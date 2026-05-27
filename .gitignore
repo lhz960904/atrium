@@ -1,0 +1,25 @@
+node_modules
+out
+dist
+build/release
+.DS_Store
+*.log*
+
+# design/ is a local-only collaboration scratchpad
+# (tokens.css lives in src/renderer/src/assets/, not here)
+design/
+
+# local dev db (drizzle-kit studio / push target)
+dev.db
+dev.db-journal
+dev.db-shm
+dev.db-wal
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea
+*.swp

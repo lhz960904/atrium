@@ -1,0 +1,270 @@
+/*
+ * Atrium · Design Tokens
+ * Light: "Salon"  (Notion / Things 3 lineage)  — extracted from references/style-picker.html stage 4
+ * Dark:  "Studio" (Linear / Vercel lineage)    — extracted from references/style-picker.html stage 2
+ *
+ * Single source of truth. Components must consume these vars, never raw hex.
+ * Switch theme by setting `data-theme="light" | "dark"` on <html> or any subtree.
+ */
+
+/* ============================================================
+   PRIMITIVES — theme-agnostic scales
+   ============================================================ */
+
+:root {
+  /* ── Type families ── */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, "Menlo", monospace;
+
+  /* ── Type scale ── */
+  --text-2xs: 10.5px;
+  --text-xs:  11.5px;
+  --text-sm:  12.5px;
+  --text-base: 13.5px;
+  --text-md:  14.5px;
+  --text-lg:  16px;
+  --text-xl:  20px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+
+  /* ── Weights ── */
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semibold: 600;
+  --weight-bold:    700;
+
+  /* ── Line height ── */
+  --leading-tight:   1.3;
+  --leading-snug:    1.5;
+  --leading-normal:  1.65;
+  --leading-relaxed: 1.75;
+
+  /* ── Letter spacing ── */
+  --tracking-tight:  -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.04em;
+  --tracking-caps:   0.08em;
+
+  /* ── Spacing (4px grid) ── */
+  --space-0:  0;
+  --space-px: 1px;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* ── Radius ── */
+  --radius-none: 0;
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   10px;
+  --radius-xl:   14px;
+  --radius-2xl:  18px;
+  --radius-full: 9999px;
+
+  /* ── Border widths ── */
+  --border-hair:  1px;
+  --border-thin:  1.5px;
+  --border-thick: 2px;
+
+  /* ── Motion ── */
+  --duration-instant: 80ms;
+  --duration-fast:    120ms;
+  --duration-normal:  180ms;
+  --duration-slow:    240ms;
+  --duration-slower:  360ms;
+  --ease-out:    cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Z-index ── */
+  --z-base:    0;
+  --z-raised:  10;
+  --z-sticky:  50;
+  --z-overlay: 100;
+  --z-modal:   200;
+  --z-popover: 300;
+  --z-tooltip: 400;
+  --z-toast:   500;
+
+  /* ── App-shell layout ── */
+  --rail-w:        64px;
+  --inspector-w:   360px;
+  --titlebar-h:    36px;
+  --composer-min-h: 88px;
+  --conv-max-w:    760px;   /* readable conversation column width */
+  --conv-pad-x:    28px;    /* horizontal padding inside conversation */
+}
+
+/* ============================================================
+   LIGHT THEME — Salon
+   ============================================================ */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces (background, low → high elevation) */
+  --bg-canvas:         #FBFBFA;
+  --bg-surface:        #F7F7F5;
+  --bg-surface-strong: #F1F1EF;
+  --bg-elevated:       #FFFFFF;
+  --bg-overlay:        rgba(0, 0, 0, 0.40);
+
+  /* Foreground (text, icons) */
+  --fg-primary:   #37352F;
+  --fg-secondary: #5A5A55;
+  --fg-tertiary:  #9B9A95;
+  --fg-disabled:  #B0AFAA;
+  --fg-on-accent: #FFFFFF;
+  --fg-link:      var(--accent-default);
+
+  /* Borders */
+  --border-default: #EAEAE6;
+  --border-strong:  #D5D4CF;
+  --border-focus:   var(--accent-default);
+
+  /* Accent (primary brand action — Notion-blue lineage) */
+  --accent-default: #2383E2;
+  --accent-hover:   #1A6FC4;
+  --accent-active:  #155FA8;
+  --accent-soft:    rgba(35, 131, 226, 0.10);
+  --accent-fg:      #FFFFFF;
+
+  /* Accent alt (warm amber, for secondary highlights — used sparingly) */
+  --accent-alt:      #E3A92B;
+  --accent-alt-soft: rgba(227, 169, 43, 0.12);
+
+  /* Status */
+  --status-success: #4A9F60;
+  --status-warning: #D29A2E;
+  --status-danger:  #D04A4A;
+  --status-info:    var(--accent-default);
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.10);
+  --shadow-xl: 0 24px 60px rgba(0, 0, 0, 0.14);
+
+  /* Selection */
+  --selection-bg: var(--accent-soft);
+  --selection-fg: var(--fg-primary);
+
+  /* Component-scoped (named so swap-out is local) */
+  --titlebar-bg:      #F4F4F2;
+  --titlebar-fg:      var(--fg-tertiary);
+  --rail-bg:          var(--bg-surface-strong);
+  --inspector-bg:     var(--bg-surface);
+  --user-bubble-bg:   var(--accent-default);
+  --user-bubble-fg:   var(--accent-fg);
+  --assist-text-fg:   var(--fg-primary);
+  --toolcall-bg:      var(--bg-elevated);
+  --toolcall-border:  var(--border-default);
+  --toolcall-accent:  var(--accent-default);
+  --composer-bg:      var(--bg-elevated);
+  --composer-border:  var(--border-default);
+  --code-bg:          var(--bg-surface-strong);
+  --code-fg:          var(--fg-primary);
+  --kbd-bg:           var(--bg-surface-strong);
+  --kbd-fg:           var(--fg-secondary);
+}
+
+/* ============================================================
+   DARK THEME — Studio
+   ============================================================ */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --bg-canvas:         #0F0F12;
+  --bg-surface:        #18181B;
+  --bg-surface-strong: #1F1F23;
+  --bg-elevated:       #27272A;
+  --bg-overlay:        rgba(0, 0, 0, 0.65);
+
+  /* Foreground */
+  --fg-primary:   #FAFAFA;
+  --fg-secondary: #E4E4E7;
+  --fg-tertiary:  #A1A1AA;
+  --fg-disabled:  #71717A;
+  --fg-on-accent: #FFFFFF;
+  --fg-link:      var(--accent-default);
+
+  /* Borders */
+  --border-default: #232327;
+  --border-strong:  #3F3F46;
+  --border-focus:   var(--accent-default);
+
+  /* Accent (cool blue-violet) */
+  --accent-default: #7C8CFF;
+  --accent-hover:   #6675FF;
+  --accent-active:  #5B5BD6;
+  --accent-soft:    rgba(124, 140, 255, 0.14);
+  --accent-fg:      #FFFFFF;
+
+  /* Accent alt (deeper violet, secondary highlights) */
+  --accent-alt:      #5B5BD6;
+  --accent-alt-soft: rgba(91, 91, 214, 0.18);
+
+  /* Status */
+  --status-success: #6FD583;
+  --status-warning: #E5B458;
+  --status-danger:  #E16B6B;
+  --status-info:    var(--accent-default);
+
+  /* Shadows (mostly imperceptible on dark — kept for elevation hints) */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.40);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.50);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.60);
+  --shadow-xl: 0 24px 60px rgba(0, 0, 0, 0.70);
+
+  /* Selection */
+  --selection-bg: var(--accent-soft);
+  --selection-fg: var(--fg-primary);
+
+  /* Component-scoped */
+  --titlebar-bg:      #18181B;
+  --titlebar-fg:      var(--fg-tertiary);
+  --rail-bg:          var(--bg-surface);
+  --inspector-bg:     var(--bg-surface);
+  --user-bubble-bg:   var(--bg-elevated);
+  --user-bubble-fg:   var(--fg-primary);
+  --assist-text-fg:   var(--fg-secondary);
+  --toolcall-bg:      var(--bg-surface);
+  --toolcall-border:  var(--bg-elevated);
+  --toolcall-accent:  var(--accent-default);
+  --composer-bg:      var(--bg-surface);
+  --composer-border:  var(--bg-elevated);
+  --code-bg:          var(--bg-surface-strong);
+  --code-fg:          var(--fg-secondary);
+  --kbd-bg:           var(--bg-elevated);
+  --kbd-fg:           var(--fg-secondary);
+}
+
+/* ============================================================
+   GLOBAL DEFAULTS — applies to <body> when tokens are loaded
+   ============================================================ */
+
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-fg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

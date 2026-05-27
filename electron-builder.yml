@@ -1,0 +1,32 @@
+appId: com.atrium.app
+productName: Atrium
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!design/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!drizzle.config.ts'
+  - '!biome.json'
+  - '!{.env,.env.*,.npmrc,bun.lockb,bun.lock}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{README.md,CHANGELOG.md,dev-app-update.yml}'
+extraResources:
+  - from: drizzle/migrations
+    to: drizzle/migrations
+    filter:
+      - '**/*'
+asarUnpack:
+  - resources/**
+mac:
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    - NSCameraUsageDescription: Atrium 需要访问相机以支持相关功能。
+    - NSMicrophoneUsageDescription: Atrium 需要访问麦克风以支持语音输入。
+    - NSDocumentsFolderUsageDescription: Atrium 需要访问"文稿"文件夹以读写工作区文件。
+    - NSDownloadsFolderUsageDescription: Atrium 需要访问"下载"文件夹以保存生成的产物。
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}.${ext}
+npmRebuild: false
