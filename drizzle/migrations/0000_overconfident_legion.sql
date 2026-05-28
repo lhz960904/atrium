@@ -14,25 +14,18 @@ CREATE TABLE `messages` (
 	`id` text PRIMARY KEY NOT NULL,
 	`thread_id` text NOT NULL,
 	`role` text NOT NULL,
-	`content` text NOT NULL,
+	`parts` text NOT NULL,
+	`metadata` text,
 	`created_at` integer DEFAULT (unixepoch() * 1000) NOT NULL,
 	FOREIGN KEY (`thread_id`) REFERENCES `threads`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE INDEX `messages_thread_created_at_idx` ON `messages` (`thread_id`,`created_at`);--> statement-breakpoint
 CREATE TABLE `threads` (
 	`id` text PRIMARY KEY NOT NULL,
 	`title` text,
 	`project_id` text,
+	`metadata` text,
 	`created_at` integer DEFAULT (unixepoch() * 1000) NOT NULL,
 	`updated_at` integer DEFAULT (unixepoch() * 1000) NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE `todos` (
-	`id` text PRIMARY KEY NOT NULL,
-	`thread_id` text NOT NULL,
-	`content` text NOT NULL,
-	`status` text DEFAULT 'pending' NOT NULL,
-	`created_at` integer DEFAULT (unixepoch() * 1000) NOT NULL,
-	`updated_at` integer DEFAULT (unixepoch() * 1000) NOT NULL,
-	FOREIGN KEY (`thread_id`) REFERENCES `threads`(`id`) ON UPDATE no action ON DELETE cascade
 );

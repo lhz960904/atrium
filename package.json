@@ -10,7 +10,7 @@
     "start": "electron-vite preview",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "format": "biome format --write .",
+    "format": "biome check --write .",
     "routes:generate": "bunx @tanstack/router-cli@latest generate",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",

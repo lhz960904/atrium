@@ -4,6 +4,8 @@
   "editor.codeActionsOnSave": {
     "source.fixAll.biome": "explicit"
   },
+  "prettier.enable": false,
+  "eslint.enable": false,
   "[typescript]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
