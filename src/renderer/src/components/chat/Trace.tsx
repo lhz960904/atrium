@@ -1,19 +1,13 @@
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import type { Trace as TraceData } from '../../lib/chat-types';
-import { NarrativeSegment } from './NarrativeSegment';
-import { ToolMarker } from './ToolMarker';
+import { SegmentList } from './SegmentList';
 
 export function Trace({ trace }: { trace: TraceData }): React.JSX.Element {
-  const hasTool = trace.segments.some((s) => s.kind === 'tool');
-  // No tool → no need for the trace head, just inline the narrative.
+  const hasTool = trace.segments.some((s) => s.kind === 'tool' || s.kind === 'subagent');
   if (!hasTool && !trace.running) {
-    return <SegmentList trace={trace} />;
+    return <SegmentList segments={trace.segments} />;
   }
-
-  // Has tool calls (or still running) → show collapsible head. Default
-  // open while running so the user can watch progress; default closed
-  // after completion (D3 lifecycle).
   return <TraceWithHead trace={trace} />;
 }
 
@@ -33,23 +27,9 @@ function TraceWithHead({ trace }: { trace: TraceData }): React.JSX.Element {
       </button>
       {open && (
         <div className="pt-1 pb-2">
-          <SegmentList trace={trace} />
+          <SegmentList segments={trace.segments} />
         </div>
       )}
     </div>
-  );
-}
-
-function SegmentList({ trace }: { trace: TraceData }): React.JSX.Element {
-  return (
-    <>
-      {trace.segments.map((seg) =>
-        seg.kind === 'narrative' ? (
-          <NarrativeSegment key={seg.id} content={seg.content} />
-        ) : (
-          <ToolMarker key={seg.tool.id} tool={seg.tool} />
-        ),
-      )}
-    </>
   );
 }

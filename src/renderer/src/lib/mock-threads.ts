@@ -101,6 +101,227 @@ const MOCK_THREADS: Record<string, Thread> = {
           ],
         },
       },
+      {
+        id: 'm-5',
+        role: 'user',
+        content: '帮我并行调研一下各主要板块更详细的情况，每块单独出一份',
+      },
+      {
+        id: 'm-6',
+        role: 'assistant',
+        trace: {
+          summary: 'Worked for 35s',
+          segments: [
+            {
+              kind: 'narrative',
+              id: 's-1',
+              content: '好，我同时起 4 个子 agent 并行调研各板块。等它们各自跑完后再汇总。',
+            },
+            {
+              kind: 'subagent',
+              subagent: {
+                id: 'sa-1',
+                name: 'Research US stock market overview',
+                status: 'done',
+                toolCount: 3,
+                body: [
+                  {
+                    kind: 'narrative',
+                    id: 'sa1-n1',
+                    content: '先扫一下三大指数的当日收盘 + VIX 当前位置。',
+                  },
+                  {
+                    kind: 'tool',
+                    tool: {
+                      id: 'sa1-t1',
+                      kind: 'web-search',
+                      verb: 'Searched',
+                      target: 'S&P 500 Nasdaq Dow Jones today 2026-05-28 close',
+                      status: 'success',
+                      typeLabel: 'Web search',
+                      output:
+                        'S&P 500: 5234.7 (+0.4%) · Nasdaq: 17820 (+0.6%) · Dow: 38901 (+0.2%)',
+                    },
+                  },
+                  {
+                    kind: 'tool',
+                    tool: {
+                      id: 'sa1-t2',
+                      kind: 'web-fetch',
+                      verb: 'Fetched',
+                      target: 'finance.yahoo.com/markets/world-indices',
+                      status: 'success',
+                      typeLabel: 'Web fetch',
+                    },
+                  },
+                  {
+                    kind: 'tool',
+                    tool: {
+                      id: 'sa1-t3',
+                      kind: 'web-search',
+                      verb: 'Searched',
+                      target: 'VIX volatility index 2026 historical comparison',
+                      status: 'success',
+                      typeLabel: 'Web search',
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              kind: 'subagent',
+              subagent: {
+                id: 'sa-2',
+                name: 'Research tech stocks recent rally',
+                status: 'done',
+                toolCount: 2,
+                body: [
+                  {
+                    kind: 'narrative',
+                    id: 'sa2-n1',
+                    content: '聚焦 AI / 半导体 / Mega-cap 的 rally driver。',
+                  },
+                  {
+                    kind: 'tool',
+                    tool: {
+                      id: 'sa2-t1',
+                      kind: 'web-search',
+                      verb: 'Searched',
+                      target: 'NVDA AMD AVGO performance May 2026',
+                      status: 'success',
+                      typeLabel: 'Web search',
+                    },
+                  },
+                  {
+                    kind: 'tool',
+                    tool: {
+                      id: 'sa2-t2',
+                      kind: 'web-search',
+                      verb: 'Searched',
+                      target: 'Magnificent 7 earnings Q1 2026 guidance',
+                      status: 'success',
+                      typeLabel: 'Web search',
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              kind: 'subagent',
+              subagent: {
+                id: 'sa-3',
+                name: 'Research sector rotation stocks',
+                status: 'streaming',
+                toolCount: 4,
+                body: [
+                  {
+                    kind: 'narrative',
+                    id: 'sa3-n1',
+                    content:
+                      'I’ll research US stock market sector performance comprehensively. Let me start with multiple searches in parallel.',
+                  },
+                  {
+                    kind: 'tool',
+                    tool: {
+                      id: 'sa3-t1',
+                      kind: 'web-search',
+                      verb: 'Searched',
+                      target:
+                        'US stock market sector performance 2026 year to date healthcare fin…',
+                      status: 'success',
+                      typeLabel: 'Web search',
+                    },
+                  },
+                  {
+                    kind: 'tool',
+                    tool: {
+                      id: 'sa3-t2',
+                      kind: 'web-search',
+                      verb: 'Searched',
+                      target: 'sector rotation May 2026 growth vs value investors moving',
+                      status: 'success',
+                      typeLabel: 'Web search',
+                    },
+                  },
+                  {
+                    kind: 'tool',
+                    tool: {
+                      id: 'sa3-t3',
+                      kind: 'web-search',
+                      verb: 'Searched',
+                      target: 'Russell 2000 vs S&P 500 performance 2026 small cap large cap dive…',
+                      status: 'success',
+                      typeLabel: 'Web search',
+                    },
+                  },
+                  {
+                    kind: 'narrative',
+                    id: 'sa3-n2',
+                    content:
+                      'Good, I have initial results. Let me now fetch the key articles for detailed data.',
+                  },
+                  {
+                    kind: 'tool',
+                    tool: {
+                      id: 'sa3-t4',
+                      kind: 'web-fetch',
+                      verb: 'Fetching',
+                      target: 'www.schwab.com/learn/story/stock-sector-outl…',
+                      status: 'running',
+                      typeLabel: 'Web fetch',
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              kind: 'subagent',
+              subagent: {
+                id: 'sa-4',
+                name: 'Research China ADR and HK stocks',
+                status: 'done',
+                toolCount: 2,
+                body: [
+                  {
+                    kind: 'narrative',
+                    id: 'sa4-n1',
+                    content:
+                      'Cross-listed Chinese tech ADRs and the Hang Seng Tech index, plus sentiment on policy.',
+                  },
+                  {
+                    kind: 'tool',
+                    tool: {
+                      id: 'sa4-t1',
+                      kind: 'web-search',
+                      verb: 'Searched',
+                      target: 'BABA PDD JD ADR May 2026',
+                      status: 'success',
+                      typeLabel: 'Web search',
+                    },
+                  },
+                  {
+                    kind: 'tool',
+                    tool: {
+                      id: 'sa4-t2',
+                      kind: 'web-fetch',
+                      verb: 'Fetched',
+                      target: 'hk.investing.com/indices/hang-seng-tech',
+                      status: 'success',
+                      typeLabel: 'Web fetch',
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              kind: 'narrative',
+              id: 's-final',
+              content:
+                '好，4 个子 agent 已经在同时跑调研了，涉及：\n\n1. **大盘指数** — S&P 500, Nasdaq, Dow Jones 最近走势\n2. **科技股领涨** — Mag 7 + 半导体板块表现\n3. **板块轮动** — Healthcare, Financials 等防御板块资金流向（仍在跑）\n4. **中概股 + 港股** — Hang Seng Tech & 政策面情绪\n\nsector rotation 那块还在 fetch 详细文章，跑完我把综合报告一起给你。',
+            },
+          ],
+        },
+      },
     ],
   },
   'fc-1': {

@@ -1,12 +1,13 @@
 /**
- * Shared message / trace / tool types used by mock-threads + chat
- * rendering components.
+ * Shared message / trace / tool / subagent types used by mock-threads
+ * + chat rendering components.
  *
- * The assistant turn is a Trace containing an ordered list of segments
- * (narrative prose interleaved with tool calls), modelled after Codex:
- * agent text and tool invocations show up in the order they happened.
- * The final "answer" is just the last narrative segment in that list,
- * not a separate field.
+ * Assistant turn is a Trace containing an ordered list of segments
+ * (narrative prose / atomic tool calls / subagent cards), in the
+ * order they happened. The "final answer" is the last narrative
+ * segment — no separate field.
+ *
+ * Subagent.body uses the same TraceSegment[] shape (subagents nest).
  */
 
 export type ToolKind =
@@ -26,27 +27,35 @@ export type ToolStatus = 'running' | 'success' | 'error' | 'cancelled' | 'warnin
 export type Tool = {
   id: string;
   kind: ToolKind;
-  /** "Ran" / "Read" / "Searched" — dim verb shown before target */
   verb: string;
-  /** "ls src/auth" / "src/auth/oauth.ts" / "OAuth handlers" — single-line target */
   target: string;
   status: ToolStatus;
-  /** Type label shown above the expanded card body ("Shell" / "File" / "HTTP") */
   typeLabel?: string;
-  /** Shell-only: actual command shown as `$ <command>` */
   command?: string;
-  /** Shell-only: stdout. Empty string treated as "No output". */
   output?: string;
+};
+
+export type SubagentStatus = 'streaming' | 'done' | 'failed' | 'cancelled';
+
+export type Subagent = {
+  id: string;
+  /** Short user-facing name, e.g. "Research US stock market overview" */
+  name: string;
+  status: SubagentStatus;
+  /** Total tool calls inside body (cached for the head chip) */
+  toolCount: number;
+  /** Subagent's own narrative + tool list, in order. Same shape as parent trace. */
+  body: TraceSegment[];
 };
 
 export type TraceSegment =
   | { kind: 'narrative'; id: string; content: string }
-  | { kind: 'tool'; tool: Tool };
+  | { kind: 'tool'; tool: Tool }
+  | { kind: 'subagent'; subagent: Subagent };
 
 export type Trace = {
-  /** Header summary, e.g. "Worked for 18s". UI shows it next to the chev. */
+  /** Header summary, e.g. "Worked for 18s". */
   summary: string;
-  /** Whether the trace is still running. Drives pulsing dot + default-open. */
   running?: boolean;
   segments: TraceSegment[];
 };
