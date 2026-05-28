@@ -1,19 +1,35 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
-import { ArrowLeft } from 'lucide-react';
+import {
+  ArrowLeft,
+  Atom,
+  Brain,
+  Info,
+  Layers,
+  type LucideIcon,
+  Shield,
+  SlidersHorizontal,
+  Sun,
+} from 'lucide-react';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsLayout,
 });
 
-const NAV_ITEMS = [
-  { section: 'general', label: 'General' },
-  { section: 'appearance', label: 'Appearance' },
-  { section: 'providers', label: 'Providers' },
-  { section: 'subagents', label: 'Subagents' },
-  { section: 'permissions', label: 'Permissions' },
-  { section: 'memories', label: 'Memories' },
-  { section: 'about', label: 'About' },
-] as const;
+type NavItem = {
+  section: string;
+  label: string;
+  icon: LucideIcon;
+};
+
+const NAV_ITEMS: readonly NavItem[] = [
+  { section: 'general', label: 'General', icon: SlidersHorizontal },
+  { section: 'appearance', label: 'Appearance', icon: Sun },
+  { section: 'providers', label: 'Providers', icon: Layers },
+  { section: 'subagents', label: 'Subagents', icon: Atom },
+  { section: 'permissions', label: 'Permissions', icon: Shield },
+  { section: 'memories', label: 'Memories', icon: Brain },
+  { section: 'about', label: 'About', icon: Info },
+];
 
 function SettingsLayout(): React.JSX.Element {
   return (
@@ -28,19 +44,24 @@ function SettingsLayout(): React.JSX.Element {
             <ArrowLeft className="size-3.5" />
             Back to app
           </Link>
-          {NAV_ITEMS.map((item) => (
-            <Link
-              key={item.section}
-              to="/settings/$section"
-              params={{ section: item.section }}
-              className="rounded-md px-3 py-2 text-sm text-fg-secondary hover:bg-surface-strong hover:text-fg-primary"
-              activeProps={{
-                className: 'rounded-md px-3 py-2 text-sm bg-elevated text-fg-primary',
-              }}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.section}
+                to="/settings/$section"
+                params={{ section: item.section }}
+                className="group flex items-center gap-3 rounded-md px-3 py-2 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
+                activeProps={{
+                  className:
+                    'group flex items-center gap-3 rounded-md px-3 py-2 text-sm bg-elevated text-fg-primary [&_svg]:text-accent',
+                }}
+              >
+                <Icon className="size-[15px] shrink-0 text-fg-tertiary group-hover:text-fg-secondary" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
         </div>
       </aside>
       <main className="min-w-0 overflow-y-auto">
