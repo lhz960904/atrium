@@ -12,9 +12,13 @@ import {
 import { useState } from 'react';
 import { MOCK_FLAT_CHATS, MOCK_PROJECTS } from '../lib/mock-data';
 
+const chatRowBase =
+  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-fg-secondary hover:bg-surface-strong hover:text-fg-primary';
+const chatRowActive =
+  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm bg-elevated text-fg-primary';
+
 export function Sidebar(): React.JSX.Element {
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
-  const [activeChatId, setActiveChatId] = useState<string | null>('fc-running');
 
   const toggleProject = (id: string): void => {
     setCollapsedProjects((prev) => {
@@ -53,14 +57,16 @@ export function Sidebar(): React.JSX.Element {
           const FolderIcon = collapsed ? Folder : FolderOpen;
           return (
             <div key={proj.id} className="mb-1">
-              <button
-                type="button"
-                onClick={() => toggleProject(proj.id)}
-                className="group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
-              >
-                <FolderIcon className="size-[15px] shrink-0 text-fg-tertiary group-hover:text-fg-secondary" />
-                <span className="min-w-0 flex-1 truncate text-left">{proj.name}</span>
-                <span className="flex gap-px opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="group relative">
+                <button
+                  type="button"
+                  onClick={() => toggleProject(proj.id)}
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
+                >
+                  <FolderIcon className="size-[15px] shrink-0 text-fg-tertiary group-hover:text-fg-secondary" />
+                  <span className="min-w-0 flex-1 truncate pr-12 text-left">{proj.name}</span>
+                </button>
+                <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 gap-px opacity-0 transition-opacity group-hover:opacity-100">
                   <SbIconButton
                     title="New chat in project"
                     icon={<Plus className="size-[13px]" />}
@@ -71,26 +77,23 @@ export function Sidebar(): React.JSX.Element {
                     icon={<MoreHorizontal className="size-[13px]" />}
                     small
                   />
-                </span>
-              </button>
+                </div>
+              </div>
               {!collapsed && (
                 <div className="mt-px pl-6">
                   {proj.chats.length === 0 ? (
                     <div className="px-3 py-1.5 text-fg-disabled text-sm">No chats</div>
                   ) : (
                     proj.chats.map((chat) => (
-                      <button
-                        type="button"
+                      <Link
                         key={chat.id}
-                        onClick={() => setActiveChatId(chat.id)}
-                        className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm ${
-                          activeChatId === chat.id
-                            ? 'bg-elevated text-fg-primary'
-                            : 'text-fg-secondary hover:bg-surface-strong hover:text-fg-primary'
-                        }`}
+                        to="/chat/$threadId"
+                        params={{ threadId: chat.id }}
+                        className={chatRowBase}
+                        activeProps={{ className: chatRowActive }}
                       >
                         <span className="min-w-0 flex-1 truncate text-left">{chat.name}</span>
-                      </button>
+                      </Link>
                     ))
                   )}
                 </div>
@@ -111,15 +114,12 @@ export function Sidebar(): React.JSX.Element {
           }
         />
         {MOCK_FLAT_CHATS.map((chat) => (
-          <button
-            type="button"
+          <Link
             key={chat.id}
-            onClick={() => setActiveChatId(chat.id)}
-            className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm ${
-              activeChatId === chat.id
-                ? 'bg-elevated text-fg-primary'
-                : 'text-fg-secondary hover:bg-surface-strong hover:text-fg-primary'
-            }`}
+            to="/chat/$threadId"
+            params={{ threadId: chat.id }}
+            className={chatRowBase}
+            activeProps={{ className: chatRowActive }}
           >
             <span className="min-w-0 flex-1 truncate text-left">{chat.name}</span>
             {chat.running ? (
@@ -131,7 +131,7 @@ export function Sidebar(): React.JSX.Element {
             ) : (
               <span className="shrink-0 text-fg-disabled text-xs">{chat.ago}</span>
             )}
-          </button>
+          </Link>
         ))}
       </div>
 

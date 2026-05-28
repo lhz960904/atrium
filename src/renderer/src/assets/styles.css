@@ -45,6 +45,18 @@
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
+
+  /* Component-scoped tokens (theme-aware via tokens.css) */
+  --color-user-bubble-bg: var(--user-bubble-bg);
+  --color-user-bubble-fg: var(--user-bubble-fg);
+  --color-assist-text: var(--assist-text-fg);
+  --color-toolcall-bg: var(--toolcall-bg);
+  --color-toolcall-border: var(--toolcall-border);
+  --color-toolcall-accent: var(--toolcall-accent);
+  --color-composer-bg: var(--composer-bg);
+  --color-composer-border: var(--composer-border);
+  --color-code-bg: var(--code-bg);
+  --color-code-fg: var(--code-fg);
 }
 
 html,

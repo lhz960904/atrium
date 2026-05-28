@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
+import { createFileRoute, Link, Outlet, useRouter } from '@tanstack/react-router';
 import {
   ArrowLeft,
   Atom,
@@ -10,6 +10,7 @@ import {
   SlidersHorizontal,
   Sun,
 } from 'lucide-react';
+import { useNavStore } from '../../state/nav-store';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsLayout,
@@ -32,18 +33,22 @@ const NAV_ITEMS: readonly NavItem[] = [
 ];
 
 function SettingsLayout(): React.JSX.Element {
+  const router = useRouter();
+  const lastAppPath = useNavStore((s) => s.lastAppPath);
+
   return (
     <div className="grid h-screen grid-cols-[260px_1fr]">
       <aside className="flex min-h-0 flex-col border-r border-border-default bg-surface">
         <div className="atrium-titlebar" />
         <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
-          <Link
-            to="/"
+          <button
+            type="button"
+            onClick={() => router.history.push(lastAppPath)}
             className="mb-4 flex items-center gap-2 rounded-md px-3 py-2 text-fg-tertiary text-sm hover:bg-surface-strong hover:text-fg-primary"
           >
             <ArrowLeft className="size-3.5" />
             Back to app
-          </Link>
+          </button>
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             return (

@@ -186,11 +186,13 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  /* Surfaces */
-  --bg-canvas:         #0F0F12;
-  --bg-surface:        #18181B;
-  --bg-surface-strong: #1F1F23;
-  --bg-elevated:       #27272A;
+  /* Surfaces — lifted slightly from pure black so chat prose reads
+     without the "压抑" feel. Layer contrast between canvas / surface /
+     elevated kept ≈ 4-5 luminance points so hierarchy stays clear. */
+  --bg-canvas:         #16161B;
+  --bg-surface:        #1E1E23;
+  --bg-surface-strong: #26262C;
+  --bg-elevated:       #2E2E34;
   --bg-overlay:        rgba(0, 0, 0, 0.65);
 
   /* Foreground */
