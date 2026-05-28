@@ -1,6 +1,7 @@
 import type { Thread } from '../../lib/chat-types';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatHeader } from './ChatHeader';
+import { Composer } from './Composer';
 import { UserMessage } from './UserMessage';
 
 export function ChatThread({ thread }: { thread: Thread }): React.JSX.Element {
@@ -16,6 +17,11 @@ export function ChatThread({ thread }: { thread: Thread }): React.JSX.Element {
               <AssistantMessage key={msg.id} trace={msg.trace} />
             ),
           )}
+        </div>
+      </div>
+      <div className="shrink-0 px-6 pt-2 pb-4">
+        <div className="mx-auto max-w-[760px]">
+          <Composer />
         </div>
       </div>
     </div>

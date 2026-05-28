@@ -39,7 +39,13 @@ export function Sidebar(): React.JSX.Element {
 
       {/* Top nav: New chat + Search */}
       <nav className="flex shrink-0 flex-col gap-0.5 px-3 pt-2 pb-1">
-        <SbNavItem icon={<SquarePen className="size-[15px] shrink-0" />} label="New chat" />
+        <Link
+          to="/"
+          className="flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
+        >
+          <SquarePen className="size-[15px] shrink-0" />
+          <span className="flex-1 text-left">New chat</span>
+        </Link>
         <SbNavItem icon={<Search className="size-[15px] shrink-0" />} label="Search" />
       </nav>
 

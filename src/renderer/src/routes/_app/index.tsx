@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { ArrowUp, ChevronDown, FileText, FolderClosed, MessageCircle, Plus } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { FileText, FolderClosed, MessageCircle } from 'lucide-react';
+import { Composer } from '../../components/chat/Composer';
 import { MOCK_CONTINUE_ITEMS, MOCK_CURRENT_PROJECT } from '../../lib/mock-data';
 
 export const Route = createFileRoute('/_app/')({
@@ -16,12 +16,7 @@ function greetingFor(hour: number): string {
 }
 
 function HomeView(): React.JSX.Element {
-  const taRef = useRef<HTMLTextAreaElement>(null);
   const greeting = `${greetingFor(new Date().getHours())}，昊泽`;
-
-  useEffect(() => {
-    taRef.current?.focus();
-  }, []);
 
   return (
     <div className="flex h-full flex-col items-center justify-center px-6 py-10">
@@ -41,38 +36,7 @@ function HomeView(): React.JSX.Element {
         </h1>
 
         {/* Composer */}
-        <div className="rounded-xl border border-border-default bg-surface p-3 transition-colors focus-within:border-accent">
-          <textarea
-            ref={taRef}
-            rows={1}
-            placeholder="说点什么…"
-            className="block max-h-[200px] min-h-[28px] w-full resize-none border-0 bg-transparent px-1 py-2 text-fg-primary outline-0 placeholder:text-fg-disabled"
-          />
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              type="button"
-              title="附件"
-              className="inline-flex items-center gap-1.5 rounded-md p-1.5 text-fg-tertiary hover:bg-elevated hover:text-fg-secondary"
-            >
-              <Plus className="size-[14px]" />
-            </button>
-            <span className="flex-1" />
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-fg-tertiary text-sm hover:bg-elevated hover:text-fg-secondary"
-            >
-              <span>Opus 4.7</span>
-              <ChevronDown className="size-[14px]" />
-            </button>
-            <button
-              type="button"
-              title="发送"
-              className="rounded-md bg-accent p-1.5 text-fg-on-accent hover:bg-accent-hover"
-            >
-              <ArrowUp className="size-[14px]" />
-            </button>
-          </div>
-        </div>
+        <Composer autoFocus />
 
         {/* Continue from */}
         {MOCK_CONTINUE_ITEMS.length > 0 && (
