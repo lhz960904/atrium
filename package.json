@@ -27,8 +27,10 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@tanstack/react-query": "^4",
     "@tanstack/react-router": "^1.170.8",
     "@trpc/client": "10.45.2",
+    "@trpc/react-query": "10.45.4",
     "@trpc/server": "10.45.2",
     "better-sqlite3": "^12.10.0",
     "drizzle-orm": "^0.45.2",

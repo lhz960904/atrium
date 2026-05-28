@@ -35,9 +35,13 @@ function detectMenuTrigger(
 export function Composer({
   autoFocus = false,
   placeholder = '说点什么…',
+  onSubmit,
+  disabled = false,
 }: {
   autoFocus?: boolean;
   placeholder?: string;
+  onSubmit?: (text: string, attachments: Attachment[]) => void;
+  disabled?: boolean;
 }): React.JSX.Element {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
@@ -73,9 +77,13 @@ export function Composer({
   };
 
   const handleSend = (): void => {
+    if (disabled) return;
     if (text.trim().length === 0 && attachments.length === 0) return;
-    // Send is a stub for now — agent loop lands later.
-    console.log('Send:', { text, attachments });
+    if (onSubmit) {
+      onSubmit(text, attachments);
+    } else {
+      console.log('Send:', { text, attachments });
+    }
     setText('');
     setAttachments([]);
     setMenu(null);
@@ -171,7 +179,7 @@ export function Composer({
           type="button"
           title="发送"
           onClick={handleSend}
-          disabled={text.trim().length === 0 && attachments.length === 0}
+          disabled={disabled || (text.trim().length === 0 && attachments.length === 0)}
           className="rounded-md bg-accent p-1.5 text-fg-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
         >
           <ArrowUp className="size-[14px]" />

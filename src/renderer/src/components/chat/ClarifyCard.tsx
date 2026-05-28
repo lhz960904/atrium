@@ -1,6 +1,6 @@
+import type { Clarify, ClarifyOption, ClarifyQuestion } from '@shared/chat-types';
 import { ArrowRight, Check } from 'lucide-react';
 import { useState } from 'react';
-import type { Clarify, ClarifyOption, ClarifyQuestion } from '../../lib/chat-types';
 
 export function ClarifyCard({ clarify }: { clarify: Clarify }): React.JSX.Element {
   const [activeIndex, setActiveIndex] = useState(0);

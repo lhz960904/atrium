@@ -1,6 +1,6 @@
+import type { Subagent, SubagentStatus } from '@shared/chat-types';
 import { Ban, Box, ChevronDown, Loader2, Wrench } from 'lucide-react';
 import { useState } from 'react';
-import type { Subagent, SubagentStatus } from '../../lib/chat-types';
 import { SegmentList } from './SegmentList';
 
 export function SubagentCard({ subagent }: { subagent: Subagent }): React.JSX.Element {

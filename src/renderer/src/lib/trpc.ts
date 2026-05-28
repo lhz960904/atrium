@@ -1,7 +1,15 @@
-import { createTRPCProxyClient } from '@trpc/client';
-import { ipcLink } from 'electron-trpc/renderer';
+import { createTRPCReact } from '@trpc/react-query';
 import type { AppRouter } from '../../../main/trpc/router';
 
-export const trpc = createTRPCProxyClient<AppRouter>({
-  links: [ipcLink()],
-});
+/**
+ * Typed tRPC React client.
+ *
+ * Usage in components:
+ *   const { data } = trpc.threads.list.useQuery();
+ *   const create = trpc.threads.create.useMutation();
+ *
+ * Non-hook access (for one-off calls / event handlers):
+ *   const utils = trpc.useUtils();
+ *   await utils.threads.list.fetch();
+ */
+export const trpc = createTRPCReact<AppRouter>();

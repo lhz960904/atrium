@@ -1,7 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { FileText, FolderClosed, MessageCircle } from 'lucide-react';
 import { Composer } from '../../components/chat/Composer';
 import { MOCK_CONTINUE_ITEMS, MOCK_CURRENT_PROJECT } from '../../lib/mock-data';
+import { trpc } from '../../lib/trpc';
 
 export const Route = createFileRoute('/_app/')({
   component: HomeView,
@@ -17,6 +18,23 @@ function greetingFor(hour: number): string {
 
 function HomeView(): React.JSX.Element {
   const greeting = `${greetingFor(new Date().getHours())}，昊泽`;
+  const navigate = useNavigate();
+  const utils = trpc.useUtils();
+  const createWithFirst = trpc.threads.createWithFirstMessage.useMutation({
+    onSuccess: async ({ threadId }) => {
+      await utils.threads.list.invalidate();
+      navigate({ to: '/chat/$threadId', params: { threadId } });
+    },
+  });
+
+  const handleSubmit = (text: string): void => {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    createWithFirst.mutate({
+      title: trimmed.slice(0, 60),
+      message: { role: 'user', parts: { content: trimmed } },
+    });
+  };
 
   return (
     <div className="flex h-full flex-col items-center justify-center px-6 py-10">
@@ -36,7 +54,7 @@ function HomeView(): React.JSX.Element {
         </h1>
 
         {/* Composer */}
-        <Composer autoFocus />
+        <Composer autoFocus onSubmit={handleSubmit} disabled={createWithFirst.isLoading} />
 
         {/* Continue from */}
         {MOCK_CONTINUE_ITEMS.length > 0 && (

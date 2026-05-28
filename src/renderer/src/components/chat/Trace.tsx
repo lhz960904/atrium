@@ -1,6 +1,6 @@
+import type { Trace as TraceData } from '@shared/chat-types';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
-import type { Trace as TraceData } from '../../lib/chat-types';
 import { SegmentList } from './SegmentList';
 
 export function Trace({ trace }: { trace: TraceData }): React.JSX.Element {

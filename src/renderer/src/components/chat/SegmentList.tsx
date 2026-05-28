@@ -1,4 +1,4 @@
-import type { TraceSegment } from '../../lib/chat-types';
+import type { TraceSegment } from '@shared/chat-types';
 import { ClarifyCard } from './ClarifyCard';
 import { NarrativeSegment } from './NarrativeSegment';
 import { SubagentCard } from './SubagentCard';

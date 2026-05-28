@@ -1,6 +1,6 @@
 import type { Thread } from './chat-types';
 
-const MOCK_THREADS: Record<string, Thread> = {
+export const MOCK_THREADS: Record<string, Thread> = {
   'fc-running': {
     id: 'fc-running',
     title: '深度调研美股板块行情',

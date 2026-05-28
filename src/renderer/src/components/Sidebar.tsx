@@ -1,16 +1,7 @@
 import { Link } from '@tanstack/react-router';
-import {
-  Folder,
-  FolderOpen,
-  ListFilter,
-  MoreHorizontal,
-  Plus,
-  Search,
-  Settings,
-  SquarePen,
-} from 'lucide-react';
-import { useState } from 'react';
-import { MOCK_FLAT_CHATS, MOCK_PROJECTS } from '../lib/mock-data';
+import { ListFilter, Search, Settings, SquarePen } from 'lucide-react';
+import { timeAgo } from '../lib/time';
+import { trpc } from '../lib/trpc';
 
 const chatRowBase =
   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-fg-secondary hover:bg-surface-strong hover:text-fg-primary';
@@ -18,26 +9,12 @@ const chatRowActive =
   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm bg-elevated text-fg-primary';
 
 export function Sidebar(): React.JSX.Element {
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
-
-  const toggleProject = (id: string): void => {
-    setCollapsedProjects((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
+  const { data: threads, isLoading } = trpc.threads.list.useQuery();
 
   return (
     <aside className="flex h-full min-h-0 flex-col border-r border-border-default bg-surface">
-      {/* macOS traffic-lights drag region — same surface bg as the rest of sidebar */}
       <div className="atrium-titlebar" />
 
-      {/* Top nav: New chat + Search */}
       <nav className="flex shrink-0 flex-col gap-0.5 px-3 pt-2 pb-1">
         <Link
           to="/"
@@ -49,69 +26,9 @@ export function Sidebar(): React.JSX.Element {
         <SbNavItem icon={<Search className="size-[15px] shrink-0" />} label="Search" />
       </nav>
 
-      {/* Scrollable middle */}
       <div className="flex-1 overflow-y-auto px-3 py-2">
-        {/* Projects section */}
-        <SbSection
-          label="Projects"
-          hoverActions={
-            <SbIconButton title="New project" icon={<Plus className="size-[13px]" />} />
-          }
-        />
-        {MOCK_PROJECTS.map((proj) => {
-          const collapsed = collapsedProjects.has(proj.id);
-          const FolderIcon = collapsed ? Folder : FolderOpen;
-          return (
-            <div key={proj.id} className="mb-1">
-              <div className="group relative">
-                <button
-                  type="button"
-                  onClick={() => toggleProject(proj.id)}
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
-                >
-                  <FolderIcon className="size-[15px] shrink-0 text-fg-tertiary group-hover:text-fg-secondary" />
-                  <span className="min-w-0 flex-1 truncate pr-12 text-left">{proj.name}</span>
-                </button>
-                <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 gap-px opacity-0 transition-opacity group-hover:opacity-100">
-                  <SbIconButton
-                    title="New chat in project"
-                    icon={<Plus className="size-[13px]" />}
-                    small
-                  />
-                  <SbIconButton
-                    title="More"
-                    icon={<MoreHorizontal className="size-[13px]" />}
-                    small
-                  />
-                </div>
-              </div>
-              {!collapsed && (
-                <div className="mt-px pl-6">
-                  {proj.chats.length === 0 ? (
-                    <div className="px-3 py-1.5 text-fg-disabled text-sm">No chats</div>
-                  ) : (
-                    proj.chats.map((chat) => (
-                      <Link
-                        key={chat.id}
-                        to="/chat/$threadId"
-                        params={{ threadId: chat.id }}
-                        className={chatRowBase}
-                        activeProps={{ className: chatRowActive }}
-                      >
-                        <span className="min-w-0 flex-1 truncate text-left">{chat.name}</span>
-                      </Link>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Chats section */}
         <SbSection
           label="Chats"
-          className="mt-4"
           hoverActions={
             <>
               <SbIconButton title="Sort / filter" icon={<ListFilter className="size-[13px]" />} />
@@ -119,29 +36,26 @@ export function Sidebar(): React.JSX.Element {
             </>
           }
         />
-        {MOCK_FLAT_CHATS.map((chat) => (
-          <Link
-            key={chat.id}
-            to="/chat/$threadId"
-            params={{ threadId: chat.id }}
-            className={chatRowBase}
-            activeProps={{ className: chatRowActive }}
-          >
-            <span className="min-w-0 flex-1 truncate text-left">{chat.name}</span>
-            {chat.running ? (
-              <span
-                role="status"
-                aria-label="Running"
-                className="size-[13px] shrink-0 animate-spin rounded-full border-[1.5px] border-border-strong border-t-accent"
-              />
-            ) : (
-              <span className="shrink-0 text-fg-disabled text-xs">{chat.ago}</span>
-            )}
-          </Link>
-        ))}
+        {isLoading ? (
+          <div className="px-3 py-1.5 text-fg-disabled text-sm">Loading…</div>
+        ) : !threads || threads.length === 0 ? (
+          <div className="px-3 py-1.5 text-fg-disabled text-sm">No chats yet</div>
+        ) : (
+          threads.map((t) => (
+            <Link
+              key={t.id}
+              to="/chat/$threadId"
+              params={{ threadId: t.id }}
+              className={chatRowBase}
+              activeProps={{ className: chatRowActive }}
+            >
+              <span className="min-w-0 flex-1 truncate text-left">{t.title ?? '未命名对话'}</span>
+              <span className="shrink-0 text-fg-disabled text-xs">{timeAgo(t.updatedAt)}</span>
+            </Link>
+          ))
+        )}
       </div>
 
-      {/* Bottom: settings link */}
       <div className="shrink-0 border-t border-border-default px-3 py-2">
         <Link
           to="/settings/$section"

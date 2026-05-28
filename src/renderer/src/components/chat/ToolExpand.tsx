@@ -1,5 +1,5 @@
+import type { Tool, ToolStatus } from '@shared/chat-types';
 import { Ban, CheckCircle2, Loader2, TriangleAlert, XCircle } from 'lucide-react';
-import type { Tool, ToolStatus } from '../../lib/chat-types';
 
 export function ToolExpand({ tool }: { tool: Tool }): React.JSX.Element {
   const isShell = tool.kind === 'shell' && tool.command !== undefined;

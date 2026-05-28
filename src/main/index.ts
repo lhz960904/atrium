@@ -4,6 +4,8 @@ import { app, BrowserWindow, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
 import { closeDb, openDb } from './db';
+import { threads } from './db/schema';
+import { seedMockThreads } from './db/seed';
 import { appRouter } from './trpc/router';
 
 function createWindow(): BrowserWindow {
@@ -43,19 +45,36 @@ function createWindow(): BrowserWindow {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.atrium.app');
 
-  openDb();
+  const db = openDb();
+
+  // Dev only: if the threads table is empty, seed it with the mock data so
+  // dev sessions don't start to a blank app. Production users start empty.
+  if (is.dev) {
+    const existing = db.select().from(threads).limit(1).all();
+    if (existing.length === 0) {
+      seedMockThreads(db);
+    }
+  }
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
 
   const mainWindow = createWindow();
-  createIPCHandler({ router: appRouter, windows: [mainWindow] });
+  createIPCHandler({
+    router: appRouter,
+    windows: [mainWindow],
+    createContext: async () => ({ db }),
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const win = createWindow();
-      createIPCHandler({ router: appRouter, windows: [win] });
+      createIPCHandler({
+        router: appRouter,
+        windows: [win],
+        createContext: async () => ({ db }),
+      });
     }
   });
 });

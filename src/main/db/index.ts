@@ -23,7 +23,7 @@ export function openDb(): Db {
   _raw = new Database(dbPath);
   _raw.pragma('journal_mode = WAL');
   _raw.pragma('foreign_keys = ON');
-  _db = drizzle(_raw, { schema });
+  _db = drizzle(_raw, { schema, casing: 'snake_case' });
 
   migrate(_db, { migrationsFolder: migrationsFolder() });
 

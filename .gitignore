@@ -26,3 +26,4 @@ dev.db-wal
 # IDE
 .idea
 *.swp
+.tanstack

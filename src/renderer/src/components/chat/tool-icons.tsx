@@ -1,3 +1,4 @@
+import type { ToolKind } from '@shared/chat-types';
 import {
   Atom,
   FilePen,
@@ -8,7 +9,6 @@ import {
   Terminal,
   Wrench,
 } from 'lucide-react';
-import type { ToolKind } from '../../lib/chat-types';
 
 export const TOOL_ICONS: Record<ToolKind, LucideIcon> = {
   shell: Terminal,

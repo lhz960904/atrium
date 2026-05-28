@@ -1,6 +1,6 @@
+import type { Tool } from '@shared/chat-types';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
-import type { Tool } from '../../lib/chat-types';
 import { ToolExpand } from './ToolExpand';
 import { TOOL_ICONS } from './tool-icons';
 

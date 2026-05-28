@@ -1,4 +1,4 @@
-import type { Thread } from '../../lib/chat-types';
+import type { Thread } from '@shared/chat-types';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatHeader } from './ChatHeader';
 import { Composer } from './Composer';
