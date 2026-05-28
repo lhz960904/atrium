@@ -67,6 +67,7 @@ export const MOCK_CURRENT_PROJECT = {
 };
 
 export const MOCK_FLAT_CHATS: MockChat[] = [
+  { id: 'fc-clarify', name: '把 src/auth 拆成几个独立模块', ago: '5m' },
   { id: 'fc-1', name: '今天 macOS 升级 26 后的兼容性', ago: '12m' },
   { id: 'fc-running', name: '深度调研美股板块行情', ago: '', running: true },
   { id: 'fc-3', name: '看看 Vercel AI SDK v5 升级 changelog', ago: '2h' },

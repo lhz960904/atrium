@@ -382,6 +382,130 @@ const MOCK_THREADS: Record<string, Thread> = {
   },
 };
 
+const CLARIFY_THREAD: Thread = {
+  id: 'fc-clarify',
+  title: '把 src/auth 拆成几个独立模块',
+  messages: [
+    {
+      id: 'm-1',
+      role: 'user',
+      content: '把 src/auth 拆成几个独立模块，然后清理旧的 build artifacts',
+    },
+    {
+      id: 'm-2',
+      role: 'assistant',
+      trace: {
+        summary: 'Working…',
+        running: true,
+        segments: [
+          {
+            kind: 'narrative',
+            id: 's-1',
+            content: '动手之前我有四件事想和你确认。回答完再继续。',
+          },
+          {
+            kind: 'clarify',
+            clarify: {
+              id: 'cl-batch',
+              questions: [
+                {
+                  id: 'q-1',
+                  header: '部署环境',
+                  question: '部署到哪个环境？',
+                  context:
+                    'package.json 里有 deploy:prod / deploy:staging / deploy:dev 三个脚本，你没指定。',
+                  inputType: 'single',
+                  allowOther: true,
+                  options: [
+                    { label: 'Production · atrium.app · 影响真实用户' },
+                    { label: 'Staging · staging.atrium.app · 团队预览' },
+                    { label: 'Dev · dev.atrium.app · 个人开发' },
+                  ],
+                },
+                {
+                  id: 'q-2',
+                  header: '实现风格',
+                  question: 'callback handler 用哪种实现风格？',
+                  context:
+                    '三种都能工作，看你团队风格偏好。每个选项右侧 preview 有代码骨架可对比。',
+                  inputType: 'single',
+                  options: [
+                    {
+                      label: 'Async/await 直写',
+                      preview: `async function handleOAuthCallback(req: Request) {
+  const code = req.query.code;
+  if (!code) throw new BadRequest('missing code');
+
+  const tokens = await provider.exchange(code);
+  const user = await provider.fetchUser(tokens.access);
+  const session = await createSession(user);
+
+  return redirect('/', { setCookie: session.cookie });
+}`,
+                    },
+                    {
+                      label: 'Result 类型链',
+                      preview: `function handleOAuthCallback(req: Request) {
+  return getCode(req)
+    .andThen(code => provider.exchange(code))
+    .andThen(tokens => provider.fetchUser(tokens.access))
+    .andThen(user => createSession(user))
+    .map(session => redirect('/', { setCookie: session.cookie }))
+    .mapErr(err => respond(err.toHttp()));
+}`,
+                    },
+                    {
+                      label: '中间件管线',
+                      preview: `const handleOAuthCallback = pipe(
+  requireQuery('code'),
+  exchangeOAuthCode,
+  fetchProviderUser,
+  createSessionMiddleware,
+  redirectMiddleware('/'),
+);
+
+app.get('/oauth/callback', handleOAuthCallback);`,
+                    },
+                  ],
+                },
+                {
+                  id: 'q-3',
+                  header: '影响范围',
+                  question: '这次 refactor 会影响哪些模块？',
+                  context: '勾选要一起改的，没勾的保持现状。',
+                  inputType: 'multi',
+                  options: [
+                    { label: 'src/auth/oauth.ts' },
+                    { label: 'src/auth/callbacks.ts' },
+                    { label: 'src/auth/provider/' },
+                    { label: 'tests/auth.test.ts' },
+                    { label: 'src/middleware/auth.ts' },
+                    { label: 'docs/auth.md' },
+                  ],
+                },
+                {
+                  id: 'q-4',
+                  header: '命名约定',
+                  question: 'refactor 之后想保留怎样的命名约定？',
+                  context: '告诉我偏好（文件夹 / 文件 / 导出名），我会用它生成新结构。',
+                  inputType: 'text',
+                },
+              ],
+            },
+          },
+          {
+            kind: 'narrative',
+            id: 's-final',
+            content: '收到这四个回答后我会列出具体的拆分计划，跑通后再 deploy。',
+          },
+        ],
+      },
+    },
+  ],
+};
+
+MOCK_THREADS[CLARIFY_THREAD.id] = CLARIFY_THREAD;
+
 export function getMockThread(id: string): Thread | null {
   return MOCK_THREADS[id] ?? null;
 }
