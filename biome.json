@@ -16,6 +16,7 @@
       "!**/resources",
       "!**/design",
       "!**/drizzle/migrations",
+      "!**/routeTree.gen.ts",
       "!**/*.css"
     ]
   },

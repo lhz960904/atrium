@@ -53,6 +53,19 @@ body,
   height: 100%;
 }
 
+/* macOS hiddenInset titleBar drag region — keeps traffic lights from overlapping content */
+.atrium-titlebar {
+  -webkit-app-region: drag;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.atrium-titlebar button,
+.atrium-titlebar a,
+.atrium-titlebar input {
+  -webkit-app-region: no-drag;
+}
+
 body {
   margin: 0;
   background: var(--bg-canvas);

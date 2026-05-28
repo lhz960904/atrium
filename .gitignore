@@ -5,6 +5,9 @@ build/release
 .DS_Store
 *.log*
 
+# TanStack Router auto-generated route tree
+src/renderer/src/routeTree.gen.ts
+
 # design/ is a local-only collaboration scratchpad
 # (tokens.css lives in src/renderer/src/assets/, not here)
 design/
