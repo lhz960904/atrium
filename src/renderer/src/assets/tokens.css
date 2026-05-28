@@ -168,7 +168,9 @@
   --user-bubble-bg:   var(--accent-default);
   --user-bubble-fg:   var(--accent-fg);
   --assist-text-fg:   var(--fg-primary);
-  --toolcall-bg:      var(--bg-elevated);
+  /* Light: card sits on `--bg-surface` so it's recessed below the canvas
+     (canvas is the lightest paper). Reads as elevation in light mode. */
+  --toolcall-bg:      var(--bg-surface);
   --toolcall-border:  var(--border-default);
   --toolcall-accent:  var(--accent-default);
   --composer-bg:      var(--bg-elevated);

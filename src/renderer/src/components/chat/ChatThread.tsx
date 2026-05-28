@@ -1,9 +1,9 @@
-import type { MockThread } from '../../lib/mock-threads';
+import type { Thread } from '../../lib/chat-types';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatHeader } from './ChatHeader';
 import { UserMessage } from './UserMessage';
 
-export function ChatThread({ thread }: { thread: MockThread }): React.JSX.Element {
+export function ChatThread({ thread }: { thread: Thread }): React.JSX.Element {
   return (
     <div className="flex h-full flex-col">
       <ChatHeader title={thread.title} />
@@ -13,7 +13,7 @@ export function ChatThread({ thread }: { thread: MockThread }): React.JSX.Elemen
             msg.role === 'user' ? (
               <UserMessage key={msg.id} content={msg.content} />
             ) : (
-              <AssistantMessage key={msg.id} content={msg.content} />
+              <AssistantMessage key={msg.id} trace={msg.trace} />
             ),
           )}
         </div>

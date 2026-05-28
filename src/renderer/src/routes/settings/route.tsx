@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet, useRouter } from '@tanstack/react-router';
+import { createFileRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
 import {
   ArrowLeft,
   Atom,
@@ -33,8 +33,20 @@ const NAV_ITEMS: readonly NavItem[] = [
 ];
 
 function SettingsLayout(): React.JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const lastAppPath = useNavStore((s) => s.lastAppPath);
+
+  const goBackToApp = (): void => {
+    // TanStack Router navigate({ to }) strictly matches typed routes at
+    // runtime — passing a dynamic string with a type-cast doesn't actually
+    // navigate to it. Parse the path back into typed nav options here.
+    const chatMatch = lastAppPath.match(/^\/chat\/(.+)$/);
+    if (chatMatch) {
+      navigate({ to: '/chat/$threadId', params: { threadId: chatMatch[1] } });
+    } else {
+      navigate({ to: '/' });
+    }
+  };
 
   return (
     <div className="grid h-screen grid-cols-[260px_1fr]">
@@ -43,7 +55,7 @@ function SettingsLayout(): React.JSX.Element {
         <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
           <button
             type="button"
-            onClick={() => router.history.push(lastAppPath)}
+            onClick={goBackToApp}
             className="mb-4 flex items-center gap-2 rounded-md px-3 py-2 text-fg-tertiary text-sm hover:bg-surface-strong hover:text-fg-primary"
           >
             <ArrowLeft className="size-3.5" />
