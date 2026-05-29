@@ -11,19 +11,18 @@ import { Conf } from 'electron-conf/main';
  * `schema` so JSON-schema validation catches typos at write time.
  */
 export type Settings = {
-  hasCompletedWelcome: boolean;
+  hasCompletedWelcome?: boolean;
 };
 
-export const DEFAULTS: Settings = {
+export const DEFAULTS = {
   hasCompletedWelcome: false,
-};
+} satisfies Required<Settings>;
 
 const schema = {
   type: 'object',
   properties: {
-    hasCompletedWelcome: { type: 'boolean' },
+    hasCompletedWelcome: { type: 'boolean', nullable: true },
   },
-  required: ['hasCompletedWelcome'],
   additionalProperties: false,
 } as const;
 

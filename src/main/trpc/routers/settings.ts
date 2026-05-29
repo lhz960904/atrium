@@ -11,7 +11,7 @@ import { publicProcedure, router } from '../trpc';
  */
 export const settingsRouter = router({
   /** Snapshot of every settings field (with defaults filled in). */
-  all: publicProcedure.query((): Settings => {
+  all: publicProcedure.query((): Required<Settings> => {
     const conf = getSettings();
     return {
       hasCompletedWelcome: conf.get('hasCompletedWelcome', DEFAULTS.hasCompletedWelcome),
