@@ -1,5 +1,6 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
+import { ProvidersSection } from '../../components/settings/providers/ProvidersSection';
 import { type Theme, useThemeStore } from '../../state/theme-store';
 
 export const Route = createFileRoute('/settings/$section')({
@@ -9,16 +10,32 @@ export const Route = createFileRoute('/settings/$section')({
 type SectionMeta = {
   title: string;
   sub: string;
+  /** Providers needs the full width; the rest read better at narrow column. */
+  wide?: boolean;
+  Component: () => React.JSX.Element;
 };
 
 const SECTIONS: Record<string, SectionMeta> = {
-  general: { title: 'General', sub: '对话风格、默认值、行为开关。' },
-  appearance: { title: 'Appearance', sub: '主题与外观偏好。' },
-  providers: { title: 'Providers', sub: '配置 Atrium 如何接入语言模型。' },
-  subagents: { title: 'Subagents', sub: 'task 工具拉起的子 agent 的运行限制与可用工具。' },
-  permissions: { title: 'Permissions', sub: '工具调用权限与通知。' },
-  memories: { title: 'Memories', sub: 'Atrium 记住的事实与上下文。' },
-  about: { title: 'About', sub: '关于 Atrium。' },
+  general: { title: 'General', sub: '对话风格、默认值、行为开关。', Component: PlaceholderSection },
+  appearance: { title: 'Appearance', sub: '主题与外观偏好。', Component: AppearanceSection },
+  providers: {
+    title: 'Providers',
+    sub: '配置 Atrium 如何接入语言模型。',
+    wide: true,
+    Component: ProvidersSection,
+  },
+  subagents: {
+    title: 'Subagents',
+    sub: 'task 工具拉起的子 agent 的运行限制与可用工具。',
+    Component: PlaceholderSection,
+  },
+  permissions: { title: 'Permissions', sub: '工具调用权限与通知。', Component: PlaceholderSection },
+  memories: {
+    title: 'Memories',
+    sub: 'Atrium 记住的事实与上下文。',
+    Component: PlaceholderSection,
+  },
+  about: { title: 'About', sub: '关于 Atrium。', Component: PlaceholderSection },
 };
 
 function SectionView(): React.JSX.Element {
@@ -26,12 +43,17 @@ function SectionView(): React.JSX.Element {
   const meta = SECTIONS[section];
   if (!meta) throw notFound();
 
-  return (
-    <div className="mx-auto max-w-[720px] px-10 py-8">
-      <h1 className="mb-1 font-semibold text-2xl text-fg-primary tracking-tight">{meta.title}</h1>
-      <p className="mb-8 text-fg-tertiary text-sm">{meta.sub}</p>
+  const { title, sub, wide = false, Component } = meta;
 
-      {section === 'appearance' ? <AppearanceSection /> : <PlaceholderSection />}
+  return (
+    <div
+      className={`flex h-full flex-col ${wide ? 'px-8 py-6' : 'mx-auto max-w-[720px] px-10 py-8'}`}
+    >
+      <h1 className="mb-1 font-semibold text-2xl text-fg-primary tracking-tight">{title}</h1>
+      <p className={`text-fg-tertiary text-sm ${wide ? 'mb-5' : 'mb-8'}`}>{sub}</p>
+      <div className={wide ? 'min-h-0 flex-1' : ''}>
+        <Component />
+      </div>
     </div>
   );
 }
