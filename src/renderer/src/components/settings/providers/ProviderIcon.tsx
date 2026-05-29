@@ -1,3 +1,4 @@
+import aihubmixSvg from '@lobehub/icons-static-svg/icons/aihubmix-color.svg?raw';
 import anthropicSvg from '@lobehub/icons-static-svg/icons/anthropic.svg?raw';
 import claudecodeSvg from '@lobehub/icons-static-svg/icons/claudecode-color.svg?raw';
 import codexSvg from '@lobehub/icons-static-svg/icons/codex-color.svg?raw';
@@ -7,6 +8,7 @@ import geminicliSvg from '@lobehub/icons-static-svg/icons/geminicli-color.svg?ra
 import kimiSvg from '@lobehub/icons-static-svg/icons/kimi-color.svg?raw';
 import moonshotSvg from '@lobehub/icons-static-svg/icons/moonshot.svg?raw';
 import openaiSvg from '@lobehub/icons-static-svg/icons/openai.svg?raw';
+import openrouterSvg from '@lobehub/icons-static-svg/icons/openrouter.svg?raw';
 import zhipuSvg from '@lobehub/icons-static-svg/icons/zhipu-color.svg?raw';
 
 /**
@@ -25,6 +27,8 @@ const SVG_BY_ID: Record<string, string> = {
   moonshot: moonshotSvg,
   'kimi-coding': kimiSvg,
   'zai-coding': zhipuSvg,
+  openrouter: openrouterSvg,
+  aihubmix: aihubmixSvg,
   'claude-code': claudecodeSvg,
   'codex-cli': codexSvg,
   'gemini-cli': geminicliSvg,

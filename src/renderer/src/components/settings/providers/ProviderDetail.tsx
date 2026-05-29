@@ -25,8 +25,8 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
   });
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto px-8 py-6">
-      <div className="mb-6 flex items-start gap-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden px-8 py-6">
+      <div className="mb-6 flex shrink-0 items-start gap-4">
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <h2 className="font-semibold text-fg-primary text-lg tracking-tight">
@@ -58,9 +58,13 @@ function CloudApiForm({
 }: {
   provider: Extract<ProviderView, { kind: 'cloud-api' }>;
 }): React.JSX.Element {
-  const config = (provider.config ?? {}) as { baseUrl?: string; fetchedModels?: string[] };
+  const config = (provider.config ?? {}) as {
+    baseUrl?: string;
+    fetchedModels?: string[];
+    enabledModels?: string[];
+  };
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-5">
       <ApiKeyField
         providerId={provider.id}
         hasCredentials={provider.hasCredentials}
@@ -71,7 +75,12 @@ function CloudApiForm({
         initialValue={config.baseUrl ?? ''}
         defaultBaseUrl={provider.defaultBaseUrl}
       />
-      <ModelsBlock hasCredentials={provider.hasCredentials} models={config.fetchedModels ?? []} />
+      <ModelsBlock
+        providerId={provider.id}
+        hasCredentials={provider.hasCredentials}
+        models={config.fetchedModels ?? []}
+        enabledModels={config.enabledModels ?? []}
+      />
     </div>
   );
 }
