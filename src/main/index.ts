@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, safeStorage, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
 import { closeDb, openDb } from './db';
@@ -46,6 +46,12 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.atrium.app');
 
   const db = openDb();
+
+  if (!safeStorage.isEncryptionAvailable()) {
+    console.warn(
+      '[atrium] safeStorage encryption unavailable — provider credential writes will throw.',
+    );
+  }
 
   // Dev only: if the threads table is empty, seed it with the mock data so
   // dev sessions don't start to a blank app. Production users start empty.
