@@ -1,7 +1,6 @@
 import { app } from 'electron';
 import { messagesRouter } from './routers/messages';
 import { providersRouter } from './routers/providers';
-import { settingsRouter } from './routers/settings';
 import { threadsRouter } from './routers/threads';
 import { publicProcedure, router } from './trpc';
 
@@ -23,7 +22,6 @@ export const appRouter = router({
   threads: threadsRouter,
   messages: messagesRouter,
   providers: providersRouter,
-  settings: settingsRouter,
 });
 
 export type AppRouter = typeof appRouter;

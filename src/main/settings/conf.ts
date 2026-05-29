@@ -1,30 +1,29 @@
 import { Conf } from 'electron-conf/main';
 
 /**
- * User-level app settings (preferences, UI state, onboarding flags).
+ * User-level app settings (preferences, UI state).
  *
  * Kept separate from the SQLite-backed user data store (threads / messages /
  * artifacts / providers): this is for client-side preferences that are
  * "lose-it-and-the-app-still-works" — recreate-from-defaults is acceptable.
  *
- * Adding a field: extend `Settings`, add a `default`, then add it to
- * `schema` so JSON-schema validation catches typos at write time.
+ * Adding a field: extend `Settings`, add a `default`, and expose it through
+ * a tRPC procedure on demand — we don't pre-emptively ship empty routers.
  */
+export type WindowState = {
+  width: number;
+  height: number;
+  maximized: boolean;
+  fullscreen: boolean;
+};
+
 export type Settings = {
-  hasCompletedWelcome?: boolean;
+  windowState?: WindowState;
 };
 
 export const DEFAULTS = {
-  hasCompletedWelcome: false,
+  windowState: { width: 1280, height: 800, maximized: false, fullscreen: false },
 } satisfies Required<Settings>;
-
-const schema = {
-  type: 'object',
-  properties: {
-    hasCompletedWelcome: { type: 'boolean', nullable: true },
-  },
-  additionalProperties: false,
-} as const;
 
 let _conf: Conf<Settings> | null = null;
 
@@ -33,7 +32,6 @@ export function openSettings(): Conf<Settings> {
   _conf = new Conf<Settings>({
     name: 'settings',
     defaults: DEFAULTS,
-    schema,
   });
   return _conf;
 }

@@ -7,12 +7,14 @@ import { closeDb, openDb } from './db';
 import { threads } from './db/schema';
 import { seedMockThreads } from './db/seed';
 import { openSettings } from './settings/conf';
+import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { appRouter } from './trpc/router';
 
 function createWindow(): BrowserWindow {
+  const initial = getInitialWindowState();
   const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: initial.width,
+    height: initial.height,
     minWidth: 880,
     minHeight: 560,
     show: false,
@@ -24,6 +26,16 @@ function createWindow(): BrowserWindow {
       sandbox: false,
     },
   });
+
+  // Fullscreen takes precedence over maximize — they're mutually exclusive
+  // on macOS, and entering fullscreen on a non-maximized window gives the
+  // user the Space-aware mode they expect.
+  if (initial.fullscreen) {
+    mainWindow.setFullScreen(true);
+  } else if (initial.maximized) {
+    mainWindow.maximize();
+  }
+  attachWindowStatePersistence(mainWindow);
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show();
