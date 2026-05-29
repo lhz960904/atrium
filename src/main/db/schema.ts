@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { blob, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 const timestamp = () =>
   integer({ mode: 'timestamp_ms' }).notNull().default(sql`(unixepoch() * 1000)`);
@@ -44,9 +44,27 @@ export const artifacts = sqliteTable('artifacts', {
   createdAt: timestamp(),
 });
 
+/**
+ * One row per provider the user has interacted with. Static per-provider
+ * metadata (display name, icon, kind, default endpoints) lives in
+ * `src/main/providers/manifest.ts`; this table only stores the user's actual
+ * configuration: whether it's enabled, non-secret config (base URL, visible
+ * models, CLI path…), and encrypted credentials.
+ */
+export const providers = sqliteTable('providers', {
+  id: text().primaryKey(),
+  enabled: integer({ mode: 'boolean' }).notNull().default(false),
+  config: text({ mode: 'json' }),
+  /** safeStorage-encrypted JSON; null when no credentials are stored. */
+  credentialsEncrypted: blob('credentials_encrypted', { mode: 'buffer' }),
+  updatedAt: timestamp(),
+});
+
 export type Thread = typeof threads.$inferSelect;
 export type NewThread = typeof threads.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type Artifact = typeof artifacts.$inferSelect;
 export type NewArtifact = typeof artifacts.$inferInsert;
+export type Provider = typeof providers.$inferSelect;
+export type NewProvider = typeof providers.$inferInsert;

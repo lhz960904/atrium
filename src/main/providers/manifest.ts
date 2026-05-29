@@ -1,0 +1,143 @@
+/**
+ * Static metadata for every well-known provider Atrium can talk to.
+ *
+ * The `providers` table only stores the user's runtime configuration
+ * (enabled flag, base URL, visible models, encrypted credentials). Display
+ * name, kind, default endpoints, console URLs, etc. live here so the table
+ * stays minimal and we can ship updated copy without a schema migration.
+ */
+
+export type ProviderKind = 'cloud-api' | 'local-cli';
+export type LocalCliProtocol = 'stream-json' | 'acp';
+
+export type CloudApiManifest = {
+  id: string;
+  kind: 'cloud-api';
+  name: string;
+  description: string;
+  defaultBaseUrl: string;
+  /** Where the user goes to generate their API key. */
+  consoleUrl: string;
+  /** Models Atrium knows about for this provider; user toggles a subset on. */
+  models: readonly string[];
+};
+
+export type LocalCliManifest = {
+  id: string;
+  kind: 'local-cli';
+  name: string;
+  description: string;
+  protocol: LocalCliProtocol;
+  /** Conventional binary name to probe on PATH. */
+  binaryName: string;
+  /** Default extra args when spawning (e.g. ACP server subcommand). */
+  defaultExtraArgs: readonly string[];
+};
+
+export type ProviderManifest = CloudApiManifest | LocalCliManifest;
+
+export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
+  // ── Cloud API ────────────────────────────────────────────────────────────
+  {
+    id: 'anthropic',
+    kind: 'cloud-api',
+    name: 'Anthropic',
+    description: 'Claude models — Opus, Sonnet, Haiku. Direct API.',
+    defaultBaseUrl: 'https://api.anthropic.com',
+    consoleUrl: 'https://console.anthropic.com/settings/keys',
+    models: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+  },
+  {
+    id: 'openai',
+    kind: 'cloud-api',
+    name: 'OpenAI',
+    description: 'GPT-5, GPT-4.1 and o-series via OpenAI API.',
+    defaultBaseUrl: 'https://api.openai.com/v1',
+    consoleUrl: 'https://platform.openai.com/api-keys',
+    models: ['gpt-5', 'gpt-4.1', 'o4-mini'],
+  },
+  {
+    id: 'deepseek',
+    kind: 'cloud-api',
+    name: 'DeepSeek',
+    description: 'DeepSeek-V3 / R1. Cost-effective, strong at code & reasoning.',
+    defaultBaseUrl: 'https://api.deepseek.com',
+    consoleUrl: 'https://platform.deepseek.com/api_keys',
+    models: ['deepseek-chat', 'deepseek-reasoner'],
+  },
+  {
+    id: 'google',
+    kind: 'cloud-api',
+    name: 'Google Gemini',
+    description: 'Gemini 2.5 Pro / Flash via Google AI Studio.',
+    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    consoleUrl: 'https://aistudio.google.com/apikey',
+    models: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+  },
+  {
+    id: 'moonshot',
+    kind: 'cloud-api',
+    name: 'Moonshot',
+    description: 'Kimi 系列（Moonshot AI）。长上下文。',
+    defaultBaseUrl: 'https://api.moonshot.cn/v1',
+    consoleUrl: 'https://platform.moonshot.cn/console/api-keys',
+    models: ['moonshot-v1-128k', 'moonshot-v1-32k'],
+  },
+  {
+    id: 'kimi-coding',
+    kind: 'cloud-api',
+    name: 'Kimi Coding Plan',
+    description: '月之暗面 · Coding 订阅版（Anthropic 兼容）。',
+    defaultBaseUrl: 'https://api.moonshot.cn/anthropic',
+    consoleUrl: 'https://platform.moonshot.cn/',
+    models: ['kimi-k2'],
+  },
+  {
+    id: 'zai-coding',
+    kind: 'cloud-api',
+    name: 'Z.AI Coding Plan',
+    description: '智谱清言 GLM Coding 订阅版（Anthropic 兼容）。',
+    defaultBaseUrl: 'https://open.bigmodel.cn/api/anthropic',
+    consoleUrl: 'https://open.bigmodel.cn/',
+    models: ['glm-4.6'],
+  },
+  // ── Local CLI ────────────────────────────────────────────────────────────
+  {
+    id: 'claude-code',
+    kind: 'local-cli',
+    name: 'Claude Code',
+    description: '通过 Claude Agent SDK（stream-json NDJSON 协议）调用你本地已登录的 Claude Code。',
+    protocol: 'stream-json',
+    binaryName: 'claude',
+    defaultExtraArgs: [
+      '--print',
+      '--input-format',
+      'stream-json',
+      '--output-format',
+      'stream-json',
+    ],
+  },
+  {
+    id: 'codex-cli',
+    kind: 'local-cli',
+    name: 'Codex CLI',
+    description:
+      '通过 ACP（Agent Client Protocol）套壳 OpenAI Codex CLI，复用你本地已登录的 ChatGPT subscription。',
+    protocol: 'acp',
+    binaryName: 'codex',
+    defaultExtraArgs: ['acp'],
+  },
+  {
+    id: 'gemini-cli',
+    kind: 'local-cli',
+    name: 'Gemini CLI',
+    description: '通过 ACP 套壳 Google Gemini CLI。',
+    protocol: 'acp',
+    binaryName: 'gemini',
+    defaultExtraArgs: ['--acp'],
+  },
+] as const;
+
+export function getProviderManifest(id: string): ProviderManifest | undefined {
+  return PROVIDER_MANIFEST.find((p) => p.id === id);
+}
