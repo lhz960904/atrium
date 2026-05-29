@@ -6,6 +6,7 @@ import icon from '../../resources/icon.png?asset';
 import { closeDb, openDb } from './db';
 import { threads } from './db/schema';
 import { seedMockThreads } from './db/seed';
+import { openSettings } from './settings/conf';
 import { appRouter } from './trpc/router';
 
 function createWindow(): BrowserWindow {
@@ -46,6 +47,7 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.atrium.app');
 
   const db = openDb();
+  openSettings();
 
   if (!safeStorage.isEncryptionAvailable()) {
     console.warn(
