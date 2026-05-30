@@ -1,5 +1,6 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import { buildAssistantView } from '../../lib/assistant-view';
+import { Markdown } from './Markdown';
 import { TraceBlock } from './TraceBlock';
 
 export function AssistantMessage({
@@ -67,15 +68,10 @@ export function AssistantMessage({
           durationMs={durationMs}
         />
       )}
-      {view.final.map((seg, i) =>
+      {view.final.map((seg) =>
         seg.kind === 'narrative' ? (
-          <div
-            key={seg.id}
-            className={`my-3 whitespace-pre-wrap text-base leading-relaxed ${
-              i === 0 ? 'text-fg-primary' : 'text-fg-secondary'
-            }`}
-          >
-            {seg.content}
+          <div key={seg.id} className="my-3 text-fg-primary">
+            <Markdown>{seg.content}</Markdown>
           </div>
         ) : null,
       )}

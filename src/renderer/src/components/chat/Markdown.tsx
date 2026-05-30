@@ -1,0 +1,71 @@
+import 'katex/dist/katex.min.css';
+import remarkMath from 'remark-math';
+import { type Components, defaultRemarkPlugins, Streamdown } from 'streamdown';
+import { CodeBlock } from './CodeBlock';
+import { MathFence } from './KatexMath';
+import { MermaidDiagram } from './MermaidDiagram';
+import { TableBlock } from './TableBlock';
+
+// Math is opt-in in Streamdown. remark-math tags $…$ / $$…$$ as `language-math`
+// code; we render those with KaTeX in the code renderer below.
+const remarkPlugins = [...Object.values(defaultRemarkPlugins), remarkMath];
+
+/**
+ * Renders assistant text as Markdown via Streamdown — streaming-safe (it styles
+ * unterminated blocks while tokens arrive), with GFM, KaTeX math, and Mermaid.
+ * Colors come from our theme tokens (mapped in styles.css), so it follows
+ * light/dark automatically.
+ *
+ * We override the tag renderers (react-markdown style) to drop Streamdown's
+ * default code/table chrome and style everything with our own tokens.
+ */
+const components: Components = {
+  // Multi-line code is a block (highlighted when a language is given, plain
+  // otherwise); a single short snippet is an inline chip with a backing color.
+  code: ({ className, children }) => {
+    const cls = className ?? '';
+    const text = String(children).replace(/\n$/, '');
+    const lang = /language-(\w+)/.exec(cls)?.[1];
+    // Math, either way it arrives: remark-math's tagged expression, or a model
+    // that fenced it in ```latex / ```math / ```tex. MathFence handles both.
+    if (lang === 'math' || lang === 'latex' || lang === 'tex') {
+      return <MathFence source={text} className={cls} />;
+    }
+    if (lang === 'mermaid') {
+      return <MermaidDiagram chart={text} />;
+    }
+    if (lang || text.includes('\n')) {
+      return <CodeBlock code={text} lang={lang ?? 'text'} />;
+    }
+    return (
+      <code className="rounded bg-code-bg px-1 py-0.5 font-mono text-[0.85em] text-fg-primary">
+        {children}
+      </code>
+    );
+  },
+  // The default wraps code in a bordered container with a header; pass through
+  // so only our CodeBlock's own <pre> remains.
+  pre: ({ children }) => <>{children}</>,
+  table: ({ children }) => <TableBlock>{children}</TableBlock>,
+  th: ({ children }) => (
+    <th className="whitespace-nowrap border-border-default border-b px-3 py-2 text-left font-medium text-fg-primary">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border-border-default border-b px-3 py-2 text-fg-secondary">{children}</td>
+  ),
+};
+
+export function Markdown({ children }: { children: string }): React.JSX.Element {
+  return (
+    <Streamdown
+      className="atrium-md leading-relaxed"
+      controls={false}
+      components={components}
+      remarkPlugins={remarkPlugins}
+    >
+      {children}
+    </Streamdown>
+  );
+}

@@ -1,7 +1,25 @@
 @import './tokens.css';
 @import 'tailwindcss';
+@import 'streamdown/styles.css';
+
+/* Let Tailwind scan Streamdown's compiled classes so its prose utilities exist. */
+@source '../../../../node_modules/streamdown/dist/*.js';
+
+/* Streamdown's code blocks switch via the `dark:` variant; bind it to our
+   [data-theme] scheme instead of the prefers-color-scheme default. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 @theme inline {
+  /* shadcn-style semantic tokens Streamdown renders with, mapped onto ours so
+     its markdown follows the active theme automatically. */
+  --color-background: var(--bg-canvas);
+  --color-foreground: var(--fg-primary);
+  --color-muted: var(--bg-elevated);
+  --color-muted-foreground: var(--fg-tertiary);
+  --color-primary: var(--accent-default);
+  --color-primary-foreground: var(--fg-on-accent);
+  --color-border: var(--border-default);
+
   --color-canvas: var(--bg-canvas);
   --color-surface: var(--bg-surface);
   --color-surface-strong: var(--bg-surface-strong);
@@ -65,6 +83,19 @@ html,
 body,
 #root {
   height: 100%;
+}
+
+/* Markdown (Streamdown) scope. Streamdown sizes everything with Tailwind's
+   text-* utilities, which read these --text-* tokens — redefining them here
+   scales the whole block down a notch without touching the rest of the app. */
+.atrium-md {
+  --text-xs: 0.7rem;
+  --text-sm: 0.8rem;
+  --text-base: 0.875rem;
+  --text-lg: 1rem;
+  --text-xl: 1.1rem;
+  --text-2xl: 1.35rem;
+  --text-3xl: 1.6rem;
 }
 
 /* macOS hiddenInset titleBar drag region — keeps traffic lights from overlapping content */
