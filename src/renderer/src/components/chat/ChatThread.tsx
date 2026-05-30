@@ -16,6 +16,8 @@ export function ChatThread({
   status: ChatStatus;
   onSend: (text: string) => void;
 }): React.JSX.Element {
+  const live = status === 'submitted' || status === 'streaming';
+  const lastId = messages.at(-1)?.id;
   return (
     <div className="flex h-full flex-col">
       <ChatHeader title={title} />
@@ -25,7 +27,7 @@ export function ChatThread({
             msg.role === 'user' ? (
               <UserMessage key={msg.id} parts={msg.parts} />
             ) : (
-              <AssistantMessage key={msg.id} parts={msg.parts} />
+              <AssistantMessage key={msg.id} message={msg} streaming={live && msg.id === lastId} />
             ),
           )}
         </div>
