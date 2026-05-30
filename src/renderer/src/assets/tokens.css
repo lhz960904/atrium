@@ -169,8 +169,8 @@
   --sidebar-item-active: #E4E4DF;
   --rail-bg:          var(--bg-surface-strong);
   --inspector-bg:     var(--bg-surface);
-  --user-bubble-bg:   var(--accent-default);
-  --user-bubble-fg:   var(--accent-fg);
+  --user-bubble-bg:   var(--sidebar-item-hover);
+  --user-bubble-fg:   var(--fg-primary);
   --assist-text-fg:   var(--fg-primary);
   /* Light: card sits on `--bg-surface` so it's recessed below the canvas
      (canvas is the lightest paper). Reads as elevation in light mode. */

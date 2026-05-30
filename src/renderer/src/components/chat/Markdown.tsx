@@ -48,7 +48,7 @@ const components: Components = {
   pre: ({ children }) => <>{children}</>,
   table: ({ children }) => <TableBlock>{children}</TableBlock>,
   th: ({ children }) => (
-    <th className="whitespace-nowrap border-border-default border-b px-3 py-2 text-left font-medium text-fg-primary">
+    <th className="whitespace-nowrap border-border-default border-b bg-surface px-3 py-2 text-left font-medium text-fg-primary">
       {children}
     </th>
   ),
