@@ -42,12 +42,27 @@ export async function runAgent(opts: RunAgentOptions): Promise<Response> {
   // Drive the stream to completion server-side (no await) so onFinish — and
   // thus persistence — runs even if the client disconnects mid-stream.
   result.consumeStream();
+  let startedAt = 0;
   return result.toUIMessageStreamResponse({
     originalMessages: opts.messages,
     // We stream directly from main (no client-assigned id), so the server
     // must mint the assistant message id — otherwise it's empty and every
     // assistant row collides on id, dropping all but the first.
     generateMessageId: generateId,
+    // Stamp timing + usage onto the message so the trace header can render
+    // "Worked for …"; durationMs is wall clock from first chunk to finish.
+    messageMetadata: ({ part }) => {
+      if (part.type === 'start') {
+        startedAt = Date.now();
+        return { createdAt: startedAt };
+      }
+      if (part.type === 'finish') {
+        // Optional-chain usage: if it throws here the whole return is lost and
+        // durationMs never lands, so the header falls back to a bare "Worked".
+        return { durationMs: Date.now() - startedAt, totalTokens: part.totalUsage?.totalTokens };
+      }
+      return undefined;
+    },
     onFinish: ({ responseMessage }) => opts.onFinish?.(responseMessage),
   });
 }
