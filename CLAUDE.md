@@ -16,5 +16,6 @@
 
 ## Commits
 
+- **Angular Conventional Commits** format: `type(scope): subject` (e.g. `feat(chat): stream tool calls`). Types: `feat`, `fix`, `refactor`, `docs`, `style`, `test`, `chore`, `perf`, `build`, `ci`. Scope is the area touched (`chat`, `tools`, `agent`, `db`…); omit it if the change is cross-cutting. Subject is imperative and lowercase.
 - Describe what the change does in plain functional terms; **never** include project-internal numbering (Step 1.1, D8, V0, Phase…). Reference a design by its semantic name ("empty state"), not its D-number.
 - Commit cadence: each reviewed sub-task → commit before the next; don't batch a whole step into one big diff.
