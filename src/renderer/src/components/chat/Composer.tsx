@@ -93,6 +93,9 @@ export function Composer({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    // While an IME is composing (e.g. typing pinyin), Enter confirms the
+    // candidate — it must never send or steer the slash menu.
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (menu) {
       if (e.key === 'Escape') {
         e.preventDefault();
