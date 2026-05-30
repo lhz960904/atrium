@@ -18,12 +18,12 @@ export type RunAgentOptions = {
 
 /**
  * The agent loop. AI SDK's streamText is itself the multi-step ReAct loop:
- * with tools + stopWhen it keeps going model→tool→model until done. Tools
- * land in 5.d; this version streams plain text only.
+ * with tools + stopWhen it keeps going model→tool→model until done. This
+ * version streams plain text only; tools are added later.
  *
- * The model is supplied by the caller (providers layer resolves + decrypts);
- * runAgent stays free of DB/credential concerns. Returns the streaming HTTP
- * Response (the agent's only transport is the localhost chat stream, per D-4).
+ * The model is supplied by the caller (the providers layer resolves +
+ * decrypts), so runAgent stays free of DB/credential concerns. Returns the
+ * streaming HTTP Response — the agent's only transport is the chat stream.
  */
 export async function runAgent(opts: RunAgentOptions): Promise<Response> {
   const result = streamText({

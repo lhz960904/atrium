@@ -1,8 +1,8 @@
 import type { AtriumUIMessage } from '@shared/chat';
 
 /**
- * Renders an assistant message's parts. Step 5.b handles text only;
- * tool parts (5.d) and file parts (5.e) slot in here as new branches.
+ * Renders an assistant message's parts. Text only for now; tool and file
+ * parts slot in here as new branches.
  */
 export function MessageParts({ parts }: { parts: AtriumUIMessage['parts'] }): React.JSX.Element {
   return (

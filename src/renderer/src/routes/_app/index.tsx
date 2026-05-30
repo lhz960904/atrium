@@ -21,8 +21,8 @@ function HomeView(): React.JSX.Element {
   const greeting = `${greetingFor(new Date().getHours())}，昊泽`;
   const navigate = useNavigate();
   const utils = trpc.useUtils();
-  // Create an empty thread, carry the typed text as a draft, then navigate.
-  // The chat composer prefills it (auto-send lands in 5.f).
+  // Create an empty thread, stash the typed text as a draft, then navigate;
+  // the chat view auto-sends the draft once its model is ready.
   const createThread = trpc.threads.create.useMutation({
     onSuccess: async ({ id }) => {
       await utils.threads.list.invalidate();

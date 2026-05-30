@@ -1,8 +1,7 @@
 type Status = 'enabled' | 'configured' | 'detected' | 'idle';
 
 /**
- * A single row in the provider list. Visual states map to the D11 spec:
- *
+ * A single row in the provider list. Status dot:
  *   enabled    → solid green dot
  *   configured → grey dot (credentials present but toggle off)
  *   detected   → translucent accent dot (local CLI binary on PATH, never enabled)

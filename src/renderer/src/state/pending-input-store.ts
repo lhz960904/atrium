@@ -2,8 +2,7 @@ import { create } from 'zustand';
 
 /**
  * One-shot draft carried from the home composer into a freshly created
- * thread's composer. The chat view consumes + clears it on mount. (Auto-send
- * lands in 5.f; for now it just prefills the input.)
+ * thread. The chat view consumes + clears it on mount and auto-sends it.
  */
 type PendingInputStore = {
   text: string | null;

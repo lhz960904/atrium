@@ -1,7 +1,7 @@
 /**
- * Minimal system prompt for the Step 5 agent loop. Prompt assembly
- * (skills / memory / custom-instructions injection, sectioning) gets its
- * own files in this directory later — kept as a flat constant for now.
+ * Minimal system prompt for the agent loop. Prompt assembly (skills / memory /
+ * custom-instructions injection, sectioning) gets its own files in this
+ * directory later — kept as a flat constant for now.
  */
 export const SYSTEM_PROMPT = `You are Atrium, a capable AI assistant running on the user's Mac.
 

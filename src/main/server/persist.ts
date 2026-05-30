@@ -20,9 +20,9 @@ export function loadThreadMessages(db: Db, threadId: string): UIMessage[] {
 }
 
 /**
- * Persist one UIMessage into a thread, storing parts verbatim (the canonical
- * shape since Step 5). Idempotent on message id so re-sends / retries don't
- * duplicate. Bumps the thread's updatedAt so the sidebar re-sorts.
+ * Persist one UIMessage into a thread, storing its parts verbatim (the
+ * canonical message shape). Idempotent on message id so re-sends / retries
+ * don't duplicate. Bumps the thread's updatedAt so the sidebar re-sorts.
  */
 export function persistMessage(db: Db, threadId: string, msg: UIMessage): void {
   db.insert(messages)
