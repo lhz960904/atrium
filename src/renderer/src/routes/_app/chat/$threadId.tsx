@@ -1,32 +1,31 @@
 import { useChat } from '@ai-sdk/react';
 import type { AtriumUIMessage } from '@shared/chat';
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ChatThread } from '../../../components/chat/ChatThread';
 import { makeChatTransport } from '../../../lib/chat-transport';
 import { trpc } from '../../../lib/trpc';
+import { useChatModel } from '../../../lib/use-chat-model';
+import type { SelectedModel } from '../../../state/model-store';
 import { usePendingInput } from '../../../state/pending-input-store';
 
 export const Route = createFileRoute('/_app/chat/$threadId')({
   component: ChatView,
 });
 
-type SelectedModel = { providerId: string; modelId: string };
-
 function ChatView(): React.JSX.Element {
   const { threadId } = Route.useParams();
   const thread = trpc.threads.get.useQuery({ id: threadId });
   const endpoint = trpc.system.chatEndpoint.useQuery();
-  const providers = trpc.providers.list.useQuery();
+  const { selected } = useChatModel();
 
-  if (thread.isLoading || endpoint.isLoading || providers.isLoading) {
+  if (thread.isLoading || endpoint.isLoading) {
     return <Centered>Loading…</Centered>;
   }
   if (!thread.data) {
     return <Centered>对话不存在</Centered>;
   }
 
-  const model = pickFirstEnabledModel(providers.data ?? []);
   const initialMessages: AtriumUIMessage[] = thread.data.messages.map((m) => ({
     id: m.id,
     role: m.role,
@@ -39,7 +38,7 @@ function ChatView(): React.JSX.Element {
       threadId={threadId}
       title={thread.data.title ?? '未命名对话'}
       initialMessages={initialMessages}
-      model={model}
+      model={selected}
       endpoint={endpoint.data ?? null}
     />
   );
@@ -80,13 +79,17 @@ function ChatRunner({
     },
   });
 
-  // Auto-send the draft carried from the home composer once on mount.
-  // consume() clears it, so StrictMode's double-invoke won't double-send.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: run once on mount
+  // Auto-send the home draft once the model is ready. Wait for `model` so a
+  // not-yet-hydrated selection doesn't drop the draft; the ref guards against
+  // re-sending when model changes.
+  const sentRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sendMessage is stable; fire when model becomes ready
   useEffect(() => {
+    if (sentRef.current || !model) return;
     const draft = usePendingInput.getState().consume();
-    if (draft && model) sendMessage({ text: draft });
-  }, []);
+    if (draft) sendMessage({ text: draft });
+    sentRef.current = true;
+  }, [model]);
 
   return (
     <ChatThread
@@ -99,17 +102,6 @@ function ChatRunner({
       }}
     />
   );
-}
-
-function pickFirstEnabledModel(
-  providers: { id: string; enabled: boolean; config: Record<string, unknown> | null }[],
-): SelectedModel | null {
-  for (const p of providers) {
-    if (!p.enabled) continue;
-    const enabledModels = (p.config as { enabledModels?: string[] } | null)?.enabledModels ?? [];
-    if (enabledModels.length > 0) return { providerId: p.id, modelId: enabledModels[0] };
-  }
-  return null;
 }
 
 function Centered({ children }: { children: React.ReactNode }): React.JSX.Element {

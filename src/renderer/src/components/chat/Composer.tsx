@@ -1,6 +1,7 @@
-import { ArrowUp, ChevronDown, Plus } from 'lucide-react';
+import { ArrowUp, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { type Attachment, AttachmentChip } from './AttachmentChip';
+import { ModelPicker } from './ModelPicker';
 import { MENTION_ITEMS, SLASH_COMMANDS, SlashMenu, type SlashMenuItem } from './SlashMenu';
 
 type MenuState = {
@@ -170,13 +171,8 @@ export function Composer({
           <Plus className="size-[14px]" />
         </button>
         <span className="flex-1" />
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-fg-tertiary text-sm hover:bg-elevated hover:text-fg-secondary"
-        >
-          <span>Opus 4.7</span>
-          <ChevronDown className="size-[14px]" />
-        </button>
+        {/* refocus the textarea after a model pick (popover steals focus) */}
+        <ModelPicker onSelected={() => requestAnimationFrame(() => taRef.current?.focus())} />
         <button
           type="button"
           title="发送"

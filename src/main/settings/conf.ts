@@ -17,12 +17,17 @@ export type WindowState = {
   fullscreen: boolean;
 };
 
+/** Last-picked chat model; null until the user has any enabled model. */
+export type SelectedModel = { providerId: string; modelId: string };
+
 export type Settings = {
   windowState?: WindowState;
+  selectedModel?: SelectedModel | null;
 };
 
 export const DEFAULTS = {
   windowState: { width: 1280, height: 800, maximized: false, fullscreen: false },
+  selectedModel: null,
 } satisfies Required<Settings>;
 
 let _conf: Conf<Settings> | null = null;
