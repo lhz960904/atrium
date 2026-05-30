@@ -1,27 +1,41 @@
-import type { Thread } from '@shared/chat-types';
+import type { AtriumUIMessage } from '@shared/chat';
+import type { ChatStatus } from 'ai';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatHeader } from './ChatHeader';
 import { Composer } from './Composer';
 import { UserMessage } from './UserMessage';
 
-export function ChatThread({ thread }: { thread: Thread }): React.JSX.Element {
+export function ChatThread({
+  title,
+  messages,
+  status,
+  onSend,
+}: {
+  title: string;
+  messages: AtriumUIMessage[];
+  status: ChatStatus;
+  onSend: (text: string) => void;
+}): React.JSX.Element {
   return (
     <div className="flex h-full flex-col">
-      <ChatHeader title={thread.title} />
+      <ChatHeader title={title} />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[760px] px-6 py-6">
-          {thread.messages.map((msg) =>
+          {messages.map((msg) =>
             msg.role === 'user' ? (
-              <UserMessage key={msg.id} content={msg.content} />
+              <UserMessage key={msg.id} parts={msg.parts} />
             ) : (
-              <AssistantMessage key={msg.id} trace={msg.trace} />
+              <AssistantMessage key={msg.id} parts={msg.parts} />
             ),
           )}
         </div>
       </div>
       <div className="shrink-0 px-6 pt-2 pb-4">
         <div className="mx-auto max-w-[760px]">
-          <Composer />
+          <Composer
+            disabled={status === 'submitted' || status === 'streaming'}
+            onSubmit={(text) => onSend(text)}
+          />
         </div>
       </div>
     </div>

@@ -5,8 +5,6 @@ import { app, BrowserWindow, safeStorage, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
 import { closeDb, openDb } from './db';
-import { threads } from './db/schema';
-import { seedMockThreads } from './db/seed';
 import { startHttpServer } from './server/http';
 import { openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
@@ -57,7 +55,7 @@ function createWindow(): BrowserWindow {
   return mainWindow;
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.atrium.app');
 
   const db = openDb();
@@ -69,16 +67,7 @@ app.whenReady().then(() => {
     );
   }
 
-  const chatEndpoint = startHttpServer({ db, token: randomUUID() });
-
-  // Dev only: if the threads table is empty, seed it with the mock data so
-  // dev sessions don't start to a blank app. Production users start empty.
-  if (is.dev) {
-    const existing = db.select().from(threads).limit(1).all();
-    if (existing.length === 0) {
-      seedMockThreads(db);
-    }
-  }
+  const chatEndpoint = await startHttpServer({ db, token: randomUUID() });
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);

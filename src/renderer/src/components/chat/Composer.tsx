@@ -37,14 +37,16 @@ export function Composer({
   placeholder = '说点什么…',
   onSubmit,
   disabled = false,
+  initialText = '',
 }: {
   autoFocus?: boolean;
   placeholder?: string;
   onSubmit?: (text: string, attachments: Attachment[]) => void;
   disabled?: boolean;
+  initialText?: string;
 }): React.JSX.Element {
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [menu, setMenu] = useState<MenuState | null>(null);
 

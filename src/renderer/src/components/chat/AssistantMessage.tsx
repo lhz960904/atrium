@@ -1,10 +1,14 @@
-import type { Trace as TraceData } from '@shared/chat-types';
-import { Trace } from './Trace';
+import type { AtriumUIMessage } from '@shared/chat';
+import { MessageParts } from './MessageParts';
 
-export function AssistantMessage({ trace }: { trace: TraceData }): React.JSX.Element {
+export function AssistantMessage({
+  parts,
+}: {
+  parts: AtriumUIMessage['parts'];
+}): React.JSX.Element {
   return (
     <div className="mb-7">
-      <Trace trace={trace} />
+      <MessageParts parts={parts} />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { FileText, FolderClosed, MessageCircle } from 'lucide-react';
 import { Composer } from '../../components/chat/Composer';
 import { MOCK_CONTINUE_ITEMS, MOCK_CURRENT_PROJECT } from '../../lib/mock-data';
 import { trpc } from '../../lib/trpc';
+import { usePendingInput } from '../../state/pending-input-store';
 
 export const Route = createFileRoute('/_app/')({
   component: HomeView,
@@ -20,20 +21,20 @@ function HomeView(): React.JSX.Element {
   const greeting = `${greetingFor(new Date().getHours())}，昊泽`;
   const navigate = useNavigate();
   const utils = trpc.useUtils();
-  const createWithFirst = trpc.threads.createWithFirstMessage.useMutation({
-    onSuccess: async ({ threadId }) => {
+  // Create an empty thread, carry the typed text as a draft, then navigate.
+  // The chat composer prefills it (auto-send lands in 5.f).
+  const createThread = trpc.threads.create.useMutation({
+    onSuccess: async ({ id }) => {
       await utils.threads.list.invalidate();
-      navigate({ to: '/chat/$threadId', params: { threadId } });
+      navigate({ to: '/chat/$threadId', params: { threadId: id } });
     },
   });
 
   const handleSubmit = (text: string): void => {
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
-    createWithFirst.mutate({
-      title: trimmed.slice(0, 60),
-      message: { role: 'user', parts: { content: trimmed } },
-    });
+    usePendingInput.getState().set(trimmed);
+    createThread.mutate({ title: trimmed.slice(0, 60) });
   };
 
   return (
@@ -56,7 +57,7 @@ function HomeView(): React.JSX.Element {
         </h1>
 
         {/* Composer */}
-        <Composer autoFocus onSubmit={handleSubmit} disabled={createWithFirst.isLoading} />
+        <Composer autoFocus onSubmit={handleSubmit} disabled={createThread.isLoading} />
 
         {/* Continue from */}
         {MOCK_CONTINUE_ITEMS.length > 0 && (
