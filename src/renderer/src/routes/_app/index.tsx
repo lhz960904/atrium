@@ -37,7 +37,9 @@ function HomeView(): React.JSX.Element {
   };
 
   return (
-    <div className="flex h-full flex-col items-center justify-center px-6 py-10">
+    <div className="relative flex h-full flex-col items-center justify-center px-6 py-10">
+      {/* No header bar here; top strip keeps the window draggable over empty space. */}
+      <div className="app-drag absolute inset-x-0 top-0 h-9" />
       <div className="flex w-full max-w-[680px] flex-col items-stretch gap-6">
         {/* Project chip */}
         <div className="flex justify-center">

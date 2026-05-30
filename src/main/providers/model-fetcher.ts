@@ -41,8 +41,6 @@ async function fetchOpenAiCompatible(baseUrl: string, apiKey: string): Promise<s
   // OpenAI lists at `/models`; users sometimes paste a base URL with or
   // without the `/v1` suffix, so we just append `/models` and trust the
   // upstream to 404 if wrong.
-  //
-  console.log(`${baseUrl}/models`, 'baseURL');
   const res = await fetch(`${baseUrl}/models`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });

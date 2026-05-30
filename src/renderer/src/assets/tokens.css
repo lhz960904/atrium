@@ -163,6 +163,10 @@
   /* Component-scoped (named so swap-out is local) */
   --titlebar-bg:      #F4F4F2;
   --titlebar-fg:      var(--fg-tertiary);
+  /* Sidebar row states: hover = surface-strong; active goes one step deeper
+     (a grey below hover) so selection reads as "pressed in", not "raised". */
+  --sidebar-item-hover:  var(--bg-surface-strong);
+  --sidebar-item-active: #E4E4DF;
   --rail-bg:          var(--bg-surface-strong);
   --inspector-bg:     var(--bg-surface);
   --user-bubble-bg:   var(--accent-default);
@@ -241,6 +245,9 @@
   /* Component-scoped */
   --titlebar-bg:      #18181B;
   --titlebar-fg:      var(--fg-tertiary);
+  /* Dark mode selection reads as a lift, so active sits a step above hover. */
+  --sidebar-item-hover:  var(--bg-surface-strong);
+  --sidebar-item-active: #34343B;
   --rail-bg:          var(--bg-surface);
   --inspector-bg:     var(--bg-surface);
   --user-bubble-bg:   var(--bg-elevated);

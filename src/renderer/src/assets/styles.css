@@ -57,6 +57,8 @@
   --color-composer-border: var(--composer-border);
   --color-code-bg: var(--code-bg);
   --color-code-fg: var(--code-fg);
+  --color-sidebar-item-hover: var(--sidebar-item-hover);
+  --color-sidebar-item-active: var(--sidebar-item-active);
 }
 
 html,
@@ -75,6 +77,16 @@ body,
 .atrium-titlebar button,
 .atrium-titlebar a,
 .atrium-titlebar input {
+  -webkit-app-region: no-drag;
+}
+
+/* Reusable drag / no-drag utilities so any header row can become a drag
+   handle (Codex-style full-width top strip), while interactive children
+   opt back out. */
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-no-drag {
   -webkit-app-region: no-drag;
 }
 

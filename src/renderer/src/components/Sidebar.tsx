@@ -4,15 +4,15 @@ import { timeAgo } from '../lib/time';
 import { trpc } from '../lib/trpc';
 
 const chatRowBase =
-  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-fg-secondary hover:bg-surface-strong hover:text-fg-primary';
+  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-fg-secondary hover:bg-sidebar-item-hover hover:text-fg-primary';
 const chatRowActive =
-  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm bg-elevated text-fg-primary';
+  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm bg-sidebar-item-active text-fg-primary';
 
 export function Sidebar(): React.JSX.Element {
   const { data: threads, isLoading } = trpc.threads.list.useQuery();
 
   return (
-    <aside className="flex h-full min-h-0 flex-col border-r border-border-default bg-surface">
+    <aside className="flex h-full min-h-0 select-none flex-col border-r border-border-default bg-surface">
       <div className="atrium-titlebar" />
 
       <nav className="flex shrink-0 flex-col gap-0.5 px-3 pt-2 pb-1">
@@ -41,18 +41,20 @@ export function Sidebar(): React.JSX.Element {
         ) : !threads || threads.length === 0 ? (
           <div className="px-3 py-1.5 text-fg-disabled text-sm">No chats yet</div>
         ) : (
-          threads.map((t) => (
-            <Link
-              key={t.id}
-              to="/chat/$threadId"
-              params={{ threadId: t.id }}
-              className={chatRowBase}
-              activeProps={{ className: chatRowActive }}
-            >
-              <span className="min-w-0 flex-1 truncate text-left">{t.title ?? '未命名对话'}</span>
-              <span className="shrink-0 text-fg-disabled text-xs">{timeAgo(t.updatedAt)}</span>
-            </Link>
-          ))
+          <div className="flex flex-col gap-1">
+            {threads.map((t) => (
+              <Link
+                key={t.id}
+                to="/chat/$threadId"
+                params={{ threadId: t.id }}
+                className={chatRowBase}
+                activeProps={{ className: chatRowActive }}
+              >
+                <span className="min-w-0 flex-1 truncate text-left">{t.title ?? '未命名对话'}</span>
+                <span className="shrink-0 text-fg-disabled text-xs">{timeAgo(t.updatedAt)}</span>
+              </Link>
+            ))}
+          </div>
         )}
       </div>
 
