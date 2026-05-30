@@ -8,6 +8,7 @@
     "src/shared/**/*",
     "src/main/trpc/router.ts"
   ],
+  "exclude": ["**/*.test.ts"],
   "compilerOptions": {
     "composite": true,
     "jsx": "react-jsx",
