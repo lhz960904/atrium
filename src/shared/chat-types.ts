@@ -1,6 +1,5 @@
 /**
- * Shared message / trace / tool / subagent types used by mock-threads
- * + chat rendering components.
+ * Shared trace / tool / subagent types used by the chat rendering components.
  *
  * Assistant turn is a Trace containing an ordered list of segments
  * (narrative prose / atomic tool calls / subagent cards), in the
@@ -10,23 +9,14 @@
  * Subagent.body uses the same TraceSegment[] shape (subagents nest).
  */
 
-export type ToolKind =
-  | 'shell'
-  | 'file-read'
-  | 'file-write'
-  | 'file-edit'
-  | 'grep'
-  | 'glob'
-  | 'web-search'
-  | 'web-fetch'
-  | 'task'
-  | 'other';
+import type { ToolName } from './tools';
 
 export type ToolStatus = 'running' | 'success' | 'error' | 'cancelled' | 'warning';
 
 export type Tool = {
   id: string;
-  kind: ToolKind;
+  /** The tool's name — also the key for its icon. No separate "kind" layer. */
+  name: ToolName;
   verb: string;
   target: string;
   status: ToolStatus;

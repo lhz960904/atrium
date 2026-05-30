@@ -1,12 +1,16 @@
-import type { ToolSet } from 'ai';
+import type { ToolName } from '@shared/tools';
+import type { Tool } from 'ai';
 import { bashTool } from './builtins/bash';
 import { listDirTool } from './builtins/list-dir';
 import { readFileTool } from './builtins/read-file';
 import { writeFileTool } from './builtins/write-file';
 import type { ToolCtx } from './context';
 
-/** Assemble the built-in tools for a given sandbox context. */
-export function getTools(ctx: ToolCtx): ToolSet {
+/**
+ * Assemble the built-in tools for a given sandbox context. The return type is
+ * keyed by ToolName, so the registry and the shared name contract can't drift.
+ */
+export function getTools(ctx: ToolCtx): Record<ToolName, Tool> {
   return {
     read_file: readFileTool(ctx),
     write_file: writeFileTool(ctx),

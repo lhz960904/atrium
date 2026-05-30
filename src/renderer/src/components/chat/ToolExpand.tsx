@@ -2,7 +2,7 @@ import type { Tool, ToolStatus } from '@shared/chat-types';
 import { Ban, CheckCircle2, Loader2, TriangleAlert, XCircle } from 'lucide-react';
 
 export function ToolExpand({ tool }: { tool: Tool }): React.JSX.Element {
-  const isShell = tool.kind === 'shell' && tool.command !== undefined;
+  const isShell = tool.command !== undefined;
   const hasOutput = tool.output !== undefined && tool.output !== '';
 
   return (

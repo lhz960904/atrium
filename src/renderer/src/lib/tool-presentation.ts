@@ -1,0 +1,52 @@
+import type { ToolName } from '@shared/tools';
+import { FilePen, FileText, FolderTree, type LucideIcon, Terminal } from 'lucide-react';
+
+/** The input fields the presentation reads to build a tool's labels. */
+export type ToolInput = {
+  path?: string;
+  command?: string;
+};
+
+export type ToolPresentation = {
+  icon: LucideIcon;
+  verb: string;
+  target: (i: ToolInput) => string;
+  typeLabel: (i: ToolInput) => string;
+  /** Shell-style tools surface a `$ command` line in the expanded card. */
+  command?: (i: ToolInput) => string | undefined;
+};
+
+const basename = (p?: string): string => (p ? (p.split('/').filter(Boolean).pop() ?? p) : '');
+
+/**
+ * How each built-in tool shows in the trace — icon, verb, labels. Keyed by
+ * ToolName, so adding a tool to the shared name contract forces an entry here.
+ * This is the one place to maintain tool display.
+ */
+export const TOOL_PRESENTATION: Record<ToolName, ToolPresentation> = {
+  read_file: {
+    icon: FileText,
+    verb: 'Read',
+    target: (i) => basename(i.path),
+    typeLabel: (i) => `File · ${i.path ?? ''}`,
+  },
+  write_file: {
+    icon: FilePen,
+    verb: 'Wrote',
+    target: (i) => basename(i.path),
+    typeLabel: (i) => `File · ${i.path ?? ''}`,
+  },
+  list_dir: {
+    icon: FolderTree,
+    verb: 'Listed',
+    target: (i) => basename(i.path) || 'workspace',
+    typeLabel: (i) => `Directory · ${i.path ?? '.'}`,
+  },
+  bash: {
+    icon: Terminal,
+    verb: 'Ran',
+    target: (i) => i.command ?? '',
+    typeLabel: () => 'Shell',
+    command: (i) => i.command,
+  },
+};
