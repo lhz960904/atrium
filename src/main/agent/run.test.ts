@@ -30,6 +30,7 @@ async function collectAssistants(text: string): Promise<UIMessage[]> {
   const res = await runAgent({
     model: textModel(text),
     messages: [userMsg],
+    workspaceRoot: '/tmp/ws',
     onFinish: (a) => captured.push(a),
   });
   await res.text(); // consume the stream so onFinish fires

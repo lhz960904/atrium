@@ -4,32 +4,38 @@ import {
   type LanguageModel,
   stepCountIs,
   streamText,
+  type ToolSet,
   type UIMessage,
 } from 'ai';
-import { SYSTEM_PROMPT } from './prompts';
+import { buildSystemPrompt } from './prompts';
 
 export type RunAgentOptions = {
   model: LanguageModel;
   messages: UIMessage[];
+  /** Absolute workspace root, surfaced to the model in the system prompt. */
+  workspaceRoot: string;
   abortSignal?: AbortSignal;
+  /** Tools the model may call; the caller builds them around a sandbox. */
+  tools?: ToolSet;
   /** Called once the assistant message is complete, for persistence. */
   onFinish?: (assistant: UIMessage) => void;
 };
 
 /**
  * The agent loop. AI SDK's streamText is itself the multi-step ReAct loop:
- * with tools + stopWhen it keeps going model→tool→model until done. This
- * version streams plain text only; tools are added later.
+ * with tools + stopWhen it keeps going model→tool→model until done.
  *
- * The model is supplied by the caller (the providers layer resolves +
- * decrypts), so runAgent stays free of DB/credential concerns. Returns the
- * streaming HTTP Response — the agent's only transport is the chat stream.
+ * Both the model (providers layer resolves + decrypts) and the tools (built
+ * around a sandbox) are supplied by the caller, so runAgent stays free of
+ * DB / fs / credential concerns. Returns the streaming HTTP Response — the
+ * agent's only transport is the chat stream.
  */
 export async function runAgent(opts: RunAgentOptions): Promise<Response> {
   const result = streamText({
     model: opts.model,
-    system: SYSTEM_PROMPT,
+    system: buildSystemPrompt(opts.workspaceRoot),
     messages: await convertToModelMessages(opts.messages),
+    tools: opts.tools,
     stopWhen: stepCountIs(12),
     abortSignal: opts.abortSignal,
   });

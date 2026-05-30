@@ -3,6 +3,8 @@ import type { UIMessage } from 'ai';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { runAgent } from '../agent/run';
+import { LocalSandbox } from '../agent/sandbox';
+import { getTools } from '../agent/tools';
 import type { Db } from '../db';
 import { resolveModel } from '../providers/resolve';
 import { loadThreadMessages, persistMessage } from './persist';
@@ -25,7 +27,11 @@ type ChatBody = {
  * free port; a per-launch token gates /api/* so other local processes
  * can't drive the user's model credits.
  */
-export function startHttpServer(deps: { db: Db; token: string }): Promise<ChatEndpoint> {
+export function startHttpServer(deps: {
+  db: Db;
+  token: string;
+  workspaceRoot: string;
+}): Promise<ChatEndpoint> {
   const app = new Hono();
 
   // Renderer is a different origin (localhost:5173 in dev, file:// in prod);
@@ -52,9 +58,12 @@ export function startHttpServer(deps: { db: Db; token: string }): Promise<ChatEn
     if (threadId && message.role === 'user') persistMessage(deps.db, threadId, message);
     const history = threadId ? loadThreadMessages(deps.db, threadId) : [message];
 
+    const sandbox = new LocalSandbox(deps.workspaceRoot);
     return runAgent({
       model: resolveModel(deps.db, providerId, modelId),
       messages: history,
+      workspaceRoot: deps.workspaceRoot,
+      tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot }),
       abortSignal: c.req.raw.signal,
       onFinish: (assistant) => {
         if (threadId) persistMessage(deps.db, threadId, assistant);

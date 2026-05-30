@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { app, BrowserWindow, safeStorage, shell } from 'electron';
@@ -67,7 +69,12 @@ app.whenReady().then(async () => {
     );
   }
 
-  const chatEndpoint = await startHttpServer({ db, token: randomUUID() });
+  // Agent workspace — fixed for now (aligned with ~/Documents/Codex); the
+  // tools read/write/exec only inside it.
+  const workspaceRoot = join(homedir(), 'Documents', 'Atrium');
+  mkdirSync(workspaceRoot, { recursive: true });
+
+  const chatEndpoint = await startHttpServer({ db, token: randomUUID(), workspaceRoot });
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);

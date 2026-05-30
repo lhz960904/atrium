@@ -1,1 +1,1 @@
-export { SYSTEM_PROMPT } from './system';
+export { buildSystemPrompt } from './system';
