@@ -1,28 +1,26 @@
 import { expect, test } from 'bun:test';
+import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
 import type { UIMessage } from 'ai';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
 import { runAgent } from './run';
 
 function textModel(text: string) {
+  const chunks: LanguageModelV3StreamPart[] = [
+    { type: 'stream-start', warnings: [] },
+    { type: 'text-start', id: 't1' },
+    { type: 'text-delta', id: 't1', delta: text },
+    { type: 'text-end', id: 't1' },
+    {
+      type: 'finish',
+      finishReason: { unified: 'stop', raw: 'stop' },
+      usage: {
+        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 1, text: 1, reasoning: 0 },
+      },
+    },
+  ];
   return new MockLanguageModelV3({
-    doStream: async () => ({
-      stream: simulateReadableStream({
-        chunks: [
-          { type: 'stream-start', warnings: [] },
-          { type: 'text-start', id: 't1' },
-          { type: 'text-delta', id: 't1', delta: text },
-          { type: 'text-end', id: 't1' },
-          {
-            type: 'finish',
-            finishReason: 'stop',
-            usage: {
-              inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-              outputTokens: { total: 1, text: 1, reasoning: 0 },
-            },
-          },
-        ],
-      }),
-    }),
+    doStream: async () => ({ stream: simulateReadableStream({ chunks }) }),
   });
 }
 
