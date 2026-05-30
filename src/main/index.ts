@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { app, BrowserWindow, safeStorage, shell } from 'electron';
@@ -6,6 +7,7 @@ import icon from '../../resources/icon.png?asset';
 import { closeDb, openDb } from './db';
 import { threads } from './db/schema';
 import { seedMockThreads } from './db/seed';
+import { startHttpServer } from './server/http';
 import { openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { appRouter } from './trpc/router';
@@ -67,6 +69,8 @@ app.whenReady().then(() => {
     );
   }
 
+  const chatEndpoint = startHttpServer({ db, token: randomUUID() });
+
   // Dev only: if the threads table is empty, seed it with the mock data so
   // dev sessions don't start to a blank app. Production users start empty.
   if (is.dev) {
@@ -84,7 +88,7 @@ app.whenReady().then(() => {
   createIPCHandler({
     router: appRouter,
     windows: [mainWindow],
-    createContext: async () => ({ db }),
+    createContext: async () => ({ db, chatEndpoint }),
   });
 
   app.on('activate', () => {
@@ -93,7 +97,7 @@ app.whenReady().then(() => {
       createIPCHandler({
         router: appRouter,
         windows: [win],
-        createContext: async () => ({ db }),
+        createContext: async () => ({ db, chatEndpoint }),
       });
     }
   });

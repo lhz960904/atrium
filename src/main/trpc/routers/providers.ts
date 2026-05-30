@@ -1,28 +1,11 @@
 import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
-import { safeStorage } from 'electron';
 import { z } from 'zod';
 import { providers } from '../../db/schema';
+import { decryptCredentials, encryptCredentials } from '../../providers/credentials';
 import { PROVIDER_MANIFEST, type ProviderManifest } from '../../providers/manifest';
 import { fetchModelIds } from '../../providers/model-fetcher';
 import { publicProcedure, router } from '../trpc';
-
-/**
- * Encrypt a JSON-serialisable value using Electron safeStorage and return
- * the raw ciphertext Buffer ready to be stored in SQLite as a BLOB.
- */
-function encryptJson(value: unknown): Buffer {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error(
-      'safeStorage encryption unavailable — refusing to store credentials in plaintext.',
-    );
-  }
-  return safeStorage.encryptString(JSON.stringify(value));
-}
-
-function decryptJson<T>(buf: Buffer): T {
-  return JSON.parse(safeStorage.decryptString(buf)) as T;
-}
 
 /** A user-friendly view of a provider that merges manifest + DB row. */
 type ProviderView = ProviderManifest & {
@@ -100,7 +83,7 @@ export const providersRouter = router({
   setCredentials: publicProcedure
     .input(z.object({ id: z.string(), plaintext: z.string() }))
     .mutation(({ ctx, input }) => {
-      const blob = encryptJson({ key: input.plaintext });
+      const blob = encryptCredentials({ key: input.plaintext });
       ctx.db
         .insert(providers)
         .values({ id: input.id, credentialsEncrypted: blob })
@@ -125,8 +108,7 @@ export const providersRouter = router({
         .where(eq(providers.id, input.id))
         .get();
       if (!row?.blob) return null;
-      const payload = decryptJson<{ key: string }>(row.blob);
-      return payload.key;
+      return decryptCredentials<{ key: string }>(row.blob).key;
     }),
 
   clearCredentials: publicProcedure
@@ -164,7 +146,7 @@ export const providersRouter = router({
           message: '请先填写 API key。',
         });
       }
-      const apiKey = decryptJson<{ key: string }>(row.blob).key;
+      const apiKey = decryptCredentials<{ key: string }>(row.blob).key;
       const config = (row.config as { baseUrl?: string } | null) ?? {};
       const baseUrl = config.baseUrl?.trim() || manifest.defaultBaseUrl;
 

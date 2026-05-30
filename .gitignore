@@ -4,6 +4,7 @@ dist
 build/release
 .DS_Store
 *.log*
+*.tsbuildinfo
 
 # TanStack Router auto-generated route tree
 src/renderer/src/routeTree.gen.ts
