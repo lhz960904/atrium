@@ -27,13 +27,15 @@ function textModel(text: string) {
 async function collectAssistants(text: string): Promise<UIMessage[]> {
   const captured: UIMessage[] = [];
   const userMsg: UIMessage = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] };
-  const res = await runAgent({
+  const stream = await runAgent({
     model: textModel(text),
     messages: [userMsg],
     workspaceRoot: '/tmp/ws',
     onFinish: (a) => captured.push(a),
   });
-  await res.text(); // consume the stream so onFinish fires
+  // Drain the chunk stream to completion so onFinish fires.
+  const reader = stream.getReader();
+  while (!(await reader.read()).done) {}
   return captured;
 }
 

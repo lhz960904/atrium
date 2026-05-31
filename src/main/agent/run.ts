@@ -6,6 +6,7 @@ import {
   streamText,
   type ToolSet,
   type UIMessage,
+  type UIMessageChunk,
 } from 'ai';
 import { buildSystemPrompt } from './prompts';
 
@@ -27,10 +28,11 @@ export type RunAgentOptions = {
  *
  * Both the model (providers layer resolves + decrypts) and the tools (built
  * around a sandbox) are supplied by the caller, so runAgent stays free of
- * DB / fs / credential concerns. Returns the streaming HTTP Response — the
- * agent's only transport is the chat stream.
+ * DB / fs / credential concerns. Returns the raw UIMessage chunk stream; the
+ * RunRegistry owns its lifetime (drains it to completion, multicasts it, and
+ * supplies the abort signal), so a client disconnect can't cancel generation.
  */
-export async function runAgent(opts: RunAgentOptions): Promise<Response> {
+export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UIMessageChunk>> {
   const result = streamText({
     model: opts.model,
     system: buildSystemPrompt(opts.workspaceRoot),
@@ -39,15 +41,12 @@ export async function runAgent(opts: RunAgentOptions): Promise<Response> {
     stopWhen: stepCountIs(12),
     abortSignal: opts.abortSignal,
   });
-  // Drive the stream to completion server-side (no await) so onFinish — and
-  // thus persistence — runs even if the client disconnects mid-stream.
-  result.consumeStream();
   let startedAt = 0;
-  return result.toUIMessageStreamResponse({
+  return result.toUIMessageStream({
     originalMessages: opts.messages,
-    // We stream directly from main (no client-assigned id), so the server
-    // must mint the assistant message id — otherwise it's empty and every
-    // assistant row collides on id, dropping all but the first.
+    // We stream from main (no client-assigned id), so the server must mint the
+    // assistant message id — otherwise it's empty and every assistant row
+    // collides on id, dropping all but the first.
     generateMessageId: generateId,
     // Stamp timing + usage onto the message so the trace header can render
     // "Worked for …"; durationMs is wall clock from first chunk to finish.

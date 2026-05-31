@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import type { UIMessage } from 'ai';
+import { createUIMessageStreamResponse, type UIMessage } from 'ai';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { runAgent } from '../agent/run';
@@ -8,13 +8,16 @@ import { getTools } from '../agent/tools';
 import type { Db } from '../db';
 import { resolveModel } from '../providers/resolve';
 import { loadThreadMessages, persistMessage } from './persist';
+import { RunRegistry } from './run-registry';
 
 export type ChatEndpoint = { port: number; token: string };
 
 // Client sends only the latest message (AI SDK persistence best practice);
-// the server rebuilds history from the DB.
+// the server rebuilds history from the DB. The thread row always exists before
+// the chat view can send (the home view creates it, then navigates), so
+// threadId is a hard requirement — its absence is a bug, not a degraded mode.
 type ChatBody = {
-  threadId?: string;
+  threadId: string;
   providerId: string;
   modelId: string;
   message: UIMessage;
@@ -33,6 +36,7 @@ export function startHttpServer(deps: {
   workspaceRoot: string;
 }): Promise<ChatEndpoint> {
   const app = new Hono();
+  const registry = new RunRegistry();
 
   // Renderer is a different origin (localhost:5173 in dev, file:// in prod);
   // CORS must run before auth so the credential-less preflight isn't 401'd.
@@ -52,23 +56,28 @@ export function startHttpServer(deps: {
 
   app.post('/api/chat', async (c) => {
     const { threadId, providerId, modelId, message } = await c.req.json<ChatBody>();
+    if (!threadId) return c.text('threadId required', 400);
 
     // Persist the just-sent user message, then rebuild the full history from
     // the DB (the DB is the source of truth, not the client).
-    if (threadId && message.role === 'user') persistMessage(deps.db, threadId, message);
-    const history = threadId ? loadThreadMessages(deps.db, threadId) : [message];
+    if (message.role === 'user') persistMessage(deps.db, threadId, message);
+    const history = loadThreadMessages(deps.db, threadId);
 
     const sandbox = new LocalSandbox(deps.workspaceRoot);
-    return runAgent({
-      model: resolveModel(deps.db, providerId, modelId),
-      messages: history,
-      workspaceRoot: deps.workspaceRoot,
-      tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot }),
-      abortSignal: c.req.raw.signal,
-      onFinish: (assistant) => {
-        if (threadId) persistMessage(deps.db, threadId, assistant);
-      },
-    });
+    // The registry owns the run's lifetime and abort signal — not the request
+    // signal — so navigating away (which drops this connection) leaves the run
+    // streaming in main, reattachable via the reconnect endpoint.
+    const stream = registry.start(threadId, (signal) =>
+      runAgent({
+        model: resolveModel(deps.db, providerId, modelId),
+        messages: history,
+        workspaceRoot: deps.workspaceRoot,
+        tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot }),
+        abortSignal: signal,
+        onFinish: (assistant) => persistMessage(deps.db, threadId, assistant),
+      }),
+    );
+    return createUIMessageStreamResponse({ stream });
   });
 
   // serve() binds asynchronously; the real port arrives in the listening
