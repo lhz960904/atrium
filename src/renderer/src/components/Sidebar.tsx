@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { ListFilter, Search, Settings, SquarePen } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { timeAgo } from '../lib/time';
 import { trpc } from '../lib/trpc';
 
@@ -9,11 +10,25 @@ const chatRowActive =
   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm bg-sidebar-item-active text-fg-primary';
 
 export function Sidebar(): React.JSX.Element {
+  const utils = trpc.useUtils();
   const { data: threads, isLoading } = trpc.threads.list.useQuery();
   // Poll the main process for which threads are generating; a small id list, so
   // the interval is cheap (unlike polling message content).
   const { data: running } = trpc.threads.running.useQuery(undefined, { refetchInterval: 2000 });
   const runningSet = new Set(running);
+
+  // A background run has no client mounted to refresh the list when it finishes,
+  // so its unread dot would lag until a manual refresh. Watch the polled running
+  // set: when a thread drops out of it, it just completed — refetch the list so
+  // its bumped updatedAt (vs lastReadAt) surfaces the dot.
+  const prevRunning = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const current = new Set(running);
+    let finished = false;
+    for (const id of prevRunning.current) if (!current.has(id)) finished = true;
+    prevRunning.current = current;
+    if (finished) utils.threads.list.invalidate();
+  }, [running, utils]);
 
   return (
     <aside className="flex h-full min-h-0 select-none flex-col border-r border-border-default bg-surface">
