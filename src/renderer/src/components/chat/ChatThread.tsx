@@ -25,6 +25,7 @@ export function ChatThread({
 
   // Pin the view to the newest content as it streams — unless the user has
   // scrolled up to read earlier messages, in which case leave them be.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: messages is the intended trigger to re-pin on new content
   useEffect(() => {
     const el = scrollRef.current;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;

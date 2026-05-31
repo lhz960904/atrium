@@ -1,9 +1,9 @@
-import { useChat } from '@ai-sdk/react';
+import { type Chat, useChat } from '@ai-sdk/react';
 import type { AtriumUIMessage } from '@shared/chat';
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { ChatThread } from '../../../components/chat/ChatThread';
-import { makeChatTransport } from '../../../lib/chat-transport';
+import { getThreadChat } from '../../../lib/chat-store';
 import { trpc } from '../../../lib/trpc';
 import { useChatModel } from '../../../lib/use-chat-model';
 import type { SelectedModel } from '../../../state/model-store';
@@ -25,6 +25,9 @@ function ChatView(): React.JSX.Element {
   if (!thread.data) {
     return <Centered>对话不存在</Centered>;
   }
+  if (!endpoint.data) {
+    return <Centered>聊天服务未就绪</Centered>;
+  }
 
   const initialMessages: AtriumUIMessage[] = thread.data.messages.map((m) => ({
     id: m.id,
@@ -39,7 +42,7 @@ function ChatView(): React.JSX.Element {
       title={thread.data.title ?? '未命名对话'}
       initialMessages={initialMessages}
       model={selected}
-      endpoint={endpoint.data ?? null}
+      endpoint={endpoint.data}
     />
   );
 }
@@ -55,29 +58,59 @@ function ChatRunner({
   title: string;
   initialMessages: AtriumUIMessage[];
   model: SelectedModel | null;
-  endpoint: { baseUrl: string; token: string } | null;
+  endpoint: { baseUrl: string; token: string };
 }): React.JSX.Element {
-  const transport = useMemo(() => {
-    if (!endpoint) return undefined;
-    return makeChatTransport(endpoint.baseUrl, endpoint.token, () => ({
-      threadId,
-      providerId: model?.providerId,
-      modelId: model?.modelId,
-    }));
-  }, [endpoint, threadId, model]);
+  // The Chat persists across thread switches (see chat-store). Resolve it once
+  // per mount via a ref guard — not useMemo, whose factory StrictMode may
+  // double-invoke and flip `isNew` to false. initialMessages only seeds a
+  // brand-new Chat; an existing one keeps its in-memory state. ChatRunner is
+  // keyed on threadId, so each thread gets its own fresh ref.
+  const resolved = useRef<{ chat: Chat<AtriumUIMessage>; resume: boolean } | null>(null);
+  if (resolved.current === null) {
+    const { chat, isNew } = getThreadChat(threadId, {
+      messages: initialMessages,
+      baseUrl: endpoint.baseUrl,
+      token: endpoint.token,
+    });
+    // Resume only reconnects to a PRE-EXISTING run (e.g. reload mid-stream). A
+    // brand-new thread is about to auto-send its draft below; resuming there
+    // would attach a second consumer to that same run and double its content.
+    // Decide once at mount (stable across re-renders) — a reused Chat never
+    // resumes (it still holds its original stream).
+    const willAutoSend = usePendingInput.getState().text !== null;
+    resolved.current = { chat, resume: isNew && !willAutoSend };
+  }
+  const { chat, resume } = resolved.current;
+
+  const { messages, sendMessage, status } = useChat<AtriumUIMessage>({ chat, resume });
 
   const utils = trpc.useUtils();
-  const { messages, sendMessage, status } = useChat<AtriumUIMessage>({
-    id: threadId,
-    messages: initialMessages,
-    transport,
-    // Refresh the persisted-message cache so navigating away and back
-    // re-initializes useChat from the saved messages instead of stale empties.
-    onFinish: () => {
-      utils.threads.get.invalidate({ id: threadId });
-      utils.threads.list.invalidate();
-    },
+  const markRead = trpc.threads.markRead.useMutation({
+    onSuccess: () => utils.threads.list.invalidate(),
   });
+
+  // Mark read on open (clears this thread's unread dot in the sidebar).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: markRead.mutate is stable; fire on thread change
+  useEffect(() => {
+    markRead.mutate({ id: threadId });
+  }, [threadId]);
+
+  // When a turn completes: refresh the persisted-message cache (so a later
+  // rebuild seeds from current DB state), clear the running spinner promptly,
+  // and mark read again — the active thread should never show its own unread dot.
+  const wasStreaming = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: markRead.mutate is stable
+  useEffect(() => {
+    const streaming = status === 'submitted' || status === 'streaming';
+    // Surface the sidebar spinner promptly instead of waiting for the next poll.
+    if (streaming && !wasStreaming.current) utils.threads.running.invalidate();
+    if (wasStreaming.current && !streaming) {
+      utils.threads.get.invalidate({ id: threadId });
+      utils.threads.running.invalidate();
+      markRead.mutate({ id: threadId });
+    }
+    wasStreaming.current = streaming;
+  }, [status, threadId, utils]);
 
   // Auto-send the home draft once the model is ready. Wait for `model` so a
   // not-yet-hydrated selection doesn't drop the draft; the ref guards against

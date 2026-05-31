@@ -10,6 +10,10 @@ const chatRowActive =
 
 export function Sidebar(): React.JSX.Element {
   const { data: threads, isLoading } = trpc.threads.list.useQuery();
+  // Poll the main process for which threads are generating; a small id list, so
+  // the interval is cheap (unlike polling message content).
+  const { data: running } = trpc.threads.running.useQuery(undefined, { refetchInterval: 2000 });
+  const runningSet = new Set(running);
 
   return (
     <aside className="flex h-full min-h-0 select-none flex-col border-r border-border-default bg-surface">
@@ -51,7 +55,21 @@ export function Sidebar(): React.JSX.Element {
                 activeProps={{ className: chatRowActive }}
               >
                 <span className="min-w-0 flex-1 truncate text-left">{t.title ?? '未命名对话'}</span>
-                <span className="shrink-0 text-fg-disabled text-xs">{timeAgo(t.updatedAt)}</span>
+                {runningSet.has(t.id) ? (
+                  <span
+                    role="status"
+                    aria-label="运行中"
+                    className="size-[13px] shrink-0 animate-spin rounded-full border-[1.5px] border-border-strong border-t-accent"
+                  />
+                ) : t.lastReadAt != null && new Date(t.updatedAt) > new Date(t.lastReadAt) ? (
+                  <span
+                    role="status"
+                    aria-label="未读"
+                    className="size-2 shrink-0 rounded-full bg-accent"
+                  />
+                ) : (
+                  <span className="shrink-0 text-fg-disabled text-xs">{timeAgo(t.updatedAt)}</span>
+                )}
               </Link>
             ))}
           </div>

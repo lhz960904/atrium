@@ -20,5 +20,11 @@ export function makeChatTransport(
     prepareSendMessagesRequest: ({ messages }) => ({
       body: { message: messages[messages.length - 1], ...getExtra() },
     }),
+    // On mount (resume), reconnect to a still-running stream for this chat. The
+    // hook's id is the threadId, so the reconnect URL is per-thread.
+    prepareReconnectToStreamRequest: ({ id }) => ({
+      api: `${baseUrl}/api/chat/${id}/stream`,
+      headers: { 'x-atrium-token': token },
+    }),
   });
 }
