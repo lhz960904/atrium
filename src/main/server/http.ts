@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import { createUIMessageStreamResponse, type UIMessage } from 'ai';
+import { UI_MESSAGE_STREAM_HEADERS, type UIMessage } from 'ai';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { runAgent } from '../agent/run';
@@ -8,7 +8,7 @@ import { getTools } from '../agent/tools';
 import type { Db } from '../db';
 import { resolveModel } from '../providers/resolve';
 import { loadThreadMessages, persistMessage } from './persist';
-import { RunRegistry } from './run-registry';
+import { resumeThreadStream, startThreadStream } from './resumable';
 
 export type ChatEndpoint = { port: number; token: string };
 
@@ -36,7 +36,6 @@ export function startHttpServer(deps: {
   workspaceRoot: string;
 }): Promise<ChatEndpoint> {
   const app = new Hono();
-  const registry = new RunRegistry();
 
   // Renderer is a different origin (localhost:5173 in dev, file:// in prod);
   // CORS must run before auth so the credential-less preflight isn't 401'd.
@@ -45,7 +44,7 @@ export function startHttpServer(deps: {
     cors({
       origin: '*',
       allowHeaders: ['Content-Type', 'x-atrium-token'],
-      allowMethods: ['POST', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'OPTIONS'],
     }),
   );
 
@@ -64,20 +63,27 @@ export function startHttpServer(deps: {
     const history = loadThreadMessages(deps.db, threadId);
 
     const sandbox = new LocalSandbox(deps.workspaceRoot);
-    // The registry owns the run's lifetime and abort signal — not the request
-    // signal — so navigating away (which drops this connection) leaves the run
-    // streaming in main, reattachable via the reconnect endpoint.
-    const stream = registry.start(threadId, (signal) =>
-      runAgent({
-        model: resolveModel(deps.db, providerId, modelId),
-        messages: history,
-        workspaceRoot: deps.workspaceRoot,
-        tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot }),
-        abortSignal: signal,
-        onFinish: (assistant) => persistMessage(deps.db, threadId, assistant),
-      }),
-    );
-    return createUIMessageStreamResponse({ stream });
+    // The resumable stream's producer drives the agent to completion on its
+    // own, independent of this request — so navigating away or reloading leaves
+    // the run streaming in main, reattachable via the reconnect endpoint.
+    const agentStream = await runAgent({
+      model: resolveModel(deps.db, providerId, modelId),
+      messages: history,
+      workspaceRoot: deps.workspaceRoot,
+      tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot }),
+      onFinish: (assistant) => persistMessage(deps.db, threadId, assistant),
+    });
+    const sse = await startThreadStream(threadId, agentStream);
+    return new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS });
+  });
+
+  // Reconnect endpoint. If a run is still streaming (or just finished and still
+  // buffered) for this thread, hand back its replay-from-start + live-tail
+  // stream so a remounted client (thread switch, window reload) rejoins it.
+  // 204 when nothing is buffered — the client then shows its loaded messages.
+  app.get('/api/chat/:threadId/stream', async (c) => {
+    const sse = await resumeThreadStream(c.req.param('threadId'));
+    return sse ? new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS }) : c.body(null, 204);
   });
 
   // serve() binds asynchronously; the real port arrives in the listening

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { asc, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { messages, threads } from '../../db/schema';
+import { getRunningThreadIds } from '../../server/resumable';
 import { publicProcedure, router } from '../trpc';
 
 export const threadsRouter = router({
@@ -9,6 +10,10 @@ export const threadsRouter = router({
   list: publicProcedure.query(({ ctx }) => {
     return ctx.db.select().from(threads).orderBy(desc(threads.updatedAt)).all();
   }),
+
+  /** Thread ids whose agent is currently generating — the source of truth lives
+   *  in the main process, so the sidebar spinner stays correct across reloads. */
+  running: publicProcedure.query(() => getRunningThreadIds()),
 
   /** One thread + its messages ordered chronologically. Returns null if not found. */
   get: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
@@ -89,6 +94,11 @@ export const threadsRouter = router({
   /** Delete a thread; messages / artifacts cascade. */
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     ctx.db.delete(threads).where(eq(threads.id, input.id)).run();
+  }),
+
+  /** Mark a thread read up to now, clearing its sidebar unread dot. */
+  markRead: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    ctx.db.update(threads).set({ lastReadAt: new Date() }).where(eq(threads.id, input.id)).run();
   }),
 
   /** Rename a thread; also bumps updatedAt so it floats to the top of the sidebar. */

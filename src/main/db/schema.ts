@@ -11,6 +11,9 @@ export const threads = sqliteTable('threads', {
   metadata: text({ mode: 'json' }),
   createdAt: timestamp(),
   updatedAt: timestamp(),
+  /** When the user last viewed this thread; null = never (treated as read).
+   *  A thread is "unread" in the sidebar when updatedAt is newer than this. */
+  lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' }),
 });
 
 export const messages = sqliteTable(

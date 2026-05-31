@@ -1,0 +1,1 @@
+ALTER TABLE `threads` ADD `last_read_at` integer;

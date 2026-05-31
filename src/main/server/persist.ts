@@ -35,5 +35,10 @@ export function persistMessage(db: Db, threadId: string, msg: UIMessage): void {
     })
     .onConflictDoNothing({ target: messages.id })
     .run();
-  db.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
+  const now = new Date();
+  // Sending counts as reading: stamp lastReadAt = updatedAt for the user's own
+  // message so a thread never flashes "unread" from your own send (only a later
+  // assistant turn bumps updatedAt past lastReadAt).
+  const bump = msg.role === 'user' ? { updatedAt: now, lastReadAt: now } : { updatedAt: now };
+  db.update(threads).set(bump).where(eq(threads.id, threadId)).run();
 }
