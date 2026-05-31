@@ -13,6 +13,10 @@ import type { ToolName } from './tools';
 
 export type ToolStatus = 'running' | 'success' | 'error' | 'cancelled' | 'warning';
 
+/** A single step in the agent's plan, written via the `todo_write` tool. */
+export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+export type Todo = { content: string; status: TodoStatus };
+
 export type Tool = {
   id: string;
   /** The tool's name — also the key for its icon. No separate "kind" layer. */

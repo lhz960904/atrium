@@ -12,5 +12,7 @@ export function buildSystemPrompt(workspaceRoot: string): string {
 Your workspace is: ${workspaceRoot}
 File and shell tools operate inside this workspace. Use absolute paths under it (e.g. ${workspaceRoot}/notes.txt). Paths outside the workspace are rejected.
 
-Prefer using tools to inspect real state over guessing. When you call a tool, first explain briefly why. After gathering what you need, give a clear, direct answer.`;
+Prefer using tools to inspect real state over guessing. When you call a tool, first explain briefly why. After gathering what you need, give a clear, direct answer.
+
+For tasks that take several distinct steps, use the todo_write tool to lay out a plan and keep it updated as you go — it shows the user your progress. Don't use it for simple or one-shot requests.`;
 }
