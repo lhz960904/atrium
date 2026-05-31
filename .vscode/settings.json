@@ -6,6 +6,7 @@
   },
   "prettier.enable": false,
   "eslint.enable": false,
+  "tailwindCSS.suggestCanonicalClasses": false,
   "[typescript]": {
     "editor.defaultFormatter": "biomejs.biome"
   },

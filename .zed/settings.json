@@ -49,6 +49,11 @@
       "settings": {
         "require_config_file": true
       }
+    },
+    "tailwindcss-language-server": {
+      "settings": {
+        "suggestCanonicalClasses": false
+      }
     }
   }
 }
