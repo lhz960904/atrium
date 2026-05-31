@@ -1,11 +1,10 @@
 import { expect, test } from 'bun:test';
 import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
-import type { ToolName } from '@shared/tools';
-import type { Tool, UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
 import type { Db } from '../db';
 import type { AgentMiddleware } from './middleware';
-import { runAgent } from './run';
+import { type RunAgentOptions, runAgent } from './run';
 import type { Sandbox } from './sandbox/types';
 
 function textModel(text: string) {
@@ -44,7 +43,7 @@ async function collectAssistants(text: string): Promise<UIMessage[]> {
     threadId: 't1',
     db: {} as Db,
     sandbox: {} as Sandbox,
-    tools: {} as Record<ToolName, Tool>,
+    tools: {} as RunAgentOptions['tools'],
     middlewares: [capture],
   });
   // Drain the chunk stream to completion so afterRun fires.
