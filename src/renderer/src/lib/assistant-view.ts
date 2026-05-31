@@ -2,7 +2,7 @@ import type { AtriumUIMessage } from '@shared/chat';
 import type { Tool, ToolStatus, TraceSegment } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
 import { getStaticToolName, isStaticToolUIPart, type ToolUIPart } from 'ai';
-import { TOOL_PRESENTATION, type ToolInput } from './tool-presentation';
+import { type MarkerToolName, TOOL_PRESENTATION, type ToolInput } from './tool-presentation';
 
 /**
  * An assistant turn split for the Codex-style render: `thinking` is the
@@ -34,9 +34,12 @@ export function buildAssistantView(parts: AtriumUIMessage['parts']): AssistantVi
       if (content === '') continue;
       work.push({ kind: 'narrative', id: `s${seq++}`, content });
     } else if (isStaticToolUIPart(part)) {
+      const name = getStaticToolName<AtriumTools>(part);
+      // The plan tool isn't trace work — it renders in the composer plan panel.
+      if (name === 'todo_write') continue;
       lastToolIdx = work.length;
       toolCount++;
-      work.push({ kind: 'tool', tool: toToolModel(part) });
+      work.push({ kind: 'tool', tool: toToolModel(part, name) });
     }
   }
 
@@ -49,8 +52,7 @@ export function buildAssistantView(parts: AtriumUIMessage['parts']): AssistantVi
 
 type AtriumToolPart = ToolUIPart<AtriumTools>;
 
-function toToolModel(part: AtriumToolPart): Tool {
-  const name = getStaticToolName<AtriumTools>(part);
+function toToolModel(part: AtriumToolPart, name: MarkerToolName): Tool {
   const input = (part.input ?? {}) as ToolInput;
   const p = TOOL_PRESENTATION[name];
   return {

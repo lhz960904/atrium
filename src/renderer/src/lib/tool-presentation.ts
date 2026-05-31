@@ -1,6 +1,10 @@
 import type { ToolName } from '@shared/tools';
 import { FilePen, FileText, FolderTree, type LucideIcon, Terminal } from 'lucide-react';
 
+/** Tools that render as a single-line trace marker. `todo_write` is excluded —
+ *  its plan renders in the composer-level plan panel, not the work trace. */
+export type MarkerToolName = Exclude<ToolName, 'todo_write'>;
+
 /** The input fields the presentation reads to build a tool's labels. */
 export type ToolInput = {
   path?: string;
@@ -23,7 +27,7 @@ const basename = (p?: string): string => (p ? (p.split('/').filter(Boolean).pop(
  * ToolName, so adding a tool to the shared name contract forces an entry here.
  * This is the one place to maintain tool display.
  */
-export const TOOL_PRESENTATION: Record<ToolName, ToolPresentation> = {
+export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
   read_file: {
     icon: FileText,
     verb: 'Read',
