@@ -4,6 +4,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 import { ChatThread } from '../../../components/chat/ChatThread';
 import { getThreadChat } from '../../../lib/chat-store';
+import { getActivePlan } from '../../../lib/plan';
 import { trpc } from '../../../lib/trpc';
 import { useChatModel } from '../../../lib/use-chat-model';
 import type { SelectedModel } from '../../../state/model-store';
@@ -129,6 +130,7 @@ function ChatRunner({
       title={title}
       messages={messages}
       status={status}
+      plan={getActivePlan(messages)}
       onSend={(text) => {
         if (!model) return;
         sendMessage({ text });

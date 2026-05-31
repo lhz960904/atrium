@@ -29,7 +29,9 @@ Keep it live: when you write the plan, mark the first step in_progress immediate
             content: z.string().describe('Short, actionable description of the step.'),
             status: z
               .enum(['pending', 'in_progress', 'completed'])
-              .describe('pending = not started, in_progress = working on it, completed = fully done.'),
+              .describe(
+                'pending = not started, in_progress = working on it, completed = fully done.',
+              ),
           }),
         )
         .describe('The full plan, in order. Replaces any previous plan.'),

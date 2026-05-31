@@ -1,20 +1,25 @@
 import type { AtriumUIMessage } from '@shared/chat';
+import type { Todo } from '@shared/chat-types';
 import type { ChatStatus } from 'ai';
 import { useEffect, useRef } from 'react';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatHeader } from './ChatHeader';
 import { Composer } from './Composer';
+import { PlanPanel } from './PlanPanel';
 import { UserMessage } from './UserMessage';
 
 export function ChatThread({
   title,
   messages,
   status,
+  plan,
   onSend,
 }: {
   title: string;
   messages: AtriumUIMessage[];
   status: ChatStatus;
+  /** The thread's active plan (latest todo_write); null when none. */
+  plan: Todo[] | null;
   onSend: (text: string) => void;
 }): React.JSX.Element {
   const live = status === 'submitted' || status === 'streaming';
@@ -52,8 +57,10 @@ export function ChatThread({
       </div>
       <div className="shrink-0 px-6 pt-2 pb-4">
         <div className="mx-auto max-w-[760px]">
+          {plan != null && <PlanPanel todos={plan} />}
           <Composer
             disabled={status === 'submitted' || status === 'streaming'}
+            attachedTop={plan != null}
             onSubmit={(text) => onSend(text)}
           />
         </div>

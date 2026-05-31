@@ -139,3 +139,21 @@ samp,
 pre {
   font-family: var(--font-mono);
 }
+
+/* Keyframe, not a transition, so the height reveal fires reliably on mount. */
+@keyframes plan-enter {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.plan-enter {
+  grid-template-rows: 1fr;
+  animation: plan-enter var(--duration-slow) var(--ease-out);
+}

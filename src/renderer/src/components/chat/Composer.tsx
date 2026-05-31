@@ -39,12 +39,15 @@ export function Composer({
   onSubmit,
   disabled = false,
   initialText = '',
+  attachedTop = false,
 }: {
   autoFocus?: boolean;
   placeholder?: string;
   onSubmit?: (text: string, attachments: Attachment[]) => void;
   disabled?: boolean;
   initialText?: string;
+  /** Square the top corners so the plan panel can sit flush on top of it. */
+  attachedTop?: boolean;
 }): React.JSX.Element {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState(initialText);
@@ -145,7 +148,11 @@ export function Composer({
   const menuItems = menu?.kind === 'slash' ? SLASH_COMMANDS : MENTION_ITEMS;
 
   return (
-    <div className="relative rounded-xl border border-border-default bg-surface p-3 transition-colors focus-within:border-accent">
+    <div
+      className={`relative border border-border-default bg-surface p-3 transition-colors focus-within:border-accent ${
+        attachedTop ? 'rounded-b-xl' : 'rounded-xl'
+      }`}
+    >
       {attachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {attachments.map((a) => (
