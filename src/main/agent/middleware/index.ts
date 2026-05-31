@@ -1,3 +1,5 @@
+export { metadataMiddleware } from './builtins/metadata';
+export { type PersistFn, persistenceMiddleware } from './builtins/persistence';
 export {
   composeAfterStep,
   composeBeforeStep,
