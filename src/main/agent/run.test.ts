@@ -1,8 +1,12 @@
 import { expect, test } from 'bun:test';
 import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
-import type { UIMessage } from 'ai';
+import type { ToolName } from '@shared/tools';
+import type { Tool, UIMessage } from 'ai';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
+import type { Db } from '../db';
+import type { AgentMiddleware } from './middleware';
 import { runAgent } from './run';
+import type { Sandbox } from './sandbox/types';
 
 function textModel(text: string) {
   const chunks: LanguageModelV3StreamPart[] = [
@@ -26,14 +30,24 @@ function textModel(text: string) {
 
 async function collectAssistants(text: string): Promise<UIMessage[]> {
   const captured: UIMessage[] = [];
+  const capture: AgentMiddleware = {
+    name: 'capture',
+    afterRun: (_ctx, { message }) => {
+      captured.push(message);
+    },
+  };
   const userMsg: UIMessage = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] };
   const stream = await runAgent({
     model: textModel(text),
     messages: [userMsg],
     workspaceRoot: '/tmp/ws',
-    onFinish: (a) => captured.push(a),
+    threadId: 't1',
+    db: {} as Db,
+    sandbox: {} as Sandbox,
+    tools: {} as Record<ToolName, Tool>,
+    middlewares: [capture],
   });
-  // Drain the chunk stream to completion so onFinish fires.
+  // Drain the chunk stream to completion so afterRun fires.
   const reader = stream.getReader();
   while (!(await reader.read()).done) {}
   return captured;

@@ -1,67 +1,82 @@
+import type { ToolName } from '@shared/tools';
 import {
   convertToModelMessages,
   generateId,
   type LanguageModel,
   stepCountIs,
   streamText,
-  type ToolSet,
+  type Tool,
   type UIMessage,
   type UIMessageChunk,
 } from 'ai';
+import type { Db } from '../db';
+import {
+  type AgentMiddleware,
+  composeMessageMetadata,
+  type MetadataPart,
+  type RunContext,
+  runAfterRun,
+  runBeforeRun,
+} from './middleware';
 import { buildSystemPrompt } from './prompts';
+import type { Sandbox } from './sandbox/types';
 
 export type RunAgentOptions = {
   model: LanguageModel;
   messages: UIMessage[];
   /** Absolute workspace root, surfaced to the model in the system prompt. */
   workspaceRoot: string;
+  threadId: string;
+  db: Db;
+  sandbox: Sandbox;
+  tools: Record<ToolName, Tool>;
+  middlewares: AgentMiddleware[];
   abortSignal?: AbortSignal;
-  /** Tools the model may call; the caller builds them around a sandbox. */
-  tools?: ToolSet;
-  /** Called once the assistant message is complete, for persistence. */
-  onFinish?: (assistant: UIMessage) => void;
 };
 
 /**
  * The agent loop. AI SDK's streamText is itself the multi-step ReAct loop:
  * with tools + stopWhen it keeps going model→tool→model until done.
  *
- * Both the model (providers layer resolves + decrypts) and the tools (built
- * around a sandbox) are supplied by the caller, so runAgent stays free of
- * DB / fs / credential concerns. Returns the raw UIMessage chunk stream; the
- * RunRegistry owns its lifetime (drains it to completion, multicasts it, and
- * supplies the abort signal), so a client disconnect can't cancel generation.
+ * Cross-cutting concerns (persistence, metadata, …) live in the middleware
+ * chain, not here: this assembles the RunContext, runs beforeRun, then folds
+ * the chain into streamText's lifecycle (messageMetadata, onFinish). Returns
+ * the raw UIMessage chunk stream; resumable.ts owns its lifetime (drains it to
+ * completion + multicasts), so a client disconnect can't cancel generation.
  */
 export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UIMessageChunk>> {
+  const ctx: RunContext = {
+    threadId: opts.threadId,
+    db: opts.db,
+    sandbox: opts.sandbox,
+    workspaceRoot: opts.workspaceRoot,
+    request: {
+      system: buildSystemPrompt(opts.workspaceRoot),
+      messages: opts.messages,
+      tools: opts.tools,
+    },
+    scratch: new Map(),
+  };
+  await runBeforeRun(ctx, opts.middlewares);
+
   const result = streamText({
     model: opts.model,
-    system: buildSystemPrompt(opts.workspaceRoot),
-    messages: await convertToModelMessages(opts.messages),
-    tools: opts.tools,
+    system: ctx.request.system,
+    messages: await convertToModelMessages(ctx.request.messages),
+    tools: ctx.request.tools,
     stopWhen: stepCountIs(12),
     abortSignal: opts.abortSignal,
   });
-  let startedAt = 0;
+
+  const messageMetadata = composeMessageMetadata(opts.middlewares);
   return result.toUIMessageStream({
-    originalMessages: opts.messages,
+    originalMessages: ctx.request.messages,
     // We stream from main (no client-assigned id), so the server must mint the
     // assistant message id — otherwise it's empty and every assistant row
     // collides on id, dropping all but the first.
     generateMessageId: generateId,
-    // Stamp timing + usage onto the message so the trace header can render
-    // "Worked for …"; durationMs is wall clock from first chunk to finish.
-    messageMetadata: ({ part }) => {
-      if (part.type === 'start') {
-        startedAt = Date.now();
-        return { createdAt: startedAt };
-      }
-      if (part.type === 'finish') {
-        // Optional-chain usage: if it throws here the whole return is lost and
-        // durationMs never lands, so the header falls back to a bare "Worked".
-        return { durationMs: Date.now() - startedAt, totalTokens: part.totalUsage?.totalTokens };
-      }
-      return undefined;
-    },
-    onFinish: ({ responseMessage }) => opts.onFinish?.(responseMessage),
+    messageMetadata: ({ part }) => messageMetadata(part as MetadataPart),
+    onFinish: ({ responseMessage }) =>
+      runAfterRun(ctx, { message: responseMessage }, opts.middlewares),
   });
 }

@@ -10,7 +10,7 @@ export type AgentRequest = {
   tools: Record<ToolName, Tool>;
 };
 
-/** Persists across the whole turn; threaded to every hook via experimental_context. */
+/** Persists across the whole turn; the runner closes over it into every hook. */
 export type RunContext = {
   threadId: string;
   db: Db;
