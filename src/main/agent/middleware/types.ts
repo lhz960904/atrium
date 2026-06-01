@@ -1,5 +1,13 @@
 import type { ToolName } from '@shared/tools';
-import type { LanguageModel, ModelMessage, TextStreamPart, Tool, ToolSet, UIMessage } from 'ai';
+import type {
+  LanguageModel,
+  ModelMessage,
+  TextStreamPart,
+  Tool,
+  ToolSet,
+  UIMessage,
+  UIMessageStreamWriter,
+} from 'ai';
 import type { Db } from '../../db';
 import type { Sandbox } from '../sandbox/types';
 
@@ -19,6 +27,8 @@ export type RunContext = {
   request: AgentRequest;
   /** The run's model, reused by middleware (e.g. compaction's summarizer). */
   model: LanguageModel;
+  /** Write a UI stream part (transient data events, …); a no-op outside a stream. */
+  emit: UIMessageStreamWriter['write'];
   /** Cross-step scratch space; each middleware namespaces its own keys. */
   scratch: Map<string, unknown>;
 };

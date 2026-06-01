@@ -113,6 +113,11 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       const fold = base.slice(0, base.length - recent.length);
       if (fold.length === 0) return;
 
+      ctx.emit({
+        type: 'data-compaction',
+        data: { phase: 'start', scope: 'cross-turn' },
+        transient: true,
+      });
       const summaryText = await summarize(
         await convertToModelMessages(fold),
         options.summaryModel ?? ctx.model,
@@ -133,6 +138,11 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       options.persist(ctx.db, ctx.threadId, summaryMsg);
       options.persist(ctx.db, ctx.threadId, ackMsg);
       ctx.request.messages = [summaryMsg, ackMsg, ...recent];
+      ctx.emit({
+        type: 'data-compaction',
+        data: { phase: 'done', scope: 'cross-turn' },
+        transient: true,
+      });
     },
 
     // Within-turn: a single tool loop can balloon past the window before the
@@ -159,6 +169,11 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       const foldedTail = liveTail.slice(0, liveTail.length - recent.length);
       if (foldedTail.length === 0) return cp ? { messages: base } : undefined;
 
+      ctx.emit({
+        type: 'data-compaction',
+        data: { phase: 'start', scope: 'within-turn' },
+        transient: true,
+      });
       const summaryText = await summarize(
         [...summaryPrefix, ...foldedTail],
         options.summaryModel ?? ctx.model,
@@ -168,6 +183,11 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
         summary: [summaryMsg],
         coveredCount: messages.length - recent.length,
       } satisfies TurnCheckpoint);
+      ctx.emit({
+        type: 'data-compaction',
+        data: { phase: 'done', scope: 'within-turn' },
+        transient: true,
+      });
       return { messages: [summaryMsg, ...recent] };
     },
   };

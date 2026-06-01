@@ -2,7 +2,12 @@ import { serve } from '@hono/node-server';
 import { UI_MESSAGE_STREAM_HEADERS, type UIMessage } from 'ai';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { metadataMiddleware, persistenceMiddleware } from '../agent/middleware';
+import {
+  compactionMiddleware,
+  metadataMiddleware,
+  persistenceMiddleware,
+} from '../agent/middleware';
+import { maxContextTokens } from '../agent/models/catalog';
 import { runAgent } from '../agent/run';
 import { LocalSandbox } from '../agent/sandbox';
 import { getTools } from '../agent/tools';
@@ -75,7 +80,11 @@ export function startHttpServer(deps: {
       db: deps.db,
       sandbox,
       tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot }),
-      middlewares: [metadataMiddleware(), persistenceMiddleware(persistMessage)],
+      middlewares: [
+        metadataMiddleware(),
+        compactionMiddleware({ maxContextTokens, persist: persistMessage }),
+        persistenceMiddleware(persistMessage),
+      ],
     });
     const sse = await startThreadStream(threadId, agentStream);
     return new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS });

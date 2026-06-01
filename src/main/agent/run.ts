@@ -1,6 +1,7 @@
 import type { ToolName } from '@shared/tools';
 import {
   convertToModelMessages,
+  createUIMessageStream,
   generateId,
   type LanguageModel,
   stepCountIs,
@@ -39,9 +40,12 @@ export type RunAgentOptions = {
  * with tools + stopWhen it keeps going model→tool→model until done.
  *
  * Cross-cutting concerns (persistence, metadata, …) live in the middleware
- * chain, not here: this assembles the RunContext, runs beforeRun, then folds
- * the chain into streamText's lifecycle (messageMetadata, onFinish). Returns
- * the raw UIMessage chunk stream; resumable.ts owns its lifetime (drains it to
+ * chain, not here. The whole run is wrapped in a createUIMessageStream so a
+ * writer is available throughout: middleware emits transient UI events (e.g.
+ * compaction progress) through ctx.emit, and streamText's own UI stream is
+ * merged in. beforeRun runs inside execute (after emit is wired) so it can mutate
+ * the request and announce itself before the model call. Returns the raw
+ * UIMessage chunk stream; resumable.ts owns its lifetime (drains it to
  * completion + multicasts), so a client disconnect can't cancel generation.
  */
 export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UIMessageChunk>> {
@@ -56,32 +60,37 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
       tools: opts.tools,
     },
     model: opts.model,
+    emit: () => {},
     scratch: new Map(),
   };
-  await runBeforeRun(ctx, opts.middlewares);
-
-  const beforeStep = composeBeforeStep(ctx, opts.middlewares);
-  const result = streamText({
-    model: opts.model,
-    system: ctx.request.system,
-    messages: await convertToModelMessages(ctx.request.messages),
-    tools: ctx.request.tools,
-    // Complex coding tasks routinely exceed a dozen steps; within-turn
-    // compaction (beforeStep) keeps the loop from overflowing the window.
-    stopWhen: stepCountIs(100),
-    prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),
-    abortSignal: opts.abortSignal,
-  });
-
   const messageMetadata = composeMessageMetadata(opts.middlewares);
-  return result.toUIMessageStream({
+
+  return createUIMessageStream({
     originalMessages: ctx.request.messages,
-    // We stream from main (no client-assigned id), so the server must mint the
-    // assistant message id — otherwise it's empty and every assistant row
-    // collides on id, dropping all but the first.
-    generateMessageId: generateId,
-    messageMetadata: ({ part }) => messageMetadata(part),
+    // We stream from main (no client-assigned id), so the server mints the
+    // assistant message id — otherwise every assistant row collides on id.
+    generateId,
     onFinish: ({ responseMessage }) =>
       runAfterRun(ctx, { message: responseMessage }, opts.middlewares),
+    execute: async ({ writer }) => {
+      ctx.emit = (event) => writer.write(event);
+      await runBeforeRun(ctx, opts.middlewares);
+
+      const beforeStep = composeBeforeStep(ctx, opts.middlewares);
+      const result = streamText({
+        model: opts.model,
+        system: ctx.request.system,
+        messages: await convertToModelMessages(ctx.request.messages),
+        tools: ctx.request.tools,
+        // Complex coding tasks routinely exceed a dozen steps; within-turn
+        // compaction (beforeStep) keeps the loop from overflowing the window.
+        stopWhen: stepCountIs(100),
+        prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),
+        abortSignal: opts.abortSignal,
+      });
+      writer.merge(
+        result.toUIMessageStream({ messageMetadata: ({ part }) => messageMetadata(part) }),
+      );
+    },
   });
 }

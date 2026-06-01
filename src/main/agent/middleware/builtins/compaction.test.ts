@@ -39,6 +39,7 @@ function makeCtx(messages: UIMessage[], model: LanguageModel): RunContext {
     workspaceRoot: '/tmp',
     request: { system: '', messages, tools: {} as RunContext['request']['tools'] },
     model,
+    emit: () => {},
     scratch: new Map(),
   };
 }
