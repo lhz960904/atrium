@@ -4,6 +4,7 @@
 
 - **Best practice first** — research, cite the evidence (issue / doc / thread), then decide.
 - **Latest stable major** — pin every package to its latest stable major; bump when new majors ship. On conflict with best-practice, use the version best-practice prescribes.
+- **Reuse package types, don't reinvent them.** Before hand-rolling a type (especially a loose `Record<string, unknown>` shim), check whether the package already exports it. Prefer importing the real type; when no single export fits, derive from one with indexed/utility types (e.g. `Exclude<ModelMessage['content'], string>[number]` for a content part) over re-declaring the shape. *Why: hand-rolled types drift from the source of truth and lose the package's discriminated-union narrowing.*
 
 ## Vercel AI SDK (core code)
 
