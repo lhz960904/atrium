@@ -6,6 +6,7 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { app, BrowserWindow, safeStorage, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
+import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
 import { closeDb, openDb } from './db';
 import { startHttpServer } from './server/http';
 import { openSettings } from './settings/conf';
@@ -62,6 +63,11 @@ app.whenReady().then(async () => {
 
   const db = openDb();
   openSettings();
+
+  // Warm model metadata from the disk cache (falls back to the bundled
+  // snapshot), then let it refresh from models.dev in the background.
+  populateModelCatalog();
+  startModelCatalogRefresh();
 
   if (!safeStorage.isEncryptionAvailable()) {
     console.warn(
