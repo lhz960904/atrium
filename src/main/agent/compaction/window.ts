@@ -28,13 +28,16 @@ function keptCount(sizeAt: (i: number) => number, length: number, opts: WindowOp
 
 /**
  * Recent window to keep un-summarized. UIMessages are self-contained — a tool
- * call and its result live within one assistant message's parts — so any
- * suffix is a legal cut, no pair can be split.
+ * call and its result live within one assistant message's parts — so no pair
+ * can be split. The cut then walks back to a user turn so a prepended
+ * [summary(user), ack(assistant)] checkpoint keeps strict role alternation.
  */
 export function pickRecentWindow(messages: UIMessage[], opts: WindowOptions): UIMessage[] {
   if (messages.length <= opts.minKeepMessages) return messages.slice();
   const kept = keptCount((i) => tokensOfUIMessage(messages[i]), messages.length, opts);
-  return messages.slice(messages.length - kept);
+  let cut = messages.length - kept;
+  while (cut > 0 && messages[cut].role !== 'user') cut--;
+  return messages.slice(cut);
 }
 
 /**

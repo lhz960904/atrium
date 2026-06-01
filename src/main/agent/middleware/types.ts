@@ -1,5 +1,5 @@
 import type { ToolName } from '@shared/tools';
-import type { Tool, UIMessage } from 'ai';
+import type { LanguageModel, TextStreamPart, Tool, ToolSet, UIMessage } from 'ai';
 import type { Db } from '../../db';
 import type { Sandbox } from '../sandbox/types';
 
@@ -17,6 +17,8 @@ export type RunContext = {
   sandbox: Sandbox;
   workspaceRoot: string;
   request: AgentRequest;
+  /** The run's model, reused by middleware (e.g. compaction's summarizer). */
+  model: LanguageModel;
   /** Cross-step scratch space; each middleware namespaces its own keys. */
   scratch: Map<string, unknown>;
 };
@@ -46,11 +48,8 @@ export type ToolShortCircuit = { result: unknown };
 
 export type RunResultInfo = { message: UIMessage };
 
-/** The stream lifecycle part messageMetadata sees (subset of AI SDK's part). */
-export type MetadataPart = {
-  type: 'start' | 'finish' | 'start-step' | 'finish-step';
-  totalUsage?: { totalTokens?: number };
-};
+/** The stream part messageMetadata receives — streamText's fullStream element. */
+export type MetadataPart = TextStreamPart<ToolSet>;
 
 type MaybePromise<T> = T | Promise<T>;
 

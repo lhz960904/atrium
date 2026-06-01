@@ -32,6 +32,15 @@ test('pickRecentWindow respects minKeep above the budget', () => {
   expect(kept).toHaveLength(3);
 });
 
+test('pickRecentWindow walks the cut back to a user turn', () => {
+  const m = (id: string, role: UIMessage['role']): UIMessage =>
+    ({ id, role, parts: [{ type: 'text', text: 'aaaaaaaa' }] }) as unknown as UIMessage;
+  const msgs = [m('u1', 'user'), m('a1', 'assistant'), m('u2', 'user'), m('a2', 'assistant')];
+  // budget alone would cut at a2 (assistant); it must back up to the user turn
+  const kept = pickRecentWindow(msgs, { keepRecentTokens: 1, minKeepMessages: 1 });
+  expect(kept[0].id).toBe('u2');
+});
+
 test('pickRecentWindowModel never starts the window on an orphan tool result', () => {
   const msgs: ModelMessage[] = [
     { role: 'user', content: 'hi' },

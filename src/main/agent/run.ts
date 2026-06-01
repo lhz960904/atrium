@@ -13,7 +13,6 @@ import type { Db } from '../db';
 import {
   type AgentMiddleware,
   composeMessageMetadata,
-  type MetadataPart,
   type RunContext,
   runAfterRun,
   runBeforeRun,
@@ -55,6 +54,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
       messages: opts.messages,
       tools: opts.tools,
     },
+    model: opts.model,
     scratch: new Map(),
   };
   await runBeforeRun(ctx, opts.middlewares);
@@ -75,7 +75,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
     // assistant message id — otherwise it's empty and every assistant row
     // collides on id, dropping all but the first.
     generateMessageId: generateId,
-    messageMetadata: ({ part }) => messageMetadata(part as MetadataPart),
+    messageMetadata: ({ part }) => messageMetadata(part),
     onFinish: ({ responseMessage }) =>
       runAfterRun(ctx, { message: responseMessage }, opts.middlewares),
   });
