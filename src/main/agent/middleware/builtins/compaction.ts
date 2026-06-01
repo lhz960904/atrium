@@ -1,8 +1,18 @@
-import { convertToModelMessages, generateId, type LanguageModel, type UIMessage } from 'ai';
+import {
+  convertToModelMessages,
+  generateId,
+  type LanguageModel,
+  type ModelMessage,
+  type UIMessage,
+} from 'ai';
 import { summarize } from '../../compaction/summarize';
-import { countTokens as defaultCountTokens } from '../../compaction/tokens';
-import { findLatestCheckpoint, pickRecentWindow } from '../../compaction/window';
-import type { AgentMiddleware, RunContext } from '../types';
+import { countTokensModel, countTokens as defaultCountTokens } from '../../compaction/tokens';
+import {
+  findLatestCheckpoint,
+  pickRecentWindow,
+  pickRecentWindowModel,
+} from '../../compaction/window';
+import type { AgentMiddleware, RunContext, StepInfo, StepOverride } from '../types';
 import type { PersistFn } from './persistence';
 
 const SUMMARY_PREAMBLE =
@@ -12,6 +22,14 @@ const ACK_TEXT = 'Understood — I have the summary above and will continue from
 const DEFAULT_COMPACT_AT_RATIO = 0.8;
 const DEFAULT_KEEP_RECENT_RATIO = 0.25;
 const DEFAULT_MIN_KEEP_MESSAGES = 4;
+
+const TURN_CHECKPOINT_KEY = 'compaction:turn';
+
+// Within-turn checkpoint, transient in scratch (dies at turn end). `summary`
+// is the folded prefix as ModelMessages; `coveredCount` is how many of the
+// step's raw messages it stands in for, so each step deterministically rebuilds
+// [summary, ...live tail] and the prefix stays byte-stable for the prefix cache.
+type TurnCheckpoint = { summary: ModelMessage[]; coveredCount: number };
 
 export type CompactionOptions = {
   /** Context window per model id; see agent/models/catalog. */
@@ -115,6 +133,42 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       options.persist(ctx.db, ctx.threadId, summaryMsg);
       options.persist(ctx.db, ctx.threadId, ackMsg);
       ctx.request.messages = [summaryMsg, ackMsg, ...recent];
+    },
+
+    // Within-turn: a single tool loop can balloon past the window before the
+    // turn ends. Each step rebuilds [summary, ...live tail] from the scratch
+    // checkpoint (deterministic, so the cached prefix holds), re-summarizing
+    // only when the tail itself grows past the threshold. Transient — nothing
+    // is persisted; the real assistant message is assembled from the full
+    // responseMessages, untouched. Injects one user summary (no ack): the
+    // recent tail starts on an assistant tool-call, so user→assistant alternates.
+    async beforeStep(ctx: RunContext, { messages }: StepInfo): Promise<StepOverride | undefined> {
+      const window = options.maxContextTokens(modelIdOf(ctx.model));
+      const cp = ctx.scratch.get(TURN_CHECKPOINT_KEY) as TurnCheckpoint | undefined;
+      const summaryPrefix = cp?.summary ?? [];
+      const liveTail = messages.slice(cp?.coveredCount ?? 0);
+      const base = [...summaryPrefix, ...liveTail];
+
+      if (countTokensModel(base) < window * ratio) {
+        return cp ? { messages: base } : undefined;
+      }
+
+      const keepRecentTokens =
+        options.keepRecentTokens ?? Math.floor(window * DEFAULT_KEEP_RECENT_RATIO);
+      const recent = pickRecentWindowModel(liveTail, { keepRecentTokens, minKeepMessages });
+      const foldedTail = liveTail.slice(0, liveTail.length - recent.length);
+      if (foldedTail.length === 0) return cp ? { messages: base } : undefined;
+
+      const summaryText = await summarize(
+        [...summaryPrefix, ...foldedTail],
+        options.summaryModel ?? ctx.model,
+      );
+      const summaryMsg: ModelMessage = { role: 'user', content: SUMMARY_PREAMBLE + summaryText };
+      ctx.scratch.set(TURN_CHECKPOINT_KEY, {
+        summary: [summaryMsg],
+        coveredCount: messages.length - recent.length,
+      } satisfies TurnCheckpoint);
+      return { messages: [summaryMsg, ...recent] };
     },
   };
 }

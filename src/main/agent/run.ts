@@ -12,6 +12,7 @@ import {
 import type { Db } from '../db';
 import {
   type AgentMiddleware,
+  composeBeforeStep,
   composeMessageMetadata,
   type RunContext,
   runAfterRun,
@@ -59,12 +60,16 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
   };
   await runBeforeRun(ctx, opts.middlewares);
 
+  const beforeStep = composeBeforeStep(ctx, opts.middlewares);
   const result = streamText({
     model: opts.model,
     system: ctx.request.system,
     messages: await convertToModelMessages(ctx.request.messages),
     tools: ctx.request.tools,
-    stopWhen: stepCountIs(12),
+    // Complex coding tasks routinely exceed a dozen steps; within-turn
+    // compaction (beforeStep) keeps the loop from overflowing the window.
+    stopWhen: stepCountIs(100),
+    prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),
     abortSignal: opts.abortSignal,
   });
 

@@ -1,5 +1,5 @@
 import type { ToolName } from '@shared/tools';
-import type { LanguageModel, TextStreamPart, Tool, ToolSet, UIMessage } from 'ai';
+import type { LanguageModel, ModelMessage, TextStreamPart, Tool, ToolSet, UIMessage } from 'ai';
 import type { Db } from '../../db';
 import type { Sandbox } from '../sandbox/types';
 
@@ -23,12 +23,14 @@ export type RunContext = {
   scratch: Map<string, unknown>;
 };
 
-export type StepInfo = { stepNumber: number; messages: UIMessage[] };
+// Step hooks run inside the model loop, downstream of convertToModelMessages —
+// they see and override ModelMessages (the wire form), not our UIMessages.
+export type StepInfo = { stepNumber: number; messages: ModelMessage[] };
 
 /** What beforeStep returns to override the upcoming model call. */
 export type StepOverride = {
   system?: string;
-  messages?: UIMessage[];
+  messages?: ModelMessage[];
   activeTools?: ToolName[];
 };
 
