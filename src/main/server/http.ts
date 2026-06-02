@@ -13,6 +13,7 @@ import { LocalSandbox } from '../agent/sandbox';
 import { getTools } from '../agent/tools';
 import { todoPreserver } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
+import { createLogger } from '../log';
 import { resolveModel } from '../providers/resolve';
 import { loadThreadMessages, persistMessage } from './persist';
 import { resumeThreadStream, startThreadStream } from './resumable';
@@ -87,6 +88,7 @@ export function startHttpServer(deps: {
           maxContextTokens,
           persist: persistMessage,
           preservers: [todoPreserver],
+          log: createLogger('compaction'),
         }),
         persistenceMiddleware(persistMessage),
       ],

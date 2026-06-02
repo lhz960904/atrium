@@ -5,6 +5,7 @@ import {
   type ModelMessage,
   type UIMessage,
 } from 'ai';
+import type { Logger } from '../../../log';
 import type { CompactionPreserver } from '../../compaction/preserver';
 import { summarize } from '../../compaction/summarize';
 import { countTokensModel, countTokens as defaultCountTokens } from '../../compaction/tokens';
@@ -78,6 +79,8 @@ export type CompactionOptions = {
   countTokens?: (messages: UIMessage[]) => number;
   /** Feature hooks that carry their state (plan, skills, …) across a fold. */
   preservers?: CompactionPreserver[];
+  /** Scoped logger; defaults to console (so unit tests don't pull in electron-log). */
+  log?: Logger;
 };
 
 function modelIdOf(model: LanguageModel): string {
@@ -128,6 +131,7 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
   const ratio = options.compactAtRatio ?? DEFAULT_COMPACT_AT_RATIO;
   const minKeepMessages = options.minKeepMessages ?? DEFAULT_MIN_KEEP_MESSAGES;
   const preservers = options.preservers ?? [];
+  const log = options.log ?? console;
   const isText = (t: string | null): t is string => t !== null;
 
   return {
@@ -148,9 +152,7 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       if (!selected) return;
       const { fold, recent } = selected;
 
-      console.log(
-        `[atrium] compaction: cross-turn fold of ${fold.length} messages (${tokens}/${window} tokens)`,
-      );
+      log.info(`cross-turn fold of ${fold.length} messages (${tokens}/${window} tokens)`);
       ctx.emit({ type: 'data-compaction', data: { phase: 'start' }, transient: true });
       try {
         const carried = preservers.map((p) => p.fromUI(fold, recent)).filter(isText);
@@ -176,9 +178,7 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
         ctx.request.messages = [summaryMsg, ackMsg, ...recent];
       } catch (err) {
         // Never let a failed summary dead-end the turn — run uncompacted.
-        console.warn(
-          `[atrium] compaction: cross-turn fold failed, proceeding uncompacted: ${(err as Error).message}`,
-        );
+        log.warn(`cross-turn fold failed, proceeding uncompacted: ${(err as Error).message}`);
         ctx.request.messages = base;
       } finally {
         ctx.emit({ type: 'data-compaction', data: { phase: 'done' }, transient: true });
@@ -219,9 +219,7 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       // Within-turn folds are internal and not persisted — not surfaced in the UI
       // (no emit), matching Codex: compaction shows only at the turn boundary.
       // It is logged, though, since there's no other trace to debug from.
-      console.log(
-        `[atrium] compaction: within-turn fold of ${foldedTail.length} messages (${tokens}/${window} tokens)`,
-      );
+      log.info(`within-turn fold of ${foldedTail.length} messages (${tokens}/${window} tokens)`);
       try {
         const carried = preservers.map((p) => p.fromModel(foldedTail, recent)).filter(isText);
         const content = await summarizeFold(
@@ -237,9 +235,7 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
         return { messages: [summaryMsg, ...recent] };
       } catch (err) {
         // Failed summary: run this step on the existing (un-refolded) view.
-        console.warn(
-          `[atrium] compaction: within-turn fold failed, proceeding uncompacted: ${(err as Error).message}`,
-        );
+        log.warn(`within-turn fold failed, proceeding uncompacted: ${(err as Error).message}`);
         return cp ? { messages: base } : undefined;
       }
     },

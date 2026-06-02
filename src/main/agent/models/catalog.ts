@@ -1,9 +1,12 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { app } from 'electron';
+import { createLogger } from '../../log';
 import { capabilitiesFrom, maxContextTokensFrom } from './lookup';
 import snapshotData from './models-dev.snapshot.json';
 import type { ModelCapabilities, ModelsCatalog } from './types';
+
+const log = createLogger('models');
 
 /**
  * Per-model capability data (context window, vision, tool-call, …) sourced from
@@ -77,7 +80,7 @@ export function startModelCatalogRefresh(): void {
     try {
       await fetchAndCache();
     } catch (err) {
-      console.warn('[atrium] models.dev refresh failed:', (err as Error).message);
+      log.warn('models.dev refresh failed:', (err as Error).message);
     }
   };
   void tick();

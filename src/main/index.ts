@@ -8,6 +8,7 @@ import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
 import { closeDb, openDb } from './db';
+import { createLogger, initLogging } from './log';
 import { startHttpServer } from './server/http';
 import { openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
@@ -60,6 +61,7 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.atrium.app');
+  initLogging();
 
   const db = openDb();
   openSettings();
@@ -70,8 +72,8 @@ app.whenReady().then(async () => {
   startModelCatalogRefresh();
 
   if (!safeStorage.isEncryptionAvailable()) {
-    console.warn(
-      '[atrium] safeStorage encryption unavailable — provider credential writes will throw.',
+    createLogger('app').warn(
+      'safeStorage encryption unavailable — provider credential writes will throw.',
     );
   }
 
