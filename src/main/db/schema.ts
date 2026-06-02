@@ -63,6 +63,29 @@ export const providers = sqliteTable('providers', {
   updatedAt: timestamp(),
 });
 
+/**
+ * User-defined and AI-created subagents. Built-in subagents (general-purpose,
+ * deep-research) live in code and are never stored here — this table holds only
+ * the ones the user adds or the agent creates via createSubAgent. `name` is the
+ * unique identifier the parent delegates to; it must not collide with a built-in
+ * (built-in vs custom is told apart by membership in the code's built-in map, so
+ * no column tracks it). null toolAllow/toolDeny = inherit the parent's tools. A
+ * model is identified by a (providerId, modelId) pair — set both to pin this
+ * subagent to a specific model, or leave both null to inherit the parent's.
+ */
+export const subagents = sqliteTable('subagents', {
+  id: text().primaryKey(),
+  name: text().notNull().unique(),
+  description: text().notNull(),
+  systemPrompt: text().notNull(),
+  toolAllow: text({ mode: 'json' }),
+  toolDeny: text({ mode: 'json' }),
+  providerId: text('provider_id'),
+  modelId: text('model_id'),
+  createdAt: timestamp(),
+  updatedAt: timestamp(),
+});
+
 export type Thread = typeof threads.$inferSelect;
 export type NewThread = typeof threads.$inferInsert;
 export type Message = typeof messages.$inferSelect;
@@ -71,3 +94,5 @@ export type Artifact = typeof artifacts.$inferSelect;
 export type NewArtifact = typeof artifacts.$inferInsert;
 export type Provider = typeof providers.$inferSelect;
 export type NewProvider = typeof providers.$inferInsert;
+export type Subagent = typeof subagents.$inferSelect;
+export type NewSubagent = typeof subagents.$inferInsert;
