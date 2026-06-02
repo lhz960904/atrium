@@ -105,7 +105,8 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       ctx.request.messages = base;
 
       const window = options.maxContextTokens(modelIdOf(ctx.model));
-      if (count(base) < window * ratio) return;
+      const tokens = count(base);
+      if (tokens < window * ratio) return;
 
       const keepRecentTokens =
         options.keepRecentTokens ?? Math.floor(window * DEFAULT_KEEP_RECENT_RATIO);
@@ -113,11 +114,10 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       const fold = base.slice(0, base.length - recent.length);
       if (fold.length === 0) return;
 
-      ctx.emit({
-        type: 'data-compaction',
-        data: { phase: 'start', scope: 'cross-turn' },
-        transient: true,
-      });
+      console.log(
+        `[atrium] compaction: cross-turn fold of ${fold.length} messages (${tokens}/${window} tokens)`,
+      );
+      ctx.emit({ type: 'data-compaction', data: { phase: 'start' }, transient: true });
       const summaryText = await summarize(
         await convertToModelMessages(fold),
         options.summaryModel ?? ctx.model,
@@ -138,11 +138,7 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       options.persist(ctx.db, ctx.threadId, summaryMsg);
       options.persist(ctx.db, ctx.threadId, ackMsg);
       ctx.request.messages = [summaryMsg, ackMsg, ...recent];
-      ctx.emit({
-        type: 'data-compaction',
-        data: { phase: 'done', scope: 'cross-turn' },
-        transient: true,
-      });
+      ctx.emit({ type: 'data-compaction', data: { phase: 'done' }, transient: true });
     },
 
     // Within-turn: a single tool loop can balloon past the window before the
@@ -159,7 +155,8 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       const liveTail = messages.slice(cp?.coveredCount ?? 0);
       const base = [...summaryPrefix, ...liveTail];
 
-      if (countTokensModel(base) < window * ratio) {
+      const tokens = countTokensModel(base);
+      if (tokens < window * ratio) {
         return cp ? { messages: base } : undefined;
       }
 
@@ -169,11 +166,12 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       const foldedTail = liveTail.slice(0, liveTail.length - recent.length);
       if (foldedTail.length === 0) return cp ? { messages: base } : undefined;
 
-      ctx.emit({
-        type: 'data-compaction',
-        data: { phase: 'start', scope: 'within-turn' },
-        transient: true,
-      });
+      // Within-turn folds are internal and not persisted — not surfaced in the UI
+      // (no emit), matching Codex: compaction shows only at the turn boundary.
+      // It is logged, though, since there's no other trace to debug from.
+      console.log(
+        `[atrium] compaction: within-turn fold of ${foldedTail.length} messages (${tokens}/${window} tokens)`,
+      );
       const summaryText = await summarize(
         [...summaryPrefix, ...foldedTail],
         options.summaryModel ?? ctx.model,
@@ -183,11 +181,6 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
         summary: [summaryMsg],
         coveredCount: messages.length - recent.length,
       } satisfies TurnCheckpoint);
-      ctx.emit({
-        type: 'data-compaction',
-        data: { phase: 'done', scope: 'within-turn' },
-        transient: true,
-      });
       return { messages: [summaryMsg, ...recent] };
     },
   };
