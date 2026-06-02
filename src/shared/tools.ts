@@ -3,7 +3,13 @@
  * implements each tool — schemas, descriptions, execute) and the renderer
  * (which renders tool calls by name). Only the names cross the boundary.
  */
-export type ToolName = 'read_file' | 'write_file' | 'list_dir' | 'bash' | 'todo_write';
+export type ToolName =
+  | 'read_file'
+  | 'write_file'
+  | 'list_dir'
+  | 'bash'
+  | 'todo_write'
+  | 'web_fetch';
 
 /**
  * The tools generic for UIMessage. We only care that tool parts carry a typed

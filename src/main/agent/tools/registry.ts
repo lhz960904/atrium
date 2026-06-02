@@ -4,6 +4,7 @@ import { bashTool } from './builtins/bash';
 import { listDirTool } from './builtins/list-dir';
 import { readFileTool } from './builtins/read-file';
 import { todoWriteTool } from './builtins/todo-write';
+import { webFetchTool } from './builtins/web-fetch';
 import { writeFileTool } from './builtins/write-file';
 import type { ToolCtx } from './context';
 
@@ -18,5 +19,6 @@ export function getTools(ctx: ToolCtx): Record<ToolName, Tool> {
     list_dir: listDirTool(ctx),
     bash: bashTool(ctx),
     todo_write: todoWriteTool(),
+    web_fetch: webFetchTool(),
   };
 }

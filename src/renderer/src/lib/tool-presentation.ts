@@ -1,5 +1,5 @@
 import type { ToolName } from '@shared/tools';
-import { FilePen, FileText, FolderTree, type LucideIcon, Terminal } from 'lucide-react';
+import { FilePen, FileText, FolderTree, Globe, type LucideIcon, Terminal } from 'lucide-react';
 
 /** Tools that render as a single-line trace marker. `todo_write` is excluded —
  *  its plan renders in the composer-level plan panel, not the work trace. */
@@ -9,6 +9,16 @@ export type MarkerToolName = Exclude<ToolName, 'todo_write'>;
 export type ToolInput = {
   path?: string;
   command?: string;
+  url?: string;
+};
+
+const hostname = (u?: string): string => {
+  if (!u) return '';
+  try {
+    return new URL(u).hostname;
+  } catch {
+    return u;
+  }
 };
 
 export type ToolPresentation = {
@@ -52,5 +62,11 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     target: (i) => i.command ?? '',
     typeLabel: () => 'Shell',
     command: (i) => i.command,
+  },
+  web_fetch: {
+    icon: Globe,
+    verb: 'Fetched',
+    target: (i) => hostname(i.url),
+    typeLabel: (i) => `Web · ${i.url ?? ''}`,
   },
 };
