@@ -1,5 +1,13 @@
 import type { ToolName } from '@shared/tools';
-import { FilePen, FileText, FolderTree, Globe, type LucideIcon, Terminal } from 'lucide-react';
+import {
+  FilePen,
+  FileText,
+  FolderTree,
+  Globe,
+  type LucideIcon,
+  Search,
+  Terminal,
+} from 'lucide-react';
 
 /** Tools that render as a single-line trace marker. `todo_write` is excluded —
  *  its plan renders in the composer-level plan panel, not the work trace. */
@@ -10,6 +18,7 @@ export type ToolInput = {
   path?: string;
   command?: string;
   url?: string;
+  query?: string;
 };
 
 const hostname = (u?: string): string => {
@@ -68,5 +77,11 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     verb: 'Fetched',
     target: (i) => hostname(i.url),
     typeLabel: (i) => `Web · ${i.url ?? ''}`,
+  },
+  web_search: {
+    icon: Search,
+    verb: 'Searched',
+    target: (i) => i.query ?? '',
+    typeLabel: () => 'Web search',
   },
 };
