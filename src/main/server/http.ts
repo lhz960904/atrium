@@ -11,6 +11,7 @@ import { maxContextTokens } from '../agent/models/catalog';
 import { runAgent } from '../agent/run';
 import { LocalSandbox } from '../agent/sandbox';
 import { getTools } from '../agent/tools';
+import { todoPreserver } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
 import { resolveModel } from '../providers/resolve';
 import { loadThreadMessages, persistMessage } from './persist';
@@ -82,7 +83,11 @@ export function startHttpServer(deps: {
       tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot }),
       middlewares: [
         metadataMiddleware(),
-        compactionMiddleware({ maxContextTokens, persist: persistMessage }),
+        compactionMiddleware({
+          maxContextTokens,
+          persist: persistMessage,
+          preservers: [todoPreserver],
+        }),
         persistenceMiddleware(persistMessage),
       ],
     });

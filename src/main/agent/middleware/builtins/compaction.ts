@@ -5,12 +5,14 @@ import {
   type ModelMessage,
   type UIMessage,
 } from 'ai';
+import type { CompactionPreserver } from '../../compaction/preserver';
 import { summarize } from '../../compaction/summarize';
 import { countTokensModel, countTokens as defaultCountTokens } from '../../compaction/tokens';
 import {
   findLatestCheckpoint,
   pickRecentWindow,
   pickRecentWindowModel,
+  type WindowOptions,
 } from '../../compaction/window';
 import type { AgentMiddleware, RunContext, StepInfo, StepOverride } from '../types';
 import type { PersistFn } from './persistence';
@@ -19,9 +21,37 @@ const SUMMARY_PREAMBLE =
   'Earlier conversation was compacted to save context. Summary of what came before:\n\n';
 const ACK_TEXT = 'Understood — I have the summary above and will continue from here.';
 
+/** Token-budgeted split of a region into [fold, recent]; null when nothing to fold. */
+function selectFold<T>(
+  region: T[],
+  pick: (m: T[], o: WindowOptions) => T[],
+  keepRecentTokens: number,
+  minKeepMessages: number,
+): { fold: T[]; recent: T[] } | null {
+  const recent = pick(region, { keepRecentTokens, minKeepMessages });
+  const fold = region.slice(0, region.length - recent.length);
+  return fold.length === 0 ? null : { fold, recent };
+}
+
+/** Summarize a fold (timeout-guarded), appending any preserver text carried across it. */
+async function summarizeFold(
+  fold: ModelMessage[],
+  model: LanguageModel,
+  carried: string[],
+): Promise<string> {
+  const summaryText = await summarize(fold, model, {
+    abortSignal: AbortSignal.timeout(SUMMARY_TIMEOUT_MS),
+  });
+  return [SUMMARY_PREAMBLE + summaryText, ...carried].join('\n\n');
+}
+
 const DEFAULT_COMPACT_AT_RATIO = 0.8;
 const DEFAULT_KEEP_RECENT_RATIO = 0.25;
 const DEFAULT_MIN_KEEP_MESSAGES = 4;
+// Compaction is an optimization, never load-bearing: if the summary call hangs
+// or errors, we abandon it and run the turn on the un-compacted messages.
+// Generous because cross-border access to a hosted model can be slow.
+const SUMMARY_TIMEOUT_MS = 60_000;
 
 const TURN_CHECKPOINT_KEY = 'compaction:turn';
 
@@ -46,6 +76,8 @@ export type CompactionOptions = {
   summaryModel?: LanguageModel;
   /** Token counter; defaults to the hybrid estimate. */
   countTokens?: (messages: UIMessage[]) => number;
+  /** Feature hooks that carry their state (plan, skills, …) across a fold. */
+  preservers?: CompactionPreserver[];
 };
 
 function modelIdOf(model: LanguageModel): string {
@@ -95,6 +127,8 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
   const count = options.countTokens ?? defaultCountTokens;
   const ratio = options.compactAtRatio ?? DEFAULT_COMPACT_AT_RATIO;
   const minKeepMessages = options.minKeepMessages ?? DEFAULT_MIN_KEEP_MESSAGES;
+  const preservers = options.preservers ?? [];
+  const isText = (t: string | null): t is string => t !== null;
 
   return {
     name: 'compaction',
@@ -110,35 +144,45 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
 
       const keepRecentTokens =
         options.keepRecentTokens ?? Math.floor(window * DEFAULT_KEEP_RECENT_RATIO);
-      const recent = pickRecentWindow(base, { keepRecentTokens, minKeepMessages });
-      const fold = base.slice(0, base.length - recent.length);
-      if (fold.length === 0) return;
+      const selected = selectFold(base, pickRecentWindow, keepRecentTokens, minKeepMessages);
+      if (!selected) return;
+      const { fold, recent } = selected;
 
       console.log(
         `[atrium] compaction: cross-turn fold of ${fold.length} messages (${tokens}/${window} tokens)`,
       );
       ctx.emit({ type: 'data-compaction', data: { phase: 'start' }, transient: true });
-      const summaryText = await summarize(
-        await convertToModelMessages(fold),
-        options.summaryModel ?? ctx.model,
-      );
-
-      const summaryMsg: UIMessage = {
-        id: generateId(),
-        role: 'user',
-        parts: [{ type: 'text', text: SUMMARY_PREAMBLE + summaryText }],
-        metadata: { kind: 'compaction', coveredThroughId: fold[fold.length - 1].id },
-      };
-      const ackMsg: UIMessage = {
-        id: generateId(),
-        role: 'assistant',
-        parts: [{ type: 'text', text: ACK_TEXT }],
-        metadata: { kind: 'compaction-ack' },
-      };
-      options.persist(ctx.db, ctx.threadId, summaryMsg);
-      options.persist(ctx.db, ctx.threadId, ackMsg);
-      ctx.request.messages = [summaryMsg, ackMsg, ...recent];
-      ctx.emit({ type: 'data-compaction', data: { phase: 'done' }, transient: true });
+      try {
+        const carried = preservers.map((p) => p.fromUI(fold, recent)).filter(isText);
+        const text = await summarizeFold(
+          await convertToModelMessages(fold),
+          options.summaryModel ?? ctx.model,
+          carried,
+        );
+        const summaryMsg: UIMessage = {
+          id: generateId(),
+          role: 'user',
+          parts: [{ type: 'text', text }],
+          metadata: { kind: 'compaction', coveredThroughId: fold[fold.length - 1].id },
+        };
+        const ackMsg: UIMessage = {
+          id: generateId(),
+          role: 'assistant',
+          parts: [{ type: 'text', text: ACK_TEXT }],
+          metadata: { kind: 'compaction-ack' },
+        };
+        options.persist(ctx.db, ctx.threadId, summaryMsg);
+        options.persist(ctx.db, ctx.threadId, ackMsg);
+        ctx.request.messages = [summaryMsg, ackMsg, ...recent];
+      } catch (err) {
+        // Never let a failed summary dead-end the turn — run uncompacted.
+        console.warn(
+          `[atrium] compaction: cross-turn fold failed, proceeding uncompacted: ${(err as Error).message}`,
+        );
+        ctx.request.messages = base;
+      } finally {
+        ctx.emit({ type: 'data-compaction', data: { phase: 'done' }, transient: true });
+      }
     },
 
     // Within-turn: a single tool loop can balloon past the window before the
@@ -162,9 +206,15 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
 
       const keepRecentTokens =
         options.keepRecentTokens ?? Math.floor(window * DEFAULT_KEEP_RECENT_RATIO);
-      const recent = pickRecentWindowModel(liveTail, { keepRecentTokens, minKeepMessages });
-      const foldedTail = liveTail.slice(0, liveTail.length - recent.length);
-      if (foldedTail.length === 0) return cp ? { messages: base } : undefined;
+      // Split only the live tail — the prior summary prefix is always re-folded.
+      const selected = selectFold(
+        liveTail,
+        pickRecentWindowModel,
+        keepRecentTokens,
+        minKeepMessages,
+      );
+      if (!selected) return cp ? { messages: base } : undefined;
+      const { fold: foldedTail, recent } = selected;
 
       // Within-turn folds are internal and not persisted — not surfaced in the UI
       // (no emit), matching Codex: compaction shows only at the turn boundary.
@@ -172,16 +222,26 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       console.log(
         `[atrium] compaction: within-turn fold of ${foldedTail.length} messages (${tokens}/${window} tokens)`,
       );
-      const summaryText = await summarize(
-        [...summaryPrefix, ...foldedTail],
-        options.summaryModel ?? ctx.model,
-      );
-      const summaryMsg: ModelMessage = { role: 'user', content: SUMMARY_PREAMBLE + summaryText };
-      ctx.scratch.set(TURN_CHECKPOINT_KEY, {
-        summary: [summaryMsg],
-        coveredCount: messages.length - recent.length,
-      } satisfies TurnCheckpoint);
-      return { messages: [summaryMsg, ...recent] };
+      try {
+        const carried = preservers.map((p) => p.fromModel(foldedTail, recent)).filter(isText);
+        const content = await summarizeFold(
+          [...summaryPrefix, ...foldedTail],
+          options.summaryModel ?? ctx.model,
+          carried,
+        );
+        const summaryMsg: ModelMessage = { role: 'user', content };
+        ctx.scratch.set(TURN_CHECKPOINT_KEY, {
+          summary: [summaryMsg],
+          coveredCount: messages.length - recent.length,
+        } satisfies TurnCheckpoint);
+        return { messages: [summaryMsg, ...recent] };
+      } catch (err) {
+        // Failed summary: run this step on the existing (un-refolded) view.
+        console.warn(
+          `[atrium] compaction: within-turn fold failed, proceeding uncompacted: ${(err as Error).message}`,
+        );
+        return cp ? { messages: base } : undefined;
+      }
     },
   };
 }

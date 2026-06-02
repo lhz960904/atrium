@@ -83,6 +83,26 @@ test('beforeRun under threshold folds at the checkpoint but does not re-summariz
   expect(ctx.request.messages.map((m) => m.id)).toEqual(['u1']);
 });
 
+test('beforeRun proceeds uncompacted (no throw, no checkpoint) when the summary fails', async () => {
+  const failing = new MockLanguageModelV3({
+    doGenerate: async () => {
+      throw new Error('boom');
+    },
+  });
+  const messages = [
+    msg('u1', 'user', 'a'),
+    msg('a1', 'assistant', 'b'),
+    msg('u2', 'user', 'c'),
+    msg('a2', 'assistant', 'd'),
+    msg('u3', 'user', 'e'),
+    msg('a3', 'assistant', 'f'),
+  ];
+  const { ctx, persisted, run } = runWith(messages, { summaryModel: failing });
+  await run();
+  expect(persisted).toHaveLength(0);
+  expect(ctx.request.messages.map((m) => m.id)).toEqual(['u1', 'a1', 'u2', 'a2', 'u3', 'a3']);
+});
+
 test('beforeRun over threshold persists a checkpoint pair and keeps a recent tail', async () => {
   const messages = [
     msg('u1', 'user', 'a'),
@@ -104,6 +124,22 @@ test('beforeRun over threshold persists a checkpoint pair and keeps a recent tai
   expect(out.at(-1)?.id).toBe('a3');
   // covered through the last folded message, not into the kept tail
   expect(out[0].metadata).toMatchObject({ coveredThroughId: 'a2' });
+});
+
+test('beforeRun appends preserver output to the summary', async () => {
+  const messages = [
+    msg('u1', 'user', 'a'),
+    msg('a1', 'assistant', 'b'),
+    msg('u2', 'user', 'c'),
+    msg('a2', 'assistant', 'd'),
+    msg('u3', 'user', 'e'),
+    msg('a3', 'assistant', 'f'),
+  ];
+  const { ctx, run } = runWith(messages, {
+    preservers: [{ fromUI: () => 'CARRIED-PLAN', fromModel: () => null }],
+  });
+  await run();
+  expect((ctx.request.messages[0].parts[0] as { text: string }).text).toContain('CARRIED-PLAN');
 });
 
 test('a second compaction folds the prior summary into the new one (incremental)', async () => {

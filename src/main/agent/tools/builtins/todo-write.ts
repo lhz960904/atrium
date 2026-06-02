@@ -1,12 +1,6 @@
-import type { Todo } from '@shared/chat-types';
 import { tool } from 'ai';
 import { z } from 'zod';
-
-const STATUS_MARKER: Record<Todo['status'], string> = {
-  pending: '[ ]',
-  in_progress: '[>]',
-  completed: '[x]',
-};
+import { renderTodos } from './todo';
 
 /**
  * Plan tracking for multi-step work. The tool holds no state of its own — the
@@ -38,7 +32,6 @@ Keep it live: when you write the plan, mark the first step in_progress immediate
     }),
     execute: async ({ todos }) => {
       const done = todos.filter((t) => t.status === 'completed').length;
-      const lines = todos.map((t) => `${STATUS_MARKER[t.status]} ${t.content}`).join('\n');
-      return `Plan updated · ${done}/${todos.length} done\n${lines}`;
+      return `Plan updated · ${done}/${todos.length} done\n${renderTodos(todos)}`;
     },
   });
