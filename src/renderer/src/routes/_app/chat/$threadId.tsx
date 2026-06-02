@@ -7,6 +7,7 @@ import { getThreadChat } from '../../../lib/chat-store';
 import { getActivePlan } from '../../../lib/plan';
 import { trpc } from '../../../lib/trpc';
 import { useChatModel } from '../../../lib/use-chat-model';
+import { useCompactionStore } from '../../../state/compaction-store';
 import type { SelectedModel } from '../../../state/model-store';
 import { usePendingInput } from '../../../state/pending-input-store';
 
@@ -34,6 +35,7 @@ function ChatView(): React.JSX.Element {
     id: m.id,
     role: m.role,
     parts: m.parts as AtriumUIMessage['parts'],
+    metadata: (m.metadata ?? undefined) as AtriumUIMessage['metadata'],
   }));
 
   return (
@@ -84,6 +86,7 @@ function ChatRunner({
   const { chat, resume } = resolved.current;
 
   const { messages, sendMessage, status } = useChat<AtriumUIMessage>({ chat, resume });
+  const compacting = useCompactionStore((s) => s.active[threadId] ?? false);
 
   const utils = trpc.useUtils();
   const markRead = trpc.threads.markRead.useMutation({
@@ -109,6 +112,9 @@ function ChatRunner({
       utils.threads.get.invalidate({ id: threadId });
       utils.threads.running.invalidate();
       markRead.mutate({ id: threadId });
+      // Safety net: clear the indicator if a 'done' event was missed (errored
+      // or aborted mid-compaction) — the turn is over, so it can't be compacting.
+      useCompactionStore.getState().setActive(threadId, false);
     }
     wasStreaming.current = streaming;
   }, [status, threadId, utils]);
@@ -130,6 +136,7 @@ function ChatRunner({
       title={title}
       messages={messages}
       status={status}
+      compacting={compacting}
       plan={getActivePlan(messages)}
       onSend={(text) => {
         if (!model) return;

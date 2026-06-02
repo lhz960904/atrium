@@ -157,3 +157,29 @@ pre {
   grid-template-rows: 1fr;
   animation: plan-enter var(--duration-slow) var(--ease-out);
 }
+
+/* Monochrome "thinking"-style text shimmer: a brighter band sweeps across the
+   muted label while compacting. Theme-aware via the fg tokens; no accent color. */
+@keyframes compaction-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+.compaction-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--fg-tertiary) 0%,
+    var(--fg-tertiary) 40%,
+    var(--fg-primary) 50%,
+    var(--fg-tertiary) 60%,
+    var(--fg-tertiary) 100%
+  );
+  background-size: 250% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: compaction-shimmer 2s linear infinite;
+}

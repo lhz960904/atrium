@@ -1,5 +1,6 @@
 import { Chat } from '@ai-sdk/react';
 import type { AtriumUIMessage } from '@shared/chat';
+import { useCompactionStore } from '../state/compaction-store';
 import { useModelStore } from '../state/model-store';
 import { makeChatTransport } from './chat-transport';
 
@@ -59,6 +60,13 @@ export function getThreadChat(
       const m = useModelStore.getState().selected;
       return { threadId, providerId: m?.providerId, modelId: m?.modelId };
     }),
+    // Transient compaction events never enter messages; surface them as live
+    // per-thread status the chat view reads to show a "compacting…" indicator.
+    onData: (part) => {
+      if (part.type === 'data-compaction') {
+        useCompactionStore.getState().setActive(threadId, part.data.phase === 'start');
+      }
+    },
   });
   chats.set(threadId, chat);
   evictIdle(threadId);
