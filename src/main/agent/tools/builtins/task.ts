@@ -1,4 +1,4 @@
-import { generateId, tool } from 'ai';
+import { tool } from 'ai';
 import { z } from 'zod';
 import type { Logger } from '../../../log';
 import type { RunContext } from '../../middleware';
@@ -47,7 +47,7 @@ ${list}`,
         .optional()
         .describe(`Which subagent to delegate to, by name. Defaults to '${DEFAULT_SUBAGENT}'.`),
     }),
-    execute: async ({ prompt, subagent }, { experimental_context, abortSignal }) => {
+    execute: async ({ prompt, subagent }, { experimental_context, abortSignal, toolCallId }) => {
       const ctx = experimental_context as RunContext;
       const name = subagent ?? DEFAULT_SUBAGENT;
       const def = resolveSubagentDef(name, ctx.db);
@@ -57,7 +57,9 @@ ${list}`,
         parent: ctx,
         agent: def,
         prompt,
-        subagentId: generateId(),
+        // Key the subagent's bubbled-up activity by the tool call id so the
+        // frontend can correlate it with this task part's card.
+        subagentId: toolCallId,
         maxContextTokens: deps.maxContextTokens,
         log: deps.log,
         abortSignal,

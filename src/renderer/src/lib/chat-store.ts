@@ -2,6 +2,7 @@ import { Chat } from '@ai-sdk/react';
 import type { AtriumUIMessage } from '@shared/chat';
 import { useCompactionStore } from '../state/compaction-store';
 import { useModelStore } from '../state/model-store';
+import { useSubagentStore } from '../state/subagent-store';
 import { makeChatTransport } from './chat-transport';
 
 /**
@@ -65,6 +66,12 @@ export function getThreadChat(
     onData: (part) => {
       if (part.type === 'data-compaction') {
         useCompactionStore.getState().setActive(threadId, part.data.phase === 'start');
+      } else if (part.type === 'data-subagent') {
+        const store = useSubagentStore.getState();
+        const d = part.data;
+        if (d.phase === 'start') store.start(d.id);
+        else if (d.phase === 'step') store.addTools(d.id, d.tools);
+        else store.finish(d.id, d.status);
       }
     },
   });

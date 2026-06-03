@@ -1,5 +1,5 @@
 import type { AtriumUIMessage } from '@shared/chat';
-import type { Tool, ToolStatus, TraceSegment } from '@shared/chat-types';
+import type { Subagent, SubagentStatus, Tool, ToolStatus, TraceSegment } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
 import { getStaticToolName, isStaticToolUIPart, type ToolUIPart } from 'ai';
 import { type MarkerToolName, TOOL_PRESENTATION, type ToolInput } from './tool-presentation';
@@ -39,7 +39,11 @@ export function buildAssistantView(parts: AtriumUIMessage['parts']): AssistantVi
       if (name === 'todo_write') continue;
       lastToolIdx = work.length;
       toolCount++;
-      work.push({ kind: 'tool', tool: toToolModel(part, name) });
+      // A task call is a delegated subagent — render it as a nested card whose
+      // live body the card pulls from the subagent store; everything else is a
+      // flat tool marker.
+      if (name === 'task') work.push({ kind: 'subagent', subagent: toSubagentModel(part) });
+      else work.push({ kind: 'tool', tool: toToolModel(part, name) });
     }
   }
 
@@ -65,6 +69,32 @@ function toToolModel(part: AtriumToolPart, name: MarkerToolName): Tool {
     command: p.command?.(input),
     output: toOutput(part),
   };
+}
+
+/**
+ * A task call rendered as a subagent card. Only id/name/status come from the
+ * part; the tool list (body + count) is pulled live by the card from the
+ * subagent store, since the subagent's own tool calls are never in the message.
+ */
+function toSubagentModel(part: AtriumToolPart): Subagent {
+  const input = (part.input ?? {}) as ToolInput;
+  return {
+    id: part.toolCallId,
+    name: input.description ?? input.subagent ?? 'Subagent',
+    status: toSubagentStatus(part),
+    result: part.state === 'output-available' ? String(part.output) : undefined,
+  };
+}
+
+function toSubagentStatus(part: AtriumToolPart): SubagentStatus {
+  switch (part.state) {
+    case 'output-available':
+      return 'done';
+    case 'output-error':
+      return 'failed';
+    default:
+      return 'streaming';
+  }
 }
 
 function toStatus(part: AtriumToolPart): ToolStatus {

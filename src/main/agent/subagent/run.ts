@@ -1,3 +1,4 @@
+import type { ToolName } from '@shared/tools';
 import { convertToModelMessages, generateId, stepCountIs, streamText, type UIMessage } from 'ai';
 import type { Logger } from '../../log';
 import { compactionMiddleware, composeBeforeStep, type RunContext } from '../middleware';
@@ -68,8 +69,8 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
     workspaceRoot: parent.workspaceRoot,
     request: { system, messages, tools },
     model,
-    // Within-turn compaction doesn't emit, and the child produces no top-level
-    // UI message; bubbling its activity to the parent stream comes later.
+    // The child's own middleware (within-turn compaction) doesn't emit; its
+    // activity is bubbled to the parent's stream below via parent.emit instead.
     emit: () => {},
     scratch: new Map(),
   };
@@ -87,6 +88,10 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   ];
   const beforeStep = composeBeforeStep(subCtx, middlewares);
 
+  const emit = (data: Record<string, unknown>): void =>
+    parent.emit({ type: 'data-subagent', data: { id: opts.subagentId, ...data }, transient: true });
+
+  emit({ phase: 'start' });
   const result = streamText({
     model,
     system,
@@ -95,19 +100,34 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
     stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
     prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),
     abortSignal: opts.abortSignal,
+    // Bubble each step's completed tool calls up to the parent so its task card
+    // shows a live activity list. todo_write is a plan-panel concern, not trace.
+    // Only name + input go up — the card shows a static line, no output.
+    onStepFinish: ({ toolCalls }) => {
+      const tools = toolCalls
+        .filter((tc) => tc.toolName !== 'todo_write')
+        .map((tc) => ({ id: tc.toolCallId, name: tc.toolName as ToolName, input: tc.input }));
+      if (tools.length > 0) emit({ phase: 'step', tools });
+    },
   });
 
-  // Drive the loop to completion, then take the final assistant text.
-  const text = (await result.text).trim();
-  const usage = { totalTokens: (await result.totalUsage).totalTokens };
-  if (text) return { text, usage };
+  try {
+    // Drive the loop to completion, then take the final assistant text.
+    const text = (await result.text).trim();
+    const usage = { totalTokens: (await result.totalUsage).totalTokens };
+    emit({ phase: 'done', status: 'done' });
+    if (text) return { text, usage };
 
-  // The loop ended on a tool step with no closing text (e.g. it hit the step
-  // cap) — fall back to the most recent step that did produce text.
-  const steps = await result.steps;
-  for (let i = steps.length - 1; i >= 0; i--) {
-    const t = steps[i].text?.trim();
-    if (t) return { text: t, usage };
+    // The loop ended on a tool step with no closing text (e.g. it hit the step
+    // cap) — fall back to the most recent step that did produce text.
+    const steps = await result.steps;
+    for (let i = steps.length - 1; i >= 0; i--) {
+      const t = steps[i].text?.trim();
+      if (t) return { text: t, usage };
+    }
+    return { text: '(subagent finished without a text response)', usage };
+  } catch (err) {
+    emit({ phase: 'done', status: 'failed' });
+    throw err;
   }
-  return { text: '(subagent finished without a text response)', usage };
 }

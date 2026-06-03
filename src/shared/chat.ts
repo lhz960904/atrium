@@ -1,14 +1,25 @@
 import type { UIMessage } from 'ai';
-import type { AtriumTools } from './tools';
+import type { AtriumTools, ToolName } from './tools';
+
+/** One tool call a subagent made, bubbled up live for its card's activity list
+ *  (shown as a static "verb + target" line; no output/expansion). */
+export type SubagentActivityTool = { id: string; name: ToolName; input: unknown };
 
 /**
  * Transient UI data parts the server streams via writer.write — delivered to
  * the client's onData, never persisted into messages. `compaction` announces
  * an in-progress cross-turn fold (phase start/done) so the UI shows a live
  * indicator. Within-turn folds aren't surfaced (internal, not persisted).
+ * `subagent` bubbles a delegated subagent's activity (keyed by the task tool's
+ * call id) so its card can show a live nested trace; never persisted, so a
+ * reloaded card shows just the result.
  */
 export type AtriumDataParts = {
   compaction: { phase: 'start' | 'done' };
+  subagent:
+    | { id: string; phase: 'start' }
+    | { id: string; phase: 'step'; tools: SubagentActivityTool[] }
+    | { id: string; phase: 'done'; status: 'done' | 'failed' };
 };
 
 /**

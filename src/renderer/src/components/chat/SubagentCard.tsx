@@ -1,12 +1,43 @@
+import type { SubagentActivityTool } from '@shared/chat';
 import type { Subagent, SubagentStatus } from '@shared/chat-types';
-import { Ban, Box, ChevronDown, Loader2, Wrench } from 'lucide-react';
+import { Ban, Bot, ChevronDown, Loader2, Wrench } from 'lucide-react';
 import { useState } from 'react';
-import { SegmentList } from './SegmentList';
+import {
+  type MarkerToolName,
+  TOOL_PRESENTATION,
+  type ToolInput,
+} from '../../lib/tool-presentation';
+import { useSubagentStore } from '../../state/subagent-store';
+import { Markdown } from './Markdown';
+
+/** One subagent tool call as a static line (icon + verb + target) — not the
+ *  expandable ToolMarker; the subagent's per-tool detail/output isn't shown. */
+function SubagentToolLine({ tool }: { tool: SubagentActivityTool }): React.JSX.Element {
+  const input = (tool.input ?? {}) as ToolInput;
+  const p = TOOL_PRESENTATION[tool.name as MarkerToolName];
+  const Icon = p.icon;
+  return (
+    <div className="flex items-center gap-2.5 py-1 text-fg-secondary text-md">
+      <Icon className="size-4 shrink-0 text-fg-tertiary" />
+      <span className="min-w-0 truncate">
+        <span className="text-fg-tertiary">{p.verb}</span> {p.target(input)}
+      </span>
+    </div>
+  );
+}
 
 export function SubagentCard({ subagent }: { subagent: Subagent }): React.JSX.Element {
+  // The subagent's own activity lives in the store (keyed by the task call id),
+  // not in the message. With no live entry (e.g. after a reload — activity isn't
+  // persisted), fall back to the part-derived status + final returned text.
+  const entry = useSubagentStore((s) => s.byId[subagent.id]);
+  const status = entry?.status ?? subagent.status;
+  const tools = entry?.tools ?? [];
+  const toolCount = tools.length;
+
   // Default open while streaming so the user can watch progress; default
   // closed after completion. User can always toggle.
-  const [open, setOpen] = useState(subagent.status === 'streaming');
+  const [open, setOpen] = useState(status === 'streaming');
 
   return (
     <div
@@ -21,21 +52,29 @@ export function SubagentCard({ subagent }: { subagent: Subagent }): React.JSX.El
           open ? 'border-border-default border-b' : ''
         }`}
       >
-        <Box className="size-4 shrink-0 text-fg-secondary" />
+        <Bot className="size-4 shrink-0 text-fg-secondary" />
         <span className="min-w-0 flex-1 truncate font-medium text-base text-fg-primary">
           {subagent.name}
         </span>
-        <SubagentBadge status={subagent.status} />
-        <ToolCountChip count={subagent.toolCount} />
+        <SubagentBadge status={status} />
+        {/* Only when the live activity is around — after a reload the count
+            isn't persisted, so showing "0 tools" would read as a bug. */}
+        {entry && <ToolCountChip count={toolCount} />}
         <ChevronDown
           className={`size-3.5 shrink-0 text-fg-tertiary transition-transform ${
             open ? 'rotate-180' : ''
           }`}
         />
       </button>
-      {open && (
-        <div className="px-4 py-3">
-          <SegmentList segments={subagent.body} />
+      {open && (entry || subagent.result) && (
+        <div className="atrium-tool-output max-h-[360px] overflow-y-auto px-4 py-3">
+          {entry ? (
+            tools.map((t) => <SubagentToolLine key={t.id} tool={t} />)
+          ) : subagent.result ? (
+            <div className="text-fg-secondary">
+              <Markdown>{subagent.result}</Markdown>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

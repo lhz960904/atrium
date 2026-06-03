@@ -5,8 +5,6 @@
  * (narrative prose / atomic tool calls / subagent cards), in the
  * order they happened. The "final answer" is the last narrative
  * segment — no separate field.
- *
- * Subagent.body uses the same TraceSegment[] shape (subagents nest).
  */
 
 import type { ToolName } from './tools';
@@ -36,10 +34,10 @@ export type Subagent = {
   /** Short user-facing name, e.g. "Research US stock market overview" */
   name: string;
   status: SubagentStatus;
-  /** Total tool calls inside body (cached for the head chip) */
-  toolCount: number;
-  /** Subagent's own narrative + tool list, in order. Same shape as parent trace. */
-  body: TraceSegment[];
+  /** The subagent's final returned text (persisted in the task part). Shown as
+   *  the card body when its live activity isn't around — e.g. after a reload,
+   *  since the step-by-step activity itself isn't persisted. */
+  result?: string;
 };
 
 export type ClarifyInputType = 'single' | 'multi' | 'text';
