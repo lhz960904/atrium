@@ -81,7 +81,7 @@ export function startHttpServer(deps: {
       threadId,
       db: deps.db,
       sandbox,
-      tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot }),
+      tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot, db: deps.db }),
       middlewares: [
         metadataMiddleware(),
         compactionMiddleware({

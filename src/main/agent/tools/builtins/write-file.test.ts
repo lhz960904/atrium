@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { Db } from '../../../db';
 import type { Sandbox } from '../../sandbox/types';
 import type { ToolCtx } from '../context';
 import { writeFileTool } from './write-file';
@@ -10,7 +11,7 @@ function ctx(over: Partial<Sandbox>): ToolCtx {
     list: async () => [],
     exec: async () => ({ output: '', exitCode: 0 }),
   };
-  return { sandbox: { ...base, ...over }, workspaceRoot: '/ws' };
+  return { sandbox: { ...base, ...over }, workspaceRoot: '/ws', db: {} as Db };
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: tool.execute's option arg is irrelevant here

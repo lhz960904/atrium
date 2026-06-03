@@ -1,5 +1,6 @@
 import type { ToolName } from '@shared/tools';
 import {
+  Bot,
   FilePen,
   FileText,
   FolderTree,
@@ -19,6 +20,8 @@ export type ToolInput = {
   command?: string;
   url?: string;
   query?: string;
+  description?: string;
+  subagent?: string;
 };
 
 const hostname = (u?: string): string => {
@@ -83,5 +86,11 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     verb: 'Searched',
     target: (i) => i.query ?? '',
     typeLabel: () => 'Web search',
+  },
+  task: {
+    icon: Bot,
+    verb: 'Delegated',
+    target: (i) => i.description ?? i.subagent ?? 'subagent',
+    typeLabel: (i) => `Subagent · ${i.subagent ?? 'general-purpose'}`,
   },
 };

@@ -95,6 +95,23 @@ export const BUILTIN_SUBAGENTS: Record<string, SubagentDef> = {
  * `subagents` table (user/AI-created) — same precedence as DeerFlow, so a
  * built-in name can't be shadowed by a DB row.
  */
+/**
+ * Every subagent the parent can delegate to right now — built-ins plus the
+ * user/AI-created rows — as name+description pairs. Used to advertise the
+ * choices in the task tool's description.
+ */
+export function listSubagentDefs(db: Db): Array<{ name: string; description: string }> {
+  const builtins = Object.values(BUILTIN_SUBAGENTS).map((s) => ({
+    name: s.name,
+    description: s.description,
+  }));
+  const custom = db
+    .select({ name: subagents.name, description: subagents.description })
+    .from(subagents)
+    .all();
+  return [...builtins, ...custom];
+}
+
 export function resolveSubagentDef(name: string, db: Db): SubagentDef | undefined {
   const builtin = BUILTIN_SUBAGENTS[name];
   if (builtin) return builtin;

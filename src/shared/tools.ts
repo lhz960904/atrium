@@ -10,7 +10,8 @@ export type ToolName =
   | 'bash'
   | 'todo_write'
   | 'web_fetch'
-  | 'web_search';
+  | 'web_search'
+  | 'task';
 
 /**
  * The tools generic for UIMessage. We only care that tool parts carry a typed

@@ -87,6 +87,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
         stopWhen: stepCountIs(100),
         prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),
         abortSignal: opts.abortSignal,
+        // Hands the run's RunContext to tool execute (the task tool reads it to
+        // spawn a subagent that reuses this run's model / sandbox / db).
+        experimental_context: ctx,
       });
       writer.merge(
         result.toUIMessageStream({ messageMetadata: ({ part }) => messageMetadata(part) }),

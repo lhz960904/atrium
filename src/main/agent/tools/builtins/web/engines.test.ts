@@ -1,12 +1,16 @@
 import { expect, test } from 'bun:test';
-import { type RawResult, formatResults, parseDdgResults } from './engines';
+import { formatResults, parseDdgResults, type RawResult } from './engines';
 
 const redirect = (realUrl: string) =>
   `https://duckduckgo.com/l/?uddg=${encodeURIComponent(realUrl)}&rut=abc123`;
 
 test('decodes the real destination URL out of the DDG redirect wrapper', () => {
   const raw: RawResult[] = [
-    { title: 'AI SDK Core: streamText', href: redirect('https://ai-sdk.dev/docs'), snippet: 'Streams text.' },
+    {
+      title: 'AI SDK Core: streamText',
+      href: redirect('https://ai-sdk.dev/docs'),
+      snippet: 'Streams text.',
+    },
   ];
   expect(parseDdgResults(raw)).toEqual([
     { title: 'AI SDK Core: streamText', url: 'https://ai-sdk.dev/docs', snippet: 'Streams text.' },
@@ -15,7 +19,11 @@ test('decodes the real destination URL out of the DDG redirect wrapper', () => {
 
 test('drops sponsored results that redirect back to a duckduckgo.com tracker', () => {
   const raw: RawResult[] = [
-    { title: 'Ad', href: redirect('https://duckduckgo.com/y.js?ad_provider=bingv7aa'), snippet: 'buy now' },
+    {
+      title: 'Ad',
+      href: redirect('https://duckduckgo.com/y.js?ad_provider=bingv7aa'),
+      snippet: 'buy now',
+    },
     { title: 'Real', href: redirect('https://vercel.com/docs'), snippet: 'real result' },
   ];
   const out = parseDdgResults(raw);

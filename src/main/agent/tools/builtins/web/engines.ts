@@ -75,7 +75,7 @@ export function parseDdgResults(raw: RawResult[]): SearchResult[] {
 export const DDG: SearchEngine = {
   name: 'duckduckgo',
   buildUrl: (query) => `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
-  readyExpr: "document.querySelectorAll('a.result__a[href*=\"uddg\"]').length",
+  readyExpr: 'document.querySelectorAll(\'a.result__a[href*="uddg"]\').length',
   scrapeScript: DDG_SCRAPE,
   parse: parseDdgResults,
 };
