@@ -6,6 +6,7 @@ import { listSubagentDefs } from '../subagent/defs';
 import { bashTool } from './builtins/bash';
 import { listDirTool } from './builtins/list-dir';
 import { readFileTool } from './builtins/read-file';
+import { skillTool } from './builtins/skill';
 import { taskTool } from './builtins/task';
 import { todoWriteTool } from './builtins/todo-write';
 import { webFetchTool } from './builtins/web-fetch';
@@ -33,5 +34,6 @@ export function getTools(ctx: ToolCtx): Record<ToolName, Tool> {
       log: createLogger('subagent'),
       subagents: listSubagentDefs(ctx.db),
     }),
+    skill: skillTool({ skills: ctx.skills ?? [] }),
   };
 }

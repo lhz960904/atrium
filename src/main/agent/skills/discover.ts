@@ -55,6 +55,14 @@ export function parseSkillFrontmatter(content: string): SkillFrontmatter | null 
   };
 }
 
+/** Strip the leading YAML frontmatter block, returning just the skill body. */
+export function stripFrontmatter(content: string): string {
+  return content
+    .replace(FRONTMATTER_RE, '')
+    .replace(/^\s*\n/, '')
+    .trimEnd();
+}
+
 function normalizeAllowedTools(raw: unknown): string[] | undefined {
   const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : undefined;
   if (!list) return undefined;

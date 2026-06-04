@@ -1,6 +1,8 @@
+import type { ToolName } from '@shared/tools';
 import type { UIMessage } from 'ai';
-import type { Skill } from '../../skills/types';
-import type { AgentMiddleware, RunContext } from '../types';
+import { scopeToolsForSkill } from '../../skills/scope';
+import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
+import type { AgentMiddleware, RunContext, StepOverride } from '../types';
 
 export type SkillsOptions = {
   /** The skills discovered at startup (see agent/skills/discover). */
@@ -67,6 +69,19 @@ export function skillsMiddleware(options: SkillsOptions): AgentMiddleware {
         parts: [{ type: 'text', text: buildIndexReminder(skills) }, ...target.parts],
       };
       ctx.request.messages = [...msgs.slice(0, idx), injected, ...msgs.slice(idx + 1)];
+    },
+
+    // Once a skill is loaded (the skill tool records it in scratch), scope the
+    // following steps' tools to that skill's allowed-tools. Resolves on the
+    // active registry; an unconstrainable allow-list (nothing maps) leaves
+    // tools open rather than banning everything. Fires from the step after the
+    // load — the loading step itself isn't scoped.
+    beforeStep(ctx: RunContext): StepOverride | undefined {
+      const active = ctx.scratch.get(SKILL_SCRATCH_KEY) as ActiveSkill | undefined;
+      if (!active) return undefined;
+      const available = Object.keys(ctx.request.tools) as ToolName[];
+      const scoped = scopeToolsForSkill(active.allowedTools, available);
+      return scoped ? { activeTools: scoped } : undefined;
     },
   };
 }

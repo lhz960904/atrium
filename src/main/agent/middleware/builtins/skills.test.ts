@@ -90,3 +90,51 @@ test('lists every discovered skill', () => {
   const text = (ctx.request.messages[0].parts[0] as { text: string }).text;
   for (const n of ['alpha', 'beta', 'gamma']) expect(text).toContain(`<skill name="${n}">`);
 });
+
+import { SKILL_SCRATCH_KEY } from '../../skills/types';
+
+function scopingCtx(scratch: Map<string, unknown>): RunContext {
+  const tools = Object.fromEntries(
+    ['read_file', 'write_file', 'bash', 'web_search', 'task', 'skill'].map((n) => [n, {}]),
+  );
+  return { request: { messages: [], system: '', tools }, scratch } as unknown as RunContext;
+}
+
+test('beforeStep: no active skill → no tool scoping', () => {
+  const out = skillsMiddleware({ skills: [] }).beforeStep?.(scopingCtx(new Map()), {
+    stepNumber: 1,
+    messages: [],
+  });
+  expect(out).toBeUndefined();
+});
+
+test('beforeStep: active skill scopes activeTools to its (mapped) allowed-tools', () => {
+  const scratch = new Map<string, unknown>([
+    [SKILL_SCRATCH_KEY, { name: 'pptx', allowedTools: ['Read', 'bash'] }],
+  ]);
+  const out = skillsMiddleware({ skills: [] }).beforeStep?.(scopingCtx(scratch), {
+    stepNumber: 2,
+    messages: [],
+  });
+  expect(out).toEqual({ activeTools: ['read_file', 'bash'] });
+});
+
+test('beforeStep: an unconstrainable allow-list leaves tools open (no ban-all)', () => {
+  const scratch = new Map<string, unknown>([
+    [SKILL_SCRATCH_KEY, { name: 'x', allowedTools: ['Glob', 'mcp__y'] }],
+  ]);
+  const out = skillsMiddleware({ skills: [] }).beforeStep?.(scopingCtx(scratch), {
+    stepNumber: 2,
+    messages: [],
+  });
+  expect(out).toBeUndefined();
+});
+
+test('beforeStep: active skill without allowed-tools imposes no scope', () => {
+  const scratch = new Map<string, unknown>([[SKILL_SCRATCH_KEY, { name: 'x' }]]);
+  const out = skillsMiddleware({ skills: [] }).beforeStep?.(scopingCtx(scratch), {
+    stepNumber: 2,
+    messages: [],
+  });
+  expect(out).toBeUndefined();
+});

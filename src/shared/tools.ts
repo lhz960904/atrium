@@ -11,7 +11,8 @@ export type ToolName =
   | 'todo_write'
   | 'web_fetch'
   | 'web_search'
-  | 'task';
+  | 'task'
+  | 'skill';
 
 /**
  * The tools generic for UIMessage. We only care that tool parts carry a typed

@@ -7,6 +7,7 @@ import {
   Globe,
   type LucideIcon,
   Search,
+  Sparkles,
   Terminal,
 } from 'lucide-react';
 
@@ -22,6 +23,7 @@ export type ToolInput = {
   query?: string;
   description?: string;
   subagent?: string;
+  name?: string;
 };
 
 const hostname = (u?: string): string => {
@@ -92,5 +94,11 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     verb: 'Delegated',
     target: (i) => i.description ?? i.subagent ?? 'subagent',
     typeLabel: (i) => `Subagent · ${i.subagent ?? 'general-purpose'}`,
+  },
+  skill: {
+    icon: Sparkles,
+    verb: 'Used skill',
+    target: (i) => i.name ?? '',
+    typeLabel: (i) => `Skill · ${i.name ?? ''}`,
   },
 };

@@ -23,6 +23,12 @@ export type Skill = {
 /** The skill manifest filename — fixed by the directory-style convention. */
 export const SKILL_FILE = 'SKILL.md';
 
+/** Scratch key under which the skill tool records the currently active skill. */
+export const SKILL_SCRATCH_KEY = 'skill:active';
+
+/** What the skill tool writes to scratch on activation; beforeStep reads it to scope tools. */
+export type ActiveSkill = { name: string; allowedTools?: string[] };
+
 /**
  * Where a skill came from. `agents` is the tool-neutral shared home
  * (~/.agents/skills) — Atrium's own skills live there so other tools can read
