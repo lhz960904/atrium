@@ -7,6 +7,7 @@ import { app, BrowserWindow, safeStorage, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
+import { refreshSkills } from './agent/skills/registry';
 import { closeDb, openDb } from './db';
 import { createLogger, initLogging } from './log';
 import { startHttpServer } from './server/http';
@@ -81,6 +82,9 @@ app.whenReady().then(async () => {
   // tools read/write/exec only inside it.
   const workspaceRoot = join(homedir(), 'Documents', 'Atrium');
   mkdirSync(workspaceRoot, { recursive: true });
+
+  // Discover skills before serving so the first turn already sees the index.
+  await refreshSkills();
 
   const chatEndpoint = await startHttpServer({ db, token: randomUUID(), workspaceRoot });
 

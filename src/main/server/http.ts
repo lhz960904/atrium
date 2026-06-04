@@ -6,10 +6,12 @@ import {
   compactionMiddleware,
   metadataMiddleware,
   persistenceMiddleware,
+  skillsMiddleware,
 } from '../agent/middleware';
 import { maxContextTokens } from '../agent/models/catalog';
 import { runAgent } from '../agent/run';
 import { LocalSandbox } from '../agent/sandbox';
+import { getSkills } from '../agent/skills/registry';
 import { getTools } from '../agent/tools';
 import { todoPreserver } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
@@ -71,6 +73,7 @@ export function startHttpServer(deps: {
     const history = loadThreadMessages(deps.db, threadId);
 
     const sandbox = new LocalSandbox(deps.workspaceRoot);
+    const skills = getSkills();
     // The resumable stream's producer drives the agent to completion on its
     // own, independent of this request — so navigating away or reloading leaves
     // the run streaming in main, reattachable via the reconnect endpoint.
@@ -81,7 +84,10 @@ export function startHttpServer(deps: {
       threadId,
       db: deps.db,
       sandbox,
-      tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot, db: deps.db }),
+      tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot, db: deps.db, skills }),
+      // skills must run after compaction: compaction may fold the original first
+      // user message into a summary, and the skill index has to land on whatever
+      // the post-compaction first user message is.
       middlewares: [
         metadataMiddleware(),
         compactionMiddleware({
@@ -90,6 +96,7 @@ export function startHttpServer(deps: {
           preservers: [todoPreserver],
           log: createLogger('compaction'),
         }),
+        skillsMiddleware({ skills }),
         persistenceMiddleware(persistMessage),
       ],
     });
