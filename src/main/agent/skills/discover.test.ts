@@ -5,8 +5,6 @@ import { join } from 'node:path';
 import { discoverSkills, parseSkillFrontmatter } from './discover';
 import type { SkillRoots } from './types';
 
-const silent = { info() {}, warn() {}, error() {}, debug() {} };
-
 let tmp: string;
 beforeEach(async () => {
   tmp = await mkdtemp(join(tmpdir(), 'atrium-skills-'));
@@ -67,7 +65,7 @@ test('discovers skills across roots and sorts by name', async () => {
   await makeSkill(agents, 'alpha', 'name: alpha\ndescription: A');
   const roots: SkillRoots = { agents };
 
-  const skills = await discoverSkills(roots, silent);
+  const skills = await discoverSkills(roots);
   expect(skills.map((s) => s.name)).toEqual(['alpha', 'zeta']);
   expect(skills[0]).toMatchObject({ name: 'alpha', source: 'agents' });
   expect(skills[0].dir).toBe(join(agents, 'alpha'));
@@ -80,7 +78,7 @@ test('skips malformed skills and missing roots', async () => {
   // a directory with no SKILL.md at all
   await mkdir(join(claude, 'empty'), { recursive: true });
 
-  const skills = await discoverSkills({ claude, codex: join(tmp, 'does-not-exist') }, silent);
+  const skills = await discoverSkills({ claude, codex: join(tmp, 'does-not-exist') });
   expect(skills.map((s) => s.name)).toEqual(['good']);
 });
 
@@ -90,7 +88,7 @@ test('same-name collision: higher-priority source wins', async () => {
   await makeSkill(codex, 'shared', 'name: shared\ndescription: from codex');
   await makeSkill(agents, 'shared', 'name: shared\ndescription: from agents');
 
-  const skills = await discoverSkills({ codex, agents }, silent);
+  const skills = await discoverSkills({ codex, agents });
   expect(skills).toHaveLength(1);
   expect(skills[0]).toMatchObject({ source: 'agents', description: 'from agents' });
 });
@@ -100,7 +98,7 @@ test('skips hidden directories', async () => {
   await makeSkill(agents, '.git', 'name: nope\ndescription: should not load');
   await makeSkill(agents, 'real', 'name: real\ndescription: ok');
 
-  const skills = await discoverSkills({ agents }, silent);
+  const skills = await discoverSkills({ agents });
   expect(skills.map((s) => s.name)).toEqual(['real']);
 });
 
@@ -111,7 +109,7 @@ test('collapses a symlinked duplicate to one entry', async () => {
   await mkdir(claude, { recursive: true });
   await symlink(realDir, join(claude, 'tool'));
 
-  const skills = await discoverSkills({ agents, claude }, silent);
+  const skills = await discoverSkills({ agents, claude });
   expect(skills).toHaveLength(1);
   expect(skills[0].source).toBe('agents');
 });

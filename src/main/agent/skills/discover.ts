@@ -1,7 +1,7 @@
 import { readdir, readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import type { Logger } from '../../log';
+import { createLogger } from '../../log';
 import {
   SKILL_FILE,
   type Skill,
@@ -9,6 +9,8 @@ import {
   type SkillSource,
   SOURCE_PRIORITY,
 } from './types';
+
+const log = createLogger('skills');
 
 /** Parsed frontmatter, before it becomes a Skill (no dir/source yet). */
 export type SkillFrontmatter = {
@@ -45,7 +47,7 @@ export function parseSkillFrontmatter(content: string): SkillFrontmatter | null 
   if (typeof name !== 'string' || !name.trim()) return null;
   if (typeof description !== 'string' || !description.trim()) return null;
 
-  const allowedTools = normalizeAllowedTools(rec['allowed-tools'] ?? rec.allowedTools);
+  const allowedTools = normalizeAllowedTools(rec['allowed-tools']);
   return {
     name: name.trim(),
     description: description.trim(),
@@ -74,7 +76,7 @@ async function loadSkill(dir: string, source: SkillSource): Promise<Skill | null
 }
 
 /** Scan one root for `<name>/SKILL.md` subdirectories. Missing root → []. */
-async function scanRoot(root: string, source: SkillSource, log: Logger): Promise<Skill[]> {
+async function scanRoot(root: string, source: SkillSource): Promise<Skill[]> {
   let entries: import('node:fs').Dirent[];
   try {
     entries = await readdir(root, { withFileTypes: true });
@@ -100,13 +102,14 @@ async function scanRoot(root: string, source: SkillSource, log: Logger): Promise
  *  - by skill name, where the higher-priority source wins (SOURCE_PRIORITY) —
  *    the shared ~/.agents home overriding an ecosystem copy of the same name.
  *
- * Pure over its roots + filesystem; no AI SDK, no Electron — directly unit
+ * Pure over its roots + filesystem (no AI SDK); the only side channel is the
+ * scoped logger, which falls back to console off Electron — directly unit
  * testable against a temp dir.
  */
-export async function discoverSkills(roots: SkillRoots, log: Logger = console): Promise<Skill[]> {
+export async function discoverSkills(roots: SkillRoots): Promise<Skill[]> {
   const all: Skill[] = [];
   for (const [source, root] of Object.entries(roots) as [SkillSource, string][]) {
-    if (root) all.push(...(await scanRoot(root, source, log)));
+    if (root) all.push(...(await scanRoot(root, source)));
   }
 
   // Collapse symlinked duplicates first: same physical dir → keep one (priority).
