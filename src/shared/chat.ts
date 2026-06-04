@@ -16,9 +16,6 @@ export type SubagentActivityTool = { id: string; name: ToolName; input: unknown 
  */
 export type AtriumDataParts = {
   compaction: { phase: 'start' | 'done' };
-  /** A skill was activated this turn (loaded via the skill tool); drives the
-   *  "using X skill" indicator. Keyed by name; never persisted. */
-  skill: { name: string; phase: 'active' };
   subagent:
     | { id: string; phase: 'start' }
     | { id: string; phase: 'step'; tools: SubagentActivityTool[] }

@@ -26,14 +26,12 @@ async function writeSkill(
   return { name, description: 'x', dir, source: 'agents', ...(allowedTools && { allowedTools }) };
 }
 
-function fakeCtx(): { ctx: RunContext; events: unknown[] } {
-  const events: unknown[] = [];
-  const ctx = {
+function fakeCtx(): RunContext {
+  return {
     threadId: 'thread-123',
     scratch: new Map<string, unknown>(),
-    emit: (e: unknown) => events.push(e),
+    emit: () => {},
   } as unknown as RunContext;
-  return { ctx, events };
 }
 
 const run = (
@@ -51,7 +49,7 @@ test('prepends the base directory, strips frontmatter, substitutes SKILL_DIR', a
     // biome-ignore lint/suspicious/noTemplateCurlyInString: literal placeholders the tool substitutes
     'Run ${SKILL_DIR}/run.py and $SKILL_DIR/extra.py.',
   );
-  const { ctx } = fakeCtx();
+  const ctx = fakeCtx();
   const out = await run(skillTool({ skills: [skill] }), { name: 'deep-research' }, ctx);
 
   expect(out).toContain(`Base directory for this skill: ${skill.dir}`);
@@ -60,28 +58,25 @@ test('prepends the base directory, strips frontmatter, substitutes SKILL_DIR', a
   expect(out).not.toContain('name: deep-research');
 });
 
-test('records the active skill in scratch and emits the activation event', async () => {
+test('records the active skill in scratch (name + allowed-tools)', async () => {
   const skill = await writeSkill(
     'pptx',
     'name: pptx\ndescription: slides\nallowed-tools: read_file, bash',
     'body',
     ['read_file', 'bash'],
   );
-  const { ctx, events } = fakeCtx();
+  const ctx = fakeCtx();
   await run(skillTool({ skills: [skill] }), { name: 'pptx' }, ctx);
 
   expect(ctx.scratch.get(SKILL_SCRATCH_KEY)).toEqual({
     name: 'pptx',
     allowedTools: ['read_file', 'bash'],
   } satisfies ActiveSkill);
-  expect(events).toEqual([
-    { type: 'data-skill', data: { name: 'pptx', phase: 'active' }, transient: true },
-  ]);
 });
 
 test('appends user-supplied args after the body', async () => {
   const skill = await writeSkill('x', 'name: x\ndescription: y', 'do the thing');
-  const { ctx } = fakeCtx();
+  const ctx = fakeCtx();
   const out = await run(
     skillTool({ skills: [skill] }),
     { name: 'x', args: 'on the Q3 report' },
@@ -93,13 +88,12 @@ test('appends user-supplied args after the body', async () => {
 
 test('unknown skill returns an error listing the available ones', async () => {
   const skill = await writeSkill('real', 'name: real\ndescription: y', 'body');
-  const { ctx, events } = fakeCtx();
+  const ctx = fakeCtx();
   const out = await run(skillTool({ skills: [skill] }), { name: 'ghost' }, ctx);
   expect(out).toContain("unknown skill 'ghost'");
   expect(out).toContain('real');
   // nothing activated on failure
   expect(ctx.scratch.get(SKILL_SCRATCH_KEY)).toBeUndefined();
-  expect(events).toHaveLength(0);
 });
 
 test('a missing manifest file returns a read error, not a throw', async () => {
@@ -109,7 +103,7 @@ test('a missing manifest file returns a read error, not a throw', async () => {
     dir: join(tmp, 'gone'), // never created
     source: 'agents',
   };
-  const { ctx } = fakeCtx();
+  const ctx = fakeCtx();
   const out = await run(skillTool({ skills: [skill] }), { name: 'gone' }, ctx);
   expect(out).toContain("could not read skill 'gone'");
 });

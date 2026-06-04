@@ -16,10 +16,9 @@ export type SkillToolDeps = {
  * advertised (name + description only) in the turn's system-reminder; this tool
  * is how the model pulls the body of one it decides to use. Loading flows
  * through this tool — not a raw file read — so activation produces a clean
- * signal: it records the active skill in scratch (which scopes the following
- * steps' tools to the skill's allowed-tools) and emits a UI event for the
- * "using X skill" indicator. The body it returns becomes the tool result the
- * model then follows.
+ * signal: it records the active skill in scratch, which scopes the following
+ * steps' tools to the skill's allowed-tools. The body it returns becomes the
+ * tool result the model then follows; the call itself shows in the trace.
  */
 export const skillTool = (deps: SkillToolDeps) => {
   const byName = new Map(deps.skills.map((s) => [s.name, s]));
@@ -58,11 +57,6 @@ export const skillTool = (deps: SkillToolDeps) => {
         name: skill.name,
         allowedTools: skill.allowedTools,
       } satisfies ActiveSkill);
-      ctx.emit({
-        type: 'data-skill',
-        data: { name: skill.name, phase: 'active' },
-        transient: true,
-      });
 
       // Prepend the skill's base directory (Claude Code convention) so the body
       // can reference its bundled scripts/templates by relative path.
