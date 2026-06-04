@@ -2,6 +2,7 @@ import { app } from 'electron';
 import { messagesRouter } from './routers/messages';
 import { providersRouter } from './routers/providers';
 import { settingsRouter } from './routers/settings';
+import { skillsRouter } from './routers/skills';
 import { systemRouter } from './routers/system';
 import { threadsRouter } from './routers/threads';
 import { publicProcedure, router } from './trpc';
@@ -25,6 +26,7 @@ export const appRouter = router({
   messages: messagesRouter,
   providers: providersRouter,
   settings: settingsRouter,
+  skills: skillsRouter,
   system: systemRouter,
 });
 
