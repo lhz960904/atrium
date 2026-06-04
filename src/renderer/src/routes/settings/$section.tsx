@@ -1,6 +1,7 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
 import { ProvidersSection } from '../../components/settings/providers/ProvidersSection';
+import { SkillsSection } from '../../components/settings/skills/SkillsSection';
 import { type Theme, useThemeStore } from '../../state/theme-store';
 
 export const Route = createFileRoute('/settings/$section')({
@@ -23,6 +24,11 @@ const SECTIONS: Record<string, SectionMeta> = {
     sub: '配置 Atrium 如何接入语言模型。',
     wide: true,
     Component: ProvidersSection,
+  },
+  skills: {
+    title: 'Skills',
+    sub: '从 Agents、Claude、Codex 收集的技能，为 AI 赋予完成特定任务的专业能力。',
+    Component: SkillsSection,
   },
   subagents: {
     title: 'Subagents',

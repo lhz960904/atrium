@@ -1,17 +1,10 @@
 import { ArrowUp, Package, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { skillSourceLabel } from '../../lib/skill-source';
 import { trpc } from '../../lib/trpc';
 import { type Attachment, AttachmentChip } from './AttachmentChip';
 import { ModelPicker } from './ModelPicker';
 import { SLASH_COMMANDS, SlashMenu, type SlashMenuItem } from './SlashMenu';
-
-/** Friendly source label shown as the right-aligned tag on skill rows. */
-const SOURCE_LABEL: Record<string, string> = {
-  builtin: 'Built-in',
-  agents: 'Agents',
-  claude: 'Claude',
-  codex: 'Codex',
-};
 
 type MenuState = {
   query: string;
@@ -182,7 +175,7 @@ export function Composer({
     desc: s.description,
     icon: Package,
     group: 'skill',
-    tag: SOURCE_LABEL[s.source] ?? s.source,
+    tag: skillSourceLabel(s.source),
     skill: s.name,
   }));
   const menuItems = [...SLASH_COMMANDS, ...skillItems];
