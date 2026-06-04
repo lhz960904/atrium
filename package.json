@@ -61,6 +61,7 @@
     "remark-math": "^6.0.0",
     "streamdown": "^2.5.0",
     "turndown": "^7.2.4",
+    "yaml": "^2.9.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.13"
   },
