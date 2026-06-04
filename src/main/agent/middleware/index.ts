@@ -1,6 +1,7 @@
 export { type CompactionOptions, compactionMiddleware } from './builtins/compaction';
 export { metadataMiddleware } from './builtins/metadata';
 export { type PersistFn, persistenceMiddleware } from './builtins/persistence';
+export { type SkillsOptions, skillsMiddleware } from './builtins/skills';
 export {
   composeAfterStep,
   composeBeforeStep,
