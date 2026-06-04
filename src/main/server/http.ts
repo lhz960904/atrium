@@ -13,6 +13,7 @@ import { runAgent } from '../agent/run';
 import { LocalSandbox } from '../agent/sandbox';
 import { getSkills } from '../agent/skills/registry';
 import { getTools } from '../agent/tools';
+import { skillPreserver } from '../agent/tools/builtins/skill';
 import { todoPreserver } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
 import { createLogger } from '../log';
@@ -93,7 +94,7 @@ export function startHttpServer(deps: {
         compactionMiddleware({
           maxContextTokens,
           persist: persistMessage,
-          preservers: [todoPreserver],
+          preservers: [todoPreserver, skillPreserver],
           log: createLogger('compaction'),
         }),
         skillsMiddleware({ skills }),
