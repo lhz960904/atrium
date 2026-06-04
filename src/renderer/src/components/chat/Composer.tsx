@@ -1,31 +1,34 @@
-import { ArrowUp, Plus } from 'lucide-react';
+import { ArrowUp, Package, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { trpc } from '../../lib/trpc';
 import { type Attachment, AttachmentChip } from './AttachmentChip';
 import { ModelPicker } from './ModelPicker';
-import { MENTION_ITEMS, SLASH_COMMANDS, SlashMenu, type SlashMenuItem } from './SlashMenu';
+import { SLASH_COMMANDS, SlashMenu, type SlashMenuItem } from './SlashMenu';
+
+/** Friendly source label shown as the right-aligned tag on skill rows. */
+const SOURCE_LABEL: Record<string, string> = {
+  builtin: 'Built-in',
+  agents: 'Agents',
+  claude: 'Claude',
+  codex: 'Codex',
+};
 
 type MenuState = {
-  kind: 'slash' | 'mention';
   query: string;
   activeIndex: number;
 };
 
 /**
- * Detect whether the cursor is currently inside a slash- or @-command.
- * Trigger char must be at the start of the textarea or preceded by whitespace
- * (so URLs like https://… don't open the menu).
+ * Detect whether the cursor is currently inside a slash command. The `/` must
+ * be at the start of the textarea or preceded by whitespace (so URLs like
+ * https://… don't open the menu).
  */
-function detectMenuTrigger(
-  text: string,
-  cursor: number,
-): { kind: 'slash' | 'mention'; query: string } | null {
+function detectSlashTrigger(text: string, cursor: number): { query: string } | null {
   for (let i = cursor - 1; i >= 0; i--) {
     const c = text[i];
-    if (c === '/' || c === '@') {
+    if (c === '/') {
       const before = i === 0 ? '' : text[i - 1];
-      if (before === '' || /\s/.test(before)) {
-        return { kind: c === '/' ? 'slash' : 'mention', query: text.slice(i + 1, cursor) };
-      }
+      if (before === '' || /\s/.test(before)) return { query: text.slice(i + 1, cursor) };
       return null;
     }
     if (c && /\s/.test(c)) return null;
@@ -53,6 +56,7 @@ export function Composer({
   const [text, setText] = useState(initialText);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const { data: skills } = trpc.skills.list.useQuery();
 
   // Autosize: grow textarea up to ~200px, then scroll internally.
   // biome-ignore lint/correctness/useExhaustiveDependencies: text drives autosize via scrollHeight (indirect dep)
@@ -68,9 +72,9 @@ export function Composer({
   }, [autoFocus]);
 
   const updateMenuFromCursor = (newText: string, cursor: number): void => {
-    const trigger = detectMenuTrigger(newText, cursor);
+    const trigger = detectSlashTrigger(newText, cursor);
     if (trigger) {
-      setMenu({ kind: trigger.kind, query: trigger.query, activeIndex: 0 });
+      setMenu({ query: trigger.query, activeIndex: 0 });
     } else {
       setMenu(null);
     }
@@ -138,14 +142,50 @@ export function Composer({
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const handleMenuSelect = (_item: SlashMenuItem): void => {
-    // Stub: real command dispatching lands when each slash command earns
-    // its own implementation.
+  // Replace the open `/trigger` token with a skill-invocation intent. Sending
+  // it makes the model load the skill via the skill tool (the user-invocable
+  // path, alongside the model invoking skills on its own).
+  const invokeSkill = (skillName: string): void => {
+    const ta = taRef.current;
+    const cursor = ta?.selectionStart ?? text.length;
+    let start = cursor;
+    for (let i = cursor - 1; i >= 0; i--) {
+      if (text[i] === '/') {
+        start = i;
+        break;
+      }
+      if (/\s/.test(text[i] ?? '')) break;
+    }
+    const intent = `Use the ${skillName} skill: `;
+    const next = text.slice(0, start) + intent + text.slice(cursor);
+    setText(next);
+    setMenu(null);
+    requestAnimationFrame(() => {
+      ta?.focus();
+      const pos = start + intent.length;
+      ta?.setSelectionRange(pos, pos);
+    });
+  };
+
+  const handleMenuSelect = (item: SlashMenuItem): void => {
+    if (item.skill) {
+      invokeSkill(item.skill);
+      return;
+    }
+    // App commands are still stubs — each lands its dispatch when implemented.
     setMenu(null);
     taRef.current?.focus();
   };
 
-  const menuItems = menu?.kind === 'slash' ? SLASH_COMMANDS : MENTION_ITEMS;
+  const skillItems: SlashMenuItem[] = (skills ?? []).map((s) => ({
+    name: s.name,
+    desc: s.description,
+    icon: Package,
+    group: 'skill',
+    tag: SOURCE_LABEL[s.source] ?? s.source,
+    skill: s.name,
+  }));
+  const menuItems = [...SLASH_COMMANDS, ...skillItems];
 
   return (
     <div

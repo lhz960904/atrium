@@ -1,13 +1,10 @@
 import {
   Atom,
-  AtSign,
   Box,
   Brain,
-  Brush,
   Download,
   Eraser,
   GitBranch,
-  Layers,
   ListChecks,
   type LucideIcon,
   Octagon,
@@ -15,12 +12,18 @@ import {
   Search,
   SlidersHorizontal,
 } from 'lucide-react';
-import { useEffect } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 
 export type SlashMenuItem = {
   name: string;
   desc: string;
   icon?: LucideIcon;
+  /** Grouping for section headers; 'skill' rows sit under a "Skills" header. */
+  group?: 'command' | 'skill';
+  /** Right-aligned source label (skills only, e.g. the ecosystem it came from). */
+  tag?: string;
+  /** Set on skill rows: the skill name to invoke when selected. */
+  skill?: string;
 };
 
 export const SLASH_COMMANDS: SlashMenuItem[] = [
@@ -36,13 +39,6 @@ export const SLASH_COMMANDS: SlashMenuItem[] = [
   { name: 'Settings', desc: '打开设置面板', icon: SlidersHorizontal },
   { name: 'Stop', desc: '停止当前 agent 运行', icon: Octagon },
   { name: 'Theme', desc: '切换 light / dark / 跟随系统', icon: Palette },
-];
-
-export const MENTION_ITEMS: SlashMenuItem[] = [
-  { name: 'D11 Provider 配置 IA 收敛', desc: 'chat · 2h ago', icon: AtSign },
-  { name: 'D12 subagent card / settings', desc: 'chat · 1d ago', icon: AtSign },
-  { name: 'tokens.css', desc: 'artifact · 3d ago', icon: Layers },
-  { name: 'src/main/db/schema.ts', desc: 'file', icon: Brush },
 ];
 
 export function SlashMenu({
@@ -70,6 +66,14 @@ export function SlashMenu({
     }
   }, [activeIndex, filtered.length, onHoverIndex]);
 
+  // Keep the keyboard-selected row visible — arrow nav past the viewport edge
+  // would otherwise leave the active row scrolled out of sight.
+  const activeRef = useRef<HTMLButtonElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeIndex is the intended trigger; the body scrolls the ref it points to
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex]);
+
   if (filtered.length === 0) return null;
 
   return (
@@ -78,25 +82,38 @@ export function SlashMenu({
         {filtered.map((item, i) => {
           const Icon = item.icon;
           const active = i === activeIndex;
+          // Section header before the first skill row (commands sit above, untitled).
+          const showSkillHeader = item.group === 'skill' && filtered[i - 1]?.group !== 'skill';
           return (
-            <li key={item.name}>
-              <button
-                type="button"
-                onMouseEnter={() => onHoverIndex(i)}
-                onMouseDown={(e) => {
-                  // Prevent textarea blur before click handler fires
-                  e.preventDefault();
-                }}
-                onClick={() => onSelect(item)}
-                className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm ${
-                  active ? 'bg-surface-strong text-fg-primary' : 'text-fg-secondary'
-                }`}
-              >
-                {Icon && <Icon className="size-4 shrink-0 text-fg-tertiary" />}
-                <span className="font-medium">{item.name}</span>
-                <span className="truncate text-fg-tertiary text-xs">{item.desc}</span>
-              </button>
-            </li>
+            <Fragment key={item.name}>
+              {showSkillHeader && (
+                <li className="px-3 pt-2 pb-1 text-fg-tertiary text-xs">Skills</li>
+              )}
+              <li>
+                <button
+                  type="button"
+                  ref={active ? activeRef : undefined}
+                  onMouseEnter={() => onHoverIndex(i)}
+                  onMouseDown={(e) => {
+                    // Prevent textarea blur before click handler fires
+                    e.preventDefault();
+                  }}
+                  onClick={() => onSelect(item)}
+                  className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm ${
+                    active ? 'bg-surface-strong text-fg-primary' : 'text-fg-secondary'
+                  }`}
+                >
+                  {Icon && <Icon className="size-4 shrink-0 text-fg-tertiary" />}
+                  <span className="shrink-0 font-medium">{item.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-fg-tertiary text-xs">
+                    {item.desc}
+                  </span>
+                  {item.tag && (
+                    <span className="shrink-0 text-fg-disabled text-xs">{item.tag}</span>
+                  )}
+                </button>
+              </li>
+            </Fragment>
           );
         })}
       </ul>
