@@ -1,6 +1,7 @@
 import type { AtriumUIMessage } from '@shared/chat';
-import type { Todo } from '@shared/chat-types';
-import type { ChatStatus } from 'ai';
+import type { ClarifyResult, Todo } from '@shared/chat-types';
+import type { AtriumTools } from '@shared/tools';
+import { type ChatStatus, getStaticToolName, isStaticToolUIPart } from 'ai';
 import { useEffect, useRef } from 'react';
 import { useCompactionStore } from '../../state/compaction-store';
 import { AssistantMessage } from './AssistantMessage';
@@ -21,6 +22,8 @@ type ChatThreadProps = {
   /** `/` commands for the composer (e.g. compact). */
   commands: SlashCommand[];
   onSend: (text: string) => void;
+  /** Submit a clarification's answers (addToolOutput); resumes the turn. */
+  onClarify: (toolCallId: string, result: ClarifyResult) => void;
 };
 
 function messageText(parts: AtriumUIMessage['parts']): string {
@@ -28,6 +31,21 @@ function messageText(parts: AtriumUIMessage['parts']): string {
     .filter((p) => p.type === 'text')
     .map((p) => p.text)
     .join('');
+}
+
+/** True while an ask_clarification is awaiting its answer — the composer is
+ *  held until then so the dangling tool call can't strand the next turn. */
+function hasPendingClarify(messages: AtriumUIMessage[]): boolean {
+  return messages.some(
+    (m) =>
+      m.role === 'assistant' &&
+      m.parts.some(
+        (p) =>
+          isStaticToolUIPart(p) &&
+          getStaticToolName<AtriumTools>(p) === 'ask_clarification' &&
+          p.state === 'input-available',
+      ),
+  );
 }
 
 export function ChatThread({
@@ -38,11 +56,13 @@ export function ChatThread({
   plan,
   commands,
   onSend,
+  onClarify,
 }: ChatThreadProps): React.JSX.Element {
   // Compaction is a live, per-thread status in a global store — read it here
   // rather than threading it through as a prop.
   const compacting = useCompactionStore((s) => s.active[threadId] ?? false);
   const live = status === 'submitted' || status === 'streaming';
+  const clarifyPending = hasPendingClarify(messages);
   const lastId = messages.at(-1)?.id;
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -76,7 +96,12 @@ export function ChatThread({
             return msg.role === 'user' ? (
               <UserMessage key={msg.id} parts={msg.parts} />
             ) : (
-              <AssistantMessage key={msg.id} message={msg} streaming={live && msg.id === lastId} />
+              <AssistantMessage
+                key={msg.id}
+                message={msg}
+                streaming={live && msg.id === lastId}
+                onAnswer={onClarify}
+              />
             );
           })}
           {compacting && <CompactionProgress />}
@@ -86,7 +111,8 @@ export function ChatThread({
         <div className="mx-auto max-w-[760px]">
           {plan != null && <PlanPanel todos={plan} />}
           <Composer
-            disabled={live || compacting}
+            disabled={live || compacting || clarifyPending}
+            placeholder={clarifyPending ? '请先回答上面的问题…' : undefined}
             attachedTop={plan != null}
             commands={commands}
             onSubmit={(text) => onSend(text)}

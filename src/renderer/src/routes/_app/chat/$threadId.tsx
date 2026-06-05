@@ -86,7 +86,10 @@ function ChatRunner({
   }
   const { chat, resume } = resolved.current;
 
-  const { messages, sendMessage, setMessages, status } = useChat<AtriumUIMessage>({ chat, resume });
+  const { messages, sendMessage, setMessages, status, addToolOutput } = useChat<AtriumUIMessage>({
+    chat,
+    resume,
+  });
 
   const utils = trpc.useUtils();
   const compactCommand = useCompactCommand({ threadId, model, endpoint, setMessages });
@@ -145,6 +148,9 @@ function ChatRunner({
         if (!model) return;
         sendMessage({ text });
       }}
+      onClarify={(toolCallId, result) =>
+        addToolOutput({ tool: 'ask_clarification', toolCallId, output: result })
+      }
     />
   );
 }

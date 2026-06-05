@@ -58,8 +58,6 @@ export type ClarifyQuestion = {
   options?: ClarifyOption[];
   /** Optional explanation rendered under the question. */
   context?: string;
-  /** Single only: whether the Other (free-text fallback) row is shown. */
-  allowOther?: boolean;
 };
 
 export type Clarify = {
@@ -67,6 +65,13 @@ export type Clarify = {
   /** 1-4 questions answered in sequence; rendered as tabs when length > 1. */
   questions: ClarifyQuestion[];
 };
+
+/** One question's resolved answer. For multi-select, picks are joined into one
+ *  readable string. The model reads these as the ask_clarification result. */
+export type ClarifyAnswer = { question: string; answer: string };
+
+/** The ask_clarification tool's output, submitted via addToolOutput. */
+export type ClarifyResult = { answers: ClarifyAnswer[] };
 
 export type TraceSegment =
   | { kind: 'narrative'; id: string; content: string }

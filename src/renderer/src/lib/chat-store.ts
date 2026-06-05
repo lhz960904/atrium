@@ -1,5 +1,6 @@
 import { Chat } from '@ai-sdk/react';
 import type { AtriumUIMessage } from '@shared/chat';
+import { lastAssistantMessageIsCompleteWithToolCalls } from 'ai';
 import { useCompactionStore } from '../state/compaction-store';
 import { useModelStore } from '../state/model-store';
 import { useSubagentStore } from '../state/subagent-store';
@@ -61,6 +62,11 @@ export function getThreadChat(
       const m = useModelStore.getState().selected;
       return { threadId, providerId: m?.providerId, modelId: m?.modelId };
     }),
+    // ask_clarification is a client-side tool with no server execute: the turn
+    // ends with its call unanswered. Once the user fills the answer in (via
+    // addToolOutput), this resubmits the message so the model continues. Normal
+    // turns end on text, not a complete tool call, so they don't re-fire.
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     // Transient compaction events never enter messages; surface them as live
     // per-thread status the chat view reads to show a "compacting…" indicator.
     onData: (part) => {

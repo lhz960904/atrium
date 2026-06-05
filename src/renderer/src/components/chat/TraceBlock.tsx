@@ -1,8 +1,22 @@
 import * as Collapsible from '@radix-ui/react-collapsible';
-import type { TraceSegment } from '@shared/chat-types';
+import type { ClarifyResult } from '@shared/chat-types';
 import { ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import type { ViewSegment } from '../../lib/assistant-view';
 import { SegmentList } from './SegmentList';
+
+type TraceBlockProps = {
+  kind: 'thought' | 'work';
+  segments: ViewSegment[];
+  toolCount?: number;
+  streaming: boolean;
+  /** Whether content follows this block (answer / a later block) — if not, it
+   *  stays expanded so the message is never a bare header. */
+  hasFinal: boolean;
+  createdAt?: number;
+  durationMs?: number;
+  onAnswer: (toolCallId: string, result: ClarifyResult) => void;
+};
 
 /**
  * The collapsible header over part of an assistant turn — either the reasoning
@@ -18,17 +32,8 @@ export function TraceBlock({
   hasFinal,
   createdAt,
   durationMs,
-}: {
-  kind: 'thought' | 'work';
-  segments: TraceSegment[];
-  toolCount?: number;
-  streaming: boolean;
-  /** Whether content follows this block (answer / a later block) — if not, it
-   *  stays expanded so the message is never a bare header. */
-  hasFinal: boolean;
-  createdAt?: number;
-  durationMs?: number;
-}): React.JSX.Element {
+  onAnswer,
+}: TraceBlockProps): React.JSX.Element {
   const [open, setOpen] = useState(streaming);
   // Follow the stream: open while this part streams; once done, collapse only
   // if something follows it — otherwise the message would be a bare header.
@@ -64,7 +69,7 @@ export function TraceBlock({
       </Collapsible.Trigger>
       <Collapsible.Content className="atrium-collapsible">
         <div className="pt-1 pb-2">
-          <SegmentList segments={segments} />
+          <SegmentList segments={segments} onAnswer={onAnswer} />
         </div>
       </Collapsible.Content>
     </Collapsible.Root>

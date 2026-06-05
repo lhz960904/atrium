@@ -1,5 +1,14 @@
 import type { AtriumUIMessage } from '@shared/chat';
-import type { Subagent, SubagentStatus, Tool, ToolStatus, TraceSegment } from '@shared/chat-types';
+import type {
+  Clarify,
+  ClarifyQuestion,
+  ClarifyResult,
+  Subagent,
+  SubagentStatus,
+  Tool,
+  ToolStatus,
+  TraceSegment,
+} from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
 import { getStaticToolName, isStaticToolUIPart, type ToolUIPart } from 'ai';
 import { type MarkerToolName, TOOL_PRESENTATION, type ToolInput } from './tool-presentation';
@@ -10,16 +19,31 @@ import { type MarkerToolName, TOOL_PRESENTATION, type ToolInput } from './tool-p
  * plus the narrative between them — under "Worked …", and `final` is the
  * concluding answer.
  */
+/** A clarification card. Carries its render state so it can sit inline in the
+ *  turn's flow (a resolved card before the reply it prompted, a pending card at
+ *  the end) instead of being hoisted out of order. */
+export type ClarifySegment = {
+  kind: 'clarify';
+  clarify: Clarify;
+  /** No answer yet — render the interactive card; otherwise show the result. */
+  pending: boolean;
+  result?: ClarifyResult;
+};
+
+/** Trace segments as the renderer sees them — the shared clarify variant
+ *  swapped for one carrying the answer state. */
+export type ViewSegment = Exclude<TraceSegment, { kind: 'clarify' }> | ClarifySegment;
+
 export type AssistantView = {
-  thinking: TraceSegment[];
-  trace: TraceSegment[];
-  final: TraceSegment[];
+  thinking: ViewSegment[];
+  trace: ViewSegment[];
+  final: ViewSegment[];
   toolCount: number;
 };
 
 export function buildAssistantView(parts: AtriumUIMessage['parts']): AssistantView {
-  const thinking: TraceSegment[] = [];
-  const work: TraceSegment[] = []; // non-reasoning: narrative + tools, in order
+  const thinking: ViewSegment[] = [];
+  const work: ViewSegment[] = []; // non-reasoning: narrative + tools + clarify, in order
   let lastToolIdx = -1;
   let toolCount = 0;
   let seq = 0;
@@ -37,6 +61,14 @@ export function buildAssistantView(parts: AtriumUIMessage['parts']): AssistantVi
       const name = getStaticToolName<AtriumTools>(part);
       // The plan tool isn't trace work — it renders in the composer plan panel.
       if (name === 'todo_write') continue;
+      // ask_clarification keeps its place in the flow but isn't a trace tool —
+      // don't advance lastToolIdx (so a pending card stays in `final`, visible)
+      // or count it toward the tool tally.
+      if (name === 'ask_clarification') {
+        const v = toClarifySegment(part);
+        if (v) work.push(v);
+        continue;
+      }
       lastToolIdx = work.length;
       toolCount++;
       // A task call is a delegated subagent — render it as a nested card whose
@@ -52,6 +84,25 @@ export function buildAssistantView(parts: AtriumUIMessage['parts']): AssistantVi
   const trace = work.slice(0, lastToolIdx + 1);
   const final = work.slice(lastToolIdx + 1);
   return { thinking, trace, final, toolCount };
+}
+
+/**
+ * Map an ask_clarification call to a clarify segment. The model supplies the
+ * questions as the tool input (no ids — we key by position); once answered, the
+ * tool output carries the result for the read-only view. Skipped while the
+ * input is still streaming, since the questions aren't complete yet.
+ */
+function toClarifySegment(part: AtriumToolPart): ClarifySegment | null {
+  if (part.state === 'input-streaming') return null;
+  const input = (part.input ?? {}) as { questions?: Omit<ClarifyQuestion, 'id'>[] };
+  const questions = (input.questions ?? []).map((q, i) => ({ ...q, id: String(i) }));
+  if (questions.length === 0) return null;
+  return {
+    kind: 'clarify',
+    clarify: { id: part.toolCallId, questions },
+    pending: part.state !== 'output-available',
+    result: part.state === 'output-available' ? (part.output as ClarifyResult) : undefined,
+  };
 }
 
 type AtriumToolPart = ToolUIPart<AtriumTools>;

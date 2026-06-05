@@ -1,15 +1,22 @@
 import type { AtriumUIMessage } from '@shared/chat';
+import type { ClarifyResult } from '@shared/chat-types';
 import { buildAssistantView } from '../../lib/assistant-view';
+import { ClarifyCard } from './ClarifyCard';
 import { Markdown } from './Markdown';
 import { TraceBlock } from './TraceBlock';
+
+type AssistantMessageProps = {
+  message: AtriumUIMessage;
+  streaming: boolean;
+  /** Submit a clarification's answers (addToolOutput), which resumes the turn. */
+  onAnswer: (toolCallId: string, result: ClarifyResult) => void;
+};
 
 export function AssistantMessage({
   message,
   streaming,
-}: {
-  message: AtriumUIMessage;
-  streaming: boolean;
-}): React.JSX.Element {
+  onAnswer,
+}: AssistantMessageProps): React.JSX.Element {
   const view = buildAssistantView(message.parts);
   const createdAt = message.metadata?.createdAt;
 
@@ -28,6 +35,7 @@ export function AssistantMessage({
             streaming={thinkingLive}
             hasFinal
             createdAt={createdAt}
+            onAnswer={onAnswer}
           />
         )}
         {work.length > 0 && (
@@ -38,13 +46,14 @@ export function AssistantMessage({
             streaming
             hasFinal={false}
             createdAt={createdAt}
+            onAnswer={onAnswer}
           />
         )}
       </div>
     );
   }
 
-  const hasFinal = view.final.some((seg) => seg.kind === 'narrative');
+  const hasFinal = view.final.length > 0;
   const durationMs = message.metadata?.durationMs;
   return (
     <div className="mb-7">
@@ -56,6 +65,7 @@ export function AssistantMessage({
           hasFinal={hasFinal || view.trace.length > 0}
           // The whole-turn duration equals thinking time only when no tool ran.
           durationMs={view.toolCount === 0 ? durationMs : undefined}
+          onAnswer={onAnswer}
         />
       )}
       {view.trace.length > 0 && (
@@ -66,6 +76,7 @@ export function AssistantMessage({
           streaming={false}
           hasFinal={hasFinal}
           durationMs={durationMs}
+          onAnswer={onAnswer}
         />
       )}
       {view.final.map((seg) =>
@@ -73,6 +84,14 @@ export function AssistantMessage({
           <div key={seg.id} className="my-3 text-fg-primary">
             <Markdown>{seg.content}</Markdown>
           </div>
+        ) : seg.kind === 'clarify' ? (
+          <ClarifyCard
+            key={seg.clarify.id}
+            clarify={seg.clarify}
+            pending={seg.pending}
+            result={seg.result}
+            onSubmit={(result) => onAnswer(seg.clarify.id, result)}
+          />
         ) : null,
       )}
     </div>

@@ -1,10 +1,17 @@
-import type { TraceSegment } from '@shared/chat-types';
+import type { ClarifyResult } from '@shared/chat-types';
+import type { ViewSegment } from '../../lib/assistant-view';
 import { ClarifyCard } from './ClarifyCard';
 import { NarrativeSegment } from './NarrativeSegment';
 import { SubagentCard } from './SubagentCard';
 import { ToolMarker } from './ToolMarker';
 
-export function SegmentList({ segments }: { segments: TraceSegment[] }): React.JSX.Element {
+type SegmentListProps = {
+  segments: ViewSegment[];
+  /** Submit a clarification's answers (a card may appear inline in the trace). */
+  onAnswer: (toolCallId: string, result: ClarifyResult) => void;
+};
+
+export function SegmentList({ segments, onAnswer }: SegmentListProps): React.JSX.Element {
   return (
     <>
       {segments.map((seg) => {
@@ -17,7 +24,15 @@ export function SegmentList({ segments }: { segments: TraceSegment[] }): React.J
         if (seg.kind === 'subagent') {
           return <SubagentCard key={seg.subagent.id} subagent={seg.subagent} />;
         }
-        return <ClarifyCard key={seg.clarify.id} clarify={seg.clarify} />;
+        return (
+          <ClarifyCard
+            key={seg.clarify.id}
+            clarify={seg.clarify}
+            pending={seg.pending}
+            result={seg.result}
+            onSubmit={(result) => onAnswer(seg.clarify.id, result)}
+          />
+        );
       })}
     </>
   );
