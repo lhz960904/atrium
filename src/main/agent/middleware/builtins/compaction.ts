@@ -5,6 +5,7 @@ import {
   type ModelMessage,
   type UIMessage,
 } from 'ai';
+import type { Db } from '../../../db';
 import type { Logger } from '../../../log';
 import type { CompactionPreserver } from '../../compaction/preserver';
 import { summarize } from '../../compaction/summarize';
@@ -44,6 +45,37 @@ async function summarizeFold(
     abortSignal: AbortSignal.timeout(SUMMARY_TIMEOUT_MS),
   });
   return [SUMMARY_PREAMBLE + summaryText, ...carried].join('\n\n');
+}
+
+const isText = (t: string | null): t is string => t !== null;
+
+/**
+ * Summarize a fold into the persisted checkpoint pair (summary `user` message +
+ * its ack), carrying preserver state across it. The shared core of both the
+ * cross-turn middleware fold and the on-demand compactThread — each caller owns
+ * its own fold selection, threshold / persistence / emit around this.
+ */
+async function summarizeToCheckpoint(
+  fold: UIMessage[],
+  recent: UIMessage[],
+  model: LanguageModel,
+  preservers: CompactionPreserver[],
+): Promise<{ summaryMsg: UIMessage; ackMsg: UIMessage }> {
+  const carried = preservers.map((p) => p.fromUI(fold, recent)).filter(isText);
+  const text = await summarizeFold(await convertToModelMessages(fold), model, carried);
+  const summaryMsg: UIMessage = {
+    id: generateId(),
+    role: 'user',
+    parts: [{ type: 'text', text }],
+    metadata: { kind: 'compaction', coveredThroughId: fold[fold.length - 1].id },
+  };
+  const ackMsg: UIMessage = {
+    id: generateId(),
+    role: 'assistant',
+    parts: [{ type: 'text', text: ACK_TEXT }],
+    metadata: { kind: 'compaction-ack' },
+  };
+  return { summaryMsg, ackMsg };
 }
 
 const DEFAULT_COMPACT_AT_RATIO = 0.8;
@@ -132,7 +164,6 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
   const minKeepMessages = options.minKeepMessages ?? DEFAULT_MIN_KEEP_MESSAGES;
   const preservers = options.preservers ?? [];
   const log = options.log ?? console;
-  const isText = (t: string | null): t is string => t !== null;
 
   return {
     name: 'compaction',
@@ -155,24 +186,12 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       log.info(`cross-turn fold of ${fold.length} messages (${tokens}/${window} tokens)`);
       ctx.emit({ type: 'data-compaction', data: { phase: 'start' }, transient: true });
       try {
-        const carried = preservers.map((p) => p.fromUI(fold, recent)).filter(isText);
-        const text = await summarizeFold(
-          await convertToModelMessages(fold),
+        const { summaryMsg, ackMsg } = await summarizeToCheckpoint(
+          fold,
+          recent,
           options.summaryModel ?? ctx.model,
-          carried,
+          preservers,
         );
-        const summaryMsg: UIMessage = {
-          id: generateId(),
-          role: 'user',
-          parts: [{ type: 'text', text }],
-          metadata: { kind: 'compaction', coveredThroughId: fold[fold.length - 1].id },
-        };
-        const ackMsg: UIMessage = {
-          id: generateId(),
-          role: 'assistant',
-          parts: [{ type: 'text', text: ACK_TEXT }],
-          metadata: { kind: 'compaction-ack' },
-        };
         options.persist(ctx.db, ctx.threadId, summaryMsg);
         options.persist(ctx.db, ctx.threadId, ackMsg);
         ctx.request.messages = [summaryMsg, ackMsg, ...recent];
@@ -240,4 +259,50 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
       }
     },
   };
+}
+
+export type CompactThreadOptions = {
+  db: Db;
+  threadId: string;
+  /** The thread's full history (from the DB). */
+  messages: UIMessage[];
+  model: LanguageModel;
+  persist: PersistFn;
+  preservers?: CompactionPreserver[];
+  /** Recent-window token budget; defaults to 0 (keep only the message floor). */
+  keepRecentTokens?: number;
+  minKeepMessages?: number;
+  log?: Logger;
+};
+
+/**
+ * Force-compact a thread now, ignoring the auto-trigger threshold — the path
+ * behind a user-invoked `/compact`. Folds everything before the recent window
+ * into a summary checkpoint and persists the pair, exactly like beforeRun's
+ * cross-turn fold but on demand. Returns false when there's nothing to fold
+ * (already minimal). Carries preserver state (plan, active skill) across.
+ */
+export async function compactThread(opts: CompactThreadOptions): Promise<boolean> {
+  const log = opts.log ?? console;
+  const base = applyCheckpoint(opts.messages);
+  // Force-compact is aggressive on purpose: unlike the automatic path (which
+  // keeps ~25% of the window so a short chat folds nothing), the user asked to
+  // compact now, so keep only the recent floor and fold everything before it.
+  const keepRecentTokens = opts.keepRecentTokens ?? 0;
+  const minKeepMessages = opts.minKeepMessages ?? DEFAULT_MIN_KEEP_MESSAGES;
+
+  const selected = selectFold(base, pickRecentWindow, keepRecentTokens, minKeepMessages);
+  if (!selected) return false;
+  const { fold, recent } = selected;
+
+  const { summaryMsg, ackMsg } = await summarizeToCheckpoint(
+    fold,
+    recent,
+    opts.model,
+    opts.preservers ?? [],
+  );
+  opts.persist(opts.db, opts.threadId, summaryMsg);
+  opts.persist(opts.db, opts.threadId, ackMsg);
+  log.info(`forced compaction folded ${fold.length} of ${base.length} messages`);
+  return true;
 }

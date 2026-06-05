@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import {
   compactionMiddleware,
+  compactThread,
   metadataMiddleware,
   persistenceMiddleware,
   skillsMiddleware,
@@ -103,6 +104,25 @@ export function startHttpServer(deps: {
     });
     const sse = await startThreadStream(threadId, agentStream);
     return new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS });
+  });
+
+  // Force-compact a thread on demand (user-invoked /compact). Summarizes the
+  // history into a checkpoint pair and persists it; the client then reloads to
+  // show the divider. Needs a model (for the summary), so the client passes the
+  // active provider/model like the chat endpoint.
+  app.post('/api/chat/:threadId/compact', async (c) => {
+    const threadId = c.req.param('threadId');
+    const { providerId, modelId } = await c.req.json<{ providerId: string; modelId: string }>();
+    const compacted = await compactThread({
+      db: deps.db,
+      threadId,
+      messages: loadThreadMessages(deps.db, threadId),
+      model: resolveModel(deps.db, providerId, modelId),
+      persist: persistMessage,
+      preservers: [todoPreserver, skillPreserver],
+      log: createLogger('compaction'),
+    });
+    return c.json({ compacted });
   });
 
   // Reconnect endpoint. If a run is still streaming (or just finished and still

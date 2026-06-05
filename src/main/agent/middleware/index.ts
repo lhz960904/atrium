@@ -1,4 +1,9 @@
-export { type CompactionOptions, compactionMiddleware } from './builtins/compaction';
+export {
+  type CompactionOptions,
+  type CompactThreadOptions,
+  compactionMiddleware,
+  compactThread,
+} from './builtins/compaction';
 export { metadataMiddleware } from './builtins/metadata';
 export { type PersistFn, persistenceMiddleware } from './builtins/persistence';
 export { type SkillsOptions, skillsMiddleware } from './builtins/skills';
