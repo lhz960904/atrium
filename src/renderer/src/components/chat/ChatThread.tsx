@@ -2,12 +2,26 @@ import type { AtriumUIMessage } from '@shared/chat';
 import type { Todo } from '@shared/chat-types';
 import type { ChatStatus } from 'ai';
 import { useEffect, useRef } from 'react';
+import { useCompactionStore } from '../../state/compaction-store';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatHeader } from './ChatHeader';
 import { CompactionDivider, CompactionProgress } from './CompactionDivider';
 import { Composer } from './composer/Composer';
+import type { SlashCommand } from './composer/slash-menu';
 import { PlanPanel } from './PlanPanel';
 import { UserMessage } from './UserMessage';
+
+type ChatThreadProps = {
+  threadId: string;
+  title: string;
+  messages: AtriumUIMessage[];
+  status: ChatStatus;
+  /** The thread's active plan (latest todo_write); null when none. */
+  plan: Todo[] | null;
+  /** `/` commands for the composer (e.g. compact). */
+  commands: SlashCommand[];
+  onSend: (text: string) => void;
+};
 
 function messageText(parts: AtriumUIMessage['parts']): string {
   return parts
@@ -17,22 +31,17 @@ function messageText(parts: AtriumUIMessage['parts']): string {
 }
 
 export function ChatThread({
+  threadId,
   title,
   messages,
   status,
-  compacting,
   plan,
+  commands,
   onSend,
-}: {
-  title: string;
-  messages: AtriumUIMessage[];
-  status: ChatStatus;
-  /** Whether the context is being compacted right now (live indicator). */
-  compacting: boolean;
-  /** The thread's active plan (latest todo_write); null when none. */
-  plan: Todo[] | null;
-  onSend: (text: string) => void;
-}): React.JSX.Element {
+}: ChatThreadProps): React.JSX.Element {
+  // Compaction is a live, per-thread status in a global store — read it here
+  // rather than threading it through as a prop.
+  const compacting = useCompactionStore((s) => s.active[threadId] ?? false);
   const live = status === 'submitted' || status === 'streaming';
   const lastId = messages.at(-1)?.id;
 
@@ -77,8 +86,9 @@ export function ChatThread({
         <div className="mx-auto max-w-[760px]">
           {plan != null && <PlanPanel todos={plan} />}
           <Composer
-            disabled={status === 'submitted' || status === 'streaming'}
+            disabled={live || compacting}
             attachedTop={plan != null}
+            commands={commands}
             onSubmit={(text) => onSend(text)}
           />
         </div>

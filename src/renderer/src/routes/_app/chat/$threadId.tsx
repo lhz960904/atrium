@@ -3,6 +3,7 @@ import type { AtriumUIMessage } from '@shared/chat';
 import { createFileRoute } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 import { ChatThread } from '../../../components/chat/ChatThread';
+import { useCompactCommand } from '../../../components/chat/use-compact-command';
 import { getThreadChat } from '../../../lib/chat-store';
 import { getActivePlan } from '../../../lib/plan';
 import { trpc } from '../../../lib/trpc';
@@ -85,10 +86,11 @@ function ChatRunner({
   }
   const { chat, resume } = resolved.current;
 
-  const { messages, sendMessage, status } = useChat<AtriumUIMessage>({ chat, resume });
-  const compacting = useCompactionStore((s) => s.active[threadId] ?? false);
+  const { messages, sendMessage, setMessages, status } = useChat<AtriumUIMessage>({ chat, resume });
 
   const utils = trpc.useUtils();
+  const compactCommand = useCompactCommand({ threadId, model, endpoint, setMessages });
+
   const markRead = trpc.threads.markRead.useMutation({
     onSuccess: () => utils.threads.list.invalidate(),
   });
@@ -133,11 +135,12 @@ function ChatRunner({
 
   return (
     <ChatThread
+      threadId={threadId}
       title={title}
       messages={messages}
       status={status}
-      compacting={compacting}
       plan={getActivePlan(messages)}
+      commands={[compactCommand]}
       onSend={(text) => {
         if (!model) return;
         sendMessage({ text });

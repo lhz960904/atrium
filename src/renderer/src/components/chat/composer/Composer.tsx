@@ -9,7 +9,7 @@ import { useRef, useState } from 'react';
 import { type Attachment, AttachmentChip } from './AttachmentChip';
 import { ModelPicker } from './ModelPicker';
 import { SlashMenu } from './SlashMenu';
-import { useSkillSuggestion } from './skill-mention';
+import { type SlashCommand, useSlashMenu } from './slash-menu';
 
 type ComposerProps = {
   autoFocus?: boolean;
@@ -19,6 +19,8 @@ type ComposerProps = {
   initialText?: string;
   /** Square the top corners so the plan panel can sit flush on top of it. */
   attachedTop?: boolean;
+  /** `/` commands offered alongside skills (e.g. compact); none by default. */
+  commands?: SlashCommand[];
 };
 
 export function Composer({
@@ -28,10 +30,11 @@ export function Composer({
   disabled = false,
   initialText = '',
   attachedTop = false,
+  commands,
 }: ComposerProps): React.JSX.Element {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [empty, setEmpty] = useState(initialText.trim().length === 0);
-  const skill = useSkillSuggestion();
+  const skill = useSlashMenu(commands ?? []);
 
   // The editor is created once, so handleKeyDown closes over the first render;
   // route Enter-to-send through a ref so it sees the latest state.
