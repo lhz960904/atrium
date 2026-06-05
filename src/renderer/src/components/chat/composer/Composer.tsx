@@ -4,7 +4,7 @@ import { Paragraph } from '@tiptap/extension-paragraph';
 import { Text } from '@tiptap/extension-text';
 import { Placeholder, UndoRedo } from '@tiptap/extensions';
 import { EditorContent, useEditor } from '@tiptap/react';
-import { ArrowUp, Plus } from 'lucide-react';
+import { Plus, Send, Square } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useChatModel } from '../../../lib/use-chat-model';
 import { ModelPicker } from '../../ModelPicker';
@@ -22,6 +22,10 @@ type ComposerProps = {
   attachedTop?: boolean;
   /** `/` commands offered alongside skills (e.g. compact); none by default. */
   commands?: SlashCommand[];
+  /** A turn is generating — the send button becomes a stop button. */
+  streaming?: boolean;
+  /** Stop the in-flight generation (abort). */
+  onStop?: () => void;
 };
 
 export function Composer({
@@ -32,6 +36,8 @@ export function Composer({
   initialText = '',
   attachedTop = false,
   commands,
+  streaming = false,
+  onStop,
 }: ComposerProps): React.JSX.Element {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [empty, setEmpty] = useState(initialText.trim().length === 0);
@@ -131,15 +137,26 @@ export function Composer({
           groups={groups}
           onSelected={() => requestAnimationFrame(() => editor?.commands.focus())}
         />
-        <button
-          type="button"
-          title="发送"
-          onClick={handleSend}
-          disabled={!canSend}
-          className="rounded-md bg-accent p-1.5 text-fg-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
-        >
-          <ArrowUp className="size-[14px]" />
-        </button>
+        {streaming ? (
+          <button
+            type="button"
+            title="停止"
+            onClick={onStop}
+            className="rounded-md bg-danger p-1.5 text-fg-on-accent hover:bg-danger/90"
+          >
+            <Square className="size-[11px]" fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            title="发送"
+            onClick={handleSend}
+            disabled={!canSend}
+            className="rounded-md bg-accent p-1.5 text-fg-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
+          >
+            <Send className="size-[14px]" />
+          </button>
+        )}
       </div>
 
       {skill.menu && (

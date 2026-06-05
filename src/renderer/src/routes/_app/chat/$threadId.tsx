@@ -86,10 +86,18 @@ function ChatRunner({
   }
   const { chat, resume } = resolved.current;
 
-  const { messages, sendMessage, setMessages, status, addToolOutput } = useChat<AtriumUIMessage>({
-    chat,
-    resume,
-  });
+  const { messages, sendMessage, setMessages, status, addToolOutput, stop } =
+    useChat<AtriumUIMessage>({ chat, resume });
+
+  // Stopping: detach this client immediately, then tell main to abort the run
+  // (the producer is decoupled for resume, so stop() alone won't reach it).
+  const onStop = (): void => {
+    stop();
+    void fetch(`${endpoint.baseUrl}/api/chat/${threadId}/abort`, {
+      method: 'POST',
+      headers: { 'x-atrium-token': endpoint.token },
+    }).catch(() => {});
+  };
 
   const utils = trpc.useUtils();
   const compactCommand = useCompactCommand({ threadId, model, endpoint, setMessages });
@@ -151,6 +159,7 @@ function ChatRunner({
       onClarify={(toolCallId, result) =>
         addToolOutput({ tool: 'ask_clarification', toolCallId, output: result })
       }
+      onStop={onStop}
     />
   );
 }

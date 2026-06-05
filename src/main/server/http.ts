@@ -19,7 +19,7 @@ import { todoPreserver } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
 import { resolveModel } from '../providers/resolve';
 import { loadThreadMessages, persistMessage, upsertMessage } from './persist';
-import { resumeThreadStream, startThreadStream } from './resumable';
+import { abortThreadRun, resumeThreadStream, startThreadStream } from './resumable';
 
 export type ChatEndpoint = { port: number; token: string };
 
@@ -81,7 +81,9 @@ export function startHttpServer(deps: {
     const skills = getSkills();
     // The resumable stream's producer drives the agent to completion on its
     // own, independent of this request — so navigating away or reloading leaves
-    // the run streaming in main, reattachable via the reconnect endpoint.
+    // the run streaming in main, reattachable via the reconnect endpoint. The
+    // controller is held by the stream registry so a stop request can abort it.
+    const abort = new AbortController();
     const agentStream = await runAgent({
       model: resolveModel(deps.db, providerId, modelId),
       messages: history,
@@ -89,6 +91,7 @@ export function startHttpServer(deps: {
       threadId,
       db: deps.db,
       sandbox,
+      abortSignal: abort.signal,
       tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot, db: deps.db, skills }),
       // skills must run after compaction: compaction may fold the original first
       // user message into a summary, and the skill index has to land on whatever
@@ -107,8 +110,16 @@ export function startHttpServer(deps: {
         persistenceMiddleware(upsertMessage),
       ],
     });
-    const sse = await startThreadStream(threadId, agentStream);
+    const sse = await startThreadStream(threadId, agentStream, abort);
     return new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS });
+  });
+
+  // Stop a thread's in-flight generation. Aborts the agent loop server-side
+  // (closing the client stream alone can't, since the run is decoupled for
+  // resume); whatever was generated so far is persisted as the turn ends.
+  app.post('/api/chat/:threadId/abort', (c) => {
+    const aborted = abortThreadRun(c.req.param('threadId'));
+    return c.json({ aborted });
   });
 
   // Force-compact a thread on demand (user-invoked /compact). Summarizes the

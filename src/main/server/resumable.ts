@@ -26,6 +26,10 @@ const store = createInMemoryResumableStreamStore({
 // One live stream per thread; a new turn mints a fresh id and supersedes it.
 const activeStreamByThread = new Map<string, string>();
 const threadByStream = new Map<string, string>();
+// The run's abort handle, keyed by stream id — lets an explicit stop request
+// abort the agent loop (the producer is decoupled from the request, so closing
+// the client connection alone never reaches it).
+const abortByStream = new Map<string, AbortController>();
 // Server-authoritative "is this thread generating?" — survives renderer reloads
 // (the sidebar reads it over tRPC), unlike per-tab client state.
 const runningThreads = new Set<string>();
@@ -33,6 +37,7 @@ const runningThreads = new Set<string>();
 const context = createResumableStreamContext({
   store,
   onFinalize: (streamId) => {
+    abortByStream.delete(streamId);
     const threadId = threadByStream.get(streamId);
     if (threadId === undefined) return;
     threadByStream.delete(streamId);
@@ -46,17 +51,33 @@ export function getRunningThreadIds(): string[] {
 }
 
 /**
+ * Abort a thread's in-flight run, if any. Aborting the agent's signal ends
+ * streamText, which finalizes the stream (persisting whatever was generated).
+ * Returns whether a live run was found to abort.
+ */
+export function abortThreadRun(threadId: string): boolean {
+  const streamId = activeStreamByThread.get(threadId);
+  const controller = streamId ? abortByStream.get(streamId) : undefined;
+  if (!controller) return false;
+  controller.abort();
+  return true;
+}
+
+/**
  * Start a thread's live stream and return an SSE byte stream for the caller.
  * The agent's UIMessage chunks are encoded to the SSE bytes the store holds
- * and the client's `useChat` parses.
+ * and the client's `useChat` parses. The run's AbortController is held so a
+ * stop request can abort it.
  */
 export function startThreadStream(
   threadId: string,
   agentStream: ReadableStream<UIMessageChunk>,
+  abort: AbortController,
 ): Promise<ReadableStream<Uint8Array>> {
   const streamId = generateId();
   activeStreamByThread.set(threadId, streamId);
   threadByStream.set(streamId, threadId);
+  abortByStream.set(streamId, abort);
   runningThreads.add(threadId);
   return context.run(streamId, () =>
     agentStream.pipeThrough(new JsonToSseTransformStream()).pipeThrough(new TextEncoderStream()),

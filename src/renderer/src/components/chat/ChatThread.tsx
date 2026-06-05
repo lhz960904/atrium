@@ -24,6 +24,8 @@ type ChatThreadProps = {
   onSend: (text: string) => void;
   /** Submit a clarification's answers (addToolOutput); resumes the turn. */
   onClarify: (toolCallId: string, result: ClarifyResult) => void;
+  /** Stop the in-flight generation. */
+  onStop: () => void;
 };
 
 function messageText(parts: AtriumUIMessage['parts']): string {
@@ -57,6 +59,7 @@ export function ChatThread({
   commands,
   onSend,
   onClarify,
+  onStop,
 }: ChatThreadProps): React.JSX.Element {
   // Compaction is a live, per-thread status in a global store — read it here
   // rather than threading it through as a prop.
@@ -112,10 +115,12 @@ export function ChatThread({
           {plan != null && <PlanPanel todos={plan} />}
           <Composer
             disabled={live || compacting || clarifyPending}
+            streaming={live}
             placeholder={clarifyPending ? '请先回答上面的问题…' : undefined}
             attachedTop={plan != null}
             commands={commands}
             onSubmit={(text) => onSend(text)}
+            onStop={onStop}
           />
         </div>
       </div>
