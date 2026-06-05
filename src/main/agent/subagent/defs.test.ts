@@ -43,8 +43,8 @@ test('toolDeny removes a tool the parent has', () => {
 });
 
 test('the always-denied tools are stripped even if the parent exposes them', () => {
-  // task / create_subagent / ask_clarification aren't in ToolName yet; the
-  // parent may still carry them, and a subagent must never get them.
+  // create_subagent isn't in ToolName; the parent may still carry such tools,
+  // and a subagent must never get a denied one (task / ask_clarification / …).
   const out = filterToolsForSubagent(
     parentTools(['task', 'create_subagent', 'ask_clarification']),
     {

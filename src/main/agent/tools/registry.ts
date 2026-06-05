@@ -2,6 +2,7 @@ import type { ToolName } from '@shared/tools';
 import type { Tool } from 'ai';
 import { maxContextTokens } from '../models/catalog';
 import { listSubagentDefs } from '../subagent/defs';
+import { askClarificationTool } from './builtins/ask-clarification';
 import { bashTool } from './builtins/bash';
 import { listDirTool } from './builtins/list-dir';
 import { readFileTool } from './builtins/read-file';
@@ -33,5 +34,6 @@ export function getTools(ctx: ToolCtx): Record<ToolName, Tool> {
       subagents: listSubagentDefs(ctx.db),
     }),
     skill: skillTool({ skills: ctx.skills ?? [] }),
+    ask_clarification: askClarificationTool(),
   };
 }

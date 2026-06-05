@@ -28,11 +28,12 @@ export type SubagentDef = {
 
 /**
  * Tools a subagent may never hold, whatever its allow-list says: `task` (no
- * infinite nesting of subagents) and `skill` (subagents aren't given the skill
- * index, so it'd be dead). A Set<string> so a future tool can be denied before
- * it's added to ToolName.
+ * infinite nesting of subagents), `skill` (subagents aren't given the skill
+ * index, so it'd be dead), and `ask_clarification` (subagents run headless —
+ * there's no user to answer them). A Set<string> so a future tool can be denied
+ * before it's added to ToolName.
  */
-export const SUBAGENT_DENIED_TOOLS = new Set<string>(['task', 'skill']);
+export const SUBAGENT_DENIED_TOOLS = new Set<string>(['task', 'skill', 'ask_clarification']);
 
 /** Narrow the parent's tools to what a subagent def permits. */
 export function filterToolsForSubagent(

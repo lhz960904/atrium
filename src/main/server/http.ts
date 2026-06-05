@@ -18,7 +18,7 @@ import { skillPreserver } from '../agent/tools/builtins/skill';
 import { todoPreserver } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
 import { resolveModel } from '../providers/resolve';
-import { loadThreadMessages, persistMessage } from './persist';
+import { loadThreadMessages, persistMessage, upsertMessage } from './persist';
 import { resumeThreadStream, startThreadStream } from './resumable';
 
 export type ChatEndpoint = { port: number; token: string };
@@ -69,8 +69,12 @@ export function startHttpServer(deps: {
     if (!threadId) return c.text('threadId required', 400);
 
     // Persist the just-sent user message, then rebuild the full history from
-    // the DB (the DB is the source of truth, not the client).
+    // the DB (the DB is the source of truth, not the client). An assistant
+    // message arrives only when a client-side tool (ask_clarification) was just
+    // answered and the chat auto-resumed: overwrite the stored call so history
+    // carries the answer the model is about to continue from.
     if (message.role === 'user') persistMessage(deps.db, threadId, message);
+    else if (message.role === 'assistant') upsertMessage(deps.db, threadId, message);
     const history = loadThreadMessages(deps.db, threadId);
 
     const sandbox = new LocalSandbox(deps.workspaceRoot);

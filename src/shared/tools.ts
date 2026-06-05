@@ -15,6 +15,7 @@ export const TOOL_NAMES = [
   'web_search',
   'task',
   'skill',
+  'ask_clarification',
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];

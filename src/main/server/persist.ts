@@ -42,3 +42,25 @@ export function persistMessage(db: Db, threadId: string, msg: UIMessage): void {
   const bump = msg.role === 'user' ? { updatedAt: now, lastReadAt: now } : { updatedAt: now };
   db.update(threads).set(bump).where(eq(threads.id, threadId)).run();
 }
+
+/**
+ * Overwrite an already-persisted message's parts in place. Used when the client
+ * re-sends an assistant message whose client-side tool (ask_clarification) just
+ * got its answer — the stored copy held the unresolved call, so history must
+ * pick up the now-filled result before the model continues from it.
+ */
+export function upsertMessage(db: Db, threadId: string, msg: UIMessage): void {
+  db.insert(messages)
+    .values({
+      id: msg.id,
+      threadId,
+      role: msg.role,
+      parts: msg.parts,
+      metadata: msg.metadata ?? null,
+    })
+    .onConflictDoUpdate({
+      target: messages.id,
+      set: { parts: msg.parts, metadata: msg.metadata ?? null },
+    })
+    .run();
+}
