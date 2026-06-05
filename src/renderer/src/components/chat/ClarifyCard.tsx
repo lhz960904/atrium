@@ -1,3 +1,5 @@
+import * as Checkbox from '@radix-ui/react-checkbox';
+import * as RadioGroup from '@radix-ui/react-radio-group';
 import type { Clarify, ClarifyOption, ClarifyQuestion } from '@shared/chat-types';
 import { ArrowRight, Check } from 'lucide-react';
 import { useState } from 'react';
@@ -177,19 +179,42 @@ function SingleSelect({
   const hasPreview = options.some((o) => o.preview);
   const [selected, setSelected] = useState<number>(0);
 
+  const list = (
+    <RadioGroup.Root
+      value={String(selected)}
+      onValueChange={(v) => setSelected(Number(v))}
+      className="flex flex-col gap-1.5"
+    >
+      {options.map((opt, i) => {
+        const on = selected === i;
+        return (
+          <RadioGroup.Item
+            key={opt.label}
+            value={String(i)}
+            className={`flex items-center gap-3 rounded-md border px-3.5 py-2.5 text-left text-sm transition-colors ${
+              on
+                ? 'border-accent bg-accent-soft text-fg-primary'
+                : 'border-border-default bg-surface text-fg-primary hover:border-border-strong'
+            }`}
+          >
+            <span
+              className={`relative flex size-4 shrink-0 items-center justify-center rounded-full border-[1.5px] ${
+                on ? 'border-accent bg-accent' : 'border-border-strong'
+              }`}
+            >
+              <RadioGroup.Indicator className="size-1.5 rounded-full bg-fg-on-accent" />
+            </span>
+            <span className="flex-1">{opt.label}</span>
+          </RadioGroup.Item>
+        );
+      })}
+    </RadioGroup.Root>
+  );
+
   if (hasPreview) {
     return (
       <div className="grid grid-cols-[260px_1fr] gap-3">
-        <div className="flex flex-col gap-1.5">
-          {options.map((opt, i) => (
-            <OptionRow
-              key={opt.label}
-              label={opt.label}
-              selected={selected === i}
-              onSelect={() => setSelected(i)}
-            />
-          ))}
-        </div>
+        {list}
         <div>
           <div className="mb-1.5 font-medium text-[10px] text-fg-tertiary uppercase tracking-wider">
             Preview · 伪代码
@@ -204,19 +229,12 @@ function SingleSelect({
 
   return (
     <div className="flex flex-col gap-1.5">
-      {options.map((opt, i) => (
-        <OptionRow
-          key={opt.label}
-          label={opt.label}
-          selected={selected === i}
-          onSelect={() => setSelected(i)}
-        />
-      ))}
+      {list}
       {allowOther && (
         <input
           type="text"
           placeholder="或者填别的…"
-          className="mt-1 w-full rounded-md border border-border-default bg-surface px-3.5 py-2 text-fg-primary text-sm placeholder:text-fg-disabled focus:border-accent focus:outline-none"
+          className="w-full rounded-md border border-border-default bg-surface px-3.5 py-2 text-fg-primary text-sm placeholder:text-fg-disabled focus:border-accent focus:outline-none"
         />
       )}
     </div>
@@ -236,75 +254,41 @@ function MultiSelect({ options }: { options: ClarifyOption[] }): React.JSX.Eleme
 
   return (
     <div className="flex flex-col gap-1.5">
-      {options.map((opt, i) => (
-        <OptionRow
-          key={opt.label}
-          label={opt.label}
-          selected={selected.has(i)}
-          onSelect={() => toggle(i)}
-          multi
-        />
-      ))}
-    </div>
-  );
-}
-
-function OptionRow({
-  label,
-  selected,
-  onSelect,
-  multi = false,
-}: {
-  label: string;
-  selected: boolean;
-  onSelect: () => void;
-  multi?: boolean;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`flex items-center gap-3 rounded-md border px-3.5 py-2.5 text-left text-sm transition-colors ${
-        selected
-          ? 'border-accent bg-accent-soft text-fg-primary'
-          : 'border-border-default bg-surface text-fg-primary hover:border-border-strong'
-      }`}
-    >
-      <Indicator selected={selected} multi={multi} />
-      <span className="flex-1">{label}</span>
-    </button>
-  );
-}
-
-function Indicator({ selected, multi }: { selected: boolean; multi: boolean }): React.JSX.Element {
-  if (multi) {
-    return (
-      <span
-        className={`flex size-4 shrink-0 items-center justify-center rounded-[3px] border ${
-          selected ? 'border-accent bg-accent' : 'border-border-strong'
-        }`}
-      >
-        {selected && (
-          <svg
-            viewBox="0 0 16 16"
-            className="size-2.5 fill-none stroke-fg-on-accent stroke-2"
-            aria-hidden="true"
+      {options.map((opt, i) => {
+        const on = selected.has(i);
+        return (
+          // biome-ignore lint/a11y/noLabelWithoutControl: wraps the Radix Checkbox control
+          <label
+            key={opt.label}
+            className={`flex cursor-pointer items-center gap-3 rounded-md border px-3.5 py-2.5 text-sm transition-colors ${
+              on
+                ? 'border-accent bg-accent-soft text-fg-primary'
+                : 'border-border-default bg-surface text-fg-primary hover:border-border-strong'
+            }`}
           >
-            <title>Selected</title>
-            <path d="M3 8.5 6.5 12 13 4.5" />
-          </svg>
-        )}
-      </span>
-    );
-  }
-  return (
-    <span
-      className={`relative flex size-4 shrink-0 items-center justify-center rounded-full border-[1.5px] ${
-        selected ? 'border-accent bg-accent' : 'border-border-strong'
-      }`}
-    >
-      {selected && <span className="size-1.5 rounded-full bg-fg-on-accent" />}
-    </span>
+            <Checkbox.Root
+              checked={on}
+              onCheckedChange={() => toggle(i)}
+              className={`flex size-4 shrink-0 items-center justify-center rounded-[3px] border ${
+                on ? 'border-accent bg-accent' : 'border-border-strong'
+              }`}
+            >
+              <Checkbox.Indicator>
+                <svg
+                  viewBox="0 0 16 16"
+                  className="size-2.5 fill-none stroke-fg-on-accent stroke-2"
+                  aria-hidden="true"
+                >
+                  <title>Selected</title>
+                  <path d="M3 8.5 6.5 12 13 4.5" />
+                </svg>
+              </Checkbox.Indicator>
+            </Checkbox.Root>
+            <span className="flex-1">{opt.label}</span>
+          </label>
+        );
+      })}
+    </div>
   );
 }
 
