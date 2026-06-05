@@ -44,10 +44,12 @@ export function persistMessage(db: Db, threadId: string, msg: UIMessage): void {
 }
 
 /**
- * Overwrite an already-persisted message's parts in place. Used when the client
+ * Insert a message or overwrite an existing one's parts/metadata in place. Two
+ * cases need the overwrite, both keyed on a reused message id: the client
  * re-sends an assistant message whose client-side tool (ask_clarification) just
- * got its answer — the stored copy held the unresolved call, so history must
- * pick up the now-filled result before the model continues from it.
+ * got its answer, and the model continues that same assistant message after the
+ * answer (the AI SDK extends it under the same id rather than minting a new
+ * one). Insert-and-ignore would silently drop the continuation.
  */
 export function upsertMessage(db: Db, threadId: string, msg: UIMessage): void {
   db.insert(messages)
@@ -63,4 +65,5 @@ export function upsertMessage(db: Db, threadId: string, msg: UIMessage): void {
       set: { parts: msg.parts, metadata: msg.metadata ?? null },
     })
     .run();
+  db.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
 }

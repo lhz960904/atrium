@@ -101,7 +101,10 @@ export function startHttpServer(deps: {
           preservers: [todoPreserver, skillPreserver],
         }),
         skillsMiddleware({ skills }),
-        persistenceMiddleware(persistMessage),
+        // Upsert, not insert-ignore: when a turn resumes after an
+        // ask_clarification answer, the model extends the SAME assistant message
+        // (reused id), and that continuation must overwrite the stored copy.
+        persistenceMiddleware(upsertMessage),
       ],
     });
     const sse = await startThreadStream(threadId, agentStream);
