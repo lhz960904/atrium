@@ -158,6 +158,36 @@ pre {
   animation: plan-enter var(--duration-slow) var(--ease-out);
 }
 
+/* Radix Collapsible height transition. Radix measures the content and exposes
+   it as --radix-collapsible-content-height; we animate from/to it. Keep padding
+   on an inner element, not on the .atrium-collapsible node — overflow:hidden
+   here clips during the slide, and padding at height:0 would jump. */
+@keyframes atrium-collapsible-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+@keyframes atrium-collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+.atrium-collapsible {
+  overflow: hidden;
+}
+.atrium-collapsible[data-state='open'] {
+  animation: atrium-collapsible-down var(--duration-normal) var(--ease-out);
+}
+.atrium-collapsible[data-state='closed'] {
+  animation: atrium-collapsible-up var(--duration-normal) var(--ease-out);
+}
+
 /* Monochrome "thinking"-style text shimmer: a brighter band sweeps across the
    muted label while compacting. Theme-aware via the fg tokens; no accent color. */
 @keyframes compaction-shimmer {

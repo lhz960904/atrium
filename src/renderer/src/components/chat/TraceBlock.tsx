@@ -1,3 +1,4 @@
+import * as Collapsible from '@radix-ui/react-collapsible';
 import type { TraceSegment } from '@shared/chat-types';
 import { ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -37,35 +38,36 @@ export function TraceBlock({
   const live = kind === 'thought' ? 'Thinking' : 'Working';
 
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`group inline-flex items-center gap-2 py-1 text-md ${
-          streaming ? 'text-fg-secondary' : 'text-fg-tertiary hover:text-fg-secondary'
-        }`}
-      >
-        {streaming && <span className="size-2 animate-pulse rounded-full bg-accent" />}
-        {streaming ? (
-          <LiveLabel verb={live} createdAt={createdAt} />
-        ) : (
-          <span>
-            {durationMs != null ? `${rest} for ${formatRest(durationMs)}` : rest}
-            {kind === 'work' && toolCount > 0 && (
-              <span className="text-fg-disabled"> · {toolCount} steps</span>
-            )}
-          </span>
-        )}
-        <ChevronRight
-          className={`size-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}
-        />
-      </button>
-      {open && (
+    <Collapsible.Root open={open} onOpenChange={setOpen}>
+      <Collapsible.Trigger asChild>
+        <button
+          type="button"
+          className={`group inline-flex items-center gap-2 py-1 text-md ${
+            streaming ? 'text-fg-secondary' : 'text-fg-tertiary hover:text-fg-secondary'
+          }`}
+        >
+          {streaming && <span className="size-2 animate-pulse rounded-full bg-accent" />}
+          {streaming ? (
+            <LiveLabel verb={live} createdAt={createdAt} />
+          ) : (
+            <span>
+              {durationMs != null ? `${rest} for ${formatRest(durationMs)}` : rest}
+              {kind === 'work' && toolCount > 0 && (
+                <span className="text-fg-disabled"> · {toolCount} steps</span>
+              )}
+            </span>
+          )}
+          <ChevronRight
+            className={`size-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`}
+          />
+        </button>
+      </Collapsible.Trigger>
+      <Collapsible.Content className="atrium-collapsible">
         <div className="pt-1 pb-2">
           <SegmentList segments={segments} />
         </div>
-      )}
-    </div>
+      </Collapsible.Content>
+    </Collapsible.Root>
   );
 }
 

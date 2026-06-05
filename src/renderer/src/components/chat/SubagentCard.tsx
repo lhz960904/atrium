@@ -1,3 +1,4 @@
+import * as Collapsible from '@radix-ui/react-collapsible';
 import type { SubagentActivityTool } from '@shared/chat';
 import type { Subagent, SubagentStatus } from '@shared/chat-types';
 import { Ban, Bot, ChevronDown, Loader2, Wrench } from 'lucide-react';
@@ -40,44 +41,49 @@ export function SubagentCard({ subagent }: { subagent: Subagent }): React.JSX.El
   const [open, setOpen] = useState(status === 'streaming');
 
   return (
-    <div
+    <Collapsible.Root
+      open={open}
+      onOpenChange={setOpen}
       className={`my-3 overflow-hidden rounded-lg border bg-elevated transition-colors ${
         open ? 'border-border-strong' : 'border-border-default'
       }`}
     >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface ${
-          open ? 'border-border-default border-b' : ''
-        }`}
-      >
-        <Bot className="size-4 shrink-0 text-fg-secondary" />
-        <span className="min-w-0 flex-1 truncate font-medium text-base text-fg-primary">
-          {subagent.name}
-        </span>
-        <SubagentBadge status={status} />
-        {/* Only when the live activity is around — after a reload the count
-            isn't persisted, so showing "0 tools" would read as a bug. */}
-        {entry && <ToolCountChip count={toolCount} />}
-        <ChevronDown
-          className={`size-3.5 shrink-0 text-fg-tertiary transition-transform ${
-            open ? 'rotate-180' : ''
+      <Collapsible.Trigger asChild>
+        <button
+          type="button"
+          className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface ${
+            open ? 'border-border-default border-b' : ''
           }`}
-        />
-      </button>
-      {open && (entry || subagent.result) && (
-        <div className="atrium-tool-output max-h-[360px] overflow-y-auto px-4 py-3">
-          {entry ? (
-            tools.map((t) => <SubagentToolLine key={t.id} tool={t} />)
-          ) : subagent.result ? (
-            <div className="text-fg-secondary">
-              <Markdown>{subagent.result}</Markdown>
-            </div>
-          ) : null}
-        </div>
+        >
+          <Bot className="size-4 shrink-0 text-fg-secondary" />
+          <span className="min-w-0 flex-1 truncate font-medium text-base text-fg-primary">
+            {subagent.name}
+          </span>
+          <SubagentBadge status={status} />
+          {/* Only when the live activity is around — after a reload the count
+              isn't persisted, so showing "0 tools" would read as a bug. */}
+          {entry && <ToolCountChip count={toolCount} />}
+          <ChevronDown
+            className={`size-3.5 shrink-0 text-fg-tertiary transition-transform ${
+              open ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+      </Collapsible.Trigger>
+      {(entry || subagent.result) && (
+        <Collapsible.Content className="atrium-collapsible">
+          <div className="atrium-tool-output max-h-[360px] overflow-y-auto px-4 py-3">
+            {entry ? (
+              tools.map((t) => <SubagentToolLine key={t.id} tool={t} />)
+            ) : subagent.result ? (
+              <div className="text-fg-secondary">
+                <Markdown>{subagent.result}</Markdown>
+              </div>
+            ) : null}
+          </div>
+        </Collapsible.Content>
       )}
-    </div>
+    </Collapsible.Root>
   );
 }
 

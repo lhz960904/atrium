@@ -1,3 +1,4 @@
+import * as Collapsible from '@radix-ui/react-collapsible';
 import { ChevronRight, Package, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { skillSourceLabel } from '../../../lib/skill-source';
@@ -66,27 +67,29 @@ function SkillRow({ skill }: { skill: SkillItem }): React.JSX.Element {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border-default bg-surface">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="block w-full px-4 py-3 text-left hover:bg-elevated"
-      >
-        <div className="flex items-center gap-3">
-          <Package className="size-4 shrink-0 text-fg-tertiary" />
-          <span className="min-w-0 flex-1 truncate font-medium text-fg-primary text-sm">
-            {skill.name}
-          </span>
-          <span className="shrink-0 text-fg-disabled text-xs">
-            {skillSourceLabel(skill.source)}
-          </span>
-          <ChevronRight
-            className={`size-4 shrink-0 text-fg-tertiary transition-transform ${open ? 'rotate-90' : ''}`}
-          />
-        </div>
-        <p className="mt-1 pl-7 text-fg-tertiary text-xs">{skill.description}</p>
-      </button>
-      {open && (
+    <Collapsible.Root
+      open={open}
+      onOpenChange={setOpen}
+      className="overflow-hidden rounded-lg border border-border-default bg-surface"
+    >
+      <Collapsible.Trigger asChild>
+        <button type="button" className="block w-full px-4 py-3 text-left hover:bg-elevated">
+          <div className="flex items-center gap-3">
+            <Package className="size-4 shrink-0 text-fg-tertiary" />
+            <span className="min-w-0 flex-1 truncate font-medium text-fg-primary text-sm">
+              {skill.name}
+            </span>
+            <span className="shrink-0 text-fg-disabled text-xs">
+              {skillSourceLabel(skill.source)}
+            </span>
+            <ChevronRight
+              className={`size-4 shrink-0 text-fg-tertiary transition-transform ${open ? 'rotate-90' : ''}`}
+            />
+          </div>
+          <p className="mt-1 pl-7 text-fg-tertiary text-xs">{skill.description}</p>
+        </button>
+      </Collapsible.Trigger>
+      <Collapsible.Content className="atrium-collapsible">
         <div className="max-h-[420px] overflow-y-auto border-border-default border-t px-4 py-3">
           {skill.body ? (
             <Markdown>{skill.body}</Markdown>
@@ -94,7 +97,7 @@ function SkillRow({ skill }: { skill: SkillItem }): React.JSX.Element {
             <p className="text-fg-tertiary text-sm">无内容。</p>
           )}
         </div>
-      )}
-    </div>
+      </Collapsible.Content>
+    </Collapsible.Root>
   );
 }
