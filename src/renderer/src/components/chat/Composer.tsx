@@ -1,33 +1,23 @@
-import { ArrowUp, Package, Plus } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { skillSourceLabel } from '../../lib/skill-source';
-import { trpc } from '../../lib/trpc';
+import { Document } from '@tiptap/extension-document';
+import { HardBreak } from '@tiptap/extension-hard-break';
+import { Paragraph } from '@tiptap/extension-paragraph';
+import { Text } from '@tiptap/extension-text';
+import { Placeholder, UndoRedo } from '@tiptap/extensions';
+import { EditorContent, useEditor } from '@tiptap/react';
+import { ArrowUp, Plus } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { type Attachment, AttachmentChip } from './AttachmentChip';
 import { ModelPicker } from './ModelPicker';
-import { SLASH_COMMANDS, SlashMenu, type SlashMenuItem } from './SlashMenu';
 
-type MenuState = {
-  query: string;
-  activeIndex: number;
+type ComposerProps = {
+  autoFocus?: boolean;
+  placeholder?: string;
+  onSubmit?: (text: string, attachments: Attachment[]) => void;
+  disabled?: boolean;
+  initialText?: string;
+  /** Square the top corners so the plan panel can sit flush on top of it. */
+  attachedTop?: boolean;
 };
-
-/**
- * Detect whether the cursor is currently inside a slash command. The `/` must
- * be at the start of the textarea or preceded by whitespace (so URLs like
- * https://… don't open the menu).
- */
-function detectSlashTrigger(text: string, cursor: number): { query: string } | null {
-  for (let i = cursor - 1; i >= 0; i--) {
-    const c = text[i];
-    if (c === '/') {
-      const before = i === 0 ? '' : text[i - 1];
-      if (before === '' || /\s/.test(before)) return { query: text.slice(i + 1, cursor) };
-      return null;
-    }
-    if (c && /\s/.test(c)) return null;
-  }
-  return null;
-}
 
 export function Composer({
   autoFocus = false,
@@ -36,93 +26,55 @@ export function Composer({
   disabled = false,
   initialText = '',
   attachedTop = false,
-}: {
-  autoFocus?: boolean;
-  placeholder?: string;
-  onSubmit?: (text: string, attachments: Attachment[]) => void;
-  disabled?: boolean;
-  initialText?: string;
-  /** Square the top corners so the plan panel can sit flush on top of it. */
-  attachedTop?: boolean;
-}): React.JSX.Element {
-  const taRef = useRef<HTMLTextAreaElement>(null);
-  const [text, setText] = useState(initialText);
+}: ComposerProps): React.JSX.Element {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [menu, setMenu] = useState<MenuState | null>(null);
-  const { data: skills } = trpc.skills.list.useQuery();
+  const [empty, setEmpty] = useState(initialText.trim().length === 0);
+  // The editor is created once, so its handleKeyDown closes over the first
+  // render's state. Route Enter-to-send through a ref that always points at the
+  // latest handleSend, so it reads current attachments/disabled, not stale ones.
+  const sendRef = useRef<() => void>(() => {});
 
-  // Autosize: grow textarea up to ~200px, then scroll internally.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: text drives autosize via scrollHeight (indirect dep)
-  useEffect(() => {
-    const ta = taRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
-  }, [text]);
-
-  useEffect(() => {
-    if (autoFocus) taRef.current?.focus();
-  }, [autoFocus]);
-
-  const updateMenuFromCursor = (newText: string, cursor: number): void => {
-    const trigger = detectSlashTrigger(newText, cursor);
-    if (trigger) {
-      setMenu({ query: trigger.query, activeIndex: 0 });
-    } else {
-      setMenu(null);
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
-    const newText = e.target.value;
-    setText(newText);
-    updateMenuFromCursor(newText, e.target.selectionStart);
-  };
+  const editor = useEditor({
+    extensions: [
+      Document,
+      Paragraph,
+      Text,
+      // Shift-Enter / Mod-Enter insert a newline; plain Enter is intercepted to send.
+      HardBreak,
+      UndoRedo,
+      Placeholder.configure({ placeholder }),
+    ],
+    content: initialText,
+    autofocus: autoFocus,
+    editorProps: {
+      attributes: {
+        class: 'tiptap max-h-[200px] min-h-[28px] overflow-y-auto px-1 py-2 text-fg-primary',
+      },
+      handleKeyDown: (_view, event) => {
+        // IME composing (e.g. pinyin): Enter confirms the candidate, never sends.
+        if (event.isComposing || event.keyCode === 229) return false;
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          sendRef.current();
+          return true;
+        }
+        return false;
+      },
+    },
+    onUpdate: ({ editor }) => setEmpty(editor.isEmpty),
+  });
 
   const handleSend = (): void => {
-    if (disabled) return;
+    if (disabled || !editor) return;
+    const text = editor.getText({ blockSeparator: '\n' });
     if (text.trim().length === 0 && attachments.length === 0) return;
-    if (onSubmit) {
-      onSubmit(text, attachments);
-    } else {
-      console.log('Send:', { text, attachments });
-    }
-    setText('');
+    onSubmit?.(text, attachments);
+    editor.commands.clearContent();
+    setEmpty(true);
     setAttachments([]);
-    setMenu(null);
   };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
-    // While an IME is composing (e.g. typing pinyin), Enter confirms the
-    // candidate — it must never send or steer the slash menu.
-    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-    if (menu) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setMenu(null);
-        return;
-      }
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setMenu({ ...menu, activeIndex: menu.activeIndex + 1 });
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setMenu({ ...menu, activeIndex: Math.max(0, menu.activeIndex - 1) });
-        return;
-      }
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        setMenu(null);
-        return;
-      }
-    }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+  // Keep the ref current so the editor's captured handleKeyDown sends fresh state.
+  sendRef.current = handleSend;
 
   const addMockAttachment = (): void => {
     const candidates = ['screenshot.png', 'notes.md', 'design.pdf', 'sketch.png'];
@@ -135,50 +87,7 @@ export function Composer({
     setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  // Replace the open `/trigger` token with a skill-invocation intent. Sending
-  // it makes the model load the skill via the skill tool (the user-invocable
-  // path, alongside the model invoking skills on its own).
-  const invokeSkill = (skillName: string): void => {
-    const ta = taRef.current;
-    const cursor = ta?.selectionStart ?? text.length;
-    let start = cursor;
-    for (let i = cursor - 1; i >= 0; i--) {
-      if (text[i] === '/') {
-        start = i;
-        break;
-      }
-      if (/\s/.test(text[i] ?? '')) break;
-    }
-    const intent = `Use the ${skillName} skill: `;
-    const next = text.slice(0, start) + intent + text.slice(cursor);
-    setText(next);
-    setMenu(null);
-    requestAnimationFrame(() => {
-      ta?.focus();
-      const pos = start + intent.length;
-      ta?.setSelectionRange(pos, pos);
-    });
-  };
-
-  const handleMenuSelect = (item: SlashMenuItem): void => {
-    if (item.skill) {
-      invokeSkill(item.skill);
-      return;
-    }
-    // App commands are still stubs — each lands its dispatch when implemented.
-    setMenu(null);
-    taRef.current?.focus();
-  };
-
-  const skillItems: SlashMenuItem[] = (skills ?? []).map((s) => ({
-    name: s.name,
-    desc: s.description,
-    icon: Package,
-    group: 'skill',
-    tag: skillSourceLabel(s.source),
-    skill: s.name,
-  }));
-  const menuItems = [...SLASH_COMMANDS, ...skillItems];
+  const canSend = !disabled && (!empty || attachments.length > 0);
 
   return (
     <div
@@ -194,15 +103,7 @@ export function Composer({
         </div>
       )}
 
-      <textarea
-        ref={taRef}
-        rows={1}
-        value={text}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        className="block max-h-[200px] min-h-[28px] w-full resize-none border-0 bg-transparent px-1 py-2 text-fg-primary outline-0 placeholder:text-fg-disabled"
-      />
+      <EditorContent editor={editor} />
 
       <div className="flex items-center gap-2 pt-1">
         <button
@@ -214,28 +115,18 @@ export function Composer({
           <Plus className="size-[14px]" />
         </button>
         <span className="flex-1" />
-        {/* refocus the textarea after a model pick (popover steals focus) */}
-        <ModelPicker onSelected={() => requestAnimationFrame(() => taRef.current?.focus())} />
+        {/* refocus the editor after a model pick (popover steals focus) */}
+        <ModelPicker onSelected={() => requestAnimationFrame(() => editor?.commands.focus())} />
         <button
           type="button"
           title="发送"
           onClick={handleSend}
-          disabled={disabled || (text.trim().length === 0 && attachments.length === 0)}
+          disabled={!canSend}
           className="rounded-md bg-accent p-1.5 text-fg-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
         >
           <ArrowUp className="size-[14px]" />
         </button>
       </div>
-
-      {menu && (
-        <SlashMenu
-          items={menuItems}
-          query={menu.query}
-          activeIndex={menu.activeIndex}
-          onHoverIndex={(i) => setMenu({ ...menu, activeIndex: i })}
-          onSelect={handleMenuSelect}
-        />
-      )}
     </div>
   );
 }

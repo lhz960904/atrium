@@ -183,3 +183,21 @@ pre {
   color: transparent;
   animation: compaction-shimmer 2s linear infinite;
 }
+
+/* Tiptap composer — a plain-text editing surface (no block formatting). The
+   placeholder is rendered by the Placeholder extension via data-placeholder. */
+.tiptap {
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tiptap p {
+  margin: 0;
+}
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--fg-disabled);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
