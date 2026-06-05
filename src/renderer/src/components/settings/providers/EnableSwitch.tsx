@@ -1,28 +1,30 @@
+import * as Switch from '@radix-ui/react-switch';
+
+type EnableSwitchProps = {
+  on: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+};
+
 export function EnableSwitch({
   on,
   disabled = false,
   onToggle,
-}: {
-  on: boolean;
-  disabled?: boolean;
-  onToggle: () => void;
-}): React.JSX.Element {
+}: EnableSwitchProps): React.JSX.Element {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
+    <Switch.Root
+      checked={on}
       disabled={disabled}
-      onClick={onToggle}
+      onCheckedChange={onToggle}
       className={`relative inline-flex h-[18px] w-[30px] shrink-0 items-center rounded-full transition-colors ${
         on ? 'bg-accent' : 'bg-surface-strong'
       } ${disabled ? 'opacity-40' : 'cursor-pointer'}`}
     >
-      <span
+      <Switch.Thumb
         className={`inline-block size-[14px] rounded-full bg-elevated shadow-sm transition-transform ${
           on ? 'translate-x-[14px]' : 'translate-x-[2px]'
         }`}
       />
-    </button>
+    </Switch.Root>
   );
 }
