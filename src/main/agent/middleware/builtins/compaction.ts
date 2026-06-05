@@ -6,7 +6,7 @@ import {
   type UIMessage,
 } from 'ai';
 import type { Db } from '../../../db';
-import type { Logger } from '../../../log';
+import { createLogger } from '../../../log';
 import type { CompactionPreserver } from '../../compaction/preserver';
 import { summarize } from '../../compaction/summarize';
 import { countTokensModel, countTokens as defaultCountTokens } from '../../compaction/tokens';
@@ -18,6 +18,8 @@ import {
 } from '../../compaction/window';
 import type { AgentMiddleware, RunContext, StepInfo, StepOverride } from '../types';
 import type { PersistFn } from './persistence';
+
+const log = createLogger('compaction');
 
 const SUMMARY_PREAMBLE =
   'Earlier conversation was compacted to save context. Summary of what came before:\n\n';
@@ -111,8 +113,6 @@ export type CompactionOptions = {
   countTokens?: (messages: UIMessage[]) => number;
   /** Feature hooks that carry their state (plan, skills, …) across a fold. */
   preservers?: CompactionPreserver[];
-  /** Scoped logger; defaults to console (so unit tests don't pull in electron-log). */
-  log?: Logger;
 };
 
 function modelIdOf(model: LanguageModel): string {
@@ -163,7 +163,6 @@ export function compactionMiddleware(options: CompactionOptions): AgentMiddlewar
   const ratio = options.compactAtRatio ?? DEFAULT_COMPACT_AT_RATIO;
   const minKeepMessages = options.minKeepMessages ?? DEFAULT_MIN_KEEP_MESSAGES;
   const preservers = options.preservers ?? [];
-  const log = options.log ?? console;
 
   return {
     name: 'compaction',
@@ -272,7 +271,6 @@ export type CompactThreadOptions = {
   /** Recent-window token budget; defaults to 0 (keep only the message floor). */
   keepRecentTokens?: number;
   minKeepMessages?: number;
-  log?: Logger;
 };
 
 /**
@@ -283,7 +281,6 @@ export type CompactThreadOptions = {
  * (already minimal). Carries preserver state (plan, active skill) across.
  */
 export async function compactThread(opts: CompactThreadOptions): Promise<boolean> {
-  const log = opts.log ?? console;
   const base = applyCheckpoint(opts.messages);
   // Force-compact is aggressive on purpose: unlike the automatic path (which
   // keeps ~25% of the window so a short chat folds nothing), the user asked to

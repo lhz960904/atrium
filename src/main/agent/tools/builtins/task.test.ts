@@ -23,7 +23,7 @@ const textModel = (text: string) => {
   });
 };
 
-const deps = { maxContextTokens: () => 200_000, log: console, subagents: [] };
+const deps = { maxContextTokens: () => 200_000, subagents: [] };
 
 function ctx(model: RunContext['model'], db: Db): RunContext {
   return {

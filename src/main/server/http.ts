@@ -17,7 +17,6 @@ import { getTools } from '../agent/tools';
 import { skillPreserver } from '../agent/tools/builtins/skill';
 import { todoPreserver } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
-import { createLogger } from '../log';
 import { resolveModel } from '../providers/resolve';
 import { loadThreadMessages, persistMessage } from './persist';
 import { resumeThreadStream, startThreadStream } from './resumable';
@@ -96,7 +95,6 @@ export function startHttpServer(deps: {
           maxContextTokens,
           persist: persistMessage,
           preservers: [todoPreserver, skillPreserver],
-          log: createLogger('compaction'),
         }),
         skillsMiddleware({ skills }),
         persistenceMiddleware(persistMessage),
@@ -120,7 +118,6 @@ export function startHttpServer(deps: {
       model: resolveModel(deps.db, providerId, modelId),
       persist: persistMessage,
       preservers: [todoPreserver, skillPreserver],
-      log: createLogger('compaction'),
     });
     return c.json({ compacted });
   });

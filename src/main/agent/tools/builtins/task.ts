@@ -1,6 +1,5 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import type { Logger } from '../../../log';
 import type { RunContext } from '../../middleware';
 import { resolveSubagentDef } from '../../subagent/defs';
 import { runSubagent } from '../../subagent/run';
@@ -9,7 +8,6 @@ const DEFAULT_SUBAGENT = 'general-purpose';
 
 export type TaskToolDeps = {
   maxContextTokens: (modelId: string) => number;
-  log: Logger;
   /** All delegatable subagents (built-in + custom), advertised in the description. */
   subagents: Array<{ name: string; description: string }>;
 };
@@ -61,7 +59,6 @@ ${list}`,
         // frontend can correlate it with this task part's card.
         subagentId: toolCallId,
         maxContextTokens: deps.maxContextTokens,
-        log: deps.log,
         abortSignal,
       });
       return text;

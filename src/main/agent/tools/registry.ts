@@ -1,6 +1,5 @@
 import type { ToolName } from '@shared/tools';
 import type { Tool } from 'ai';
-import { createLogger } from '../../log';
 import { maxContextTokens } from '../models/catalog';
 import { listSubagentDefs } from '../subagent/defs';
 import { bashTool } from './builtins/bash';
@@ -31,7 +30,6 @@ export function getTools(ctx: ToolCtx): Record<ToolName, Tool> {
     web_search: webSearchTool(),
     task: taskTool({
       maxContextTokens,
-      log: createLogger('subagent'),
       subagents: listSubagentDefs(ctx.db),
     }),
     skill: skillTool({ skills: ctx.skills ?? [] }),

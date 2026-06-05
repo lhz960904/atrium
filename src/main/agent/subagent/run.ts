@@ -1,10 +1,12 @@
 import type { ToolName } from '@shared/tools';
 import { convertToModelMessages, generateId, stepCountIs, streamText, type UIMessage } from 'ai';
-import type { Logger } from '../../log';
+import { createLogger } from '../../log';
 import { compactionMiddleware, composeBeforeStep, type RunContext } from '../middleware';
 import { workspaceGuidance } from '../prompts';
 import { todoPreserver } from '../tools/builtins/todo';
 import { filterToolsForSubagent, type SubagentDef } from './defs';
+
+const log = createLogger('subagent');
 
 const SUBAGENT_MAX_STEPS = 100;
 
@@ -21,7 +23,6 @@ export type RunSubagentOptions = {
   /** Context window per model id (injected, like compaction — avoids importing
    *  the Electron-bound catalog here so this stays unit-testable). */
   maxContextTokens: (modelId: string) => number;
-  log?: Logger;
   abortSignal?: AbortSignal;
 };
 
@@ -38,7 +39,6 @@ export type RunSubagentOptions = {
  */
 export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentResult> {
   const { parent, agent, prompt } = opts;
-  const log = opts.log ?? console;
 
   // Pin the subagent to its own model if it has a valid one, else inherit the
   // parent's. resolveModel is imported lazily — it pulls in the Electron-bound
@@ -83,7 +83,6 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
       // Only within-turn folding (as the loop grows) ever fires.
       persist: () => {},
       preservers: [todoPreserver],
-      log,
     }),
   ];
   const beforeStep = composeBeforeStep(subCtx, middlewares);
