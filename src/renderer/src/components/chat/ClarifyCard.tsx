@@ -11,6 +11,9 @@ type ClarifyCardProps = {
   /** The submitted answers, present once resolved. */
   result?: ClarifyResult;
   onSubmit: (result: ClarifyResult) => void;
+  /** Dismiss without answering; omit to hide the cancel affordance (e.g. in the
+   *  read-only trace). */
+  onCancel?: () => void;
 };
 
 /**
@@ -46,17 +49,20 @@ export function ClarifyCard({
   pending,
   result,
   onSubmit,
+  onCancel,
 }: ClarifyCardProps): React.JSX.Element {
   if (!pending) return <ResolvedCard clarify={clarify} result={result} />;
-  return <PendingCard clarify={clarify} onSubmit={onSubmit} />;
+  return <PendingCard clarify={clarify} onSubmit={onSubmit} onCancel={onCancel} />;
 }
 
 function PendingCard({
   clarify,
   onSubmit,
+  onCancel,
 }: {
   clarify: Clarify;
   onSubmit: (result: ClarifyResult) => void;
+  onCancel?: () => void;
 }): React.JSX.Element {
   const questions = clarify.questions;
   const [activeIndex, setActiveIndex] = useState(0);
@@ -96,12 +102,14 @@ function PendingCard({
 
   return (
     <div className="my-3 overflow-hidden rounded-lg border border-accent/50 bg-elevated">
-      {isMulti && (
+      {(isMulti || onCancel) && (
         <CardHead
+          isMulti={isMulti}
           questions={questions}
           activeIndex={activeIndex}
           answeredIds={answeredIds}
           onTabClick={setActiveIndex}
+          onCancel={onCancel}
         />
       )}
       <div className="px-5 py-4">
@@ -124,46 +132,65 @@ function PendingCard({
 }
 
 function CardHead({
+  isMulti,
   questions,
   activeIndex,
   answeredIds,
   onTabClick,
+  onCancel,
 }: {
+  isMulti: boolean;
   questions: ClarifyQuestion[];
   activeIndex: number;
   answeredIds: Set<string>;
   onTabClick: (i: number) => void;
+  onCancel?: () => void;
 }): React.JSX.Element {
   return (
-    <div className="flex min-w-0 items-center gap-1 overflow-x-auto border-border-default border-b bg-surface px-4 py-2">
-      {questions.map((q, i) => {
-        const isActive = i === activeIndex;
-        const isAnswered = answeredIds.has(q.id);
-        return (
-          <button
-            type="button"
-            key={q.id}
-            onClick={() => onTabClick(i)}
-            title={q.question}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-medium text-xs transition-colors ${
-              isActive
-                ? 'bg-accent text-fg-on-accent'
-                : isAnswered
-                  ? 'text-accent hover:bg-accent-soft'
-                  : 'text-fg-tertiary hover:bg-surface-strong hover:text-fg-secondary'
-            }`}
-          >
-            {isAnswered ? (
-              <Check className="size-3 shrink-0" />
-            ) : (
-              <span className={`font-mono text-[10px] ${isActive ? 'opacity-80' : 'opacity-60'}`}>
-                {i + 1}
-              </span>
-            )}
-            <span className="truncate">{q.header}</span>
-          </button>
-        );
-      })}
+    <div className="flex items-center gap-2 border-border-default border-b bg-surface px-4 py-2">
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        {isMulti &&
+          questions.map((q, i) => {
+            const isActive = i === activeIndex;
+            const isAnswered = answeredIds.has(q.id);
+            return (
+              <button
+                type="button"
+                key={q.id}
+                onClick={() => onTabClick(i)}
+                title={q.question}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 font-medium text-xs transition-colors ${
+                  isActive
+                    ? 'bg-accent text-fg-on-accent'
+                    : isAnswered
+                      ? 'text-accent hover:bg-accent-soft'
+                      : 'text-fg-tertiary hover:bg-surface-strong hover:text-fg-secondary'
+                }`}
+              >
+                {isAnswered ? (
+                  <Check className="size-3 shrink-0" />
+                ) : (
+                  <span
+                    className={`font-mono text-[10px] ${isActive ? 'opacity-80' : 'opacity-60'}`}
+                  >
+                    {i + 1}
+                  </span>
+                )}
+                <span className="truncate">{q.header}</span>
+              </button>
+            );
+          })}
+      </div>
+      {onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          title="取消提问，自己重新输入"
+          className="shrink-0 rounded-md px-2 py-1 text-fg-tertiary text-xs hover:bg-surface-strong hover:text-fg-secondary"
+        >
+          取消
+        </button>
+      )}
     </div>
   );
 }
@@ -427,18 +454,23 @@ function ResolvedCard({
   result?: ClarifyResult;
 }): React.JSX.Element {
   const answers = result?.answers ?? [];
+  const cancelled = result?.cancelled === true;
   return (
     <div className="my-3 overflow-hidden rounded-lg border border-border-default bg-elevated">
       <div className="border-border-default border-b bg-surface px-4 py-2 font-medium text-[10.5px] text-fg-tertiary uppercase tracking-wider">
-        已回答
+        {cancelled ? '已取消' : '已回答'}
       </div>
       <div className="flex flex-col gap-3 px-5 py-4">
-        {clarify.questions.map((q, i) => (
-          <div key={q.id}>
-            <div className="text-fg-tertiary text-sm leading-snug">{q.question}</div>
-            <div className="mt-0.5 text-fg-primary text-sm">{answers[i]?.answer || '—'}</div>
-          </div>
-        ))}
+        {cancelled ? (
+          <div className="text-fg-tertiary text-sm">已取消提问，未作答。</div>
+        ) : (
+          clarify.questions.map((q, i) => (
+            <div key={q.id}>
+              <div className="text-fg-tertiary text-sm leading-snug">{q.question}</div>
+              <div className="mt-0.5 text-fg-primary text-sm">{answers[i]?.answer || '—'}</div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

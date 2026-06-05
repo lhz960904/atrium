@@ -24,6 +24,8 @@ type ChatThreadProps = {
   onSend: (text: string) => void;
   /** Submit a clarification's answers (addToolOutput); resumes the turn. */
   onClarify: (toolCallId: string, result: ClarifyResult) => void;
+  /** Dismiss a clarification without answering; resolves it but doesn't resume. */
+  onCancelClarify: (toolCallId: string) => void;
   /** Stop the in-flight generation. */
   onStop: () => void;
 };
@@ -35,19 +37,23 @@ function messageText(parts: AtriumUIMessage['parts']): string {
     .join('');
 }
 
-/** True while an ask_clarification is awaiting its answer — the composer is
- *  held until then so the dangling tool call can't strand the next turn. */
-function hasPendingClarify(messages: AtriumUIMessage[]): boolean {
-  return messages.some(
-    (m) =>
-      m.role === 'assistant' &&
-      m.parts.some(
-        (p) =>
-          isStaticToolUIPart(p) &&
-          getStaticToolName<AtriumTools>(p) === 'ask_clarification' &&
-          p.state === 'input-available',
-      ),
-  );
+/** The toolCallId of an ask_clarification awaiting its answer, or null. The
+ *  composer is held while one is pending so the dangling tool call can't strand
+ *  the next turn; Esc cancels it. */
+function pendingClarifyId(messages: AtriumUIMessage[]): string | null {
+  for (const m of messages) {
+    if (m.role !== 'assistant') continue;
+    for (const p of m.parts) {
+      if (
+        isStaticToolUIPart(p) &&
+        getStaticToolName<AtriumTools>(p) === 'ask_clarification' &&
+        p.state === 'input-available'
+      ) {
+        return p.toolCallId;
+      }
+    }
+  }
+  return null;
 }
 
 export function ChatThread({
@@ -59,14 +65,30 @@ export function ChatThread({
   commands,
   onSend,
   onClarify,
+  onCancelClarify,
   onStop,
 }: ChatThreadProps): React.JSX.Element {
   // Compaction is a live, per-thread status in a global store — read it here
   // rather than threading it through as a prop.
   const compacting = useCompactionStore((s) => s.active[threadId] ?? false);
   const live = status === 'submitted' || status === 'streaming';
-  const clarifyPending = hasPendingClarify(messages);
+  const pendingClarify = pendingClarifyId(messages);
+  const clarifyPending = pendingClarify !== null;
   const lastId = messages.at(-1)?.id;
+
+  // Esc takes back the turn (Claude Code style): aborts an in-flight generation,
+  // or cancels a clarification that's waiting on the user. Bound only while one
+  // of those is active, so it doesn't swallow Esc from popovers/menus otherwise.
+  useEffect(() => {
+    if (!live && !clarifyPending) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return;
+      if (live) onStop();
+      else if (pendingClarify) onCancelClarify(pendingClarify);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [live, clarifyPending, pendingClarify, onStop, onCancelClarify]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
@@ -104,6 +126,7 @@ export function ChatThread({
                 message={msg}
                 streaming={live && msg.id === lastId}
                 onAnswer={onClarify}
+                onCancel={onCancelClarify}
               />
             );
           })}

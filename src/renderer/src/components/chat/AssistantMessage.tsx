@@ -10,12 +10,15 @@ type AssistantMessageProps = {
   streaming: boolean;
   /** Submit a clarification's answers (addToolOutput), which resumes the turn. */
   onAnswer: (toolCallId: string, result: ClarifyResult) => void;
+  /** Dismiss a clarification without answering. */
+  onCancel: (toolCallId: string) => void;
 };
 
 export function AssistantMessage({
   message,
   streaming,
   onAnswer,
+  onCancel,
 }: AssistantMessageProps): React.JSX.Element {
   const view = buildAssistantView(message.parts);
   const createdAt = message.metadata?.createdAt;
@@ -91,6 +94,7 @@ export function AssistantMessage({
             pending={seg.pending}
             result={seg.result}
             onSubmit={(result) => onAnswer(seg.clarify.id, result)}
+            onCancel={() => onCancel(seg.clarify.id)}
           />
         ) : null,
       )}

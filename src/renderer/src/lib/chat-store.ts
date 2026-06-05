@@ -1,6 +1,12 @@
 import { Chat } from '@ai-sdk/react';
 import type { AtriumUIMessage } from '@shared/chat';
-import { lastAssistantMessageIsCompleteWithToolCalls } from 'ai';
+import type { ClarifyResult } from '@shared/chat-types';
+import type { AtriumTools } from '@shared/tools';
+import {
+  getStaticToolName,
+  isStaticToolUIPart,
+  lastAssistantMessageIsCompleteWithToolCalls,
+} from 'ai';
 import { useCompactionStore } from '../state/compaction-store';
 import { useModelStore } from '../state/model-store';
 import { useSubagentStore } from '../state/subagent-store';
@@ -22,6 +28,20 @@ import { makeChatTransport } from './chat-transport';
 const MAX_CHATS = 16;
 
 const chats = new Map<string, Chat<AtriumUIMessage>>();
+
+/** A cancelled clarification resolves its tool call but must NOT auto-resume —
+ *  the user took back the turn and sends again themselves. */
+function lastClarifyCancelled(messages: AtriumUIMessage[]): boolean {
+  const last = messages.at(-1);
+  if (!last || last.role !== 'assistant') return false;
+  return last.parts.some(
+    (p) =>
+      isStaticToolUIPart(p) &&
+      getStaticToolName<AtriumTools>(p) === 'ask_clarification' &&
+      p.state === 'output-available' &&
+      (p.output as ClarifyResult | undefined)?.cancelled === true,
+  );
+}
 
 function isBusy(chat: Chat<AtriumUIMessage>): boolean {
   return chat.status === 'submitted' || chat.status === 'streaming';
@@ -65,8 +85,11 @@ export function getThreadChat(
     // ask_clarification is a client-side tool with no server execute: the turn
     // ends with its call unanswered. Once the user fills the answer in (via
     // addToolOutput), this resubmits the message so the model continues. Normal
-    // turns end on text, not a complete tool call, so they don't re-fire.
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    // turns end on text, not a complete tool call, so they don't re-fire. A
+    // cancelled clarification resolves its call too, but must not auto-resume —
+    // it's persisted separately and the user drives the next turn.
+    sendAutomaticallyWhen: ({ messages }) =>
+      lastAssistantMessageIsCompleteWithToolCalls({ messages }) && !lastClarifyCancelled(messages),
     // Transient compaction events never enter messages; surface them as live
     // per-thread status the chat view reads to show a "compacting…" indicator.
     onData: (part) => {

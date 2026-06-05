@@ -70,8 +70,9 @@ export type Clarify = {
  *  readable string. The model reads these as the ask_clarification result. */
 export type ClarifyAnswer = { question: string; answer: string };
 
-/** The ask_clarification tool's output, submitted via addToolOutput. */
-export type ClarifyResult = { answers: ClarifyAnswer[] };
+/** The ask_clarification tool's output, submitted via addToolOutput. `cancelled`
+ *  marks a dismissed question — the user took back the turn without answering. */
+export type ClarifyResult = { answers: ClarifyAnswer[]; cancelled?: boolean };
 
 export type TraceSegment =
   | { kind: 'narrative'; id: string; content: string }

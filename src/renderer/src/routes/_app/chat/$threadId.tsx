@@ -1,7 +1,8 @@
 import { type Chat, useChat } from '@ai-sdk/react';
 import type { AtriumUIMessage } from '@shared/chat';
+import type { ClarifyResult } from '@shared/chat-types';
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { ChatThread } from '../../../components/chat/ChatThread';
 import { useCompactCommand } from '../../../components/chat/use-compact-command';
 import { getThreadChat } from '../../../lib/chat-store';
@@ -91,13 +92,29 @@ function ChatRunner({
 
   // Stopping: detach this client immediately, then tell main to abort the run
   // (the producer is decoupled for resume, so stop() alone won't reach it).
-  const onStop = (): void => {
+  const onStop = useCallback((): void => {
     stop();
     void fetch(`${endpoint.baseUrl}/api/chat/${threadId}/abort`, {
       method: 'POST',
       headers: { 'x-atrium-token': endpoint.token },
     }).catch(() => {});
-  };
+  }, [stop, endpoint.baseUrl, endpoint.token, threadId]);
+
+  // Cancelling a clarification: resolve the call so the next turn's history is
+  // valid, but don't auto-resume (the store's sendAutomaticallyWhen skips a
+  // cancelled clarify). Persist it server-side without running the model.
+  const onCancelClarify = useCallback(
+    (toolCallId: string): void => {
+      const output: ClarifyResult = { answers: [], cancelled: true };
+      addToolOutput({ tool: 'ask_clarification', toolCallId, output });
+      void fetch(`${endpoint.baseUrl}/api/chat/${threadId}/resolve-clarify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-atrium-token': endpoint.token },
+        body: JSON.stringify({ toolCallId, output }),
+      }).catch(() => {});
+    },
+    [addToolOutput, endpoint.baseUrl, endpoint.token, threadId],
+  );
 
   const utils = trpc.useUtils();
   const compactCommand = useCompactCommand({ threadId, model, endpoint, setMessages });
@@ -159,6 +176,7 @@ function ChatRunner({
       onClarify={(toolCallId, result) =>
         addToolOutput({ tool: 'ask_clarification', toolCallId, output: result })
       }
+      onCancelClarify={onCancelClarify}
       onStop={onStop}
     />
   );

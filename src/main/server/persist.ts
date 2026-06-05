@@ -67,3 +67,27 @@ export function upsertMessage(db: Db, threadId: string, msg: UIMessage): void {
     .run();
   db.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
 }
+
+/**
+ * Fill a client-side tool call's result into the stored message without running
+ * the model — used when a clarification is cancelled: the call must be resolved
+ * (so the next turn's history isn't a dangling tool_use) but no continuation
+ * should fire until the user sends again.
+ */
+export function resolveToolOutput(
+  db: Db,
+  threadId: string,
+  toolCallId: string,
+  output: unknown,
+): void {
+  const msg = loadThreadMessages(db, threadId).find((m) =>
+    m.parts.some((p) => (p as { toolCallId?: string }).toolCallId === toolCallId),
+  );
+  if (!msg) return;
+  const parts = msg.parts.map((p) =>
+    (p as { toolCallId?: string }).toolCallId === toolCallId
+      ? { ...p, state: 'output-available', output }
+      : p,
+  ) as UIMessage['parts'];
+  upsertMessage(db, threadId, { ...msg, parts });
+}

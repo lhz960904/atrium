@@ -18,7 +18,7 @@ import { skillPreserver } from '../agent/tools/builtins/skill';
 import { todoPreserver } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
 import { resolveModel } from '../providers/resolve';
-import { loadThreadMessages, persistMessage, upsertMessage } from './persist';
+import { loadThreadMessages, persistMessage, resolveToolOutput, upsertMessage } from './persist';
 import { abortThreadRun, resumeThreadStream, startThreadStream } from './resumable';
 
 export type ChatEndpoint = { port: number; token: string };
@@ -120,6 +120,14 @@ export function startHttpServer(deps: {
   app.post('/api/chat/:threadId/abort', (c) => {
     const aborted = abortThreadRun(c.req.param('threadId'));
     return c.json({ aborted });
+  });
+
+  // Resolve a client-side tool call (a cancelled clarification) in the DB
+  // without running the model — the turn only resumes on the user's next send.
+  app.post('/api/chat/:threadId/resolve-clarify', async (c) => {
+    const { toolCallId, output } = await c.req.json<{ toolCallId: string; output: unknown }>();
+    resolveToolOutput(deps.db, c.req.param('threadId'), toolCallId, output);
+    return c.json({ ok: true });
   });
 
   // Force-compact a thread on demand (user-invoked /compact). Summarizes the
