@@ -34,6 +34,8 @@ ${entries}
 </available_skills>
 
 When a request matches a skill, load it with the skill tool (by name) and follow the instructions it returns. Load it through the skill tool — don't open the skill file yourself, and don't claim to use a skill you haven't loaded. If none fit, just proceed normally.
+
+When a user message contains a tag like <skill-use>name</skill-use>, the user has explicitly invoked that skill — load it with the skill tool and follow it.
 </system-reminder>`;
 }
 
