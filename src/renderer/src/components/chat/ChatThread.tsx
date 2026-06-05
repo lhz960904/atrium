@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatHeader } from './ChatHeader';
 import { CompactionDivider, CompactionProgress } from './CompactionDivider';
-import { Composer } from './Composer';
+import { Composer } from './composer/Composer';
 import { PlanPanel } from './PlanPanel';
 import { UserMessage } from './UserMessage';
 

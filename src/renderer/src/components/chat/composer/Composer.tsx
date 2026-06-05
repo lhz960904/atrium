@@ -8,6 +8,8 @@ import { ArrowUp, Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { type Attachment, AttachmentChip } from './AttachmentChip';
 import { ModelPicker } from './ModelPicker';
+import { SlashMenu } from './SlashMenu';
+import { useSkillSuggestion } from './skill-mention';
 
 type ComposerProps = {
   autoFocus?: boolean;
@@ -29,9 +31,10 @@ export function Composer({
 }: ComposerProps): React.JSX.Element {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [empty, setEmpty] = useState(initialText.trim().length === 0);
-  // The editor is created once, so its handleKeyDown closes over the first
-  // render's state. Route Enter-to-send through a ref that always points at the
-  // latest handleSend, so it reads current attachments/disabled, not stale ones.
+  const skill = useSkillSuggestion();
+
+  // The editor is created once, so handleKeyDown closes over the first render;
+  // route Enter-to-send through a ref so it sees the latest state.
   const sendRef = useRef<() => void>(() => {});
 
   const editor = useEditor({
@@ -39,10 +42,10 @@ export function Composer({
       Document,
       Paragraph,
       Text,
-      // Shift-Enter / Mod-Enter insert a newline; plain Enter is intercepted to send.
       HardBreak,
       UndoRedo,
       Placeholder.configure({ placeholder }),
+      ...skill.extensions,
     ],
     content: initialText,
     autofocus: autoFocus,
@@ -51,6 +54,8 @@ export function Composer({
         class: 'tiptap max-h-[200px] min-h-[28px] overflow-y-auto px-1 py-2 text-fg-primary',
       },
       handleKeyDown: (_view, event) => {
+        // Defer all keys to the open suggestion (its onKeyDown selects/navigates).
+        if (skill.isOpen()) return false;
         // IME composing (e.g. pinyin): Enter confirms the candidate, never sends.
         if (event.isComposing || event.keyCode === 229) return false;
         if (event.key === 'Enter' && !event.shiftKey) {
@@ -73,7 +78,6 @@ export function Composer({
     setEmpty(true);
     setAttachments([]);
   };
-  // Keep the ref current so the editor's captured handleKeyDown sends fresh state.
   sendRef.current = handleSend;
 
   const addMockAttachment = (): void => {
@@ -127,6 +131,16 @@ export function Composer({
           <ArrowUp className="size-[14px]" />
         </button>
       </div>
+
+      {skill.menu && (
+        <SlashMenu
+          items={skill.menu.items}
+          query=""
+          activeIndex={skill.menu.activeIndex}
+          onHoverIndex={skill.menu.onHoverIndex}
+          onSelect={skill.menu.onSelect}
+        />
+      )}
     </div>
   );
 }

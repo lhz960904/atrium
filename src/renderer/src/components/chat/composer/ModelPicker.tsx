@@ -1,8 +1,8 @@
 import { Link } from '@tanstack/react-router';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useChatModel } from '../../lib/use-chat-model';
-import { ProviderIcon } from '../settings/providers/ProviderIcon';
+import { useChatModel } from '../../../lib/use-chat-model';
+import { ProviderIcon } from '../../settings/providers/ProviderIcon';
 
 /**
  * Composer model selector. The trigger shows the model name only (no provider

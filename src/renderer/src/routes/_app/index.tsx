@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { FileText, FolderClosed, MessageCircle } from 'lucide-react';
-import { Composer } from '../../components/chat/Composer';
+import { Composer } from '../../components/chat/composer/Composer';
 import { MOCK_CONTINUE_ITEMS, MOCK_CURRENT_PROJECT } from '../../lib/mock-data';
 import { trpc } from '../../lib/trpc';
 import { usePendingInput } from '../../state/pending-input-store';
