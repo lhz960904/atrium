@@ -2,6 +2,7 @@ import { createFileRoute, notFound } from '@tanstack/react-router';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
 import { ProvidersSection } from '../../components/settings/providers/ProvidersSection';
 import { SkillsSection } from '../../components/settings/skills/SkillsSection';
+import { SubagentsSection } from '../../components/settings/subagents/SubagentsSection';
 import { type Theme, useThemeStore } from '../../state/theme-store';
 
 export const Route = createFileRoute('/settings/$section')({
@@ -32,8 +33,9 @@ const SECTIONS: Record<string, SectionMeta> = {
   },
   subagents: {
     title: 'Subagents',
-    sub: 'task 工具拉起的子 agent 的运行限制与可用工具。',
-    Component: PlaceholderSection,
+    sub: 'task 工具拉起的子 agent：内置只读，自定义可配 prompt、工具与承接模型。',
+    wide: true,
+    Component: SubagentsSection,
   },
   permissions: { title: 'Permissions', sub: '工具调用权限与通知。', Component: PlaceholderSection },
   memories: {

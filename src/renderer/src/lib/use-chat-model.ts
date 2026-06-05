@@ -5,7 +5,7 @@ import { trpc } from './trpc';
 /** A provider with its enabled models, for the picker's grouped list. */
 export type ModelGroup = { providerId: string; providerName: string; models: string[] };
 
-function deriveGroups(
+export function deriveGroups(
   providers: {
     id: string;
     name: string;

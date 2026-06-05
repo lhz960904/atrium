@@ -6,8 +6,9 @@ import { Placeholder, UndoRedo } from '@tiptap/extensions';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { ArrowUp, Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { useChatModel } from '../../../lib/use-chat-model';
+import { ModelPicker } from '../../ModelPicker';
 import { type Attachment, AttachmentChip } from './AttachmentChip';
-import { ModelPicker } from './ModelPicker';
 import { SlashMenu } from './SlashMenu';
 import { type SlashCommand, useSlashMenu } from './slash-menu';
 
@@ -35,6 +36,7 @@ export function Composer({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [empty, setEmpty] = useState(initialText.trim().length === 0);
   const skill = useSlashMenu(commands ?? []);
+  const { selected, setSelected, groups } = useChatModel();
 
   // The editor is created once, so handleKeyDown closes over the first render;
   // route Enter-to-send through a ref so it sees the latest state.
@@ -123,7 +125,12 @@ export function Composer({
         </button>
         <span className="flex-1" />
         {/* refocus the editor after a model pick (popover steals focus) */}
-        <ModelPicker onSelected={() => requestAnimationFrame(() => editor?.commands.focus())} />
+        <ModelPicker
+          value={selected}
+          onChange={(v) => v && setSelected(v)}
+          groups={groups}
+          onSelected={() => requestAnimationFrame(() => editor?.commands.focus())}
+        />
         <button
           type="button"
           title="发送"
