@@ -1,18 +1,23 @@
 /**
  * The tool-name contract shared between the agent (main process, which
  * implements each tool — schemas, descriptions, execute) and the renderer
- * (which renders tool calls by name). Only the names cross the boundary.
+ * (which renders tool calls by name). Only the names cross the boundary. The
+ * runtime array is the source of truth so the type can't drift from a list the
+ * UI iterates (e.g. the subagent tool-allow picker).
  */
-export type ToolName =
-  | 'read_file'
-  | 'write_file'
-  | 'list_dir'
-  | 'bash'
-  | 'todo_write'
-  | 'web_fetch'
-  | 'web_search'
-  | 'task'
-  | 'skill';
+export const TOOL_NAMES = [
+  'read_file',
+  'write_file',
+  'list_dir',
+  'bash',
+  'todo_write',
+  'web_fetch',
+  'web_search',
+  'task',
+  'skill',
+] as const;
+
+export type ToolName = (typeof TOOL_NAMES)[number];
 
 /**
  * The tools generic for UIMessage. We only care that tool parts carry a typed
