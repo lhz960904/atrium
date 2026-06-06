@@ -5,15 +5,19 @@ import {
   FileText,
   FolderTree,
   Globe,
+  Image as ImageIcon,
   type LucideIcon,
   Search,
   Sparkles,
   Terminal,
 } from 'lucide-react';
 
-/** Tools that render as a single-line trace marker. `todo_write` is excluded —
- *  its plan renders in the composer-level plan panel, not the work trace. */
-export type MarkerToolName = Exclude<ToolName, 'todo_write'>;
+/**
+ * Tools that render as a single-line trace marker. Excluded: `todo_write` (its
+ * plan renders in the composer-level plan panel) and `ask_clarification` (it
+ * renders as a ClarifyCard in the message flow, not a trace marker).
+ */
+export type MarkerToolName = Exclude<ToolName, 'todo_write' | 'ask_clarification'>;
 
 /** The input fields the presentation reads to build a tool's labels. */
 export type ToolInput = {
@@ -24,6 +28,7 @@ export type ToolInput = {
   description?: string;
   subagent?: string;
   name?: string;
+  prompt?: string;
 };
 
 const hostname = (u?: string): string => {
@@ -100,5 +105,11 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     verb: 'Used skill',
     target: (i) => i.name ?? '',
     typeLabel: (i) => `Skill · ${i.name ?? ''}`,
+  },
+  image_gen: {
+    icon: ImageIcon,
+    verb: 'Generated image',
+    target: (i) => i.prompt ?? '',
+    typeLabel: () => 'Image',
   },
 };
