@@ -1,5 +1,6 @@
 import type { ToolName } from '@shared/tools';
 import {
+  APICallError,
   convertToModelMessages,
   createUIMessageStream,
   generateId,
@@ -36,6 +37,28 @@ export type RunAgentOptions = {
 };
 
 /**
+ * A human-readable message for the client. createUIMessageStream masks errors
+ * as a generic string by default (don't leak internals); we override that to
+ * surface the real reason. Provider errors bury the useful text in the response
+ * body (e.g. "unsupported image format"), so dig that out before the SDK's own
+ * message.
+ */
+function readableError(error: unknown): string {
+  if (APICallError.isInstance(error)) {
+    if (error.responseBody) {
+      try {
+        const parsed = JSON.parse(error.responseBody) as { error?: { message?: string } };
+        if (parsed.error?.message) return parsed.error.message;
+      } catch {
+        // fall through to the SDK message
+      }
+    }
+    return error.message;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
  * The agent loop. AI SDK's streamText is itself the multi-step ReAct loop:
  * with tools + stopWhen it keeps going model→tool→model until done.
  *
@@ -70,6 +93,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
     // We stream from main (no client-assigned id), so the server mints the
     // assistant message id — otherwise every assistant row collides on id.
     generateId,
+    // Surface the real failure to the client (default masks it). The renderer
+    // reads useChat's `error` and shows it instead of silently stalling.
+    onError: readableError,
     onFinish: ({ responseMessage }) =>
       runAfterRun(ctx, { message: responseMessage }, opts.middlewares),
     execute: async ({ writer }) => {

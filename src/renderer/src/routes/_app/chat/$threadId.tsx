@@ -4,6 +4,7 @@ import type { ClarifyResult } from '@shared/chat-types';
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef } from 'react';
 import { ChatThread } from '../../../components/chat/ChatThread';
+import type { Attachment } from '../../../components/chat/composer/AttachmentChip';
 import { useCompactCommand } from '../../../components/chat/use-compact-command';
 import { getThreadChat } from '../../../lib/chat-store';
 import { getActivePlan } from '../../../lib/plan';
@@ -16,6 +17,16 @@ import { usePendingInput } from '../../../state/pending-input-store';
 export const Route = createFileRoute('/_app/chat/$threadId')({
   component: ChatView,
 });
+
+/** Composer attachments → AI SDK file parts for sendMessage. */
+function toFileParts(attachments: Attachment[]) {
+  return attachments.map((a) => ({
+    type: 'file' as const,
+    filename: a.name,
+    mediaType: a.mediaType,
+    url: a.url,
+  }));
+}
 
 function ChatView(): React.JSX.Element {
   const { threadId } = Route.useParams();
@@ -82,12 +93,12 @@ function ChatRunner({
     // would attach a second consumer to that same run and double its content.
     // Decide once at mount (stable across re-renders) — a reused Chat never
     // resumes (it still holds its original stream).
-    const willAutoSend = usePendingInput.getState().text !== null;
+    const willAutoSend = usePendingInput.getState().draft !== null;
     resolved.current = { chat, resume: isNew && !willAutoSend };
   }
   const { chat, resume } = resolved.current;
 
-  const { messages, sendMessage, setMessages, status, addToolOutput, stop } =
+  const { messages, sendMessage, setMessages, status, addToolOutput, stop, error } =
     useChat<AtriumUIMessage>({ chat, resume });
 
   // Stopping: detach this client immediately, then tell main to abort the run
@@ -157,7 +168,10 @@ function ChatRunner({
   useEffect(() => {
     if (sentRef.current || !model) return;
     const draft = usePendingInput.getState().consume();
-    if (draft) sendMessage({ text: draft });
+    if (draft) {
+      const files = toFileParts(draft.attachments);
+      sendMessage({ text: draft.text, ...(files.length > 0 && { files }) });
+    }
     sentRef.current = true;
   }, [model]);
 
@@ -167,11 +181,13 @@ function ChatRunner({
       title={title}
       messages={messages}
       status={status}
+      error={error}
       plan={getActivePlan(messages)}
       commands={[compactCommand]}
-      onSend={(text) => {
+      onSend={(text, attachments) => {
         if (!model) return;
-        sendMessage({ text });
+        const files = toFileParts(attachments);
+        sendMessage({ text, ...(files.length > 0 && { files }) });
       }}
       onClarify={(toolCallId, result) =>
         addToolOutput({ tool: 'ask_clarification', toolCallId, output: result })

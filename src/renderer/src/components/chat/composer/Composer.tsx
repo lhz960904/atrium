@@ -7,10 +7,82 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import { Plus, Send, Square } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useChatModel } from '../../../lib/use-chat-model';
+import { toast } from '../../../state/toast-store';
 import { ModelPicker } from '../../ModelPicker';
 import { type Attachment, AttachmentChip } from './AttachmentChip';
 import { SlashMenu } from './SlashMenu';
 import { type SlashCommand, useSlashMenu } from './slash-menu';
+
+// The only image formats the vision APIs accept; anything else sent as an image
+// 400s.
+const RASTER_EXT: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+};
+const SUPPORTED_IMAGE = new Set(Object.values(RASTER_EXT));
+// Formats we can't send as-is: Office docs need a document→text step we don't
+// have yet (see TODO), and media/archives/fonts aren't useful as text. Skipped
+// at pick with a notice rather than smuggled through.
+const UNSUPPORTED_EXT = new Set([
+  'doc',
+  'docx',
+  'xls',
+  'xlsx',
+  'ppt',
+  'pptx',
+  'zip',
+  'rar',
+  '7z',
+  'tar',
+  'gz',
+  'exe',
+  'dmg',
+  'app',
+  'bin',
+  'so',
+  'dll',
+  'mp4',
+  'mov',
+  'avi',
+  'mkv',
+  'webm',
+  'mp3',
+  'wav',
+  'flac',
+  'ogg',
+  'm4a',
+  'heic',
+  'heif',
+  'tiff',
+  'tif',
+  'avif',
+  'bmp',
+  'psd',
+  'fig',
+  'sketch',
+  'woff',
+  'woff2',
+  'ttf',
+  'otf',
+]);
+
+/**
+ * Classify a picked file into a media type the model accepts, or null to skip
+ * it. Raster images go multimodal; PDFs as documents; everything else not on the
+ * unsupported list (text, code, svg, markdown, json…) is read as text — SVG in
+ * particular is more useful as its XML source than a rejected image.
+ */
+function classifyAttachment(file: File): string | null {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext in RASTER_EXT) return RASTER_EXT[ext];
+  if (SUPPORTED_IMAGE.has(file.type)) return file.type;
+  if (ext === 'pdf' || file.type === 'application/pdf') return 'application/pdf';
+  if (UNSUPPORTED_EXT.has(ext)) return null;
+  return 'text/plain';
+}
 
 type ComposerProps = {
   autoFocus?: boolean;
@@ -47,6 +119,7 @@ export function Composer({
   // The editor is created once, so handleKeyDown closes over the first render;
   // route Enter-to-send through a ref so it sees the latest state.
   const sendRef = useRef<() => void>(() => {});
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     extensions: [
@@ -91,11 +164,43 @@ export function Composer({
   };
   sendRef.current = handleSend;
 
-  const addMockAttachment = (): void => {
-    const candidates = ['screenshot.png', 'notes.md', 'design.pdf', 'sketch.png'];
-    const name = candidates[attachments.length % candidates.length];
-    if (!name) return;
-    setAttachments((prev) => [...prev, { id: `att-${Date.now()}`, name }]);
+  // Read each picked file into a data URL up front, so the attachment is a
+  // self-contained copy (the original can move or be deleted) and maps straight
+  // to an AI SDK file part on send.
+  const onFilesPicked = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ''; // let the same file be re-picked later
+    const dropped: string[] = [];
+    for (const file of files) {
+      const mediaType = classifyAttachment(file);
+      if (mediaType === null) {
+        dropped.push(file.name);
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result !== 'string') return;
+        // The data URL's own media type wins over the part's mediaType field
+        // downstream (convertToModelMessages reads it from the URL header), so
+        // rebuild the URL with the classified type — e.g. an SVG read as text
+        // must declare text/plain, not image/svg+xml, or the API rejects it.
+        const base64 = reader.result.slice(reader.result.indexOf(',') + 1);
+        setAttachments((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            name: file.name,
+            mediaType,
+            url: `data:${mediaType};base64,${base64}`,
+            size: file.size,
+          },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    }
+    if (dropped.length > 0) {
+      toast.warning(`已跳过暂不支持的文件：${dropped.join('、')}（转成文本或 PDF 后可传）`);
+    }
   };
 
   const removeAttachment = (id: string): void => {
@@ -121,10 +226,17 @@ export function Composer({
       <EditorContent editor={editor} />
 
       <div className="flex items-center gap-2 pt-1">
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          onChange={onFilesPicked}
+          className="hidden"
+        />
         <button
           type="button"
           title="附件"
-          onClick={addMockAttachment}
+          onClick={() => fileInputRef.current?.click()}
           className="inline-flex items-center rounded-md p-1.5 text-fg-tertiary hover:bg-elevated hover:text-fg-secondary"
         >
           <Plus className="size-[14px]" />

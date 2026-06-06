@@ -2,11 +2,13 @@ import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult, Todo } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
 import { type ChatStatus, getStaticToolName, isStaticToolUIPart } from 'ai';
+import { TriangleAlert } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useCompactionStore } from '../../state/compaction-store';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatHeader } from './ChatHeader';
 import { CompactionDivider, CompactionProgress } from './CompactionDivider';
+import type { Attachment } from './composer/AttachmentChip';
 import { Composer } from './composer/Composer';
 import type { SlashCommand } from './composer/slash-menu';
 import { PlanPanel } from './PlanPanel';
@@ -17,11 +19,13 @@ type ChatThreadProps = {
   title: string;
   messages: AtriumUIMessage[];
   status: ChatStatus;
+  /** The turn's failure, if any — surfaced as an error notice. */
+  error?: Error;
   /** The thread's active plan (latest todo_write); null when none. */
   plan: Todo[] | null;
   /** `/` commands for the composer (e.g. compact). */
   commands: SlashCommand[];
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments: Attachment[]) => void;
   /** Submit a clarification's answers (addToolOutput); resumes the turn. */
   onClarify: (toolCallId: string, result: ClarifyResult) => void;
   /** Dismiss a clarification without answering; resolves it but doesn't resume. */
@@ -61,6 +65,7 @@ export function ChatThread({
   title,
   messages,
   status,
+  error,
   plan,
   commands,
   onSend,
@@ -131,6 +136,12 @@ export function ChatThread({
             );
           })}
           {compacting && <CompactionProgress />}
+          {error && (
+            <div className="my-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-danger text-sm">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+              <span className="min-w-0 whitespace-pre-wrap break-words">{error.message}</span>
+            </div>
+          )}
         </div>
       </div>
       <div className="shrink-0 px-6 pt-2 pb-4">
@@ -142,7 +153,7 @@ export function ChatThread({
             placeholder={clarifyPending ? '请先回答上面的问题…' : undefined}
             attachedTop={plan != null}
             commands={commands}
-            onSubmit={(text) => onSend(text)}
+            onSubmit={onSend}
             onStop={onStop}
           />
         </div>

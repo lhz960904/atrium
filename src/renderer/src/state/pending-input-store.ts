@@ -1,21 +1,23 @@
 import { create } from 'zustand';
+import type { Attachment } from '../components/chat/composer/AttachmentChip';
 
-/**
- * One-shot draft carried from the home composer into a freshly created
- * thread. The chat view consumes + clears it on mount and auto-sends it.
- */
+/** A one-shot draft (text + attachments) carried from the home composer into a
+ *  freshly created thread; the chat view consumes + clears it on mount and
+ *  auto-sends it. */
+export type PendingDraft = { text: string; attachments: Attachment[] };
+
 type PendingInputStore = {
-  text: string | null;
-  set: (text: string) => void;
-  consume: () => string | null;
+  draft: PendingDraft | null;
+  set: (draft: PendingDraft) => void;
+  consume: () => PendingDraft | null;
 };
 
 export const usePendingInput = create<PendingInputStore>((set, get) => ({
-  text: null,
-  set: (text) => set({ text }),
+  draft: null,
+  set: (draft) => set({ draft }),
   consume: () => {
-    const { text } = get();
-    if (text !== null) set({ text: null });
-    return text;
+    const { draft } = get();
+    if (draft !== null) set({ draft: null });
+    return draft;
   },
 }));

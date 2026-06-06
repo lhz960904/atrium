@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { FileText, FolderClosed, MessageCircle } from 'lucide-react';
+import type { Attachment } from '../../components/chat/composer/AttachmentChip';
 import { Composer } from '../../components/chat/composer/Composer';
 import { MOCK_CONTINUE_ITEMS, MOCK_CURRENT_PROJECT } from '../../lib/mock-data';
 import { trpc } from '../../lib/trpc';
@@ -30,11 +31,12 @@ function HomeView(): React.JSX.Element {
     },
   });
 
-  const handleSubmit = (text: string): void => {
+  const handleSubmit = (text: string, attachments: Attachment[]): void => {
     const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    usePendingInput.getState().set(trimmed);
-    createThread.mutate({ title: trimmed.slice(0, 60) });
+    if (trimmed.length === 0 && attachments.length === 0) return;
+    usePendingInput.getState().set({ text: trimmed, attachments });
+    const title = trimmed || attachments[0]?.name || '新对话';
+    createThread.mutate({ title: title.slice(0, 60) });
   };
 
   return (
