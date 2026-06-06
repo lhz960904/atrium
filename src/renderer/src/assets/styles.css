@@ -158,6 +158,20 @@ pre {
   animation: plan-enter var(--duration-slow) var(--ease-out);
 }
 
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.toast-enter {
+  animation: toast-enter var(--duration-normal) var(--ease-out);
+}
+
 /* Radix Collapsible height transition. Radix measures the content and exposes
    it as --radix-collapsible-content-height; we animate from/to it. Keep padding
    on an inner element, not on the .atrium-collapsible node — overflow:hidden
