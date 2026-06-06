@@ -94,3 +94,13 @@ export function maxContextTokens(modelId: string): number {
 export function modelCapabilities(modelId: string): ModelCapabilities {
   return capabilitiesFrom(catalog, modelId);
 }
+
+/**
+ * Whether a model generates images — used to route a turn to text-to-image and
+ * to surface image models to the image_gen tool. The litellm catalog tracks
+ * image models (gpt-image-2, imagen, …) via `mode`, so the output modality is a
+ * reliable signal without any model-id heuristic.
+ */
+export function isImageModel(modelId: string): boolean {
+  return modelCapabilities(modelId).outputModalities.includes('image');
+}

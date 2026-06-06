@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { modelCapabilities } from '../agent/models/catalog';
+import { isImageModel } from '../agent/models/catalog';
 import type { Db } from '../db';
 import { providers } from '../db/schema';
 
@@ -22,7 +22,7 @@ export function listEnabledImageModels(db: Db): ImageModelRef[] {
   for (const row of rows) {
     const enabled = (row.config as { enabledModels?: string[] } | null)?.enabledModels ?? [];
     for (const modelId of enabled) {
-      if (modelCapabilities(modelId).outputModalities.includes('image')) {
+      if (isImageModel(modelId)) {
         refs.push({ providerId: row.id, modelId });
       }
     }
