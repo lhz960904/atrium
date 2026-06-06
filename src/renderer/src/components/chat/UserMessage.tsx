@@ -1,5 +1,6 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import { FileText, Package } from 'lucide-react';
+import { openAttachment } from '../../state/attachment-viewer-store';
 
 /**
  * Mentions serialize into the message text as <skill-use>name</skill-use> tags —
@@ -38,26 +39,43 @@ export function UserMessage({ parts }: { parts: AtriumUIMessage['parts'] }): Rea
     <div className="mb-5 flex flex-col items-end gap-1.5">
       {files.length > 0 && (
         <div className="flex max-w-[75%] flex-wrap justify-end gap-1.5">
-          {files.map((f, i) =>
-            f.mediaType?.startsWith('image/') ? (
-              <img
+          {files.map((f, i) => {
+            const view = (): void =>
+              openAttachment({
+                filename: f.filename ?? '附件',
+                mediaType: f.mediaType,
+                url: f.url,
+              });
+            // Uniform height so a tall image can't stretch a file chip next to
+            // it — images shrink to a thumbnail (detail is a click away in the
+            // viewer) and everything lines up.
+            return f.mediaType?.startsWith('image/') ? (
+              <button
                 // biome-ignore lint/suspicious/noArrayIndexKey: file parts are static, never reordered
                 key={i}
-                src={f.url}
-                alt={f.filename ?? 'image'}
-                className="max-h-40 rounded-lg border border-border-default object-cover"
-              />
-            ) : (
-              <span
-                // biome-ignore lint/suspicious/noArrayIndexKey: file parts are static, never reordered
-                key={i}
-                className="inline-flex max-w-[220px] items-center gap-1.5 rounded-lg border border-border-default bg-surface px-2.5 py-1.5 text-fg-secondary text-xs"
+                type="button"
+                onClick={view}
+                className="h-12 overflow-hidden rounded-lg border border-border-default transition-opacity hover:opacity-90"
               >
-                <FileText className="size-3.5 shrink-0 text-fg-tertiary" />
+                <img
+                  src={f.url}
+                  alt={f.filename ?? 'image'}
+                  className="h-full w-auto max-w-[240px] object-cover"
+                />
+              </button>
+            ) : (
+              <button
+                // biome-ignore lint/suspicious/noArrayIndexKey: file parts are static, never reordered
+                key={i}
+                type="button"
+                onClick={view}
+                className="flex h-12 max-w-[220px] items-center gap-2 rounded-lg border border-border-default bg-surface px-3 text-fg-secondary text-xs hover:border-border-strong hover:bg-elevated"
+              >
+                <FileText className="size-4 shrink-0 text-fg-tertiary" />
                 <span className="min-w-0 truncate">{f.filename ?? '附件'}</span>
-              </span>
-            ),
-          )}
+              </button>
+            );
+          })}
         </div>
       )}
       {text.length > 0 && (

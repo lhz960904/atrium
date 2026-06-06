@@ -29,6 +29,9 @@ function createWindow(): BrowserWindow {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
+      // Chromium's built-in PDF viewer (used to preview PDF attachments in an
+      // iframe) needs plugins enabled.
+      plugins: true,
     },
   });
 

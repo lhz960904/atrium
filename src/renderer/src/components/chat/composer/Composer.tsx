@@ -6,83 +6,13 @@ import { Placeholder, UndoRedo } from '@tiptap/extensions';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Plus, Send, Square } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { ATTACHMENT_ACCEPT, classifyAttachment } from '../../../lib/attachments';
 import { useChatModel } from '../../../lib/use-chat-model';
 import { toast } from '../../../state/toast-store';
 import { ModelPicker } from '../../ModelPicker';
 import { type Attachment, AttachmentChip } from './AttachmentChip';
 import { SlashMenu } from './SlashMenu';
 import { type SlashCommand, useSlashMenu } from './slash-menu';
-
-// The only image formats the vision APIs accept; anything else sent as an image
-// 400s.
-const RASTER_EXT: Record<string, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif: 'image/gif',
-  webp: 'image/webp',
-};
-const SUPPORTED_IMAGE = new Set(Object.values(RASTER_EXT));
-// Formats we can't send as-is: Office docs need a document→text step we don't
-// have yet (see TODO), and media/archives/fonts aren't useful as text. Skipped
-// at pick with a notice rather than smuggled through.
-const UNSUPPORTED_EXT = new Set([
-  'doc',
-  'docx',
-  'xls',
-  'xlsx',
-  'ppt',
-  'pptx',
-  'zip',
-  'rar',
-  '7z',
-  'tar',
-  'gz',
-  'exe',
-  'dmg',
-  'app',
-  'bin',
-  'so',
-  'dll',
-  'mp4',
-  'mov',
-  'avi',
-  'mkv',
-  'webm',
-  'mp3',
-  'wav',
-  'flac',
-  'ogg',
-  'm4a',
-  'heic',
-  'heif',
-  'tiff',
-  'tif',
-  'avif',
-  'bmp',
-  'psd',
-  'fig',
-  'sketch',
-  'woff',
-  'woff2',
-  'ttf',
-  'otf',
-]);
-
-/**
- * Classify a picked file into a media type the model accepts, or null to skip
- * it. Raster images go multimodal; PDFs as documents; everything else not on the
- * unsupported list (text, code, svg, markdown, json…) is read as text — SVG in
- * particular is more useful as its XML source than a rejected image.
- */
-function classifyAttachment(file: File): string | null {
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-  if (ext in RASTER_EXT) return RASTER_EXT[ext];
-  if (SUPPORTED_IMAGE.has(file.type)) return file.type;
-  if (ext === 'pdf' || file.type === 'application/pdf') return 'application/pdf';
-  if (UNSUPPORTED_EXT.has(ext)) return null;
-  return 'text/plain';
-}
 
 type ComposerProps = {
   autoFocus?: boolean;
@@ -230,6 +160,7 @@ export function Composer({
           ref={fileInputRef}
           type="file"
           multiple
+          accept={ATTACHMENT_ACCEPT}
           onChange={onFilesPicked}
           className="hidden"
         />

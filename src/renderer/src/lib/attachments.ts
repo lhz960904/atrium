@@ -1,0 +1,95 @@
+// What we accept as a message attachment, and how each maps to a media type the
+// model can use. One allowlist drives both the picker (`accept`) and the
+// post-pick validation, so the two can't drift.
+
+// Raster image formats (extension → media type) the vision APIs accept; any
+// other image type 400s, so it's not here.
+const IMAGE_MEDIA: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+};
+const IMAGE_TYPES = new Set(Object.values(IMAGE_MEDIA));
+
+// Text/code/data extensions we read as text — the OS often doesn't type these
+// as text/* (e.g. .ts, .json, .svg). Any file the OS *does* type as text/* is
+// also accepted even if its extension isn't listed.
+const TEXT_EXT = new Set([
+  'md',
+  'markdown',
+  'svg',
+  'json',
+  'jsonc',
+  'csv',
+  'tsv',
+  'xml',
+  'yaml',
+  'yml',
+  'toml',
+  'ini',
+  'env',
+  'log',
+  'html',
+  'css',
+  'scss',
+  'less',
+  'js',
+  'jsx',
+  'mjs',
+  'cjs',
+  'ts',
+  'tsx',
+  'py',
+  'rb',
+  'go',
+  'rs',
+  'java',
+  'kt',
+  'swift',
+  'c',
+  'h',
+  'cpp',
+  'cc',
+  'cs',
+  'php',
+  'sh',
+  'bash',
+  'zsh',
+  'sql',
+  'vue',
+  'svelte',
+  'dart',
+  'lua',
+  'gql',
+  'graphql',
+  'proto',
+]);
+
+/**
+ * The `accept` allowlist for the file picker so the OS greys out unsupported
+ * files. Derived from the same sets classifyAttachment uses; `text/*` lets the
+ * OS offer any file it recognises as text even if its extension isn't listed.
+ */
+export const ATTACHMENT_ACCEPT = [
+  ...IMAGE_TYPES,
+  'application/pdf',
+  'text/*',
+  ...[...TEXT_EXT].map((e) => `.${e}`),
+].join(',');
+
+/**
+ * Classify a picked file into a media type the model accepts, or null to skip
+ * it. Raster images go multimodal; PDFs as documents; text/code/svg/markdown is
+ * read as text — SVG in particular is more useful as its XML source than a
+ * rejected image. Anything else (office docs, media, archives…) is skipped.
+ */
+export function classifyAttachment(file: File): string | null {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext in IMAGE_MEDIA) return IMAGE_MEDIA[ext];
+  if (IMAGE_TYPES.has(file.type)) return file.type;
+  if (ext === 'pdf' || file.type === 'application/pdf') return 'application/pdf';
+  if (TEXT_EXT.has(ext) || file.type.startsWith('text/')) return 'text/plain';
+  return null;
+}
