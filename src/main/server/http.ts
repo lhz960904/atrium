@@ -9,14 +9,16 @@ import {
   persistenceMiddleware,
   skillsMiddleware,
 } from '../agent/middleware';
-import { maxContextTokens } from '../agent/models/catalog';
+import { isImageModel, maxContextTokens } from '../agent/models/catalog';
 import { runAgent } from '../agent/run';
+import { runImageTurn } from '../agent/run-image';
 import { LocalSandbox } from '../agent/sandbox';
 import { getSkills } from '../agent/skills/registry';
 import { getTools } from '../agent/tools';
 import { skillPreserver } from '../agent/tools/builtins/skill';
 import { todoPreserver } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
+import { createLogger } from '../log';
 import { resolveModel } from '../providers/resolve';
 import { loadThreadMessages, persistMessage, resolveToolOutput, upsertMessage } from './persist';
 import { abortThreadRun, resumeThreadStream, startThreadStream } from './resumable';
@@ -41,6 +43,8 @@ type ChatBody = {
  * free port; a per-launch token gates /api/* so other local processes
  * can't drive the user's model credits.
  */
+const log = createLogger('chat');
+
 export function startHttpServer(deps: {
   db: Db;
   token: string;
@@ -77,13 +81,27 @@ export function startHttpServer(deps: {
     else if (message.role === 'assistant') upsertMessage(deps.db, threadId, message);
     const history = loadThreadMessages(deps.db, threadId);
 
+    const abort = new AbortController();
+
+    // use  run image gen if current model is image model
+    const imageModel = isImageModel(modelId);
+    log.info(`turn ${providerId}/${modelId} → ${imageModel ? 'image generation' : 'agent loop'}`);
+    if (imageModel) {
+      const imageStream = runImageTurn({
+        db: deps.db,
+        providerId,
+        modelId,
+        messages: history,
+        abortSignal: abort.signal,
+        onFinish: (m) =>
+          upsertMessage(deps.db, threadId, { ...m, metadata: { createdAt: Date.now() } }),
+      });
+      const sse = await startThreadStream(threadId, imageStream, abort);
+      return new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS });
+    }
+
     const sandbox = new LocalSandbox(deps.workspaceRoot);
     const skills = getSkills();
-    // The resumable stream's producer drives the agent to completion on its
-    // own, independent of this request — so navigating away or reloading leaves
-    // the run streaming in main, reattachable via the reconnect endpoint. The
-    // controller is held by the stream registry so a stop request can abort it.
-    const abort = new AbortController();
     const agentStream = await runAgent({
       model: resolveModel(deps.db, providerId, modelId),
       messages: history,

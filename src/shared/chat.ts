@@ -12,7 +12,9 @@ export type SubagentActivityTool = { id: string; name: ToolName; input: unknown 
  * indicator. Within-turn folds aren't surfaced (internal, not persisted).
  * `subagent` bubbles a delegated subagent's activity (keyed by the task tool's
  * call id) so its card can show a live nested trace; never persisted, so a
- * reloaded card shows just the result.
+ * reloaded card shows just the result. `imageGeneration` flags a direct
+ * image-model turn in progress (it streams only the image at the end, so the
+ * message is empty until then) to drive a loading indicator.
  */
 export type AtriumDataParts = {
   compaction: { phase: 'start' | 'done' };
@@ -20,6 +22,7 @@ export type AtriumDataParts = {
     | { id: string; phase: 'start' }
     | { id: string; phase: 'step'; tools: SubagentActivityTool[] }
     | { id: string; phase: 'done'; status: 'done' | 'failed' };
+  imageGeneration: { phase: 'start' | 'done' };
 };
 
 /**

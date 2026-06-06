@@ -5,12 +5,14 @@ import { type ChatStatus, getStaticToolName, isStaticToolUIPart } from 'ai';
 import { TriangleAlert } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useCompactionStore } from '../../state/compaction-store';
+import { useImageGenStore } from '../../state/image-gen-store';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatHeader } from './ChatHeader';
 import { CompactionDivider, CompactionProgress } from './CompactionDivider';
 import type { Attachment } from './composer/AttachmentChip';
 import { Composer } from './composer/Composer';
 import type { SlashCommand } from './composer/slash-menu';
+import { ImageGeneratingProgress } from './ImageGeneratingProgress';
 import { PlanPanel } from './PlanPanel';
 import { UserMessage } from './UserMessage';
 
@@ -76,6 +78,7 @@ export function ChatThread({
   // Compaction is a live, per-thread status in a global store — read it here
   // rather than threading it through as a prop.
   const compacting = useCompactionStore((s) => s.active[threadId] ?? false);
+  const generatingImage = useImageGenStore((s) => s.active[threadId] ?? false);
   const live = status === 'submitted' || status === 'streaming';
   const pendingClarify = pendingClarifyId(messages);
   const clarifyPending = pendingClarify !== null;
@@ -136,6 +139,7 @@ export function ChatThread({
             );
           })}
           {compacting && <CompactionProgress />}
+          {generatingImage && <ImageGeneratingProgress />}
           {error && (
             <div className="my-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-danger text-sm">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />

@@ -43,7 +43,7 @@ export type RunAgentOptions = {
  * body (e.g. "unsupported image format"), so dig that out before the SDK's own
  * message.
  */
-function readableError(error: unknown): string {
+export function readableError(error: unknown): string {
   if (APICallError.isInstance(error)) {
     if (error.responseBody) {
       try {

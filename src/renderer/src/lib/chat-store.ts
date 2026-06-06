@@ -8,6 +8,7 @@ import {
   lastAssistantMessageIsCompleteWithToolCalls,
 } from 'ai';
 import { useCompactionStore } from '../state/compaction-store';
+import { useImageGenStore } from '../state/image-gen-store';
 import { useModelStore } from '../state/model-store';
 import { useSubagentStore } from '../state/subagent-store';
 import { makeChatTransport } from './chat-transport';
@@ -95,6 +96,8 @@ export function getThreadChat(
     onData: (part) => {
       if (part.type === 'data-compaction') {
         useCompactionStore.getState().setActive(threadId, part.data.phase === 'start');
+      } else if (part.type === 'data-imageGeneration') {
+        useImageGenStore.getState().setActive(threadId, part.data.phase === 'start');
       } else if (part.type === 'data-subagent') {
         const store = useSubagentStore.getState();
         const d = part.data;
