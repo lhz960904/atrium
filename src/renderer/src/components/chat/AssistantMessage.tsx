@@ -2,6 +2,7 @@ import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
 import { buildAssistantView } from '../../lib/assistant-view';
 import { ClarifyCard } from './ClarifyCard';
+import { CopyButton } from './CopyButton';
 import { GeneratedImage } from './GeneratedImage';
 import { Markdown } from './Markdown';
 import { TraceBlock } from './TraceBlock';
@@ -59,8 +60,14 @@ export function AssistantMessage({
 
   const hasFinal = view.final.length > 0;
   const durationMs = message.metadata?.durationMs;
+  // The textual answer — the final narrative after any tool trace. Only this
+  // gets a copy button; the tool-call trace above it doesn't.
+  const answer = view.final
+    .filter((s) => s.kind === 'narrative')
+    .map((s) => s.content)
+    .join('\n\n');
   return (
-    <div className="mb-7">
+    <div className="group mb-7">
       {view.thinking.length > 0 && (
         <TraceBlock
           kind="thought"
@@ -105,6 +112,11 @@ export function AssistantMessage({
             onCancel={() => onCancel(seg.clarify.id)}
           />
         ) : null,
+      )}
+      {answer.length > 0 && (
+        <div className="opacity-0 transition-opacity group-hover:opacity-100">
+          <CopyButton text={answer} />
+        </div>
       )}
     </div>
   );

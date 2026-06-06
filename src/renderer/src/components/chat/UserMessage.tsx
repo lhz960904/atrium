@@ -1,6 +1,7 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import { FileText, Package } from 'lucide-react';
 import { openAttachment } from '../../state/attachment-viewer-store';
+import { CopyButton } from './CopyButton';
 
 /**
  * Mentions serialize into the message text as <skill-use>name</skill-use> tags —
@@ -36,7 +37,7 @@ export function UserMessage({ parts }: { parts: AtriumUIMessage['parts'] }): Rea
     .join('');
   const files = parts.filter((p) => p.type === 'file');
   return (
-    <div className="mb-5 flex flex-col items-end gap-1.5">
+    <div className="group mb-5 flex flex-col items-end gap-1.5">
       {files.length > 0 && (
         <div className="flex max-w-[75%] flex-wrap justify-end gap-1.5">
           {files.map((f, i) => {
@@ -81,6 +82,11 @@ export function UserMessage({ parts }: { parts: AtriumUIMessage['parts'] }): Rea
       {text.length > 0 && (
         <div className="max-w-[75%] whitespace-pre-wrap rounded-2xl bg-user-bubble-bg px-4 py-2.5 text-base text-user-bubble-fg leading-snug">
           {renderWithMentions(text)}
+        </div>
+      )}
+      {text.length > 0 && (
+        <div className="opacity-0 transition-opacity group-hover:opacity-100">
+          <CopyButton text={text} />
         </div>
       )}
     </div>
