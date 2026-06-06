@@ -1,33 +1,26 @@
 #!/usr/bin/env bun
 /**
- * Refresh the vendored models.dev snapshot (the offline fallback baked into the
- * build). Runtime freshness comes from the live CDN fetch in agent/models/
- * catalog.ts — this only re-bakes the floor. Run when shipping a release:
+ * Refresh the vendored litellm model catalog snapshot (the offline fallback
+ * baked into the build). Runtime freshness comes from the live fetch in
+ * agent/models/catalog.ts — this only re-bakes the floor. Run when shipping a
+ * release:
  *   bun run sync:models
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const URL = 'https://models.dev/api.json';
-const OUT = join(
-  import.meta.dir,
-  '..',
-  'src',
-  'main',
-  'agent',
-  'models',
-  'models-dev.snapshot.json',
-);
+const URL =
+  'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json';
+const OUT = join(import.meta.dir, '..', 'src', 'main', 'agent', 'models', 'litellm.snapshot.json');
 
 const res = await fetch(URL, { headers: { 'User-Agent': 'atrium' } });
 if (!res.ok) {
-  console.error(`models.dev fetch failed: HTTP ${res.status}`);
+  console.error(`litellm catalog fetch failed: HTTP ${res.status}`);
   process.exit(1);
 }
 const text = await res.text();
-const data = JSON.parse(text);
-const providers = Object.keys(data).length;
+const models = Object.keys(JSON.parse(text)).length;
 writeFileSync(OUT, text);
 console.log(
-  `synced models.dev snapshot: ${providers} providers, ${(text.length / 1e6).toFixed(1)}MB`,
+  `synced litellm catalog snapshot: ${models} models, ${(text.length / 1e6).toFixed(1)}MB`,
 );

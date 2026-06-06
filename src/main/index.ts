@@ -71,7 +71,7 @@ app.whenReady().then(async () => {
   openSettings();
 
   // Warm model metadata from the disk cache (falls back to the bundled
-  // snapshot), then let it refresh from models.dev in the background.
+  // snapshot), then let it refresh from the litellm catalog in the background.
   populateModelCatalog();
   startModelCatalogRefresh();
 

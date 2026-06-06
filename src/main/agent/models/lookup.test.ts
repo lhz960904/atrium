@@ -8,81 +8,87 @@ import {
 import type { ModelsCatalog } from './types';
 
 const catalog: ModelsCatalog = {
-  anthropic: {
-    id: 'anthropic',
-    models: {
-      'claude-opus-4-5': {
-        id: 'claude-opus-4-5',
-        attachment: true,
-        tool_call: true,
-        reasoning: true,
-        modalities: { input: ['text', 'image', 'pdf'] },
-        limit: { context: 200_000, output: 64_000 },
-      },
-    },
+  sample_spec: { mode: 'chat' },
+  'claude-opus-4-5': {
+    litellm_provider: 'anthropic',
+    mode: 'chat',
+    max_input_tokens: 200_000,
+    max_output_tokens: 64_000,
+    supports_vision: true,
+    supports_function_calling: true,
+    supports_reasoning: true,
+    supports_pdf_input: true,
   },
-  moonshotai: {
-    id: 'moonshotai',
-    models: {
-      'kimi-k2': { id: 'kimi-k2', tool_call: true, limit: { context: 128_000 } },
-    },
+  'gpt-image-2': {
+    litellm_provider: 'openai',
+    mode: 'image_generation',
+    supports_vision: true,
   },
-  deepseek: {
-    id: 'deepseek',
-    models: {
-      'deepseek-chat': { id: 'deepseek-chat', tool_call: true, limit: { context: 64_000 } },
-    },
+  'gemini-2.5-flash-image': {
+    litellm_provider: 'vertex_ai',
+    mode: 'image_generation',
+    supported_modalities: ['text', 'image'],
+    supported_output_modalities: ['text', 'image'],
   },
-  google: {
-    id: 'google',
-    models: {
-      'gemini-2.5-flash-image': {
-        id: 'gemini-2.5-flash-image',
-        modalities: { input: ['text', 'image'], output: ['text', 'image'] },
-      },
-    },
-  },
+  'openrouter/some-chat': { litellm_provider: 'openrouter', mode: 'chat', max_tokens: 64_000 },
+  'moonshot/kimi-k2.5': { litellm_provider: 'moonshot', mode: 'chat', max_input_tokens: 256_000 },
 };
 
-test('findModelInfo resolves a direct provider hit', () => {
-  expect(findModelInfo(catalog, 'claude-opus-4-5', 'anthropic')?.id).toBe('claude-opus-4-5');
+test('findModelInfo resolves a direct id hit', () => {
+  expect(findModelInfo(catalog, 'claude-opus-4-5')?.litellm_provider).toBe('anthropic');
 });
 
-test('findModelInfo applies the provider alias (moonshot -> moonshotai)', () => {
-  expect(findModelInfo(catalog, 'kimi-k2', 'moonshot')?.id).toBe('kimi-k2');
+test('findModelInfo strips a relay vendor prefix the caller passes', () => {
+  // an aggregator handing us "openai/gpt-image-2" still resolves the bare entry
+  expect(findModelInfo(catalog, 'openai/gpt-image-2')?.mode).toBe('image_generation');
 });
 
-test('findModelInfo falls back to a cross-provider search when provider is unknown', () => {
-  // an aggregator/local-cli provider id that is not a models.dev key
-  expect(findModelInfo(catalog, 'deepseek-chat', 'openrouter')?.id).toBe('deepseek-chat');
-  expect(findModelInfo(catalog, 'deepseek-chat')?.id).toBe('deepseek-chat');
+test('findModelInfo matches a prefixed catalog key by bare name', () => {
+  expect(findModelInfo(catalog, 'some-chat')?.litellm_provider).toBe('openrouter');
+});
+
+test('findModelInfo matches across diverging vendor prefix + casing', () => {
+  // litellm keys Kimi as moonshot/kimi-k2.5; a relay serves moonshotai/Kimi-K2.5
+  expect(findModelInfo(catalog, 'moonshotai/Kimi-K2.5')?.litellm_provider).toBe('moonshot');
+  expect(findModelInfo(catalog, 'some-relay/moonshotai/Kimi-K2.5')?.litellm_provider).toBe(
+    'moonshot',
+  );
+});
+
+test('findModelInfo never returns the sample_spec sentinel', () => {
+  expect(findModelInfo(catalog, 'sample_spec')).toBeUndefined();
 });
 
 test('findModelInfo returns undefined for a truly unknown id', () => {
   expect(findModelInfo(catalog, 'no-such-model')).toBeUndefined();
 });
 
-test('maxContextTokensFrom reads limit.context, falls back when unknown', () => {
-  expect(maxContextTokensFrom(catalog, 'claude-opus-4-5', 'anthropic')).toBe(200_000);
+test('maxContextTokensFrom reads max_input_tokens, falls back when unknown', () => {
+  expect(maxContextTokensFrom(catalog, 'claude-opus-4-5')).toBe(200_000);
   expect(maxContextTokensFrom(catalog, 'no-such-model')).toBe(FALLBACK_CONTEXT_TOKENS);
 });
 
-test('capabilitiesFrom flattens vision/tool/reasoning + limits', () => {
-  const caps = capabilitiesFrom(catalog, 'claude-opus-4-5', 'anthropic');
+test('capabilitiesFrom flattens vision/tool/reasoning + limits + pdf modality', () => {
+  const caps = capabilitiesFrom(catalog, 'claude-opus-4-5');
   expect(caps).toEqual({
     contextTokens: 200_000,
     outputTokens: 64_000,
     vision: true,
     toolCall: true,
     reasoning: true,
-    inputModalities: ['text', 'image', 'pdf'],
+    inputModalities: ['pdf'],
     outputModalities: [],
   });
 });
 
-test('capabilitiesFrom surfaces output image modality for image-gen models', () => {
-  const caps = capabilitiesFrom(catalog, 'gemini-2.5-flash-image', 'google');
-  expect(caps.outputModalities).toEqual(['text', 'image']);
+test('capabilitiesFrom marks image output from mode even without output modalities', () => {
+  // gpt-image-2 carries mode=image_generation but no supported_output_modalities
+  expect(capabilitiesFrom(catalog, 'gpt-image-2').outputModalities).toEqual(['image']);
+  // a model that also declares them keeps text+image
+  expect(capabilitiesFrom(catalog, 'gemini-2.5-flash-image').outputModalities).toEqual([
+    'text',
+    'image',
+  ]);
 });
 
 test('capabilitiesFrom defaults conservatively for an unknown id', () => {
@@ -92,4 +98,5 @@ test('capabilitiesFrom defaults conservatively for an unknown id', () => {
   expect(caps.reasoning).toBe(false);
   expect(caps.contextTokens).toBeUndefined();
   expect(caps.inputModalities).toEqual([]);
+  expect(caps.outputModalities).toEqual([]);
 });

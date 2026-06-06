@@ -22,7 +22,7 @@ export function listEnabledImageModels(db: Db): ImageModelRef[] {
   for (const row of rows) {
     const enabled = (row.config as { enabledModels?: string[] } | null)?.enabledModels ?? [];
     for (const modelId of enabled) {
-      if (modelCapabilities(modelId, row.id).outputModalities.includes('image')) {
+      if (modelCapabilities(modelId).outputModalities.includes('image')) {
         refs.push({ providerId: row.id, modelId });
       }
     }
