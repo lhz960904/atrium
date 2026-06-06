@@ -57,5 +57,6 @@ export function capabilitiesFrom(
     toolCall: Boolean(info?.tool_call),
     reasoning: Boolean(info?.reasoning),
     inputModalities,
+    outputModalities: info?.modalities?.output ?? [],
   };
 }

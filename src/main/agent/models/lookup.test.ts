@@ -33,6 +33,15 @@ const catalog: ModelsCatalog = {
       'deepseek-chat': { id: 'deepseek-chat', tool_call: true, limit: { context: 64_000 } },
     },
   },
+  google: {
+    id: 'google',
+    models: {
+      'gemini-2.5-flash-image': {
+        id: 'gemini-2.5-flash-image',
+        modalities: { input: ['text', 'image'], output: ['text', 'image'] },
+      },
+    },
+  },
 };
 
 test('findModelInfo resolves a direct provider hit', () => {
@@ -67,7 +76,13 @@ test('capabilitiesFrom flattens vision/tool/reasoning + limits', () => {
     toolCall: true,
     reasoning: true,
     inputModalities: ['text', 'image', 'pdf'],
+    outputModalities: [],
   });
+});
+
+test('capabilitiesFrom surfaces output image modality for image-gen models', () => {
+  const caps = capabilitiesFrom(catalog, 'gemini-2.5-flash-image', 'google');
+  expect(caps.outputModalities).toEqual(['text', 'image']);
 });
 
 test('capabilitiesFrom defaults conservatively for an unknown id', () => {
