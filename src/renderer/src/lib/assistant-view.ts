@@ -30,9 +30,22 @@ export type ClarifySegment = {
   result?: ClarifyResult;
 };
 
+/** A generated/attached image shown inline (from a file part the agent emits,
+ *  e.g. image_gen). Clicking it opens the full attachment viewer. */
+export type ImageSegment = {
+  kind: 'image';
+  id: string;
+  url: string;
+  mediaType: string;
+  filename?: string;
+};
+
 /** Trace segments as the renderer sees them — the shared clarify variant
- *  swapped for one carrying the answer state. */
-export type ViewSegment = Exclude<TraceSegment, { kind: 'clarify' }> | ClarifySegment;
+ *  swapped for one carrying the answer state, plus inline images. */
+export type ViewSegment =
+  | Exclude<TraceSegment, { kind: 'clarify' }>
+  | ClarifySegment
+  | ImageSegment;
 
 export type AssistantView = {
   thinking: ViewSegment[];
@@ -57,6 +70,17 @@ export function buildAssistantView(parts: AtriumUIMessage['parts']): AssistantVi
       const content = part.text.trim();
       if (content === '') continue;
       work.push({ kind: 'narrative', id: `s${seq++}`, content });
+    } else if (part.type === 'file' && part.mediaType.startsWith('image/')) {
+      // Images the agent produced (image_gen emits a file part) render inline as
+      // the deliverable. Not a tool, so it doesn't advance lastToolIdx — it
+      // trails the generating tool and lands in `final`, shown prominently.
+      work.push({
+        kind: 'image',
+        id: `s${seq++}`,
+        url: part.url,
+        mediaType: part.mediaType,
+        filename: part.filename,
+      });
     } else if (isStaticToolUIPart(part)) {
       const name = getStaticToolName<AtriumTools>(part);
       // The plan tool isn't trace work — it renders in the composer plan panel.

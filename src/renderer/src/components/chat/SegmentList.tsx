@@ -1,6 +1,7 @@
 import type { ClarifyResult } from '@shared/chat-types';
 import type { ViewSegment } from '../../lib/assistant-view';
 import { ClarifyCard } from './ClarifyCard';
+import { GeneratedImage } from './GeneratedImage';
 import { NarrativeSegment } from './NarrativeSegment';
 import { SubagentCard } from './SubagentCard';
 import { ToolMarker } from './ToolMarker';
@@ -23,6 +24,16 @@ export function SegmentList({ segments, onAnswer }: SegmentListProps): React.JSX
         }
         if (seg.kind === 'subagent') {
           return <SubagentCard key={seg.subagent.id} subagent={seg.subagent} />;
+        }
+        if (seg.kind === 'image') {
+          return (
+            <GeneratedImage
+              key={seg.id}
+              url={seg.url}
+              mediaType={seg.mediaType}
+              filename={seg.filename}
+            />
+          );
         }
         return (
           <ClarifyCard

@@ -2,6 +2,7 @@ import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
 import { buildAssistantView } from '../../lib/assistant-view';
 import { ClarifyCard } from './ClarifyCard';
+import { GeneratedImage } from './GeneratedImage';
 import { Markdown } from './Markdown';
 import { TraceBlock } from './TraceBlock';
 
@@ -87,6 +88,13 @@ export function AssistantMessage({
           <div key={seg.id} className="my-3 text-fg-primary">
             <Markdown>{seg.content}</Markdown>
           </div>
+        ) : seg.kind === 'image' ? (
+          <GeneratedImage
+            key={seg.id}
+            url={seg.url}
+            mediaType={seg.mediaType}
+            filename={seg.filename}
+          />
         ) : seg.kind === 'clarify' ? (
           <ClarifyCard
             key={seg.clarify.id}
