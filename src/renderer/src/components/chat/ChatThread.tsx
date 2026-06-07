@@ -3,7 +3,7 @@ import type { ClarifyResult, Todo } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
 import { type ChatStatus, getStaticToolName, isStaticToolUIPart } from 'ai';
 import { TriangleAlert } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCompactionStore } from '../../state/compaction-store';
 import { useImageGenStore } from '../../state/image-gen-store';
 import { AssistantMessage } from './AssistantMessage';
@@ -14,6 +14,7 @@ import { Composer } from './composer/Composer';
 import type { SlashCommand } from './composer/slash-menu';
 import { ImageGeneratingProgress } from './ImageGeneratingProgress';
 import { PlanPanel } from './PlanPanel';
+import { TurnLoading } from './TurnLoading';
 import { UserMessage } from './UserMessage';
 
 type ChatThreadProps = {
@@ -84,6 +85,19 @@ export function ChatThread({
   const clarifyPending = pendingClarify !== null;
   const lastId = messages.at(-1)?.id;
 
+  // "Working…" before the first token: status sits at 'submitted' until the
+  // first chunk arrives (external CLI agents can take seconds). Debounced so a
+  // fast turn (cloud) doesn't flash it.
+  const [awaiting, setAwaiting] = useState(false);
+  useEffect(() => {
+    if (status !== 'submitted') {
+      setAwaiting(false);
+      return;
+    }
+    const t = setTimeout(() => setAwaiting(true), 400);
+    return () => clearTimeout(t);
+  }, [status]);
+
   // Esc takes back the turn (Claude Code style): aborts an in-flight generation,
   // or cancels a clarification that's waiting on the user. Bound only while one
   // of those is active, so it doesn't swallow Esc from popovers/menus otherwise.
@@ -140,6 +154,7 @@ export function ChatThread({
           })}
           {compacting && <CompactionProgress />}
           {generatingImage && <ImageGeneratingProgress />}
+          {awaiting && <TurnLoading />}
           {error && (
             <div className="my-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-danger text-sm">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />

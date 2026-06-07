@@ -3,6 +3,7 @@ import type { ClarifyResult } from '@shared/chat-types';
 import { ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ViewSegment } from '../../lib/assistant-view';
+import { LiveLabel } from './LiveLabel';
 import { SegmentList } from './SegmentList';
 
 type TraceBlockProps = {
@@ -76,29 +77,8 @@ export function TraceBlock({
   );
 }
 
-function LiveLabel({ verb, createdAt }: { verb: string; createdAt?: number }): React.JSX.Element {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  // Hold off on the timer until the server's start time has arrived and at
-  // least a second has elapsed — no flash of "0m 00s".
-  const sec = createdAt != null ? Math.max(0, Math.floor((now - createdAt) / 1000)) : 0;
-  return (
-    <span>
-      {verb}…{sec > 0 ? ` ${formatLive(sec)}` : ''}
-    </span>
-  );
-}
-
 function formatRest(ms: number): string {
   const sec = Math.round(ms / 1000);
   if (sec < 60) return `${sec}s`;
   return `${Math.floor(sec / 60)}m ${sec % 60}s`;
-}
-
-function formatLive(sec: number): string {
-  if (sec < 60) return `${sec}s`;
-  return `${Math.floor(sec / 60)}m ${String(sec % 60).padStart(2, '0')}s`;
 }
