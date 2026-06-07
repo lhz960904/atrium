@@ -39,6 +39,8 @@ export type LocalCliManifest = {
   name: string;
   description: string;
   acp: AcpLaunch;
+  /** npm package the user global-installs (we don't bundle it) — shown as a hint. */
+  install: string;
 };
 
 export type ProviderManifest = CloudApiManifest | LocalCliManifest;
@@ -146,6 +148,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
       package: '@agentclientprotocol/claude-agent-acp',
       bin: 'claude-agent-acp',
     },
+    install: '@agentclientprotocol/claude-agent-acp',
   },
   {
     id: 'codex-cli',
@@ -153,6 +156,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     name: 'Codex CLI',
     description: '通过 ACP 调用你本地已登录的 Codex CLI（复用 ChatGPT 订阅）。',
     acp: { via: 'adapter', package: '@agentclientprotocol/codex-acp', bin: 'codex-acp' },
+    install: '@agentclientprotocol/codex-acp',
   },
   {
     id: 'gemini-cli',
@@ -160,6 +164,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     name: 'Gemini CLI',
     description: '通过 ACP 调用你本地已登录的 Gemini CLI（自带 ACP）。',
     acp: { via: 'binary', command: 'gemini', args: ['--acp'] },
+    install: '@google/gemini-cli',
   },
 ] as const;
 
