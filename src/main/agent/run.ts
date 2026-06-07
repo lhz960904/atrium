@@ -1,6 +1,5 @@
 import type { ToolName } from '@shared/tools';
 import {
-  APICallError,
   convertToModelMessages,
   createUIMessageStream,
   generateId,
@@ -12,6 +11,7 @@ import {
   type UIMessageChunk,
 } from 'ai';
 import type { Db } from '../db';
+import { readableError } from './errors';
 import {
   type AgentMiddleware,
   composeBeforeStep,
@@ -35,28 +35,6 @@ export type RunAgentOptions = {
   middlewares: AgentMiddleware[];
   abortSignal?: AbortSignal;
 };
-
-/**
- * A human-readable message for the client. createUIMessageStream masks errors
- * as a generic string by default (don't leak internals); we override that to
- * surface the real reason. Provider errors bury the useful text in the response
- * body (e.g. "unsupported image format"), so dig that out before the SDK's own
- * message.
- */
-export function readableError(error: unknown): string {
-  if (APICallError.isInstance(error)) {
-    if (error.responseBody) {
-      try {
-        const parsed = JSON.parse(error.responseBody) as { error?: { message?: string } };
-        if (parsed.error?.message) return parsed.error.message;
-      } catch {
-        // fall through to the SDK message
-      }
-    }
-    return error.message;
-  }
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * The agent loop. AI SDK's streamText is itself the multi-step ReAct loop:

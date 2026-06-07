@@ -1,7 +1,7 @@
 import { createUIMessageStream, generateId, type UIMessage, type UIMessageChunk } from 'ai';
 import type { Db } from '../db';
+import { readableError } from './errors';
 import { generateThreadImage, imageFileChunk, referenceImages } from './image-generation';
-import { readableError } from './run';
 
 export type RunImageOptions = {
   db: Db;
