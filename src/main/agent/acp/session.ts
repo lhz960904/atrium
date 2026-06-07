@@ -149,6 +149,11 @@ export class AcpSession {
     }
   }
 
+  /** True while a prompt turn is in flight — the registry won't evict a busy session. */
+  isBusy(): boolean {
+    return this.turn !== null;
+  }
+
   /** Run one prompt turn with this turn's sinks; resolves with the stop reason. */
   async prompt(content: ContentBlock[], handlers: AcpTurnHandlers): Promise<string> {
     if (!this.sessionId) throw new Error('AcpSession.prompt called before start()');
