@@ -33,6 +33,10 @@ function latestUserText(messages: UIMessage[]): string {
 
 const textToContent = (text: string): ContentBlock[] => [{ type: 'text', text }];
 
+/** A session update that renders as visible content (vs. commands/mode notices). */
+const isContent = (kind: string): boolean =>
+  kind === 'agent_message_chunk' || kind === 'agent_thought_chunk' || kind === 'tool_call';
+
 /** Permission is deferred — always approve for now; a dedicated scheme comes later. */
 const approveAll: AcpTurnHandlers['onPermission'] = async (req) => {
   const allow =
@@ -61,6 +65,7 @@ export function runExternalAgentTurn(
     onError: readableError,
     onFinish: ({ responseMessage }) => opts.onFinish(responseMessage),
     execute: async ({ writer }) => {
+      const startedAt = Date.now();
       const emitter = new ChunkEmitter(writer);
       // acquire() throws if the adapter can't start (not installed, etc.); the
       // stream's onError turns that into a readable error in the chat.
@@ -72,12 +77,27 @@ export function runExternalAgentTurn(
       opts.onSession?.(sessionId);
       const onAbort = (): void => void session.cancel();
       opts.abortSignal?.addEventListener('abort', onAbort);
+      // Stamp createdAt on the first visible chunk — not before, since an early
+      // chunk would flip the turn out of its loading state — and durationMs at
+      // the end, so the trace shows "Working… Xs" / "Worked for Xs" like a normal
+      // turn. The two metadata writes merge into the message.
+      let stamped = false;
       try {
         await session.prompt(textToContent(latestUserText(opts.messages)), {
-          onUpdate: (u) => emitter.handle(u),
+          onUpdate: (u) => {
+            if (!stamped && isContent(u.sessionUpdate)) {
+              stamped = true;
+              writer.write({ type: 'message-metadata', messageMetadata: { createdAt: startedAt } });
+            }
+            emitter.handle(u);
+          },
           onPermission: approveAll,
         });
         emitter.flush();
+        writer.write({
+          type: 'message-metadata',
+          messageMetadata: { durationMs: Date.now() - startedAt },
+        });
       } finally {
         opts.abortSignal?.removeEventListener('abort', onAbort);
       }

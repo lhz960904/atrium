@@ -123,8 +123,9 @@ export function startHttpServer(deps: {
         messages: history,
         abortSignal: abort.signal,
         onSession: (sessionId) => writeAcpBinding(deps.db, threadId, providerId, sessionId),
-        onFinish: (m) =>
-          upsertMessage(deps.db, threadId, { ...m, metadata: { createdAt: Date.now() } }),
+        // The stream stamps createdAt + durationMs as message metadata; persist
+        // the message as-is so the trace's "Worked for Xs" survives a reload.
+        onFinish: (m) => upsertMessage(deps.db, threadId, m),
       });
       const sse = await startThreadStream(threadId, acpStream, abort);
       return new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS });
