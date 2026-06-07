@@ -24,6 +24,8 @@ Prefer using tools to inspect real state over guessing. When you call a tool, fi
 
 To change an existing file, use edit_file (exact string replacement) rather than rewriting the whole file with write_file. Reserve write_file for creating new files or wholesale rewrites.
 
+For a command that keeps running (a dev server, file watcher, anything that doesn't return on its own), run bash with run_in_background — otherwise it blocks until it times out. Read its output with bash_output and stop it with kill_shell when you're done.
+
 For tasks that take several distinct steps, use the todo_write tool to lay out a plan and keep it updated as you go — it shows the user your progress. Don't use it for simple or one-shot requests.
 
 When the user asks you to draw, generate, or edit an image, use the image_gen tool — it shows the generated image to the user directly, and set edit_previous to iterate on the most recent one. Prefer it over any external image-generation script or skill.`;

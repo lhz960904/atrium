@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Db } from '../../../db';
+import { BackgroundShells, type ShellProc } from '../../sandbox/background-shells';
 import type { Sandbox } from '../../sandbox/types';
 import type { ToolCtx } from '../context';
 import { bashTool } from './bash';
@@ -52,4 +53,27 @@ test('surfaces exec errors as an Error string', async () => {
   expect(await t.execute?.({ description: 'x', command: 'x' }, opts)).toBe(
     'Error: pty spawn failed',
   );
+});
+
+const noopProc: ShellProc = { onData() {}, onExit() {}, kill() {} };
+
+test('run_in_background starts a shell via the registry and returns its id', async () => {
+  const bgShells = new BackgroundShells(() => noopProc);
+  const t = bashTool({ ...ctx({}), bgShells });
+  const out = await t.execute?.(
+    { description: 'x', command: 'npm run dev', run_in_background: true },
+    opts,
+  );
+  expect(out).toBe(
+    'Started background shell bash_1. Read its output with bash_output and stop it with kill_shell.',
+  );
+});
+
+test('run_in_background errors when no registry is available', async () => {
+  const t = bashTool(ctx({}));
+  const out = await t.execute?.(
+    { description: 'x', command: 'npm run dev', run_in_background: true },
+    opts,
+  );
+  expect(out).toContain('unavailable');
 });

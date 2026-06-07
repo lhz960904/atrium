@@ -1,4 +1,5 @@
 import type { Db } from '../../db';
+import type { BackgroundShells } from '../sandbox/background-shells';
 import type { Sandbox } from '../sandbox/types';
 import type { Skill } from '../skills/types';
 
@@ -9,5 +10,14 @@ import type { Skill } from '../skills/types';
  * here for tools that need it (e.g. task, to list the available subagents).
  * `skills` are the ones discovered at startup, so the skill tool can load a
  * body by name; absent until discovery is wired, so it defaults to none.
+ * `bgShells` is the main-process registry of long-running shells (a singleton
+ * shared across requests), so the background bash / bash_output / kill_shell
+ * tools reach the same processes turn to turn.
  */
-export type ToolCtx = { sandbox: Sandbox; workspaceRoot: string; db: Db; skills?: Skill[] };
+export type ToolCtx = {
+  sandbox: Sandbox;
+  workspaceRoot: string;
+  db: Db;
+  skills?: Skill[];
+  bgShells?: BackgroundShells;
+};

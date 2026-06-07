@@ -12,7 +12,7 @@ import {
 import { isImageModel, maxContextTokens } from '../agent/models/catalog';
 import { runAgent } from '../agent/run';
 import { runImageTurn } from '../agent/run-image';
-import { LocalSandbox } from '../agent/sandbox';
+import { BackgroundShells, LocalSandbox } from '../agent/sandbox';
 import { getSkills } from '../agent/skills/registry';
 import { getTools } from '../agent/tools';
 import { skillPreserver } from '../agent/tools/builtins/skill';
@@ -23,7 +23,7 @@ import { resolveModel } from '../providers/resolve';
 import { loadThreadMessages, persistMessage, resolveToolOutput, upsertMessage } from './persist';
 import { abortThreadRun, resumeThreadStream, startThreadStream } from './resumable';
 
-export type ChatEndpoint = { port: number; token: string };
+export type ChatEndpoint = { port: number; token: string; dispose: () => void };
 
 // Client sends only the latest message (AI SDK persistence best practice);
 // the server rebuilds history from the DB. The thread row always exists before
@@ -51,6 +51,9 @@ export function startHttpServer(deps: {
   workspaceRoot: string;
 }): Promise<ChatEndpoint> {
   const app = new Hono();
+  // Long-running shells (dev servers, watchers) outlive a request, so the
+  // registry is a single instance held for the server's lifetime, not per-call.
+  const bgShells = new BackgroundShells();
 
   // Renderer is a different origin (localhost:5173 in dev, file:// in prod);
   // CORS must run before auth so the credential-less preflight isn't 401'd.
@@ -110,7 +113,13 @@ export function startHttpServer(deps: {
       db: deps.db,
       sandbox,
       abortSignal: abort.signal,
-      tools: getTools({ sandbox, workspaceRoot: deps.workspaceRoot, db: deps.db, skills }),
+      tools: getTools({
+        sandbox,
+        workspaceRoot: deps.workspaceRoot,
+        db: deps.db,
+        skills,
+        bgShells,
+      }),
       // skills must run after compaction: compaction may fold the original first
       // user message into a summary, and the skill index has to land on whatever
       // the post-compaction first user message is.
@@ -179,7 +188,7 @@ export function startHttpServer(deps: {
   // callback (server.address() is null synchronously right after).
   return new Promise((resolve) => {
     serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 }, (info) => {
-      resolve({ port: info.port, token: deps.token });
+      resolve({ port: info.port, token: deps.token, dispose: () => bgShells.killAll() });
     });
   });
 }

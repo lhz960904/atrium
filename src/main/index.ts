@@ -10,7 +10,7 @@ import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/c
 import { refreshSkills } from './agent/skills/registry';
 import { closeDb, openDb } from './db';
 import { createLogger, initLogging } from './log';
-import { startHttpServer } from './server/http';
+import { type ChatEndpoint, startHttpServer } from './server/http';
 import { openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { appRouter } from './trpc/router';
@@ -63,6 +63,10 @@ function createWindow(): BrowserWindow {
   return mainWindow;
 }
 
+// Held at module scope so before-quit can dispose it (kill background shells) —
+// assigned once the server is up inside whenReady.
+let serverEndpoint: ChatEndpoint | undefined;
+
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.atrium.app');
   initLogging();
@@ -90,6 +94,7 @@ app.whenReady().then(async () => {
   await refreshSkills();
 
   const chatEndpoint = await startHttpServer({ db, token: randomUUID(), workspaceRoot });
+  serverEndpoint = chatEndpoint;
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
@@ -121,5 +126,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  serverEndpoint?.dispose();
   closeDb();
 });

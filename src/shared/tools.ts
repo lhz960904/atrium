@@ -11,6 +11,8 @@ export const TOOL_NAMES = [
   'edit_file',
   'list_dir',
   'bash',
+  'bash_output',
+  'kill_shell',
   'todo_write',
   'web_fetch',
   'web_search',

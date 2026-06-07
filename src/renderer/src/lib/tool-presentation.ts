@@ -8,6 +8,8 @@ import {
   Globe,
   Image as ImageIcon,
   type LucideIcon,
+  OctagonX,
+  ScrollText,
   Search,
   Sparkles,
   Terminal,
@@ -30,6 +32,7 @@ export type ToolInput = {
   subagent?: string;
   name?: string;
   prompt?: string;
+  shell_id?: string;
 };
 
 const hostname = (u?: string): string => {
@@ -88,6 +91,18 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     target: (i) => i.command ?? '',
     typeLabel: () => 'Shell',
     command: (i) => i.command,
+  },
+  bash_output: {
+    icon: ScrollText,
+    verb: 'Read output',
+    target: (i) => i.shell_id ?? '',
+    typeLabel: (i) => `Background shell · ${i.shell_id ?? ''}`,
+  },
+  kill_shell: {
+    icon: OctagonX,
+    verb: 'Stopped',
+    target: (i) => i.shell_id ?? '',
+    typeLabel: (i) => `Background shell · ${i.shell_id ?? ''}`,
   },
   web_fetch: {
     icon: Globe,

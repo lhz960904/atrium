@@ -5,8 +5,10 @@ import { maxContextTokens } from '../models/catalog';
 import { listSubagentDefs } from '../subagent/defs';
 import { askClarificationTool } from './builtins/ask-clarification';
 import { bashTool } from './builtins/bash';
+import { bashOutputTool } from './builtins/bash-output';
 import { editFileTool } from './builtins/edit-file';
 import { imageGenTool } from './builtins/image-gen';
+import { killShellTool } from './builtins/kill-shell';
 import { listDirTool } from './builtins/list-dir';
 import { readFileTool } from './builtins/read-file';
 import { skillTool } from './builtins/skill';
@@ -30,6 +32,8 @@ export function getTools(ctx: ToolCtx): Record<ToolName, Tool> {
     edit_file: editFileTool(ctx),
     list_dir: listDirTool(ctx),
     bash: bashTool(ctx),
+    bash_output: bashOutputTool(ctx),
+    kill_shell: killShellTool(ctx),
     todo_write: todoWriteTool(),
     web_fetch: webFetchTool(),
     web_search: webSearchTool(),
