@@ -8,6 +8,7 @@
 export const TOOL_NAMES = [
   'read_file',
   'write_file',
+  'edit_file',
   'list_dir',
   'bash',
   'todo_write',

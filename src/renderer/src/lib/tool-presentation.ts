@@ -2,6 +2,7 @@ import type { ToolName } from '@shared/tools';
 import {
   Bot,
   FilePen,
+  FilePenLine,
   FileText,
   FolderTree,
   Globe,
@@ -66,6 +67,12 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
   write_file: {
     icon: FilePen,
     verb: 'Wrote',
+    target: (i) => basename(i.path),
+    typeLabel: (i) => `File · ${i.path ?? ''}`,
+  },
+  edit_file: {
+    icon: FilePenLine,
+    verb: 'Edited',
     target: (i) => basename(i.path),
     typeLabel: (i) => `File · ${i.path ?? ''}`,
   },

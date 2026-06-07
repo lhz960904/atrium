@@ -133,7 +133,10 @@ test('maps fs error codes to friendly messages', async () => {
     }),
   );
   expect(
-    await t.execute?.({ description: 'd', path: 'nope.ts', old_string: 'a', new_string: 'b' }, opts),
+    await t.execute?.(
+      { description: 'd', path: 'nope.ts', old_string: 'a', new_string: 'b' },
+      opts,
+    ),
   ).toBe('Error: File not found: nope.ts');
 });
 
