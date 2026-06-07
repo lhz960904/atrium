@@ -17,3 +17,17 @@ export function middleTruncate(s: string, max: number): string {
   const tail = max - head;
   return `${s.slice(0, head)}\n... [middle truncated: ${s.length - max} chars skipped] ...\n${s.slice(-tail)}`;
 }
+
+/**
+ * Map a Node fs error to a model-readable message, shared by the single-file
+ * tools (read/write/edit). `verb` only varies the EACCES phrasing (e.g.
+ * 'reading', 'writing to', 'editing'); the code mapping is identical. Directory
+ * tools keep their own mapper — different codes (ENOTDIR) and wording.
+ */
+export function fsErrorMessage(err: unknown, path: string, verb: string): string {
+  const code = (err as NodeJS.ErrnoException)?.code;
+  if (code === 'ENOENT') return `Error: File not found: ${path}`;
+  if (code === 'EACCES') return `Error: Permission denied ${verb} file: ${path}`;
+  if (code === 'EISDIR') return `Error: Path is a directory, not a file: ${path}`;
+  return `Error: ${err instanceof Error ? err.message : String(err)}`;
+}

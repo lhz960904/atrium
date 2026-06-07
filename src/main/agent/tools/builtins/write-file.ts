@@ -2,6 +2,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { resolveInWorkspace } from '../../sandbox/paths';
 import type { ToolCtx } from '../context';
+import { fsErrorMessage } from '../output';
 
 export const writeFileTool = (ctx: ToolCtx) =>
   tool({
@@ -24,14 +25,7 @@ export const writeFileTool = (ctx: ToolCtx) =>
         const { bytes } = await ctx.sandbox.writeFile(abs, content, append ?? false);
         return `Wrote ${bytes} bytes to ${path}.`;
       } catch (err) {
-        return writeError(err, path);
+        return fsErrorMessage(err, path, 'writing to');
       }
     },
   });
-
-function writeError(err: unknown, path: string): string {
-  const code = (err as NodeJS.ErrnoException)?.code;
-  if (code === 'EACCES') return `Error: Permission denied writing to file: ${path}`;
-  if (code === 'EISDIR') return `Error: Path is a directory, not a file: ${path}`;
-  return `Error: ${err instanceof Error ? err.message : String(err)}`;
-}

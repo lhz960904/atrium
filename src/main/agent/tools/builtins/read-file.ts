@@ -2,7 +2,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { resolveInWorkspace } from '../../sandbox/paths';
 import type { ToolCtx } from '../context';
-import { headTruncate } from '../output';
+import { fsErrorMessage, headTruncate } from '../output';
 
 const READ_MAX = 50_000;
 
@@ -39,15 +39,7 @@ export const readFileTool = (ctx: ToolCtx) =>
         }
         return headTruncate(content, READ_MAX, 'Use start_line/end_line to read a specific range');
       } catch (err) {
-        return readError(err, path);
+        return fsErrorMessage(err, path, 'reading');
       }
     },
   });
-
-function readError(err: unknown, path: string): string {
-  const code = (err as NodeJS.ErrnoException)?.code;
-  if (code === 'ENOENT') return `Error: File not found: ${path}`;
-  if (code === 'EACCES') return `Error: Permission denied reading file: ${path}`;
-  if (code === 'EISDIR') return `Error: Path is a directory, not a file: ${path}`;
-  return `Error: ${err instanceof Error ? err.message : String(err)}`;
-}
