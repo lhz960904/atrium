@@ -49,7 +49,10 @@ const hostname = (u?: string): string => {
 
 export type ToolPresentation = {
   icon: LucideIcon;
+  /** Past tense, shown once the call has settled (e.g. "Read"). */
   verb: string;
+  /** Present continuous, shown while the call is running (e.g. "Reading"). */
+  verbActive: string;
   target: (i: ToolInput) => string;
   typeLabel: (i: ToolInput) => string;
   /** Shell-style tools surface a `$ command` line in the expanded card. */
@@ -67,42 +70,49 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
   read_file: {
     icon: FileText,
     verb: 'Read',
+    verbActive: 'Reading',
     target: (i) => basename(i.path),
     typeLabel: (i) => `File · ${i.path ?? ''}`,
   },
   write_file: {
     icon: FilePen,
     verb: 'Wrote',
+    verbActive: 'Writing',
     target: (i) => basename(i.path),
     typeLabel: (i) => `File · ${i.path ?? ''}`,
   },
   edit_file: {
     icon: FilePenLine,
     verb: 'Edited',
+    verbActive: 'Editing',
     target: (i) => basename(i.path),
     typeLabel: (i) => `File · ${i.path ?? ''}`,
   },
   list_dir: {
     icon: FolderTree,
     verb: 'Listed',
+    verbActive: 'Listing',
     target: (i) => basename(i.path) || 'workspace',
     typeLabel: (i) => `Directory · ${i.path ?? '.'}`,
   },
   grep: {
     icon: TextSearch,
     verb: 'Searched',
+    verbActive: 'Searching',
     target: (i) => i.pattern ?? '',
     typeLabel: (i) => `Grep · ${i.path ?? 'workspace'}`,
   },
   glob: {
     icon: FileSearch,
     verb: 'Found files',
+    verbActive: 'Finding files',
     target: (i) => i.pattern ?? '',
     typeLabel: (i) => `Glob · ${i.path ?? 'workspace'}`,
   },
   bash: {
     icon: Terminal,
     verb: 'Ran',
+    verbActive: 'Running',
     target: (i) => i.command ?? '',
     typeLabel: () => 'Shell',
     command: (i) => i.command,
@@ -110,42 +120,49 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
   bash_output: {
     icon: ScrollText,
     verb: 'Read output',
+    verbActive: 'Reading output',
     target: (i) => i.shell_id ?? '',
     typeLabel: (i) => `Background shell · ${i.shell_id ?? ''}`,
   },
   kill_shell: {
     icon: OctagonX,
     verb: 'Stopped',
+    verbActive: 'Stopping',
     target: (i) => i.shell_id ?? '',
     typeLabel: (i) => `Background shell · ${i.shell_id ?? ''}`,
   },
   web_fetch: {
     icon: Globe,
     verb: 'Fetched',
+    verbActive: 'Fetching',
     target: (i) => hostname(i.url),
     typeLabel: (i) => `Web · ${i.url ?? ''}`,
   },
   web_search: {
     icon: Search,
     verb: 'Searched',
+    verbActive: 'Searching',
     target: (i) => i.query ?? '',
     typeLabel: () => 'Web search',
   },
   task: {
     icon: Bot,
     verb: 'Delegated',
+    verbActive: 'Delegating',
     target: (i) => i.description ?? i.subagent ?? 'subagent',
     typeLabel: (i) => `Subagent · ${i.subagent ?? 'general-purpose'}`,
   },
   skill: {
     icon: Sparkles,
     verb: 'Used skill',
+    verbActive: 'Using skill',
     target: (i) => i.name ?? '',
     typeLabel: (i) => `Skill · ${i.name ?? ''}`,
   },
   image_gen: {
     icon: ImageIcon,
     verb: 'Generated image',
+    verbActive: 'Generating image',
     target: (i) => i.prompt ?? '',
     typeLabel: () => 'Image',
   },

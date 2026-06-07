@@ -134,12 +134,14 @@ type AtriumToolPart = ToolUIPart<AtriumTools>;
 function toToolModel(part: AtriumToolPart, name: MarkerToolName): Tool {
   const input = (part.input ?? {}) as ToolInput;
   const p = TOOL_PRESENTATION[name];
+  const status = toStatus(part);
   return {
     id: part.toolCallId,
     name,
-    verb: p.verb,
+    // Present continuous while it runs ("Reading"), past tense once settled ("Read").
+    verb: status === 'running' ? p.verbActive : p.verb,
     target: p.target(input),
-    status: toStatus(part),
+    status,
     typeLabel: p.typeLabel(input),
     command: p.command?.(input),
     output: toOutput(part),
