@@ -28,6 +28,7 @@ import {
   loadThreadMessages,
   persistMessage,
   readAcpBinding,
+  readAcpConfig,
   resolveToolOutput,
   upsertMessage,
   writeAcpBinding,
@@ -103,7 +104,11 @@ export function startHttpServer(deps: {
     // An external CLI agent (Claude Code / Codex / Gemini) handles the whole
     // turn over ACP, bypassing our own agent loop.
     if (getProviderManifest(providerId)?.kind === 'local-cli') {
-      const spec = resolveAcpSpec(providerId, deps.workspaceRoot);
+      const spec = resolveAcpSpec(
+        providerId,
+        deps.workspaceRoot,
+        readAcpConfig(deps.db, providerId),
+      );
       if (!spec) return c.text(`unknown local-cli provider ${providerId}`, 400);
       log.info(`turn ${providerId} → external agent (acp)`);
       // Resume the agent's prior session for this thread when the bound provider

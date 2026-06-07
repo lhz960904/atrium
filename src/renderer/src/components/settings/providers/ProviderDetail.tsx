@@ -2,6 +2,7 @@ import { trpc } from '../../../lib/trpc';
 import { ApiKeyField } from './ApiKeyField';
 import { BaseUrlField } from './BaseUrlField';
 import { EnableSwitch } from './EnableSwitch';
+import { LocalCliForm } from './LocalCliForm';
 import { ModelsBlock } from './ModelsBlock';
 import type { ProviderView } from './types';
 
@@ -47,7 +48,7 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
       {provider.kind === 'cloud-api' ? (
         <CloudApiForm key={provider.id} provider={provider} />
       ) : (
-        <LocalCliInstall provider={provider} />
+        <LocalCliForm key={provider.id} provider={provider} />
       )}
     </div>
   );
@@ -81,26 +82,6 @@ function CloudApiForm({
         models={config.fetchedModels ?? []}
         enabledModels={config.enabledModels ?? []}
       />
-    </div>
-  );
-}
-
-function LocalCliInstall({
-  provider,
-}: {
-  provider: Extract<ProviderView, { kind: 'local-cli' }>;
-}): React.JSX.Element {
-  return (
-    <div className="rounded-lg border border-border-default bg-surface px-6 py-6">
-      <p className="text-fg-secondary text-sm">无需 API key —— 复用你本地已登录的 CLI。</p>
-      <p className="mt-4 text-fg-tertiary text-xs">先全局安装它的 CLI / ACP 适配器:</p>
-      <pre className="mt-1.5 overflow-x-auto rounded-md bg-elevated px-3 py-2 font-mono text-fg-secondary text-xs">
-        npm i -g {provider.install}
-      </pre>
-      <p className="mt-4 text-fg-tertiary text-xs leading-relaxed">
-        安装并登录后(如 <code>claude /login</code> / <code>codex login</code>),启用本项,
-        即可在对话框的模型选择里选它。未安装或未登录时,发送会提示你先处理。
-      </p>
     </div>
   );
 }

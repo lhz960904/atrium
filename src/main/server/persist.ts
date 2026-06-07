@@ -1,7 +1,7 @@
 import type { UIMessage } from 'ai';
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../db';
-import { messages, threads } from '../db/schema';
+import { messages, providers, threads } from '../db/schema';
 
 /** Load a thread's messages from the DB as UIMessages, oldest first. */
 export function loadThreadMessages(db: Db, threadId: string): UIMessage[] {
@@ -66,6 +66,17 @@ export function upsertMessage(db: Db, threadId: string, msg: UIMessage): void {
     })
     .run();
   db.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
+}
+
+/** The user's ACP launch overrides for a local-cli provider (blank = manifest default). */
+export function readAcpConfig(db: Db, providerId: string): { command?: string; args?: string } {
+  const row = db
+    .select({ config: providers.config })
+    .from(providers)
+    .where(eq(providers.id, providerId))
+    .get();
+  const cfg = (row?.config ?? null) as { command?: string; args?: string } | null;
+  return { command: cfg?.command, args: cfg?.args };
 }
 
 type AcpBinding = { providerId: string; sessionId: string };
