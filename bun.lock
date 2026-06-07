@@ -5,6 +5,7 @@
     "": {
       "name": "atrium",
       "dependencies": {
+        "@agentclientprotocol/sdk": "^0.25.0",
         "@ai-sdk/anthropic": "^3",
         "@ai-sdk/google": "^3",
         "@ai-sdk/openai-compatible": "^2",
@@ -92,6 +93,8 @@
   ],
   "packages": {
     "7zip-bin": ["7zip-bin@5.2.0", "", {}, "sha512-ukTPVhqG4jNzMro2qA9HSCSSVJN3aN7tlb+hfqYCt3ER0yWroeA2VR38MNrOHLQ/cVj+DaIMad0kFCtWWowh/A=="],
+
+    "@agentclientprotocol/sdk": ["@agentclientprotocol/sdk@0.25.0", "", { "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-wU1VgXNtMvdVotX49txc3WJUDV+/QbLpsgjMvFhlRmp37osdLbI7L7y+iwAlQATwfjLxcv1r1p3ZxZBcXlGhcQ=="],
 
     "@ai-sdk/anthropic": ["@ai-sdk/anthropic@3.0.81", "", { "dependencies": { "@ai-sdk/provider": "3.0.10", "@ai-sdk/provider-utils": "4.0.27" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-B1JDd9Ugq9R5AgIaW3674lhGCMMYJcPUxnrZh8fzbGojgg4QvHFRv6eZahGQAUsmGHbcf74G9bdSBDLWQGY2GA=="],
 

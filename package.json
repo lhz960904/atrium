@@ -28,6 +28,7 @@
     "build:mac": "bun run build && electron-vite build && electron-builder --mac"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^0.25.0",
     "@ai-sdk/anthropic": "^3",
     "@ai-sdk/google": "^3",
     "@ai-sdk/openai-compatible": "^2",
