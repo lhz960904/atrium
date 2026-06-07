@@ -15,6 +15,8 @@ import {
   Sparkles,
   Terminal,
   TextSearch,
+  Trash2,
+  Wrench,
 } from 'lucide-react';
 
 /**
@@ -167,3 +169,24 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     typeLabel: () => 'Image',
   },
 };
+
+/**
+ * Icons for an external agent's tools, keyed by ACP tool kind (read/edit/…).
+ * External agents bring arbitrary tools, so they render as dynamic parts whose
+ * name is the ACP kind rather than a built-in ToolName.
+ */
+const ACP_KIND_ICON: Record<string, LucideIcon> = {
+  read: FileText,
+  edit: FilePenLine,
+  delete: Trash2,
+  move: FolderTree,
+  search: Search,
+  execute: Terminal,
+  think: Sparkles,
+  fetch: Globe,
+};
+
+/** Resolve a tool's icon by name: a built-in tool, else an ACP kind, else generic. */
+export function toolIcon(name: string): LucideIcon {
+  return TOOL_PRESENTATION[name as MarkerToolName]?.icon ?? ACP_KIND_ICON[name] ?? Wrench;
+}

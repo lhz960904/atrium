@@ -10,7 +10,12 @@ import type {
   TraceSegment,
 } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
-import { getStaticToolName, isStaticToolUIPart, type ToolUIPart } from 'ai';
+import {
+  type DynamicToolUIPart,
+  getStaticToolName,
+  isStaticToolUIPart,
+  type ToolUIPart,
+} from 'ai';
 import { type MarkerToolName, TOOL_PRESENTATION, type ToolInput } from './tool-presentation';
 
 /**
@@ -100,6 +105,12 @@ export function buildAssistantView(parts: AtriumUIMessage['parts']): AssistantVi
       // flat tool marker.
       if (name === 'task') work.push({ kind: 'subagent', subagent: toSubagentModel(part) });
       else work.push({ kind: 'tool', tool: toToolModel(part, name) });
+    } else if (part.type === 'dynamic-tool') {
+      // An external agent's tool call — arbitrary name, rendered generically by
+      // its ACP kind (the part.toolName) + the agent-supplied title.
+      lastToolIdx = work.length;
+      toolCount++;
+      work.push({ kind: 'tool', tool: toDynamicToolModel(part) });
     }
   }
 
@@ -163,6 +174,18 @@ function toSubagentModel(part: AtriumToolPart): Subagent {
   };
 }
 
+function toDynamicToolModel(part: DynamicToolUIPart): Tool {
+  return {
+    id: part.toolCallId,
+    name: part.toolName,
+    verb: '',
+    target: part.title ?? part.toolName,
+    status: toStatus(part),
+    typeLabel: `Agent · ${part.toolName}`,
+    output: toOutput(part),
+  };
+}
+
 function toSubagentStatus(part: AtriumToolPart): SubagentStatus {
   switch (part.state) {
     case 'output-available':
@@ -174,7 +197,7 @@ function toSubagentStatus(part: AtriumToolPart): SubagentStatus {
   }
 }
 
-function toStatus(part: AtriumToolPart): ToolStatus {
+function toStatus(part: AtriumToolPart | DynamicToolUIPart): ToolStatus {
   switch (part.state) {
     case 'output-available':
       return 'success';
@@ -185,7 +208,7 @@ function toStatus(part: AtriumToolPart): ToolStatus {
   }
 }
 
-function toOutput(part: AtriumToolPart): string | undefined {
+function toOutput(part: AtriumToolPart | DynamicToolUIPart): string | undefined {
   if (part.state === 'output-error') return part.errorText;
   if (part.state === 'output-available') return String(part.output);
   return undefined;

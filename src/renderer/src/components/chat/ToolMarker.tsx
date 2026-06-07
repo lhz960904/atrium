@@ -1,12 +1,12 @@
 import type { Tool } from '@shared/chat-types';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
-import { TOOL_PRESENTATION } from '../../lib/tool-presentation';
+import { toolIcon } from '../../lib/tool-presentation';
 import { ToolExpand } from './ToolExpand';
 
 export function ToolMarker({ tool }: { tool: Tool }): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const Icon = TOOL_PRESENTATION[tool.name].icon;
+  const Icon = toolIcon(tool.name);
 
   return (
     <>

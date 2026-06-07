@@ -7,8 +7,6 @@
  * segment — no separate field.
  */
 
-import type { ToolName } from './tools';
-
 export type ToolStatus = 'running' | 'success' | 'error' | 'cancelled' | 'warning';
 
 /** A single step in the agent's plan, written via the `todo_write` tool. */
@@ -17,8 +15,9 @@ export type Todo = { content: string; status: TodoStatus };
 
 export type Tool = {
   id: string;
-  /** The tool's name — also the key for its icon. No separate "kind" layer. */
-  name: ToolName;
+  /** The tool's name — the icon key. A built-in ToolName, or (for an external
+   *  agent's tools) an ACP tool kind like "edit"/"execute". */
+  name: string;
   verb: string;
   target: string;
   status: ToolStatus;
