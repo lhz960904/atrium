@@ -77,8 +77,12 @@ test('emits a dynamic tool-input then output, closing text around it', () => {
     toolCallId: 'tc1',
     toolName: 'edit',
     dynamic: true,
+    providerExecuted: true, // external agent runs its own tools; no client auto-resume
     title: 'Edit auth.ts',
     input: { path: 'auth.ts' },
+  });
+  expect(chunks.find((c) => c.type === 'tool-output-available')).toMatchObject({
+    providerExecuted: true,
   });
 });
 

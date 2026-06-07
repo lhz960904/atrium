@@ -31,12 +31,16 @@ export class ChunkEmitter {
         break;
       case 'tool_call':
         this.closeOpen();
+        // providerExecuted: the external agent runs its own tools — without this
+        // the client treats them as client-side tools whose results need sending
+        // back, and auto-resumes the turn forever.
         this.writer.write({
           type: 'tool-input-available',
           toolCallId: update.toolCallId,
           toolName: update.kind ?? 'tool',
           input: update.rawInput ?? {},
           dynamic: true,
+          providerExecuted: true,
           title: update.title,
         });
         break;
@@ -46,6 +50,7 @@ export class ChunkEmitter {
             type: 'tool-output-available',
             toolCallId: update.toolCallId,
             output: update.rawOutput ?? { content: update.content ?? null, status: update.status },
+            providerExecuted: true,
           });
         }
         break;
