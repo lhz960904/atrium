@@ -2,6 +2,8 @@ import { serve } from '@hono/node-server';
 import { UI_MESSAGE_STREAM_HEADERS, type UIMessage } from 'ai';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { AcpSessionRegistry } from '../agent/acp/registry';
+import { runExternalAgentTurn } from '../agent/acp/run-external-agent';
 import {
   compactionMiddleware,
   compactThread,
@@ -19,8 +21,17 @@ import { skillPreserver } from '../agent/tools/builtins/skill';
 import { todoPreserver } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
 import { createLogger } from '../log';
+import { resolveAcpSpec } from '../providers/acp-spec';
+import { getProviderManifest } from '../providers/manifest';
 import { resolveModel } from '../providers/resolve';
-import { loadThreadMessages, persistMessage, resolveToolOutput, upsertMessage } from './persist';
+import {
+  loadThreadMessages,
+  persistMessage,
+  readAcpBinding,
+  resolveToolOutput,
+  upsertMessage,
+  writeAcpBinding,
+} from './persist';
 import { abortThreadRun, resumeThreadStream, startThreadStream } from './resumable';
 
 export type ChatEndpoint = { port: number; token: string; dispose: () => void };
@@ -54,6 +65,9 @@ export function startHttpServer(deps: {
   // Long-running shells (dev servers, watchers) outlive a request, so the
   // registry is a single instance held for the server's lifetime, not per-call.
   const bgShells = new BackgroundShells();
+  // External CLI agents keep one ACP session per thread (so they remember the
+  // conversation across turns), so this registry is also server-lifetime.
+  const acpSessions = new AcpSessionRegistry();
 
   // Renderer is a different origin (localhost:5173 in dev, file:// in prod);
   // CORS must run before auth so the credential-less preflight isn't 401'd.
@@ -85,6 +99,31 @@ export function startHttpServer(deps: {
     const history = loadThreadMessages(deps.db, threadId);
 
     const abort = new AbortController();
+
+    // An external CLI agent (Claude Code / Codex / Gemini) handles the whole
+    // turn over ACP, bypassing our own agent loop.
+    if (getProviderManifest(providerId)?.kind === 'local-cli') {
+      const spec = resolveAcpSpec(providerId, deps.workspaceRoot);
+      if (!spec) return c.text(`unknown local-cli provider ${providerId}`, 400);
+      log.info(`turn ${providerId} → external agent (acp)`);
+      // Resume the agent's prior session for this thread when the bound provider
+      // still matches, so a restart continues the same CLI conversation.
+      const bound = readAcpBinding(deps.db, threadId);
+      const resume = bound?.providerId === providerId ? bound.sessionId : undefined;
+      const acpStream = runExternalAgentTurn({
+        registry: acpSessions,
+        threadId,
+        spec,
+        resume,
+        messages: history,
+        abortSignal: abort.signal,
+        onSession: (sessionId) => writeAcpBinding(deps.db, threadId, providerId, sessionId),
+        onFinish: (m) =>
+          upsertMessage(deps.db, threadId, { ...m, metadata: { createdAt: Date.now() } }),
+      });
+      const sse = await startThreadStream(threadId, acpStream, abort);
+      return new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS });
+    }
 
     // use  run image gen if current model is image model
     const imageModel = isImageModel(modelId);
@@ -188,7 +227,14 @@ export function startHttpServer(deps: {
   // callback (server.address() is null synchronously right after).
   return new Promise((resolve) => {
     serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 }, (info) => {
-      resolve({ port: info.port, token: deps.token, dispose: () => bgShells.killAll() });
+      resolve({
+        port: info.port,
+        token: deps.token,
+        dispose: () => {
+          bgShells.killAll();
+          acpSessions.disposeAll();
+        },
+      });
     });
   });
 }

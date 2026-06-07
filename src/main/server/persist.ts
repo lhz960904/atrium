@@ -68,6 +68,42 @@ export function upsertMessage(db: Db, threadId: string, msg: UIMessage): void {
   db.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
 }
 
+type AcpBinding = { providerId: string; sessionId: string };
+
+/** The external ACP session this thread is bound to (provider + agent session id). */
+export function readAcpBinding(db: Db, threadId: string): AcpBinding | null {
+  const row = db
+    .select({ metadata: threads.metadata })
+    .from(threads)
+    .where(eq(threads.id, threadId))
+    .get();
+  const meta = (row?.metadata ?? null) as { acpSession?: AcpBinding } | null;
+  return meta?.acpSession ?? null;
+}
+
+/**
+ * Bind a thread to an external ACP session so a later app run can resume the
+ * agent's context via session/load. Merges into existing metadata; doesn't bump
+ * updatedAt (an internal binding, not a user-visible change).
+ */
+export function writeAcpBinding(
+  db: Db,
+  threadId: string,
+  providerId: string,
+  sessionId: string,
+): void {
+  const row = db
+    .select({ metadata: threads.metadata })
+    .from(threads)
+    .where(eq(threads.id, threadId))
+    .get();
+  const meta = (row?.metadata ?? {}) as Record<string, unknown>;
+  db.update(threads)
+    .set({ metadata: { ...meta, acpSession: { providerId, sessionId } } })
+    .where(eq(threads.id, threadId))
+    .run();
+}
+
 /**
  * Fill a client-side tool call's result into the stored message without running
  * the model — used when a clarification is cancelled: the call must be resolved

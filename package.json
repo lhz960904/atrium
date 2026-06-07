@@ -28,6 +28,8 @@
     "build:mac": "bun run build && electron-vite build && electron-builder --mac"
   },
   "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "^0.42.0",
+    "@agentclientprotocol/codex-acp": "^0.0.45",
     "@agentclientprotocol/sdk": "^0.25.0",
     "@ai-sdk/anthropic": "^3",
     "@ai-sdk/google": "^3",

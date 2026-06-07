@@ -8,8 +8,16 @@
  */
 
 export type ProviderKind = 'cloud-api' | 'local-cli';
-export type LocalCliProtocol = 'stream-json' | 'acp';
 export type CloudApiProtocol = 'anthropic' | 'openai-compatible' | 'google-gemini';
+
+/**
+ * How to launch a local CLI as an ACP agent. Some CLIs speak ACP natively (run
+ * their own binary); others need the official ACP adapter package, whose bin we
+ * resolve from node_modules.
+ */
+export type AcpLaunch =
+  | { via: 'binary'; command: string; args: readonly string[] }
+  | { via: 'adapter'; package: string; bin: string };
 
 export type CloudApiManifest = {
   id: string;
@@ -30,11 +38,7 @@ export type LocalCliManifest = {
   kind: 'local-cli';
   name: string;
   description: string;
-  protocol: LocalCliProtocol;
-  /** Conventional binary name to probe on PATH. */
-  binaryName: string;
-  /** Default extra args when spawning (e.g. ACP server subcommand). */
-  defaultExtraArgs: readonly string[];
+  acp: AcpLaunch;
 };
 
 export type ProviderManifest = CloudApiManifest | LocalCliManifest;
@@ -136,35 +140,26 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'claude-code',
     kind: 'local-cli',
     name: 'Claude Code',
-    description: '通过 Claude Agent SDK（stream-json NDJSON 协议）调用你本地已登录的 Claude Code。',
-    protocol: 'stream-json',
-    binaryName: 'claude',
-    defaultExtraArgs: [
-      '--print',
-      '--input-format',
-      'stream-json',
-      '--output-format',
-      'stream-json',
-    ],
+    description: '通过 ACP 调用你本地已登录的 Claude Code（复用订阅，无需 API key）。',
+    acp: {
+      via: 'adapter',
+      package: '@agentclientprotocol/claude-agent-acp',
+      bin: 'claude-agent-acp',
+    },
   },
   {
     id: 'codex-cli',
     kind: 'local-cli',
     name: 'Codex CLI',
-    description:
-      '通过 ACP（Agent Client Protocol）套壳 OpenAI Codex CLI，复用你本地已登录的 ChatGPT subscription。',
-    protocol: 'acp',
-    binaryName: 'codex',
-    defaultExtraArgs: ['acp'],
+    description: '通过 ACP 调用你本地已登录的 Codex CLI（复用 ChatGPT 订阅）。',
+    acp: { via: 'adapter', package: '@agentclientprotocol/codex-acp', bin: 'codex-acp' },
   },
   {
     id: 'gemini-cli',
     kind: 'local-cli',
     name: 'Gemini CLI',
-    description: '通过 ACP 套壳 Google Gemini CLI。',
-    protocol: 'acp',
-    binaryName: 'gemini',
-    defaultExtraArgs: ['--acp'],
+    description: '通过 ACP 调用你本地已登录的 Gemini CLI（自带 ACP）。',
+    acp: { via: 'binary', command: 'gemini', args: ['--acp'] },
   },
 ] as const;
 
