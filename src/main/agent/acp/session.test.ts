@@ -57,16 +57,15 @@ test('handshake reports empty auth methods and prompt forwards updates + stop re
     });
   });
 
-  const updates: SessionNotification['update'][] = [];
-  const session = new AcpSession(clientStream, {
-    onUpdate: (u) => updates.push(u),
-    onPermission: async () => ({ outcome: { outcome: 'cancelled' } }),
-  });
-
+  const session = new AcpSession(clientStream);
   const { authMethods } = await session.start('/ws');
   expect(authMethods).toEqual([]);
 
-  const stop = await session.prompt([{ type: 'text', text: 'hi' }]);
+  const updates: SessionNotification['update'][] = [];
+  const stop = await session.prompt([{ type: 'text', text: 'hi' }], {
+    onUpdate: (u) => updates.push(u),
+    onPermission: async () => ({ outcome: { outcome: 'cancelled' } }),
+  });
   expect(stop).toBe('end_turn');
   expect(updates.map((u) => u.sessionUpdate)).toEqual([
     'agent_thought_chunk',
@@ -74,9 +73,8 @@ test('handshake reports empty auth methods and prompt forwards updates + stop re
   ]);
 });
 
-test('forwards a permission request to the handler and returns its outcome', async () => {
+test('forwards a permission request to the current turn handler', async () => {
   const [clientStream, agentStream] = pairedStreams();
-  let granted: RequestPermissionRequest | null = null;
   fakeAgentSession(agentStream, async (conn, sessionId) => {
     await conn.requestPermission({
       sessionId,
@@ -88,16 +86,83 @@ test('forwards a permission request to the handler and returns its outcome', asy
     });
   });
 
-  const session = new AcpSession(clientStream, {
+  let granted: RequestPermissionRequest | null = null;
+  const session = new AcpSession(clientStream);
+  await session.start('/ws');
+  await session.prompt([{ type: 'text', text: 'edit it' }], {
     onUpdate: () => {},
     onPermission: async (req) => {
       granted = req;
       return { outcome: { outcome: 'selected', optionId: 'allow' } };
     },
   });
-  await session.start('/ws');
-  await session.prompt([{ type: 'text', text: 'edit it' }]);
 
   expect(granted).not.toBeNull();
   expect((granted as RequestPermissionRequest).toolCall.title).toBe('Edit file');
+});
+
+test('resume uses session/load when the agent supports it', async () => {
+  const [clientStream, agentStream] = pairedStreams();
+  let loaded: string | null = null;
+  const agent: Agent = {
+    async initialize(p) {
+      return {
+        protocolVersion: p.protocolVersion,
+        agentCapabilities: { loadSession: true },
+        authMethods: [],
+      };
+    },
+    async newSession() {
+      return { sessionId: 'fresh' };
+    },
+    async loadSession(p) {
+      loaded = p.sessionId;
+      return {};
+    },
+    async authenticate() {
+      return {};
+    },
+    async prompt() {
+      return { stopReason: 'end_turn' };
+    },
+    async cancel() {},
+  };
+  new AgentSideConnection(() => agent, agentStream);
+
+  const session = new AcpSession(clientStream);
+  const { sessionId } = await session.start('/ws', 'prior-1');
+  expect(loaded).toBe('prior-1'); // loaded the prior session, not a fresh one
+  expect(sessionId).toBe('prior-1');
+});
+
+test('reuses one session across multiple prompt turns', async () => {
+  const [clientStream, agentStream] = pairedStreams();
+  let prompts = 0;
+  fakeAgentSession(agentStream, async (conn, sessionId) => {
+    prompts += 1;
+    await conn.sessionUpdate({
+      sessionId,
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: `turn ${prompts}` },
+      },
+    });
+  });
+
+  const session = new AcpSession(clientStream);
+  await session.start('/ws');
+
+  const seen: string[] = [];
+  const handlers = {
+    onUpdate: (u: SessionNotification['update']) => {
+      if (u.sessionUpdate === 'agent_message_chunk' && u.content.type === 'text')
+        seen.push(u.content.text);
+    },
+    onPermission: async () => ({ outcome: { outcome: 'cancelled' as const } }),
+  };
+  await session.prompt([{ type: 'text', text: 'a' }], handlers);
+  await session.prompt([{ type: 'text', text: 'b' }], handlers);
+
+  // Two turns, one session (newSession was called once — see the fake agent).
+  expect(seen).toEqual(['turn 1', 'turn 2']);
 });
