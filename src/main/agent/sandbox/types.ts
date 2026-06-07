@@ -1,7 +1,7 @@
 /**
  * Filesystem + command-execution abstraction the tools run against.
  *
- * Tools never touch node:fs / node-pty directly — they go through a Sandbox.
+ * Tools never touch node:fs / child processes directly — they go through a Sandbox.
  * This keeps tools unit-testable (inject a mock) and leaves a seam for future
  * sandbox backends (ACP / remote). LocalSandbox is the only impl for now.
  *

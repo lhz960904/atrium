@@ -1,6 +1,6 @@
+import { spawn } from 'node:child_process';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import * as pty from 'node-pty';
 import { shouldIgnore } from './ignore';
 import { resolveInWorkspace } from './paths';
 import type { Sandbox } from './types';
@@ -8,7 +8,7 @@ import type { Sandbox } from './types';
 const EXEC_TIMEOUT_MS = 120_000;
 
 /**
- * Local filesystem + PTY sandbox rooted at a workspace directory. NOT a
+ * Local filesystem + shell sandbox rooted at a workspace directory. NOT a
  * security jail: it confines the *path* tools to the workspace (rejecting
  * `..`/absolute escapes) and runs commands with the user's own permissions —
  * the trust model of a local coding agent.
@@ -56,25 +56,28 @@ export class LocalSandbox implements Sandbox {
   }
 
   exec(command: string): Promise<{ output: string; exitCode: number }> {
-    return new Promise((resolvePromise) => {
+    return new Promise((resolvePromise, reject) => {
       const shell = process.env.SHELL || '/bin/zsh';
-      const child = pty.spawn(shell, ['-lc', command], {
-        cwd: this.root,
-        env: process.env as Record<string, string>,
-        cols: 120,
-        rows: 40,
-      });
+      // A pipe (not a PTY): stdout isn't a tty, so CLIs auto-drop color and
+      // progress animations, leaving clean text for the model.
+      const child = spawn(shell, ['-lc', command], { cwd: this.root, env: process.env });
       let out = '';
+      const collect = (d: Buffer): void => {
+        out += d.toString('utf8');
+      };
+      child.stdout?.on('data', collect);
+      child.stderr?.on('data', collect);
       const timer = setTimeout(() => {
         out += '\n[timed out]';
         child.kill();
       }, EXEC_TIMEOUT_MS);
-      child.onData((d) => {
-        out += d;
-      });
-      child.onExit(({ exitCode }) => {
+      child.on('error', (err) => {
         clearTimeout(timer);
-        resolvePromise({ output: out, exitCode });
+        reject(err);
+      });
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolvePromise({ output: out, exitCode: code ?? 0 });
       });
     });
   }

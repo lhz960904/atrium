@@ -1,6 +1,6 @@
 /**
  * Directory entries the `list` traversal skips — VCS / dependency / build /
- * cache noise that would drown a listing. Pure + node-pty-free so it's
+ * cache noise that would drown a listing. Pure + dependency-free so it's
  * directly unit-testable.
  */
 const IGNORE_NAMES = new Set([

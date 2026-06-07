@@ -8,7 +8,7 @@ const BASH_MAX = 20_000;
 export const bashTool = (ctx: ToolCtx) =>
   tool({
     description:
-      'Run a command in the workspace via a real shell (PTY). Use for any shell task — inspecting files, running scripts, system operations, and so on. Use absolute paths under the workspace. For a long-running command that never returns on its own (a dev server, file watcher, `tail -f`), set run_in_background — a foreground command would hang until it times out.',
+      'Run a command in the workspace via a real shell. Use for any shell task — inspecting files, running scripts, system operations, and so on. Use absolute paths under the workspace. For a long-running command that never returns on its own (a dev server, file watcher, `tail -f`), set run_in_background — a foreground command would hang until it times out.',
     inputSchema: z.object({
       description: z
         .string()
@@ -29,7 +29,6 @@ export const bashTool = (ctx: ToolCtx) =>
       }
       try {
         const { output, exitCode } = await ctx.sandbox.exec(command);
-        // PTYs append \r\n noise; trim the tail before formatting.
         const text = output.trimEnd();
         const body = text === '' ? '(no output)' : middleTruncate(text, BASH_MAX);
         return exitCode === 0 ? body : `${body}\nExit Code: ${exitCode}`;

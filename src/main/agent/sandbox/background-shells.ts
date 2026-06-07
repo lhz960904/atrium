@@ -1,4 +1,4 @@
-import * as pty from 'node-pty';
+import { spawn } from 'node:child_process';
 
 /**
  * Registry of long-running shell processes that outlive a single tool call —
@@ -11,7 +11,7 @@ import * as pty from 'node-pty';
 
 const MAX_BUFFER = 1_000_000;
 
-/** The slice of node-pty's IPty we depend on — injectable so tests need no real process. */
+/** The slice of a spawned child process we depend on — injectable so tests need no real process. */
 export type ShellProc = {
   onData(cb: (data: string) => void): void;
   onExit(cb: (e: { exitCode: number }) => void): void;
@@ -38,13 +38,22 @@ type Session = {
 };
 
 const defaultSpawn: SpawnShell = (command, cwd) => {
-  const shell = process.env.SHELL || '/bin/zsh';
-  return pty.spawn(shell, ['-lc', command], {
-    cwd,
-    env: process.env as Record<string, string>,
-    cols: 120,
-    rows: 40,
-  });
+  // A pipe (not a PTY): dev servers and watchers detect the non-tty stdout and
+  // emit plain text instead of color + spinner redraws, which keeps the buffer
+  // readable for the model.
+  const child = spawn(process.env.SHELL || '/bin/zsh', ['-lc', command], { cwd, env: process.env });
+  return {
+    onData(cb) {
+      child.stdout?.on('data', (d: Buffer) => cb(d.toString('utf8')));
+      child.stderr?.on('data', (d: Buffer) => cb(d.toString('utf8')));
+    },
+    onExit(cb) {
+      child.on('close', (code) => cb({ exitCode: code ?? 0 }));
+    },
+    kill() {
+      child.kill();
+    },
+  };
 };
 
 export class BackgroundShells {
