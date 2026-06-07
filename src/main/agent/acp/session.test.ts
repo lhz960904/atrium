@@ -44,7 +44,7 @@ function fakeAgentSession(
   conn = new AgentSideConnection(() => agent, agentStream);
 }
 
-test('handshake reports empty auth methods and prompt forwards updates + stop reason', async () => {
+test('handshake opens a session and prompt forwards updates + stop reason', async () => {
   const [clientStream, agentStream] = pairedStreams();
   fakeAgentSession(agentStream, async (conn, sessionId) => {
     await conn.sessionUpdate({
@@ -58,8 +58,8 @@ test('handshake reports empty auth methods and prompt forwards updates + stop re
   });
 
   const session = new AcpSession(clientStream);
-  const { authMethods } = await session.start('/ws');
-  expect(authMethods).toEqual([]);
+  const { sessionId } = await session.start('/ws');
+  expect(sessionId).toBe('sess_1');
 
   const updates: SessionNotification['update'][] = [];
   const stop = await session.prompt([{ type: 'text', text: 'hi' }], {
@@ -165,4 +165,9 @@ test('reuses one session across multiple prompt turns', async () => {
 
   // Two turns, one session (newSession was called once — see the fake agent).
   expect(seen).toEqual(['turn 1', 'turn 2']);
+});
+
+test('start() rejects (does not crash) when the adapter binary is missing', async () => {
+  const session = AcpSession.spawn('atrium-nonexistent-acp-xyz', [], '/tmp');
+  await expect(session.start('/tmp')).rejects.toThrow(/not found/);
 });

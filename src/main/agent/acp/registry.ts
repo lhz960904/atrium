@@ -1,4 +1,3 @@
-import type { AuthMethod } from '@agentclientprotocol/sdk';
 import { AcpSession } from './session';
 
 export type AcpSpec = {
@@ -9,9 +8,7 @@ export type AcpSpec = {
   env?: NodeJS.ProcessEnv;
 };
 
-export type AcquireResult =
-  | { ok: true; session: AcpSession; sessionId: string }
-  | { ok: false; authMethods: AuthMethod[] };
+export type AcquireResult = { session: AcpSession; sessionId: string };
 
 type Connect = (spec: AcpSpec) => AcpSession;
 const defaultConnect: Connect = (s) => AcpSession.spawn(s.command, s.args, s.cwd, s.env);
@@ -36,11 +33,13 @@ export class AcpSessionRegistry {
    * Reuse the thread's live session (same provider) or start a fresh one.
    * `resume` is the persisted session id from a prior app run — used only on a
    * cold start (no live session), to reconnect the agent's context via load.
+   * Throws if the adapter can't start (e.g. not installed); a dead session is
+   * never cached, so the next attempt retries cleanly.
    */
   async acquire(threadId: string, spec: AcpSpec, resume?: string): Promise<AcquireResult> {
     const existing = this.byThread.get(threadId);
     if (existing && existing.providerId === spec.providerId) {
-      return { ok: true, session: existing.session, sessionId: existing.sessionId };
+      return { session: existing.session, sessionId: existing.sessionId };
     }
     if (existing) {
       existing.session.dispose();
@@ -48,14 +47,15 @@ export class AcpSessionRegistry {
     }
 
     const session = this.connect(spec);
-    const { authMethods, sessionId } = await session.start(spec.cwd, resume);
-    if (authMethods.length > 0) {
+    let sessionId: string;
+    try {
+      sessionId = (await session.start(spec.cwd, resume)).sessionId;
+    } catch (err) {
       session.dispose();
-      return { ok: false, authMethods };
+      throw err;
     }
-    const id = sessionId ?? '';
-    this.byThread.set(threadId, { session, providerId: spec.providerId, sessionId: id });
-    return { ok: true, session, sessionId: id };
+    this.byThread.set(threadId, { session, providerId: spec.providerId, sessionId });
+    return { session, sessionId };
   }
 
   /** Drop a thread's session (e.g. thread deleted). */

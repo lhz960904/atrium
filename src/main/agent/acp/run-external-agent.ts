@@ -62,21 +62,14 @@ export function runExternalAgentTurn(
     onFinish: ({ responseMessage }) => opts.onFinish(responseMessage),
     execute: async ({ writer }) => {
       const emitter = new ChunkEmitter(writer);
-      const acquired = await opts.registry.acquire(opts.threadId, opts.spec, opts.resume);
-      if (!acquired.ok) {
-        const names = acquired.authMethods.map((m) => m.name).join(', ') || 'sign-in';
-        emitter.handle({
-          sessionUpdate: 'agent_message_chunk',
-          content: {
-            type: 'text',
-            text: `This agent isn't signed in (${names}). Run its login command in a terminal, then try again.`,
-          },
-        });
-        emitter.flush();
-        return;
-      }
-      const { session } = acquired;
-      opts.onSession?.(acquired.sessionId);
+      // acquire() throws if the adapter can't start (not installed, etc.); the
+      // stream's onError turns that into a readable error in the chat.
+      const { session, sessionId } = await opts.registry.acquire(
+        opts.threadId,
+        opts.spec,
+        opts.resume,
+      );
+      opts.onSession?.(sessionId);
       const onAbort = (): void => void session.cancel();
       opts.abortSignal?.addEventListener('abort', onAbort);
       try {

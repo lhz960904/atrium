@@ -1,17 +1,17 @@
 import { expect, test } from 'bun:test';
-import type { AuthMethod } from '@agentclientprotocol/sdk';
 import { AcpSessionRegistry, type AcpSpec } from './registry';
 import type { AcpSession } from './session';
 
 type FakeSession = AcpSession & { disposed: boolean; resumeArg?: string };
 
-function fakeSession(authMethods: AuthMethod[] = [], sessionId = 'sess'): FakeSession {
+function fakeSession(opts: { sessionId?: string; failStart?: Error } = {}): FakeSession {
   const s = {
     disposed: false,
     resumeArg: undefined as string | undefined,
     async start(_cwd: string, resume?: string) {
       s.resumeArg = resume;
-      return { authMethods, sessionId };
+      if (opts.failStart) throw opts.failStart;
+      return { sessionId: opts.sessionId ?? 'sess' };
     },
     dispose() {
       s.disposed = true;
@@ -31,18 +31,13 @@ function harness(queue: FakeSession[]) {
   return { reg, made };
 }
 
-const spec = (providerId: string): AcpSpec => ({
-  providerId,
-  command: 'x',
-  args: [],
-  cwd: '/ws',
-});
+const spec = (providerId: string): AcpSpec => ({ providerId, command: 'x', args: [], cwd: '/ws' });
 
 test('passes the resume id to start and returns the new session id', async () => {
-  const s = fakeSession([], 'sess-xyz');
+  const s = fakeSession({ sessionId: 'sess-xyz' });
   const { reg } = harness([s]);
   const r = await reg.acquire('t1', spec('claude'), 'prior-123');
-  expect(r.ok && r.sessionId).toBe('sess-xyz');
+  expect(r.sessionId).toBe('sess-xyz');
   expect(s.resumeArg).toBe('prior-123');
 });
 
@@ -50,7 +45,7 @@ test('reuses the same session for the same thread + provider', async () => {
   const { reg, made } = harness([fakeSession()]);
   const a = await reg.acquire('t1', spec('claude'));
   const b = await reg.acquire('t1', spec('claude'));
-  expect(a.ok && b.ok && a.session === b.session).toBe(true);
+  expect(a.session === b.session).toBe(true);
   expect(made.length).toBe(1); // connected once, reused
 });
 
@@ -63,18 +58,15 @@ test('switching provider disposes the old session and starts a new one', async (
   expect(made.length).toBe(2);
 });
 
-test('a not-signed-in session is disposed and not cached', async () => {
-  const needsAuth = fakeSession([{ id: 'oauth', name: 'Sign in' }]);
-  const { reg, made } = harness([needsAuth, fakeSession()]);
+test('a session that fails to start is disposed and not cached', async () => {
+  const dead = fakeSession({ failStart: new Error('codex-acp not found') });
+  const { reg, made } = harness([dead, fakeSession()]);
 
-  const r = await reg.acquire('t1', spec('codex'));
-  expect(r.ok).toBe(false);
-  if (!r.ok) expect(r.authMethods[0].name).toBe('Sign in');
-  expect(needsAuth.disposed).toBe(true);
+  await expect(reg.acquire('t1', spec('codex'))).rejects.toThrow('not found');
+  expect(dead.disposed).toBe(true);
 
-  // Next attempt (e.g. after login) starts a fresh session, not the cached one.
-  const r2 = await reg.acquire('t1', spec('codex'));
-  expect(r2.ok).toBe(true);
+  // Next attempt starts a fresh session, not the cached (dead) one.
+  await reg.acquire('t1', spec('codex'));
   expect(made.length).toBe(2);
 });
 
