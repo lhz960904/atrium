@@ -3,6 +3,7 @@ import {
   Bot,
   FilePen,
   FilePenLine,
+  FileSearch,
   FileText,
   FolderTree,
   Globe,
@@ -13,6 +14,7 @@ import {
   Search,
   Sparkles,
   Terminal,
+  TextSearch,
 } from 'lucide-react';
 
 /**
@@ -33,6 +35,7 @@ export type ToolInput = {
   name?: string;
   prompt?: string;
   shell_id?: string;
+  pattern?: string;
 };
 
 const hostname = (u?: string): string => {
@@ -84,6 +87,18 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     verb: 'Listed',
     target: (i) => basename(i.path) || 'workspace',
     typeLabel: (i) => `Directory · ${i.path ?? '.'}`,
+  },
+  grep: {
+    icon: TextSearch,
+    verb: 'Searched',
+    target: (i) => i.pattern ?? '',
+    typeLabel: (i) => `Grep · ${i.path ?? 'workspace'}`,
+  },
+  glob: {
+    icon: FileSearch,
+    verb: 'Found files',
+    target: (i) => i.pattern ?? '',
+    typeLabel: (i) => `Glob · ${i.path ?? 'workspace'}`,
   },
   bash: {
     icon: Terminal,

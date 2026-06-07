@@ -10,6 +10,8 @@ export const TOOL_NAMES = [
   'write_file',
   'edit_file',
   'list_dir',
+  'grep',
+  'glob',
   'bash',
   'bash_output',
   'kill_shell',

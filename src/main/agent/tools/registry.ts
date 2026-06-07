@@ -7,6 +7,8 @@ import { askClarificationTool } from './builtins/ask-clarification';
 import { bashTool } from './builtins/bash';
 import { bashOutputTool } from './builtins/bash-output';
 import { editFileTool } from './builtins/edit-file';
+import { globTool } from './builtins/glob';
+import { grepTool } from './builtins/grep';
 import { imageGenTool } from './builtins/image-gen';
 import { killShellTool } from './builtins/kill-shell';
 import { listDirTool } from './builtins/list-dir';
@@ -31,6 +33,8 @@ export function getTools(ctx: ToolCtx): Record<ToolName, Tool> {
     write_file: writeFileTool(ctx),
     edit_file: editFileTool(ctx),
     list_dir: listDirTool(ctx),
+    grep: grepTool(ctx),
+    glob: globTool(ctx),
     bash: bashTool(ctx),
     bash_output: bashOutputTool(ctx),
     kill_shell: killShellTool(ctx),
