@@ -6,12 +6,21 @@ export type AcpSpec = {
   args: string[];
   cwd: string;
   env?: NodeJS.ProcessEnv;
+  /** Human name + install package, used to phrase a "not installed" error. */
+  label?: string;
+  install?: string;
 };
 
 export type AcquireResult = { session: AcpSession; sessionId: string };
 
 type Connect = (spec: AcpSpec) => AcpSession;
-const defaultConnect: Connect = (s) => AcpSession.spawn(s.command, s.args, s.cwd, s.env);
+const defaultConnect: Connect = (s) =>
+  AcpSession.spawn(s.command, s.args, s.cwd, s.env, notInstalledMessage(s));
+
+function notInstalledMessage(s: AcpSpec): string | undefined {
+  if (!s.install) return undefined;
+  return `${s.label ?? s.command} 未安装。请运行: npm i -g ${s.install}（并确保它在 PATH 中）。`;
+}
 
 /**
  * Per-thread registry of long-lived ACP sessions — a main-process singleton.

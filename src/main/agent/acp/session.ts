@@ -74,8 +74,15 @@ export class AcpSession {
     this.conn = new ClientSideConnection(() => client, stream);
   }
 
-  /** Spawn the adapter and build a session around its stdio. */
-  static spawn(command: string, args: string[], cwd: string, env?: NodeJS.ProcessEnv): AcpSession {
+  /** Spawn the adapter and build a session around its stdio. `notFound` is the
+   *  message to surface when the binary is missing (ENOENT). */
+  static spawn(
+    command: string,
+    args: string[],
+    cwd: string,
+    env?: NodeJS.ProcessEnv,
+    notFound?: string,
+  ): AcpSession {
     const { child, stream } = spawnAcpStream(command, args, cwd, env);
     const session = new AcpSession(stream, child);
     // A spawn failure (ENOENT = adapter not installed, EACCES, …) arrives as an
@@ -85,7 +92,8 @@ export class AcpSession {
       const e =
         err.code === 'ENOENT'
           ? new Error(
-              `${command} not found — install the CLI/adapter (npm i -g …) and make sure it's on your PATH.`,
+              notFound ??
+                `${command} not found — install the CLI/adapter (npm i -g …) and make sure it's on your PATH.`,
             )
           : err;
       session.spawnError = e;

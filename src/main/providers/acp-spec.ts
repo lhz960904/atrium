@@ -10,7 +10,9 @@ import { getProviderManifest } from './manifest';
 export function resolveAcpSpec(providerId: string, cwd: string): AcpSpec | null {
   const m = getProviderManifest(providerId);
   if (!m || m.kind !== 'local-cli') return null;
-  return m.acp.via === 'binary'
-    ? { providerId, cwd, command: m.acp.command, args: [...m.acp.args] }
-    : { providerId, cwd, command: m.acp.bin, args: [] };
+  const launch =
+    m.acp.via === 'binary'
+      ? { command: m.acp.command, args: [...m.acp.args] }
+      : { command: m.acp.bin, args: [] };
+  return { providerId, cwd, label: m.name, install: m.install, ...launch };
 }
