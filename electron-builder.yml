@@ -24,6 +24,12 @@ extraResources:
 asarUnpack:
   - resources/**
 mac:
+  # No Apple Developer ID in CI, so the app is only ad-hoc signed. Hardened
+  # Runtime enforces Library Validation (same Team ID for all nested code),
+  # which an ad-hoc signature can't satisfy — on macOS 14+ that makes dyld
+  # reject Electron Framework at launch ("different Team IDs"). Disable it so
+  # the ad-hoc build launches; re-enable once we sign + notarize with a real ID.
+  hardenedRuntime: false
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Atrium 需要访问相机以支持相关功能。
