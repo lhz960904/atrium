@@ -1,5 +1,9 @@
 appId: com.atrium.app
 productName: Atrium
+publish:
+  provider: github
+  owner: lhz960904
+  repo: atrium
 directories:
   buildResources: build
 files:
@@ -28,5 +32,17 @@ mac:
     - NSDownloadsFolderUsageDescription: Atrium 需要访问"下载"文件夹以保存生成的产物。
   notarize: false
 dmg:
+  artifactName: ${name}-${version}.${ext}
+win:
+  target:
+    - nsis
+  artifactName: ${name}-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+linux:
+  target:
+    - AppImage
+  category: Development
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false

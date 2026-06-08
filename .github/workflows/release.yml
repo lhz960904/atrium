@@ -1,0 +1,62 @@
+name: Release
+
+# Push a tag like v0.1.0 (matching package.json "version") to build installers on
+# all three OSes and upload them to a GitHub Release (created as a draft by
+# electron-builder — review it, then publish). Run manually via "Run workflow"
+# for a build-only dry run that doesn't publish.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # Gate packaging on a green lint + typecheck + test run.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun test
+
+  release:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: windows-latest
+            platform: win
+          - os: ubuntu-latest
+            platform: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # postinstall runs electron-builder install-app-deps, rebuilding native
+      # modules (better-sqlite3) against this runner's Electron ABI.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build renderer + main
+        run: bun run build
+
+      - name: Package and publish
+        run: bunx electron-builder --${{ matrix.platform }} --publish ${{ github.event_name == 'push' && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No Apple signing certs in CI — don't attempt to sign/notarize.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
