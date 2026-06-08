@@ -10,12 +10,7 @@ import type {
   TraceSegment,
 } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
-import {
-  type DynamicToolUIPart,
-  getStaticToolName,
-  isStaticToolUIPart,
-  type ToolUIPart,
-} from 'ai';
+import { type DynamicToolUIPart, getStaticToolName, isStaticToolUIPart, type ToolUIPart } from 'ai';
 import { type MarkerToolName, TOOL_PRESENTATION, type ToolInput } from './tool-presentation';
 
 /**

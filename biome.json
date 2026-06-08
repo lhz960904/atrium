@@ -17,7 +17,8 @@
       "!**/design",
       "!**/drizzle/migrations",
       "!**/routeTree.gen.ts",
-      "!**/*.css"
+      "!**/*.css",
+      "!**/litellm.snapshot.json"
     ]
   },
   "formatter": {
