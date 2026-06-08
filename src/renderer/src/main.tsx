@@ -2,16 +2,20 @@ import './assets/styles.css';
 import './state/theme-store'; // initialize theme from persisted store + system listener
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createRouter, RouterProvider } from '@tanstack/react-router';
+import { createHashHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { ipcLink } from 'electron-trpc/renderer';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { trpc } from './lib/trpc';
 import { routeTree } from './routeTree.gen';
 
+// Hash history so routing works when the packaged app loads the renderer over
+// file:// — browser history would read the on-disk index.html path as the route
+// and resolve to Not Found.
 const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
+  history: createHashHistory(),
 });
 
 declare module '@tanstack/react-router' {
