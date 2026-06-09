@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server';
+import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
 import { UI_MESSAGE_STREAM_HEADERS, type UIMessage } from 'ai';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -46,6 +47,7 @@ type ChatBody = {
   providerId: string;
   modelId: string;
   message: UIMessage;
+  permissionMode?: PermissionMode;
 };
 
 /**
@@ -87,7 +89,7 @@ export function startHttpServer(deps: {
   });
 
   app.post('/api/chat', async (c) => {
-    const { threadId, providerId, modelId, message } = await c.req.json<ChatBody>();
+    const { threadId, providerId, modelId, message, permissionMode } = await c.req.json<ChatBody>();
     if (!threadId) return c.text('threadId required', 400);
 
     // Persist the just-sent user message, then rebuild the full history from
@@ -164,6 +166,7 @@ export function startHttpServer(deps: {
         db: deps.db,
         skills,
         bgShells,
+        permission: { mode: permissionMode ?? DEFAULT_PERMISSION_MODE },
       }),
       // skills must run after compaction: compaction may fold the original first
       // user message into a summary, and the skill index has to land on whatever

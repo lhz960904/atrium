@@ -1,4 +1,5 @@
 import type { AtriumUIMessage } from '@shared/chat';
+import type { PermissionMode } from '@shared/permissions';
 import { DefaultChatTransport } from 'ai';
 
 /**
@@ -12,7 +13,12 @@ import { DefaultChatTransport } from 'ai';
 export function makeChatTransport(
   baseUrl: string,
   token: string,
-  getExtra: () => { threadId: string; providerId?: string; modelId?: string },
+  getExtra: () => {
+    threadId: string;
+    providerId?: string;
+    modelId?: string;
+    permissionMode?: PermissionMode;
+  },
 ): DefaultChatTransport<AtriumUIMessage> {
   return new DefaultChatTransport<AtriumUIMessage>({
     api: `${baseUrl}/api/chat`,

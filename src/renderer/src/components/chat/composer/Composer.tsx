@@ -10,6 +10,7 @@ import { ATTACHMENT_ACCEPT, classifyAttachment } from '../../../lib/attachments'
 import { useChatModel } from '../../../lib/use-chat-model';
 import { toast } from '../../../state/toast-store';
 import { ModelPicker } from '../../ModelPicker';
+import { PermissionPicker } from '../../PermissionPicker';
 import { type Attachment, AttachmentChip } from './AttachmentChip';
 import { SlashMenu } from './SlashMenu';
 import { type SlashCommand, useSlashMenu } from './slash-menu';
@@ -172,6 +173,7 @@ export function Composer({
         >
           <Plus className="size-[14px]" />
         </button>
+        <PermissionPicker />
         <span className="flex-1" />
         {/* refocus the editor after a model pick (popover steals focus) */}
         <ModelPicker

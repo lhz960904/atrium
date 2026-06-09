@@ -11,6 +11,7 @@ import {
 import { useCompactionStore } from '../state/compaction-store';
 import { useImageGenStore } from '../state/image-gen-store';
 import { useModelStore } from '../state/model-store';
+import { usePermissionStore } from '../state/permission-store';
 import { useSubagentStore } from '../state/subagent-store';
 import { makeChatTransport } from './chat-transport';
 
@@ -82,7 +83,12 @@ export function getThreadChat(
     // mid-session model switch applies to the next send without rebuilding.
     transport: makeChatTransport(seed.baseUrl, seed.token, () => {
       const m = useModelStore.getState().selected;
-      return { threadId, providerId: m?.providerId, modelId: m?.modelId };
+      return {
+        threadId,
+        providerId: m?.providerId,
+        modelId: m?.modelId,
+        permissionMode: usePermissionStore.getState().mode,
+      };
     }),
     // Two completions resume a turn automatically: a tool call that now has its
     // output (ask_clarification answered, or any settled tool), and an approval
