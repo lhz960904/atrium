@@ -2,6 +2,7 @@ import type { ToolName } from '@shared/tools';
 import type { Tool } from 'ai';
 import { listEnabledImageModels } from '../../providers/image-models';
 import { maxContextTokens } from '../models/catalog';
+import { makeNeedsApproval } from '../permissions';
 import { listSubagentDefs } from '../subagent/defs';
 import { askClarificationTool } from './builtins/ask-clarification';
 import { bashTool } from './builtins/bash';
@@ -27,15 +28,21 @@ import type { ToolCtx } from './context';
  * The task tool advertises the available subagents (from ctx.db), resolved per
  * call so freshly created ones show up.
  */
+/** Gate a tool behind the permission check — it pauses for approval when the
+ *  call crosses the workspace boundary under the active mode. */
+function gate(name: ToolName, ctx: ToolCtx, t: Tool): Tool {
+  return { ...t, needsApproval: makeNeedsApproval(name, ctx) };
+}
+
 export function getTools(ctx: ToolCtx): Record<ToolName, Tool> {
   return {
     read_file: readFileTool(ctx),
-    write_file: writeFileTool(ctx),
-    edit_file: editFileTool(ctx),
+    write_file: gate('write_file', ctx, writeFileTool(ctx)),
+    edit_file: gate('edit_file', ctx, editFileTool(ctx)),
     list_dir: listDirTool(ctx),
     grep: grepTool(ctx),
     glob: globTool(ctx),
-    bash: bashTool(ctx),
+    bash: gate('bash', ctx, bashTool(ctx)),
     bash_output: bashOutputTool(ctx),
     kill_shell: killShellTool(ctx),
     todo_write: todoWriteTool(),

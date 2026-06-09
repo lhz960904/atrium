@@ -2,45 +2,58 @@ import { Check, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PendingApproval } from '../../lib/approvals';
 
-/** Brief dwell so the decision registers before the card resolves and unmounts. */
-const CONFIRM_MS = 900;
+/** Hold the confirmation this long, then slide out and send the response. */
+const CONFIRM_HOLD_MS = 600;
+const FADE_MS = 180;
+const SLIDE_MS = 240;
 
 type ApprovalCardProps = {
   approval: PendingApproval;
   /** How many further approvals are queued behind this one. */
   more: number;
-  /** Square the top corners so it sits flush under the plan panel. */
-  attachedTop: boolean;
   onApprove: (approvalId: string) => void;
   onDeny: (approvalId: string) => void;
 };
 
 /**
  * The transient gate above the composer when a tool call crosses the workspace
- * boundary. It shows what's about to run and why, takes the decision, then
- * confirms briefly and dismisses — the lasting record is the tool marker in the
- * conversation, not a banner here. The response is sent after the dwell, so the
- * card stays mounted (its part is still awaiting approval) for that beat.
+ * boundary. It fades in at full height (a height-grow animation fights the
+ * bottom-docked layout and tears a gap above the composer mid-transition, so
+ * we don't), shows what's about to run and why, takes the decision, confirms
+ * briefly, then fades out — the lasting record is the tool marker in the
+ * conversation, not a banner here. The response is sent only after the fade,
+ * so the card (its part still awaiting approval) stays mounted through it.
  */
 export function ApprovalCard({
   approval,
   more,
-  attachedTop,
   onApprove,
   onDeny,
 }: ApprovalCardProps): React.JSX.Element {
+  const [shown, setShown] = useState(false);
   const [decided, setDecided] = useState<'once' | 'deny' | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  useEffect(() => () => clearTimeout(timer.current), []);
+  // Fade in on mount; the rAF lets the 0→1 opacity transition actually run.
+  useEffect(() => {
+    const r = requestAnimationFrame(() => setShown(true));
+    const pending = timers.current;
+    return () => {
+      cancelAnimationFrame(r);
+      for (const t of pending) clearTimeout(t);
+    };
+  }, []);
 
   const decide = (kind: 'once' | 'deny'): void => {
     if (decided) return;
     setDecided(kind);
-    timer.current = setTimeout(() => {
-      if (kind === 'deny') onDeny(approval.approvalId);
-      else onApprove(approval.approvalId);
-    }, CONFIRM_MS);
+    timers.current.push(
+      setTimeout(() => setShown(false), CONFIRM_HOLD_MS),
+      setTimeout(
+        () => (kind === 'deny' ? onDeny(approval.approvalId) : onApprove(approval.approvalId)),
+        CONFIRM_HOLD_MS + SLIDE_MS,
+      ),
+    );
   };
 
   const danger = approval.crossing?.kind === 'dangerous';
@@ -48,8 +61,16 @@ export function ApprovalCard({
   const reason = approval.crossing?.reason ?? '需要确认';
 
   return (
+    // Slides up out of the composer (which paints on top, masking the lower
+    // edge) — a toast-style entrance. Transform only, never height: a height
+    // grow tears a gap in this bottom-docked layout.
     <div
-      className={`overflow-hidden border border-border-default border-b-0 bg-surface ${attachedTop ? '' : 'rounded-t-xl'}`}
+      style={{
+        opacity: shown ? 1 : 0,
+        transform: shown ? 'translateY(0)' : 'translateY(24px)',
+        transition: `opacity ${FADE_MS}ms var(--ease-out), transform ${SLIDE_MS}ms var(--ease-out)`,
+      }}
+      className="overflow-hidden rounded-t-xl border border-border-default border-b-0 bg-surface"
     >
       {decided ? (
         <div

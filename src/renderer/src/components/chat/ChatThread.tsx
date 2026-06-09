@@ -176,13 +176,13 @@ export function ChatThread({
       </div>
       <div className="shrink-0 px-6 pt-2 pb-4">
         <div className="mx-auto max-w-[760px]">
-          {plan != null && <PlanPanel todos={plan} />}
+          {/* An approval takes the slot alone — the plan panel hides until it resolves. */}
+          {plan != null && !approvalPending && <PlanPanel todos={plan} />}
           {approvalPending && (
             <ApprovalCard
               key={approvals[0].approvalId}
               approval={approvals[0]}
               more={approvals.length - 1}
-              attachedTop={plan != null}
               onApprove={onApprove}
               onDeny={onDeny}
             />
