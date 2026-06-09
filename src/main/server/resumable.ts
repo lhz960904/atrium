@@ -85,10 +85,15 @@ export function startThreadStream(
 }
 
 /**
- * Reattach to a thread's live (or just-finished, still-buffered) stream, or
- * null when nothing is buffered — the caller then falls back to the DB.
+ * Reattach to a thread's *still-running* stream, or null — the caller then
+ * falls back to the DB. A finished run's buffer lingers in the store (TTL), but
+ * its message is already persisted in the DB the client seeds from, so
+ * replaying it would duplicate the content. A turn paused at an approval counts
+ * as finished here (it waits on the user's decision, not on the stream), so a
+ * reload during a pending approval rebuilds from the DB instead of replaying.
  */
 export function resumeThreadStream(threadId: string): Promise<ReadableStream<Uint8Array> | null> {
+  if (!runningThreads.has(threadId)) return Promise.resolve(null);
   const streamId = activeStreamByThread.get(threadId);
   if (!streamId) return Promise.resolve(null);
   return context.resume(streamId);
