@@ -1,33 +1,8 @@
 import * as Popover from '@radix-ui/react-popover';
-import type { PermissionMode } from '@shared/permissions';
-import { Bot, Check, ChevronDown, Shield, ShieldOff } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
-import { usePermissionStore } from '../state/permission-store';
-
-type ModeMeta = {
-  id: PermissionMode;
-  label: string;
-  desc: string;
-  icon: typeof Shield;
-  disabled?: boolean;
-};
-
-const MODES: ModeMeta[] = [
-  {
-    id: 'default',
-    label: '默认权限',
-    desc: '越界操作（联网 / 外部写 / 危险命令）需你确认',
-    icon: Shield,
-  },
-  {
-    id: 'auto-review',
-    label: '自动审查',
-    desc: '越界交 AI 审查（需本地模型，暂未启用）',
-    icon: Bot,
-    disabled: true,
-  },
-  { id: 'full-access', label: '完全放行', desc: '不拦截任何操作', icon: ShieldOff },
-];
+import { PERMISSION_MODE_META } from '../lib/permission-modes';
+import { useChatPermission } from '../lib/use-chat-permission';
 
 /**
  * Composer-footer selector for the tool-permission mode (mirrors ModelPicker).
@@ -36,9 +11,8 @@ const MODES: ModeMeta[] = [
  */
 export function PermissionPicker(): React.JSX.Element {
   const [open, setOpen] = useState(false);
-  const mode = usePermissionStore((s) => s.mode);
-  const setMode = usePermissionStore((s) => s.setMode);
-  const current = MODES.find((m) => m.id === mode) ?? MODES[0];
+  const { mode, setMode } = useChatPermission();
+  const current = PERMISSION_MODE_META.find((m) => m.id === mode) ?? PERMISSION_MODE_META[0];
   const Icon = current.icon;
   const danger = current.id === 'full-access';
 
@@ -62,7 +36,7 @@ export function PermissionPicker(): React.JSX.Element {
           collisionPadding={12}
           className="z-50 w-72 overflow-hidden rounded-lg border border-border-default bg-elevated p-1 shadow-lg"
         >
-          {MODES.map((m) => {
+          {PERMISSION_MODE_META.map((m) => {
             const MIcon = m.icon;
             const sel = m.id === mode;
             return (

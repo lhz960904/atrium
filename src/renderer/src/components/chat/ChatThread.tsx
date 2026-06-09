@@ -33,8 +33,9 @@ type ChatThreadProps = {
   /** `/` commands for the composer (e.g. compact). */
   commands: SlashCommand[];
   onSend: (text: string, attachments: Attachment[]) => void;
-  /** Approve / deny a pending tool call (resumes or aborts it). */
+  /** Approve / trust-always / deny a pending tool call (resumes or aborts it). */
   onApprove: (approvalId: string) => void;
+  onAlways: (approvalId: string) => void;
   onDeny: (approvalId: string) => void;
   /** Submit a clarification's answers (addToolOutput); resumes the turn. */
   onClarify: (toolCallId: string, result: ClarifyResult) => void;
@@ -81,6 +82,7 @@ export function ChatThread({
   commands,
   onSend,
   onApprove,
+  onAlways,
   onDeny,
   onClarify,
   onCancelClarify,
@@ -184,6 +186,7 @@ export function ChatThread({
               approval={approvals[0]}
               more={approvals.length - 1}
               onApprove={onApprove}
+              onAlways={onAlways}
               onDeny={onDeny}
             />
           )}

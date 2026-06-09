@@ -138,6 +138,7 @@ function ChatRunner({
 
   const utils = trpc.useUtils();
   const compactCommand = useCompactCommand({ threadId, model, endpoint, setMessages });
+  const addRule = trpc.settings.addTrustRule.useMutation();
 
   const markRead = trpc.threads.markRead.useMutation({
     onSuccess: () => utils.threads.list.invalidate(),
@@ -184,6 +185,8 @@ function ChatRunner({
     sentRef.current = true;
   }, [model]);
 
+  const approvals = getPendingApprovals(messages);
+
   return (
     <ChatThread
       threadId={threadId}
@@ -192,7 +195,7 @@ function ChatRunner({
       status={status}
       error={error}
       plan={getActivePlan(messages)}
-      approvals={getPendingApprovals(messages)}
+      approvals={approvals}
       commands={[compactCommand]}
       onSend={(text, attachments) => {
         if (!model) return;
@@ -200,6 +203,11 @@ function ChatRunner({
         sendMessage({ text, ...(files.length > 0 && { files }) });
       }}
       onApprove={(id) => addToolApprovalResponse({ id, approved: true })}
+      onAlways={(id) => {
+        const rule = approvals.find((a) => a.approvalId === id)?.rule;
+        if (rule) addRule.mutate(rule);
+        addToolApprovalResponse({ id, approved: true });
+      }}
       onDeny={(id) => addToolApprovalResponse({ id, approved: false })}
       onClarify={(toolCallId, result) =>
         addToolOutput({ tool: 'ask_clarification', toolCallId, output: result })

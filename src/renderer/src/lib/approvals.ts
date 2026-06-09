@@ -1,6 +1,7 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import { analyzeBash, type Crossing, describeWriteEscape } from '@shared/permissions/analyze';
-import type { AtriumTools } from '@shared/tools';
+import { deriveRule, type TrustRule } from '@shared/permissions/rules';
+import type { AtriumTools, ToolName } from '@shared/tools';
 import { getStaticToolName, isStaticToolUIPart } from 'ai';
 
 /** A tool call paused for user approval, with its crossing reason for display. */
@@ -12,6 +13,8 @@ export type PendingApproval = {
   /** Mono prefix: `$ ` for a shell command, `✎ ` for a file write. */
   prefix: string;
   crossing: Crossing | null;
+  /** The rule "always allow" would persist, or null when the call can't reduce to one. */
+  rule: TrustRule | null;
 };
 
 /** Tool calls in the message stream currently awaiting an approval response. */
@@ -28,15 +31,16 @@ export function getPendingApprovals(messages: AtriumUIMessage[]): PendingApprova
   return pending;
 }
 
-function describe(approvalId: string, toolName: string, input: unknown): PendingApproval {
+function describe(approvalId: string, toolName: ToolName, input: unknown): PendingApproval {
+  const rule = deriveRule(toolName, input);
   if (toolName === 'bash') {
     const command = strField(input, 'command');
     const crossing = command ? analyzeBash(command) : null;
-    return { approvalId, toolName, target: command, prefix: '$ ', crossing };
+    return { approvalId, toolName, target: command, prefix: '$ ', crossing, rule };
   }
   const path = strField(input, 'path');
   const crossing = path ? describeWriteEscape(path) : null;
-  return { approvalId, toolName, target: path, prefix: '✎ ', crossing };
+  return { approvalId, toolName, target: path, prefix: '✎ ', crossing, rule };
 }
 
 function strField(input: unknown, key: string): string {

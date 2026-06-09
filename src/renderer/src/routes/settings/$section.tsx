@@ -1,5 +1,6 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
+import { PermissionsSection } from '../../components/settings/permissions/PermissionsSection';
 import { ProvidersSection } from '../../components/settings/providers/ProvidersSection';
 import { SkillsSection } from '../../components/settings/skills/SkillsSection';
 import { SubagentsSection } from '../../components/settings/subagents/SubagentsSection';
@@ -37,7 +38,11 @@ const SECTIONS: Record<string, SectionMeta> = {
     wide: true,
     Component: SubagentsSection,
   },
-  permissions: { title: 'Permissions', sub: '工具调用权限与通知。', Component: PlaceholderSection },
+  permissions: {
+    title: 'Permissions',
+    sub: '工具调用的权限模式与信任清单。',
+    Component: PermissionsSection,
+  },
   memories: {
     title: 'Memories',
     sub: 'Atrium 记住的事实与上下文。',

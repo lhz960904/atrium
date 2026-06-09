@@ -7,34 +7,44 @@ const CONFIRM_HOLD_MS = 600;
 const FADE_MS = 180;
 const SLIDE_MS = 240;
 
+type Decision = 'once' | 'always' | 'deny';
+
+const CONFIRM_LABEL: Record<Decision, string> = {
+  once: '已允许一次',
+  always: '已加入信任清单',
+  deny: '已拒绝',
+};
+
 type ApprovalCardProps = {
   approval: PendingApproval;
   /** How many further approvals are queued behind this one. */
   more: number;
   onApprove: (approvalId: string) => void;
+  /** Trust this kind of call from now on, then approve (only offered when the
+   *  crossing reduces to a rule — see approval.rule). */
+  onAlways: (approvalId: string) => void;
   onDeny: (approvalId: string) => void;
 };
 
 /**
  * The transient gate above the composer when a tool call crosses the workspace
- * boundary. It fades in at full height (a height-grow animation fights the
- * bottom-docked layout and tears a gap above the composer mid-transition, so
- * we don't), shows what's about to run and why, takes the decision, confirms
- * briefly, then fades out — the lasting record is the tool marker in the
- * conversation, not a banner here. The response is sent only after the fade,
- * so the card (its part still awaiting approval) stays mounted through it.
+ * boundary. It slides up out of the composer (which paints on top, masking the
+ * lower edge), shows what's about to run and why, takes the decision, confirms
+ * briefly, then slides out — the lasting record is the tool marker in the
+ * conversation. The response is sent only after the exit, so the card (its part
+ * still awaiting approval) stays mounted through it.
  */
 export function ApprovalCard({
   approval,
   more,
   onApprove,
+  onAlways,
   onDeny,
 }: ApprovalCardProps): React.JSX.Element {
   const [shown, setShown] = useState(false);
-  const [decided, setDecided] = useState<'once' | 'deny' | null>(null);
+  const [decided, setDecided] = useState<Decision | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  // Fade in on mount; the rAF lets the 0→1 opacity transition actually run.
   useEffect(() => {
     const r = requestAnimationFrame(() => setShown(true));
     const pending = timers.current;
@@ -44,21 +54,20 @@ export function ApprovalCard({
     };
   }, []);
 
-  const decide = (kind: 'once' | 'deny'): void => {
+  const decide = (kind: Decision): void => {
     if (decided) return;
     setDecided(kind);
+    const send = kind === 'deny' ? onDeny : kind === 'always' ? onAlways : onApprove;
     timers.current.push(
       setTimeout(() => setShown(false), CONFIRM_HOLD_MS),
-      setTimeout(
-        () => (kind === 'deny' ? onDeny(approval.approvalId) : onApprove(approval.approvalId)),
-        CONFIRM_HOLD_MS + SLIDE_MS,
-      ),
+      setTimeout(() => send(approval.approvalId), CONFIRM_HOLD_MS + SLIDE_MS),
     );
   };
 
   const danger = approval.crossing?.kind === 'dangerous';
   const tint = danger ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning';
   const reason = approval.crossing?.reason ?? '需要确认';
+  const rule = approval.rule;
 
   return (
     // Slides up out of the composer (which paints on top, masking the lower
@@ -81,7 +90,10 @@ export function ApprovalCard({
           ) : (
             <Check className="size-[15px] shrink-0" />
           )}
-          <span>{decided === 'deny' ? '已拒绝' : '已允许一次'}</span>
+          <span>
+            {CONFIRM_LABEL[decided]}
+            {decided === 'always' && rule ? ` · ${rule.matcher}` : ''}
+          </span>
         </div>
       ) : (
         <>
@@ -100,7 +112,13 @@ export function ApprovalCard({
             </div>
           </div>
           <div className="flex items-center gap-2 px-4 py-3">
-            <span className="flex-1" />
+            {rule ? (
+              <span className="min-w-0 flex-1 truncate text-fg-tertiary text-xs">
+                总是允许 → 记住 <code className="font-mono text-fg-secondary">{rule.matcher}</code>
+              </span>
+            ) : (
+              <span className="flex-1" />
+            )}
             <button
               type="button"
               onClick={() => decide('deny')}
@@ -111,10 +129,23 @@ export function ApprovalCard({
             <button
               type="button"
               onClick={() => decide('once')}
-              className="rounded-md bg-accent px-3 py-1.5 font-medium text-fg-on-accent text-sm hover:bg-accent-hover"
+              className={
+                rule
+                  ? 'rounded-md bg-surface-strong px-3 py-1.5 text-fg-primary text-sm hover:bg-border-default'
+                  : 'rounded-md bg-accent px-3 py-1.5 font-medium text-fg-on-accent text-sm hover:bg-accent-hover'
+              }
             >
               允许一次
             </button>
+            {rule && (
+              <button
+                type="button"
+                onClick={() => decide('always')}
+                className="rounded-md bg-accent px-3 py-1.5 font-medium text-fg-on-accent text-sm hover:bg-accent-hover"
+              >
+                总是允许
+              </button>
+            )}
           </div>
         </>
       )}
