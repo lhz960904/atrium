@@ -1,3 +1,4 @@
+import type { PermissionMode } from '@shared/permissions';
 import type { Db } from '../../db';
 import type { BackgroundShells } from '../sandbox/background-shells';
 import type { Sandbox } from '../sandbox/types';
@@ -20,4 +21,5 @@ export type ToolCtx = {
   db: Db;
   skills?: Skill[];
   bgShells?: BackgroundShells;
+  permission?: { mode: PermissionMode };
 };
