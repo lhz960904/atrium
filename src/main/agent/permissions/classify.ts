@@ -1,13 +1,10 @@
+import { analyzeBash, type Crossing, describeWriteEscape } from '@shared/permissions/analyze';
 import type { ToolName } from '@shared/tools';
 import { resolveInWorkspace } from '../sandbox/paths';
-import { commandName, splitSubcommands, subcommand } from './command';
-import { isDangerous, isWrapper, NETWORK_COMMANDS, NETWORK_SUBCOMMANDS } from './lists';
 
-export type BoundaryKind = 'fs-escape' | 'network' | 'dangerous' | 'opaque';
+export type { BoundaryKind } from '@shared/permissions/analyze';
 
-export type Classification =
-  | { crosses: false }
-  | { crosses: true; kind: BoundaryKind; reason: string };
+export type Classification = { crosses: false } | ({ crosses: true } & Crossing);
 
 const INSIDE: Classification = { crosses: false };
 
@@ -15,11 +12,10 @@ const INSIDE: Classification = { crosses: false };
  * Decide whether a tool call crosses the workspace boundary — the unit the
  * permission gate prompts on. Boundary = ① writing a file outside the
  * workspace ② a shell command that reaches the network ③ a destructive shell
- * command. Read tools and in-workspace writes stay inside.
- *
- * Without an OS sandbox the bash analysis is a heuristic, not a security
- * boundary: it errs toward "ask" when it can't read the command (substitution,
- * wrappers), and the Auto-review reviewer covers what the lists miss.
+ * command. Read tools and in-workspace writes stay inside. The command and
+ * path analysis lives in @shared/permissions so the renderer's approval card
+ * derives the same reason; here we add the one piece that needs the host: the
+ * workspace path check.
  */
 export function classifyToolCall(
   tool: ToolName,
@@ -27,55 +23,22 @@ export function classifyToolCall(
   workspaceRoot: string,
 ): Classification {
   switch (tool) {
-    case 'bash':
-      return classifyBash(input);
+    case 'bash': {
+      const command = stringField(input, 'command');
+      const crossing = command ? analyzeBash(command) : null;
+      return crossing ? { crosses: true, ...crossing } : INSIDE;
+    }
     case 'write_file':
-    case 'edit_file':
-      return classifyWrite(input, workspaceRoot);
+    case 'edit_file': {
+      const path = stringField(input, 'path');
+      if (path && escapesWorkspace(workspaceRoot, path)) {
+        return { crosses: true, ...describeWriteEscape(path) };
+      }
+      return INSIDE;
+    }
     default:
       return INSIDE;
   }
-}
-
-function classifyWrite(input: unknown, workspaceRoot: string): Classification {
-  const path = stringField(input, 'path');
-  if (!path) return INSIDE;
-  if (escapesWorkspace(workspaceRoot, path)) {
-    return { crosses: true, kind: 'fs-escape', reason: `写入 workspace 外的路径：${path}` };
-  }
-  return INSIDE;
-}
-
-function classifyBash(input: unknown): Classification {
-  const command = stringField(input, 'command')?.trim();
-  if (!command) return INSIDE;
-
-  // Command substitution runs a hidden inner command we can't read statically.
-  if (/`|\$\(/.test(command)) {
-    return { crosses: true, kind: 'opaque', reason: '命令含替换（$() 或反引号），无法静态判定' };
-  }
-
-  const segments = splitSubcommands(command);
-  if (!segments) {
-    return { crosses: true, kind: 'opaque', reason: '命令无法解析，保险起见需确认' };
-  }
-
-  for (const tokens of segments) {
-    const name = commandName(tokens);
-    if (!name) continue;
-    if (isDangerous(name)) return { crosses: true, kind: 'dangerous', reason: `危险命令：${name}` };
-    if (isWrapper(name)) {
-      return { crosses: true, kind: 'opaque', reason: `包装执行（${name}），无法静态判定真实命令` };
-    }
-    if (NETWORK_COMMANDS.has(name)) {
-      return { crosses: true, kind: 'network', reason: `联网命令：${name}` };
-    }
-    const sub = subcommand(tokens);
-    if (sub && NETWORK_SUBCOMMANDS[name]?.has(sub)) {
-      return { crosses: true, kind: 'network', reason: `联网命令：${name} ${sub}` };
-    }
-  }
-  return INSIDE;
 }
 
 function escapesWorkspace(root: string, path: string): boolean {
