@@ -31,12 +31,14 @@ export function classifyToolCall(
     case 'write_file':
     case 'edit_file': {
       const path = stringField(input, 'path');
+      // e.g. ../secret.txt , /etc/hosts → flag; src/a.ts , /work/space/src/a.ts → inside
       if (path && escapesWorkspace(workspaceRoot, path)) {
         return { crosses: true, ...describeWriteEscape(path) };
       }
       return INSIDE;
     }
     default:
+      // read_file / grep / web_fetch / web_search — never cross, allow
       return INSIDE;
   }
 }
