@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { ChatThread } from '../../../components/chat/ChatThread';
 import type { Attachment } from '../../../components/chat/composer/AttachmentChip';
 import { useCompactCommand } from '../../../components/chat/use-compact-command';
+import { getPendingApprovals } from '../../../lib/approvals';
 import { getThreadChat } from '../../../lib/chat-store';
 import { getActivePlan } from '../../../lib/plan';
 import { trpc } from '../../../lib/trpc';
@@ -98,8 +99,16 @@ function ChatRunner({
   }
   const { chat, resume } = resolved.current;
 
-  const { messages, sendMessage, setMessages, status, addToolOutput, stop, error } =
-    useChat<AtriumUIMessage>({ chat, resume });
+  const {
+    messages,
+    sendMessage,
+    setMessages,
+    status,
+    addToolOutput,
+    addToolApprovalResponse,
+    stop,
+    error,
+  } = useChat<AtriumUIMessage>({ chat, resume });
 
   // Stopping: detach this client immediately, then tell main to abort the run
   // (the producer is decoupled for resume, so stop() alone won't reach it).
@@ -183,12 +192,15 @@ function ChatRunner({
       status={status}
       error={error}
       plan={getActivePlan(messages)}
+      approvals={getPendingApprovals(messages)}
       commands={[compactCommand]}
       onSend={(text, attachments) => {
         if (!model) return;
         const files = toFileParts(attachments);
         sendMessage({ text, ...(files.length > 0 && { files }) });
       }}
+      onApprove={(id) => addToolApprovalResponse({ id, approved: true })}
+      onDeny={(id) => addToolApprovalResponse({ id, approved: false })}
       onClarify={(toolCallId, result) =>
         addToolOutput({ tool: 'ask_clarification', toolCallId, output: result })
       }

@@ -4,8 +4,10 @@ import type { AtriumTools } from '@shared/tools';
 import { type ChatStatus, getStaticToolName, isStaticToolUIPart } from 'ai';
 import { TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import type { PendingApproval } from '../../lib/approvals';
 import { useCompactionStore } from '../../state/compaction-store';
 import { useImageGenStore } from '../../state/image-gen-store';
+import { ApprovalCard } from './ApprovalCard';
 import { AssistantMessage } from './AssistantMessage';
 import { ChatHeader } from './ChatHeader';
 import { CompactionDivider, CompactionProgress } from './CompactionDivider';
@@ -26,9 +28,14 @@ type ChatThreadProps = {
   error?: Error;
   /** The thread's active plan (latest todo_write); null when none. */
   plan: Todo[] | null;
+  /** Tool calls awaiting an approval decision; the first shows above the composer. */
+  approvals: PendingApproval[];
   /** `/` commands for the composer (e.g. compact). */
   commands: SlashCommand[];
   onSend: (text: string, attachments: Attachment[]) => void;
+  /** Approve / deny a pending tool call (resumes or aborts it). */
+  onApprove: (approvalId: string) => void;
+  onDeny: (approvalId: string) => void;
   /** Submit a clarification's answers (addToolOutput); resumes the turn. */
   onClarify: (toolCallId: string, result: ClarifyResult) => void;
   /** Dismiss a clarification without answering; resolves it but doesn't resume. */
@@ -70,8 +77,11 @@ export function ChatThread({
   status,
   error,
   plan,
+  approvals,
   commands,
   onSend,
+  onApprove,
+  onDeny,
   onClarify,
   onCancelClarify,
   onStop,
@@ -83,6 +93,7 @@ export function ChatThread({
   const live = status === 'submitted' || status === 'streaming';
   const pendingClarify = pendingClarifyId(messages);
   const clarifyPending = pendingClarify !== null;
+  const approvalPending = approvals.length > 0;
   const lastId = messages.at(-1)?.id;
 
   // "Working…" before the first token: status sits at 'submitted' until the
@@ -166,11 +177,27 @@ export function ChatThread({
       <div className="shrink-0 px-6 pt-2 pb-4">
         <div className="mx-auto max-w-[760px]">
           {plan != null && <PlanPanel todos={plan} />}
+          {approvalPending && (
+            <ApprovalCard
+              key={approvals[0].approvalId}
+              approval={approvals[0]}
+              more={approvals.length - 1}
+              attachedTop={plan != null}
+              onApprove={onApprove}
+              onDeny={onDeny}
+            />
+          )}
           <Composer
-            disabled={live || compacting || clarifyPending}
+            disabled={live || compacting || clarifyPending || approvalPending}
             streaming={live}
-            placeholder={clarifyPending ? '请先回答上面的问题…' : undefined}
-            attachedTop={plan != null}
+            placeholder={
+              clarifyPending
+                ? '请先回答上面的问题…'
+                : approvalPending
+                  ? '请先处理上面的审批…'
+                  : undefined
+            }
+            attachedTop={plan != null || approvalPending}
             commands={commands}
             onSubmit={onSend}
             onStop={onStop}

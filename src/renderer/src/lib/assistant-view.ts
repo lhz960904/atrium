@@ -83,6 +83,9 @@ export function buildAssistantView(parts: AtriumUIMessage['parts']): AssistantVi
       });
     } else if (isStaticToolUIPart(part)) {
       const name = getStaticToolName<AtriumTools>(part);
+      // A tool awaiting approval shows in the composer's approval card, not the
+      // inline trace; it resolves to a normal marker here once approved/denied.
+      if (part.state === 'approval-requested') continue;
       // The plan tool isn't trace work — it renders in the composer plan panel.
       if (name === 'todo_write') continue;
       // ask_clarification keeps its place in the flow but isn't a trace tool —

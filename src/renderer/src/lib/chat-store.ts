@@ -5,6 +5,7 @@ import type { AtriumTools } from '@shared/tools';
 import {
   getStaticToolName,
   isStaticToolUIPart,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
   lastAssistantMessageIsCompleteWithToolCalls,
 } from 'ai';
 import { useCompactionStore } from '../state/compaction-store';
@@ -83,14 +84,15 @@ export function getThreadChat(
       const m = useModelStore.getState().selected;
       return { threadId, providerId: m?.providerId, modelId: m?.modelId };
     }),
-    // ask_clarification is a client-side tool with no server execute: the turn
-    // ends with its call unanswered. Once the user fills the answer in (via
-    // addToolOutput), this resubmits the message so the model continues. Normal
-    // turns end on text, not a complete tool call, so they don't re-fire. A
-    // cancelled clarification resolves its call too, but must not auto-resume —
-    // it's persisted separately and the user drives the next turn.
+    // Two completions resume a turn automatically: a tool call that now has its
+    // output (ask_clarification answered, or any settled tool), and an approval
+    // request the user just answered — both leave the turn mid-flight, waiting
+    // for the model to continue. A cancelled clarification resolves its call too
+    // but must NOT resume: it's persisted separately and the user drives next.
     sendAutomaticallyWhen: ({ messages }) =>
-      lastAssistantMessageIsCompleteWithToolCalls({ messages }) && !lastClarifyCancelled(messages),
+      (lastAssistantMessageIsCompleteWithToolCalls({ messages }) ||
+        lastAssistantMessageIsCompleteWithApprovalResponses({ messages })) &&
+      !lastClarifyCancelled(messages),
     // Transient compaction events never enter messages; surface them as live
     // per-thread status the chat view reads to show a "compacting…" indicator.
     onData: (part) => {
