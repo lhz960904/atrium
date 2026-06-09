@@ -34,6 +34,13 @@ test('glob *.ts matches only the root level (no ** = current dir)', async () => 
   expect(r.paths).toEqual(['a.ts']);
 });
 
+test('glob matches a directory by name (trailing slash marks it)', async () => {
+  // Regression: a directory like blog-dashboard used to return nothing because
+  // fast-glob's onlyFiles excluded it, so the agent thought it didn't exist.
+  expect((await globFiles(root, { pattern: 'src' })).paths).toEqual(['src/']);
+  expect((await globFiles(root, { pattern: '**/nested' })).paths).toEqual(['src/nested/']);
+});
+
 test('glob truncates at maxResults', async () => {
   const r = await globFiles(root, { pattern: '**/*.ts', maxResults: 2 });
   expect(r.paths.length).toBe(2);

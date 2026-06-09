@@ -53,13 +53,16 @@ function isBinary(buf: Buffer): boolean {
   return false;
 }
 
-/** Stream files matching `pattern` under `base`, skipping ignored dirs and
- *  symlinks. Yields paths relative to `base` (posix). */
-function walk(base: string, pattern: string): AsyncIterable<string> {
+/** Stream paths matching `pattern` under `base`, skipping ignored dirs and
+ *  symlinks. Yields paths relative to `base` (posix). With `onlyFiles=false`
+ *  (glob) directories match too and get a trailing slash so the model can tell
+ *  them apart; grep keeps `onlyFiles=true` since it reads file contents. */
+function walk(base: string, pattern: string, onlyFiles: boolean): AsyncIterable<string> {
   return fg.stream(pattern, {
     cwd: base,
     ignore: IGNORE_GLOBS,
-    onlyFiles: true,
+    onlyFiles,
+    markDirectories: !onlyFiles,
     dot: true,
     followSymbolicLinks: false,
     suppressErrors: true,
@@ -71,7 +74,7 @@ export async function globFiles(root: string, opts: GlobOptions): Promise<GlobRe
   const base = opts.path ? resolveInWorkspace(root, opts.path) : root;
   const scope = opts.path ? toPosix(relative(root, base)) : '';
   const paths: string[] = [];
-  for await (const rel of walk(base, opts.pattern)) {
+  for await (const rel of walk(base, opts.pattern, false)) {
     if (paths.length >= max) return { paths, truncated: true };
     paths.push(scope ? `${scope}/${rel}` : rel);
   }
@@ -87,7 +90,7 @@ export async function grepFiles(root: string, opts: GrepOptions): Promise<GrepRe
     opts.caseSensitive ? '' : 'i',
   );
   const matches: GrepMatch[] = [];
-  for await (const rel of walk(base, opts.glob ?? '**/*')) {
+  for await (const rel of walk(base, opts.glob ?? '**/*', true)) {
     let buf: Buffer;
     try {
       if ((await stat(join(base, rel))).size > MAX_FILE_SIZE) continue;

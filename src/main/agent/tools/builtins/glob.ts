@@ -6,7 +6,7 @@ import type { ToolCtx } from '../context';
 export const globTool = (ctx: ToolCtx) =>
   tool({
     description:
-      'Find files by path pattern across the workspace (e.g. "**/*.ts", "src/**"). Returns matching paths, skipping ignored directories (node_modules, .git, …). Prefer this over running find/ls through bash.',
+      'Find files and directories by path pattern across the workspace (e.g. "**/*.ts", "src/**", "blog-dashboard"). Returns matching paths — directories end with a trailing slash — skipping ignored dirs (node_modules, .git, …). Use it to check whether a file or folder exists. Prefer this over running find/ls through bash.',
     inputSchema: z.object({
       description: z
         .string()
