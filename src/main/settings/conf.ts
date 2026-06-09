@@ -1,3 +1,5 @@
+import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
+import type { TrustRule } from '@shared/permissions/rules';
 import { Conf } from 'electron-conf/main';
 
 /**
@@ -23,11 +25,17 @@ export type SelectedModel = { providerId: string; modelId: string };
 export type Settings = {
   windowState?: WindowState;
   selectedModel?: SelectedModel | null;
+  /** The active tool-permission mode, persisted so a reload doesn't reset it. */
+  permissionMode?: PermissionMode;
+  /** The tool-permission trust list — "always allow" entries, kept across turns. */
+  trustRules?: TrustRule[];
 };
 
 export const DEFAULTS = {
   windowState: { width: 1280, height: 800, maximized: false, fullscreen: false },
   selectedModel: null,
+  permissionMode: DEFAULT_PERMISSION_MODE,
+  trustRules: [],
 } satisfies Required<Settings>;
 
 let _conf: Conf<Settings> | null = null;

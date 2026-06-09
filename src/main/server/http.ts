@@ -25,6 +25,7 @@ import { createLogger } from '../log';
 import { resolveAcpSpec } from '../providers/acp-spec';
 import { getProviderManifest } from '../providers/manifest';
 import { resolveModel } from '../providers/resolve';
+import { getSettings } from '../settings/conf';
 import {
   loadThreadMessages,
   persistMessage,
@@ -166,7 +167,10 @@ export function startHttpServer(deps: {
         db: deps.db,
         skills,
         bgShells,
-        permission: { mode: permissionMode ?? DEFAULT_PERMISSION_MODE },
+        permission: {
+          mode: permissionMode ?? DEFAULT_PERMISSION_MODE,
+          rules: getSettings().get('trustRules', []),
+        },
       }),
       // skills must run after compaction: compaction may fold the original first
       // user message into a summary, and the skill index has to land on whatever

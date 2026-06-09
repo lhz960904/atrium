@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { TrustRule } from '@shared/permissions/rules';
 import { needsApprovalFor } from './index';
 
 const ROOT = '/work/space';
@@ -24,4 +25,16 @@ test('auto-review mirrors default until the reviewer lands', () => {
     true,
   );
   expect(needsApprovalFor('bash', { command: 'git status' }, 'auto-review', ROOT)).toBe(false);
+});
+
+test('a trusted rule skips the gate for a covered crossing', () => {
+  const rules: TrustRule[] = [{ tool: 'bash', matcher: 'curl' }];
+  expect(needsApprovalFor('bash', { command: 'curl https://x.com' }, 'default', ROOT, rules)).toBe(
+    false,
+  );
+  // same call without the rule still gates; an uncovered command still gates.
+  expect(needsApprovalFor('bash', { command: 'curl https://x.com' }, 'default', ROOT, [])).toBe(
+    true,
+  );
+  expect(needsApprovalFor('bash', { command: 'rm -rf x' }, 'default', ROOT, rules)).toBe(true);
 });
