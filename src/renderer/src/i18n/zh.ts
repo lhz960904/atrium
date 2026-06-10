@@ -283,6 +283,12 @@ export const zh = {
         claudeCode: '通过 ACP 调用你本地已登录的 Claude Code（复用订阅，无需 API key）。',
         codexCli: '通过 ACP 调用你本地已登录的 Codex CLI（复用 ChatGPT 订阅）。',
         geminiCli: '通过 ACP 调用你本地已登录的 Gemini CLI（自带 ACP）。',
+        ollama: '本地运行开源模型（Qwen、Gemma、DeepSeek 等）。检测到服务即可用，无需 API key。',
+      },
+      localService: {
+        running: '服务运行中 · v{{version}}',
+        notRunning: '未检测到本地服务',
+        installHint: '安装并启动 Ollama 后会自动检测到：',
       },
     },
     subagents: {

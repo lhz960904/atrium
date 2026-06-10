@@ -7,6 +7,7 @@ import geminiSvg from '@lobehub/icons-static-svg/icons/gemini-color.svg?raw';
 import geminicliSvg from '@lobehub/icons-static-svg/icons/geminicli-color.svg?raw';
 import kimiSvg from '@lobehub/icons-static-svg/icons/kimi-color.svg?raw';
 import moonshotSvg from '@lobehub/icons-static-svg/icons/moonshot.svg?raw';
+import ollamaSvg from '@lobehub/icons-static-svg/icons/ollama.svg?raw';
 import openaiSvg from '@lobehub/icons-static-svg/icons/openai.svg?raw';
 import openrouterSvg from '@lobehub/icons-static-svg/icons/openrouter.svg?raw';
 import zhipuSvg from '@lobehub/icons-static-svg/icons/zhipu-color.svg?raw';
@@ -32,6 +33,7 @@ const SVG_BY_ID: Record<string, string> = {
   'claude-code': claudecodeSvg,
   'codex-cli': codexSvg,
   'gemini-cli': geminicliSvg,
+  ollama: ollamaSvg,
 };
 
 export function ProviderIcon({

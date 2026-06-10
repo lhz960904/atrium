@@ -52,9 +52,48 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
 
       {provider.kind === 'cloud-api' ? (
         <CloudApiForm key={provider.id} provider={provider} />
-      ) : (
+      ) : provider.kind === 'local-cli' ? (
         <LocalCliForm key={provider.id} provider={provider} />
+      ) : (
+        <LocalServiceStatus key={provider.id} providerId={provider.id} />
       )}
+    </div>
+  );
+}
+
+/** Interim local-service panel: liveness only — the full form (models, pull
+ *  with progress) lands with the download UI. */
+function LocalServiceStatus({ providerId }: { providerId: string }): React.JSX.Element {
+  const { t } = useTranslation();
+  const status = trpc.providers.detectLocalService.useQuery({ id: providerId });
+  if (status.isLoading) {
+    return <p className="text-fg-tertiary text-sm">{t('common.loading')}</p>;
+  }
+  if (status.data?.running) {
+    return (
+      <p className="flex items-center gap-2 text-fg-secondary text-sm">
+        <span className="size-2 rounded-full bg-success" />
+        {t('settings.providers.localService.running', { version: status.data.version ?? '?' })}
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className="flex items-center gap-2 text-fg-secondary text-sm">
+        <span className="size-2 rounded-full bg-fg-tertiary" />
+        {t('settings.providers.localService.notRunning')}
+      </p>
+      <p className="text-fg-tertiary text-sm">
+        {t('settings.providers.localService.installHint')}{' '}
+        <a
+          href="https://ollama.com/download"
+          target="_blank"
+          rel="noreferrer"
+          className="underline"
+        >
+          ollama.com/download
+        </a>
+      </p>
     </div>
   );
 }

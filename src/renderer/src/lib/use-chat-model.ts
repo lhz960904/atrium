@@ -24,11 +24,13 @@ export function deriveGroups(
   providers: {
     id: string;
     name: string;
-    kind: 'cloud-api' | 'local-cli';
+    kind: 'cloud-api' | 'local-cli' | 'local-service';
     enabled: boolean;
     config: Record<string, unknown> | null;
   }[],
 ): ModelGroup[] {
+  // local-service providers list models like cloud ones (config.enabledModels),
+  // so only local-cli takes the synthetic single-entry path below.
   const groups: ModelGroup[] = [];
   for (const p of providers) {
     if (!p.enabled) continue;

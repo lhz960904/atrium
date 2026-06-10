@@ -288,6 +288,13 @@ export const en: typeof zh = {
         codexCli:
           'Call your locally logged-in Codex CLI over ACP (reuses the ChatGPT subscription).',
         geminiCli: 'Call your locally logged-in Gemini CLI over ACP (ships its own ACP).',
+        ollama:
+          'Run open models locally (Qwen, Gemma, DeepSeek…). Works once the service is detected — no API key.',
+      },
+      localService: {
+        running: 'Service running · v{{version}}',
+        notRunning: 'Local service not detected',
+        installHint: 'Install and start Ollama and it will be detected automatically:',
       },
     },
     subagents: {

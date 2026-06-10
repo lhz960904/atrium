@@ -6,10 +6,27 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../db';
 import { providers } from '../db/schema';
 import { decryptCredentials } from './credentials';
-import { getProviderManifest, type ProviderManifest } from './manifest';
+import { getProviderManifest, type LocalServiceManifest, type ProviderManifest } from './manifest';
 
 type CloudManifest = Extract<ProviderManifest, { kind: 'cloud-api' }>;
 type ProviderConn = { manifest: CloudManifest; apiKey: string; baseURL: string };
+
+/**
+ * A local model service (Ollama) speaks openai-compatible on /v1 with no API
+ * key, so it resolves outside the keyed providerConn path. The base URL is the
+ * user's override or the manifest default.
+ */
+function localServiceModel(db: Db, manifest: LocalServiceManifest, modelId: string) {
+  const row = db
+    .select({ config: providers.config })
+    .from(providers)
+    .where(eq(providers.id, manifest.id))
+    .get();
+  const base = (
+    (row?.config as { baseUrl?: string } | null)?.baseUrl?.trim() || manifest.defaultBaseUrl
+  ).replace(/\/+$/, '');
+  return createOpenAICompatible({ name: manifest.id, baseURL: `${base}/v1` })(modelId);
+}
 
 /**
  * Read a cloud provider's decrypted key + effective base URL in a single DB
@@ -37,6 +54,8 @@ function providerConn(db: Db, providerId: string): ProviderConn {
 
 /** Resolve a (providerId, modelId) pair into a ready-to-use AI SDK chat model. */
 export function resolveModel(db: Db, providerId: string, modelId: string): LanguageModel {
+  const known = getProviderManifest(providerId);
+  if (known?.kind === 'local-service') return localServiceModel(db, known, modelId);
   const { manifest, apiKey, baseURL } = providerConn(db, providerId);
   switch (manifest.protocol) {
     case 'anthropic':
@@ -83,6 +102,9 @@ function stripResponseFormatFetch(): OpenAICompatibleFetch {
  * silently falling back.
  */
 export function resolveImageModel(db: Db, providerId: string, modelId: string): ImageModel {
+  if (getProviderManifest(providerId)?.kind === 'local-service') {
+    throw new Error(`Provider "${providerId}" does not support image generation.`);
+  }
   const { manifest, apiKey, baseURL } = providerConn(db, providerId);
   switch (manifest.protocol) {
     case 'openai-compatible': {

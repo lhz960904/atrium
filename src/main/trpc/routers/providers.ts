@@ -3,6 +3,11 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { providers } from '../../db/schema';
 import { decryptCredentials, encryptCredentials } from '../../providers/credentials';
+import {
+  fetchOllamaModels,
+  type LocalServiceStatus,
+  pingOllama,
+} from '../../providers/local-service';
 import { PROVIDER_MANIFEST, type ProviderManifest } from '../../providers/manifest';
 import { fetchModelIds } from '../../providers/model-fetcher';
 import { publicProcedure, router } from '../trpc';
@@ -122,17 +127,39 @@ export const providersRouter = router({
     }),
 
   /**
-   * Call the provider's `/models` endpoint with the saved credentials and
-   * persist the resulting id list to `config.fetchedModels`. Doubles as a
-   * connection test: any auth / network failure surfaces as a TRPCError
-   * the renderer can render verbatim.
+   * Liveness probe for a local model service (Ollama). Read-only and cheap, so
+   * the settings UI can poll it; "not running" is a normal answer, not an error.
+   */
+  detectLocalService: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }): Promise<LocalServiceStatus> => {
+      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
+      if (!manifest || manifest.kind !== 'local-service') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown local service id.' });
+      }
+      const row = ctx.db
+        .select({ config: providers.config })
+        .from(providers)
+        .where(eq(providers.id, input.id))
+        .get();
+      const baseUrl =
+        (row?.config as { baseUrl?: string } | null)?.baseUrl?.trim() || manifest.defaultBaseUrl;
+      return pingOllama(baseUrl);
+    }),
+
+  /**
+   * List the provider's available models and persist them to
+   * `config.fetchedModels`. Cloud providers call their `/models` endpoint with
+   * the saved credentials (doubling as a connection test); a local service
+   * lists its installed models keylessly. Failures surface as TRPCErrors the
+   * renderer renders verbatim.
    */
   fetchModels: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }): Promise<string[]> => {
       const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind !== 'cloud-api') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown cloud provider id.' });
+      if (!manifest || manifest.kind === 'local-cli') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Provider has no model listing.' });
       }
 
       const row = ctx.db
@@ -140,20 +167,22 @@ export const providersRouter = router({
         .from(providers)
         .where(eq(providers.id, input.id))
         .get();
-      if (!row?.blob) {
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message: 'Add an API key first.',
-        });
-      }
-      const apiKey = decryptCredentials<{ key: string }>(row.blob).key;
-      const config = (row.config as { baseUrl?: string } | null) ?? {};
+      const config = (row?.config as { baseUrl?: string } | null) ?? {};
       const baseUrl = config.baseUrl?.trim() || manifest.defaultBaseUrl;
 
       let modelIds: string[];
       try {
-        modelIds = await fetchModelIds({ protocol: manifest.protocol, baseUrl, apiKey });
+        if (manifest.kind === 'local-service') {
+          modelIds = await fetchOllamaModels(baseUrl);
+        } else {
+          if (!row?.blob) {
+            throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Add an API key first.' });
+          }
+          const apiKey = decryptCredentials<{ key: string }>(row.blob).key;
+          modelIds = await fetchModelIds({ protocol: manifest.protocol, baseUrl, apiKey });
+        }
       } catch (err) {
+        if (err instanceof TRPCError) throw err;
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: err instanceof Error ? err.message : 'Fetch failed.',
@@ -162,9 +191,12 @@ export const providersRouter = router({
 
       const mergedConfig = { ...config, fetchedModels: modelIds };
       ctx.db
-        .update(providers)
-        .set({ config: mergedConfig, updatedAt: new Date() })
-        .where(eq(providers.id, input.id))
+        .insert(providers)
+        .values({ id: input.id, config: mergedConfig })
+        .onConflictDoUpdate({
+          target: providers.id,
+          set: { config: mergedConfig, updatedAt: new Date() },
+        })
         .run();
 
       return modelIds;

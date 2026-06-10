@@ -10,7 +10,7 @@
  * it, keeping this main-side catalog free of localized strings.
  */
 
-export type ProviderKind = 'cloud-api' | 'local-cli';
+export type ProviderKind = 'cloud-api' | 'local-cli' | 'local-service';
 export type CloudApiProtocol = 'anthropic' | 'openai-compatible' | 'google-gemini';
 
 /**
@@ -46,7 +46,23 @@ export type LocalCliManifest = {
   install: string;
 };
 
-export type ProviderManifest = CloudApiManifest | LocalCliManifest;
+/**
+ * A model server running on the user's machine (Ollama). Speaks the
+ * openai-compatible protocol on a localhost port — no API key, no spawned
+ * process; Atrium just detects whether the service is up and talks HTTP.
+ * Endpoint paths (health probe, model listing) live with the service's API
+ * knowledge in local-service.ts, like the cloud listing paths live in
+ * model-fetcher.ts — the manifest only carries what varies or is user-facing.
+ */
+export type LocalServiceManifest = {
+  id: string;
+  kind: 'local-service';
+  name: string;
+  descriptionKey: string;
+  defaultBaseUrl: string;
+};
+
+export type ProviderManifest = CloudApiManifest | LocalCliManifest | LocalServiceManifest;
 
 export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
   // ── Cloud API ────────────────────────────────────────────────────────────
@@ -168,6 +184,14 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     descriptionKey: 'settings.providers.desc.geminiCli',
     acp: { via: 'binary', command: 'gemini', args: ['--acp'] },
     install: '@google/gemini-cli',
+  },
+  // ── Local services ───────────────────────────────────────────────────────
+  {
+    id: 'ollama',
+    kind: 'local-service',
+    name: 'Ollama',
+    descriptionKey: 'settings.providers.desc.ollama',
+    defaultBaseUrl: 'http://localhost:11434',
   },
 ] as const;
 
