@@ -7,10 +7,10 @@ import { useTranslation } from 'react-i18next';
 import { ChatThread } from '../../../components/chat/ChatThread';
 import type { Attachment } from '../../../components/chat/composer/AttachmentChip';
 import { useCompactCommand } from '../../../components/chat/use-compact-command';
-import { getPendingApprovals } from '../../../lib/approvals';
 import { getThreadChat } from '../../../lib/chat-store';
 import { getActivePlan } from '../../../lib/plan';
 import { trpc } from '../../../lib/trpc';
+import { useApprovals } from '../../../lib/use-approvals';
 import { useChatModel } from '../../../lib/use-chat-model';
 import { useCompactionStore } from '../../../state/compaction-store';
 import type { SelectedModel } from '../../../state/model-store';
@@ -140,7 +140,13 @@ function ChatRunner({
 
   const utils = trpc.useUtils();
   const compactCommand = useCompactCommand({ threadId, model, endpoint, setMessages });
-  const addRule = trpc.settings.addTrustRule.useMutation();
+  const { approvals, onApprove, onAlways, onDeny } = useApprovals({
+    threadId,
+    messages,
+    status,
+    endpoint,
+    addToolApprovalResponse,
+  });
 
   const markRead = trpc.threads.markRead.useMutation({
     onSuccess: () => utils.threads.list.invalidate(),
@@ -187,8 +193,6 @@ function ChatRunner({
     sentRef.current = true;
   }, [model]);
 
-  const approvals = getPendingApprovals(messages);
-
   return (
     <ChatThread
       threadId={threadId}
@@ -204,13 +208,9 @@ function ChatRunner({
         const files = toFileParts(attachments);
         sendMessage({ text, ...(files.length > 0 && { files }) });
       }}
-      onApprove={(id) => addToolApprovalResponse({ id, approved: true })}
-      onAlways={(id) => {
-        const rule = approvals.find((a) => a.approvalId === id)?.rule;
-        if (rule) addRule.mutate(rule);
-        addToolApprovalResponse({ id, approved: true });
-      }}
-      onDeny={(id) => addToolApprovalResponse({ id, approved: false })}
+      onApprove={onApprove}
+      onAlways={onAlways}
+      onDeny={onDeny}
       onClarify={(toolCallId, result) =>
         addToolOutput({ tool: 'ask_clarification', toolCallId, output: result })
       }

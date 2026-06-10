@@ -70,6 +70,7 @@ export const en: typeof zh = {
     allowAlways: 'Always allow',
     confirmedOnce: 'Allowed once',
     confirmedAlways: 'Added to trust list',
+    confirmedAlwaysAgent: "Allowed — this tool won't ask again",
     confirmedDeny: 'Denied',
     more: '{{count}} more',
     remember: 'Always allow → remember',

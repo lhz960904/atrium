@@ -1,9 +1,11 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk';
+import type { PermissionMode } from '@shared/permissions';
 import { createUIMessageStream, generateId, type UIMessage, type UIMessageChunk } from 'ai';
 import { readableError } from '../errors';
+import { makeAcpOnPermission } from './acp-permission';
 import { ChunkEmitter } from './chunk-emitter';
+import type { AcpPermissionBroker } from './permission-broker';
 import type { AcpSessionRegistry, AcpSpec } from './registry';
-import type { AcpTurnHandlers } from './session';
 
 export type RunExternalAgentOptions = {
   registry: AcpSessionRegistry;
@@ -13,6 +15,10 @@ export type RunExternalAgentOptions = {
   /** Prior ACP session id to resume on a cold start (from persisted binding). */
   resume?: string;
   messages: UIMessage[];
+  /** The thread's permission mode; gates whether the agent's asks reach the user. */
+  mode: PermissionMode;
+  /** Parks the agent's permission requests until the user answers (see broker). */
+  broker: AcpPermissionBroker;
   abortSignal?: AbortSignal;
   onFinish: (message: UIMessage) => void;
   /** Persist the (possibly new) ACP session id so the thread can resume later. */
@@ -36,17 +42,6 @@ const textToContent = (text: string): ContentBlock[] => [{ type: 'text', text }]
 /** A session update that renders as visible content (vs. commands/mode notices). */
 const isContent = (kind: string): boolean =>
   kind === 'agent_message_chunk' || kind === 'agent_thought_chunk' || kind === 'tool_call';
-
-/** Permission is deferred — always approve for now; a dedicated scheme comes later. */
-const approveAll: AcpTurnHandlers['onPermission'] = async (req) => {
-  const allow =
-    req.options.find((o) => o.kind === 'allow_always') ??
-    req.options.find((o) => o.kind === 'allow_once') ??
-    req.options[0];
-  return allow
-    ? { outcome: { outcome: 'selected', optionId: allow.optionId } }
-    : { outcome: { outcome: 'cancelled' } };
-};
 
 /**
  * A turn handled by an external CLI agent (Claude Code / Codex / Gemini) over
@@ -75,23 +70,40 @@ export function runExternalAgentTurn(
         opts.resume,
       );
       opts.onSession?.(sessionId);
-      const onAbort = (): void => void session.cancel();
+      // On stop/abort: cancel the agent's turn AND settle any parked permission
+      // ask as cancelled — the agent is blocked on it and cancel alone doesn't
+      // resolve the client-side promise it's waiting behind.
+      const onAbort = (): void => {
+        void session.cancel();
+        opts.broker.cancelThread(opts.threadId);
+      };
       opts.abortSignal?.addEventListener('abort', onAbort);
-      // Stamp createdAt on the first visible chunk — not before, since an early
-      // chunk would flip the turn out of its loading state — and durationMs at
-      // the end, so the trace shows "Working… Xs" / "Worked for Xs" like a normal
-      // turn. The two metadata writes merge into the message.
-      let stamped = false;
+      const onPermission = makeAcpOnPermission({
+        threadId: opts.threadId,
+        mode: opts.mode,
+        broker: opts.broker,
+        write: (chunk) => writer.write(chunk),
+      });
+      // The turn's message opens on the first visible chunk — not before, since
+      // an early chunk would flip the turn out of its loading state. The start
+      // chunk matters beyond protocol hygiene: createUIMessageStream injects the
+      // server-minted messageId into it, which is what binds every consumer
+      // (the live client, and each replay after a reload) to the SAME message.
+      // Without it each replay minted a fresh client-side id and the turn
+      // duplicated on screen. createdAt and durationMs metadata merge into the
+      // message so the trace shows "Working… Xs" / "Worked for Xs".
+      let started = false;
       try {
         await session.prompt(textToContent(latestUserText(opts.messages)), {
           onUpdate: (u) => {
-            if (!stamped && isContent(u.sessionUpdate)) {
-              stamped = true;
+            if (!started && isContent(u.sessionUpdate)) {
+              started = true;
+              writer.write({ type: 'start' });
               writer.write({ type: 'message-metadata', messageMetadata: { createdAt: startedAt } });
             }
             emitter.handle(u);
           },
-          onPermission: approveAll,
+          onPermission,
         });
         emitter.flush();
         writer.write({
@@ -100,6 +112,9 @@ export function runExternalAgentTurn(
         });
       } finally {
         opts.abortSignal?.removeEventListener('abort', onAbort);
+        // Backstop: if the turn ended any other way (agent died, prompt threw)
+        // while an ask was parked, settle it so the entry doesn't leak.
+        opts.broker.cancelThread(opts.threadId);
       }
     },
   });

@@ -3,6 +3,7 @@ import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permission
 import { UI_MESSAGE_STREAM_HEADERS, type UIMessage } from 'ai';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { AcpPermissionBroker, isAcpDecision } from '../agent/acp/permission-broker';
 import { AcpSessionRegistry } from '../agent/acp/registry';
 import { runExternalAgentTurn } from '../agent/acp/run-external-agent';
 import {
@@ -72,6 +73,10 @@ export function startHttpServer(deps: {
   // External CLI agents keep one ACP session per thread (so they remember the
   // conversation across turns), so this registry is also server-lifetime.
   const acpSessions = new AcpSessionRegistry();
+  // Parked ACP permission asks (the agent blocks mid-turn on each one); the
+  // decision arrives on the acp-permission endpoint below, so the broker must
+  // outlive any single request.
+  const acpPermissions = new AcpPermissionBroker();
 
   // Renderer is a different origin (localhost:5173 in dev, file:// in prod);
   // CORS must run before auth so the credential-less preflight isn't 401'd.
@@ -124,6 +129,8 @@ export function startHttpServer(deps: {
         spec,
         resume,
         messages: history,
+        mode: permissionMode ?? DEFAULT_PERMISSION_MODE,
+        broker: acpPermissions,
         abortSignal: abort.signal,
         onSession: (sessionId) => writeAcpBinding(deps.db, threadId, providerId, sessionId),
         // The stream stamps createdAt + durationMs as message metadata; persist
@@ -199,6 +206,17 @@ export function startHttpServer(deps: {
   app.post('/api/chat/:threadId/abort', (c) => {
     const aborted = abortThreadRun(c.req.param('threadId'));
     return c.json({ aborted });
+  });
+
+  // Deliver the user's decision to a parked ACP permission ask. The external
+  // agent is blocked mid-turn on it, so this unblocks the live turn in place —
+  // unlike native approvals, which end the turn and resume via a new /api/chat
+  // POST. `ok: false` means the ask is gone (already settled, or the turn
+  // ended); the client just drops its card.
+  app.post('/api/chat/:threadId/acp-permission', async (c) => {
+    const { requestId, decision } = await c.req.json<{ requestId: string; decision: unknown }>();
+    if (!isAcpDecision(decision)) return c.text('invalid decision', 400);
+    return c.json({ ok: acpPermissions.resolve(requestId, decision) });
   });
 
   // Resolve a client-side tool call (a cancelled clarification) in the DB

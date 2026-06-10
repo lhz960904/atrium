@@ -71,6 +71,7 @@ export const zh = {
     allowAlways: '总是允许',
     confirmedOnce: '已允许一次',
     confirmedAlways: '已加入信任清单',
+    confirmedAlwaysAgent: '已允许，该工具不再询问',
     confirmedDeny: '已拒绝',
     more: '还有 {{count}} 项',
     remember: '总是允许 → 记住',

@@ -8,6 +8,7 @@ import {
   lastAssistantMessageIsCompleteWithApprovalResponses,
   lastAssistantMessageIsCompleteWithToolCalls,
 } from 'ai';
+import { useAcpApprovalStore } from '../state/acp-approval-store';
 import { useCompactionStore } from '../state/compaction-store';
 import { useImageGenStore } from '../state/image-gen-store';
 import { useModelStore } from '../state/model-store';
@@ -112,6 +113,10 @@ export function getThreadChat(
         if (d.phase === 'start') store.start(d.id);
         else if (d.phase === 'step') store.addTools(d.id, d.tools);
         else store.finish(d.id, d.status);
+      } else if (part.type === 'data-permissionRequest') {
+        useAcpApprovalStore.getState().push(threadId, part.data);
+      } else if (part.type === 'data-permissionResolved') {
+        useAcpApprovalStore.getState().remove(threadId, part.data.requestId);
       }
     },
   });
