@@ -8,7 +8,13 @@ import {
   runBeforeRun,
   runBeforeToolUse,
 } from './runner';
-import type { AgentMiddleware, RunContext, RunResultInfo, ToolCallInfo } from './types';
+import type {
+  AgentMiddleware,
+  MetadataPart,
+  RunContext,
+  RunResultInfo,
+  ToolCallInfo,
+} from './types';
 
 // The folding helpers never touch db/sandbox, so a bare context is enough.
 const ctx = { threadId: 't', scratch: new Map() } as unknown as RunContext;
@@ -126,7 +132,7 @@ test('composeMessageMetadata merges every middleware return', () => {
 
 test('composeMessageMetadata returns undefined when no middleware contributes', () => {
   const mws: AgentMiddleware[] = [{ name: 'a', messageMetadata: () => undefined }];
-  expect(composeMessageMetadata(mws)({ type: 'finish' })).toBeUndefined();
+  expect(composeMessageMetadata(mws)({ type: 'finish' } as MetadataPart)).toBeUndefined();
 });
 
 test('runAfterRun runs every middleware in order', async () => {

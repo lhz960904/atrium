@@ -86,24 +86,26 @@ test('forwards a permission request to the current turn handler', async () => {
     });
   });
 
-  let granted: RequestPermissionRequest | null = null;
+  // An array, not a nullable let: control-flow analysis can't see the closure
+  // assignment and would pin a let to its initial null at the assertions below.
+  const granted: RequestPermissionRequest[] = [];
   const session = new AcpSession(clientStream);
   await session.start('/ws');
   await session.prompt([{ type: 'text', text: 'edit it' }], {
     onUpdate: () => {},
     onPermission: async (req) => {
-      granted = req;
+      granted.push(req);
       return { outcome: { outcome: 'selected', optionId: 'allow' } };
     },
   });
 
-  expect(granted).not.toBeNull();
-  expect((granted as RequestPermissionRequest).toolCall.title).toBe('Edit file');
+  expect(granted.length).toBe(1);
+  expect(granted[0].toolCall.title).toBe('Edit file');
 });
 
 test('resume uses session/load when the agent supports it', async () => {
   const [clientStream, agentStream] = pairedStreams();
-  let loaded: string | null = null;
+  const loaded: string[] = [];
   const agent: Agent = {
     async initialize(p) {
       return {
@@ -116,7 +118,7 @@ test('resume uses session/load when the agent supports it', async () => {
       return { sessionId: 'fresh' };
     },
     async loadSession(p) {
-      loaded = p.sessionId;
+      loaded.push(p.sessionId);
       return {};
     },
     async authenticate() {
@@ -131,7 +133,7 @@ test('resume uses session/load when the agent supports it', async () => {
 
   const session = new AcpSession(clientStream);
   const { sessionId } = await session.start('/ws', 'prior-1');
-  expect(loaded).toBe('prior-1'); // loaded the prior session, not a fresh one
+  expect(loaded).toEqual(['prior-1']); // loaded the prior session, not a fresh one
   expect(sessionId).toBe('prior-1');
 });
 

@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
+import type { Todo } from '@shared/chat-types';
 import type { ModelMessage, UIMessage } from 'ai';
 import { latestTodosModel, latestTodosUI, renderTodos, todoPreserver } from './todo';
 
-// Inline fixtures (test files are outside the tsconfig that maps @shared/*).
-const todos = [
+const todos: Todo[] = [
   { content: 'build', status: 'in_progress' },
   { content: 'test', status: 'pending' },
 ];
@@ -33,8 +33,7 @@ const modelPlan = (t: unknown): ModelMessage[] => [
 
 test('renderTodos prints status markers', () => {
   expect(renderTodos([{ content: 'a', status: 'completed' }])).toBe('[x] a');
-  // biome-ignore lint/suspicious/noExplicitAny: inline fixture, exact union type irrelevant here
-  expect(renderTodos(todos as any)).toBe('[>] build\n[ ] test');
+  expect(renderTodos(todos)).toBe('[>] build\n[ ] test');
 });
 
 test('latestTodosUI / latestTodosModel find the most recent plan', () => {

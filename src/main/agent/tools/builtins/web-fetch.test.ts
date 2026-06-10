@@ -22,7 +22,7 @@ function stubFetch(res: {
       statusText: res.statusText ?? 'OK',
       headers: new Headers({ 'content-type': res.contentType ?? 'text/html' }),
       text: async () => res.body ?? '',
-    }) as Response) as typeof fetch;
+    }) as Response) as unknown as typeof fetch;
 }
 
 const para = (n: number) =>
@@ -77,7 +77,7 @@ test('rejects non-http(s) URLs without fetching', async () => {
   globalThis.fetch = (async () => {
     fetched = true;
     return {} as Response;
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
   const out = (await webFetchTool().execute?.(
     { description: 'x', url: 'file:///etc/passwd' },
     opts,
