@@ -1,15 +1,16 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { Download, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAttachmentViewer, type ViewerFile } from '../state/attachment-viewer-store';
 
 /** Decode a base64 text data URL back to its source. */
-function decodeText(url: string): string {
+function decodeText(url: string, fallback: string): string {
   const base64 = url.slice(url.indexOf(',') + 1);
   try {
     return new TextDecoder().decode(Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)));
   } catch {
-    return '(无法读取内容)';
+    return fallback;
   }
 }
 
@@ -35,6 +36,7 @@ function download(file: ViewerFile): void {
  * shows its decoded content. Mounted once at the app root.
  */
 export function AttachmentViewer(): React.JSX.Element {
+  const { t } = useTranslation();
   const file = useAttachmentViewer((s) => s.file);
   const close = useAttachmentViewer((s) => s.close);
   const isImage = file?.mediaType.startsWith('image/') ?? false;
@@ -78,7 +80,7 @@ export function AttachmentViewer(): React.JSX.Element {
                 </Dialog.Title>
                 <button
                   type="button"
-                  title="下载"
+                  title={t('common.download')}
                   onClick={() => download(file)}
                   className="rounded-md p-1.5 text-fg-tertiary hover:bg-surface-strong hover:text-fg-secondary"
                 >
@@ -86,7 +88,7 @@ export function AttachmentViewer(): React.JSX.Element {
                 </button>
                 <Dialog.Close
                   className="rounded-md p-1.5 text-fg-tertiary hover:bg-surface-strong hover:text-fg-secondary"
-                  title="关闭"
+                  title={t('common.close')}
                 >
                   <X className="size-4" />
                 </Dialog.Close>
@@ -108,7 +110,7 @@ export function AttachmentViewer(): React.JSX.Element {
                 />
               ) : (
                 <pre className="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-fg-secondary text-xs leading-relaxed">
-                  {decodeText(file.url)}
+                  {decodeText(file.url, t('attachmentViewer.unreadable'))}
                 </pre>
               )}
             </>

@@ -1,5 +1,6 @@
 import { AlertCircle, Download, Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 import { EnableSwitch } from './EnableSwitch';
 
@@ -14,6 +15,7 @@ export function ModelsBlock({
   models: string[];
   enabledModels: string[];
 }): React.JSX.Element {
+  const { t } = useTranslation();
   const utils = trpc.useUtils();
   const fetchModels = trpc.providers.fetchModels.useMutation({
     onSuccess: () => utils.providers.list.invalidate(),
@@ -56,10 +58,10 @@ export function ModelsBlock({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="mb-2 flex shrink-0 items-center justify-between">
         <h3 className="font-medium text-fg-secondary text-xs">
-          Models
+          {t('settings.providers.models')}
           {models.length > 0 && (
             <span className="ml-2 font-normal text-fg-tertiary">
-              {enabledSet.size} / {models.length} enabled
+              {t('settings.providers.enabledCount', { on: enabledSet.size, total: models.length })}
             </span>
           )}
         </h3>
@@ -74,7 +76,7 @@ export function ModelsBlock({
           ) : (
             <Download className="size-[12px]" />
           )}
-          Fetch
+          {t('settings.providers.fetch')}
         </button>
       </div>
 
@@ -88,7 +90,9 @@ export function ModelsBlock({
       {models.length === 0 ? (
         <div className="shrink-0 rounded-lg border border-border-default border-dashed bg-surface px-6 py-8 text-center">
           <p className="text-fg-tertiary text-sm">
-            {hasCredentials ? '点 Fetch 拉取可用模型。' : '填好 API key 后即可 Fetch 模型。'}
+            {hasCredentials
+              ? t('settings.providers.fetchHint')
+              : t('settings.providers.fetchHintNoKey')}
           </p>
         </div>
       ) : (

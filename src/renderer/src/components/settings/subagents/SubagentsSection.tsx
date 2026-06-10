@@ -1,5 +1,6 @@
 import { Bot, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 import { deriveGroups } from '../../../lib/use-chat-model';
 import { SubagentForm, type SubagentItem } from './SubagentForm';
@@ -8,6 +9,7 @@ import { SubagentForm, type SubagentItem } from './SubagentForm';
 type Selection = string | 'new' | null;
 
 export function SubagentsSection(): React.JSX.Element {
+  const { t } = useTranslation();
   const subagents = trpc.subagents.list.useQuery();
   const tools = trpc.subagents.assignableTools.useQuery();
   const providers = trpc.providers.list.useQuery();
@@ -28,7 +30,7 @@ export function SubagentsSection(): React.JSX.Element {
   };
 
   if (subagents.isLoading || !subagents.data) {
-    return <p className="text-fg-tertiary text-sm">加载中…</p>;
+    return <p className="text-fg-tertiary text-sm">{t('common.loading')}</p>;
   }
 
   const list = subagents.data;
@@ -59,7 +61,7 @@ export function SubagentsSection(): React.JSX.Element {
           }`}
         >
           <Plus className="size-4 shrink-0 text-fg-tertiary" />
-          新建 Subagent
+          {t('settings.subagents.newSubagent')}
         </button>
       </aside>
 
@@ -130,13 +132,14 @@ function SubagentReadonly({
   onEdit?: () => void;
   onDelete?: () => void;
 }): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-6">
       <div className="flex items-center gap-2">
         <h2 className="font-semibold text-fg-primary text-lg">{item.name}</h2>
         {item.builtin && (
           <span className="rounded-full bg-surface-strong px-2 py-0.5 font-medium text-[10.5px] text-fg-tertiary uppercase tracking-wider">
-            内置
+            {t('settings.subagents.builtin')}
           </span>
         )}
         <span className="flex-1" />
@@ -144,7 +147,7 @@ function SubagentReadonly({
           <>
             <button
               type="button"
-              title="编辑"
+              title={t('common.edit')}
               onClick={onEdit}
               className="rounded-md p-1.5 text-fg-tertiary hover:bg-elevated hover:text-fg-secondary"
             >
@@ -152,7 +155,7 @@ function SubagentReadonly({
             </button>
             <button
               type="button"
-              title="删除"
+              title={t('common.delete')}
               onClick={onDelete}
               className="rounded-md p-1.5 text-fg-tertiary hover:bg-danger/10 hover:text-danger"
             >
@@ -163,13 +166,17 @@ function SubagentReadonly({
       </div>
       <p className="text-fg-secondary text-sm">{item.description}</p>
       <div>
-        <span className="mb-1 block font-medium text-fg-secondary text-xs">System prompt</span>
+        <span className="mb-1 block font-medium text-fg-secondary text-xs">
+          {t('settings.subagents.systemPrompt')}
+        </span>
         <pre className="whitespace-pre-wrap rounded-lg border border-border-default bg-surface p-3 font-mono text-fg-secondary text-xs">
           {item.systemPrompt}
         </pre>
       </div>
       <div>
-        <span className="mb-1 block font-medium text-fg-secondary text-xs">可用工具</span>
+        <span className="mb-1 block font-medium text-fg-secondary text-xs">
+          {t('settings.subagents.availableTools')}
+        </span>
         {item.toolAllow ? (
           <div className="flex flex-wrap gap-1.5">
             {item.toolAllow.map((t) => (
@@ -182,15 +189,17 @@ function SubagentReadonly({
             ))}
           </div>
         ) : (
-          <span className="text-fg-tertiary text-sm">继承主 agent 的全部工具</span>
+          <span className="text-fg-tertiary text-sm">{t('settings.subagents.inheritTools')}</span>
         )}
       </div>
       <div>
-        <span className="mb-1 block font-medium text-fg-secondary text-xs">承接模型</span>
+        <span className="mb-1 block font-medium text-fg-secondary text-xs">
+          {t('settings.subagents.handoffModel')}
+        </span>
         {item.providerId && item.modelId ? (
           <span className="text-fg-secondary text-sm">{`${item.providerId} · ${item.modelId}`}</span>
         ) : (
-          <span className="text-fg-tertiary text-sm">继承主对话模型</span>
+          <span className="text-fg-tertiary text-sm">{t('settings.subagents.inheritModel')}</span>
         )}
       </div>
     </div>
@@ -198,9 +207,10 @@ function SubagentReadonly({
 }
 
 function Empty(): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="flex h-full items-center justify-center px-6 text-fg-tertiary text-sm">
-      选择左侧的 subagent，或新建一个。
+      {t('settings.subagents.emptyHint')}
     </div>
   );
 }

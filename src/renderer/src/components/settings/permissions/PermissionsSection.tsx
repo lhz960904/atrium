@@ -1,6 +1,7 @@
 import type { TrustRule } from '@shared/permissions/rules';
 import { Check, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PERMISSION_MODE_META } from '../../../lib/permission-modes';
 import { trpc } from '../../../lib/trpc';
 import { useChatPermission } from '../../../lib/use-chat-permission';
@@ -20,29 +21,16 @@ function inputToRule(raw: string): TrustRule | null {
     : { tool: 'bash', matcher: value };
 }
 
-function Code({ children }: { children: string }): React.JSX.Element {
-  return (
-    <code className="rounded bg-surface-strong px-1.5 py-0.5 font-mono text-fg-primary text-xs">
-      {children}
-    </code>
-  );
-}
-
-/** Plain-language description of a rule — never mentions the internal tool. */
-function ruleLabel(rule: TrustRule): React.JSX.Element {
-  return rule.tool === 'bash' ? (
-    <span>
-      允许所有 <Code>{rule.matcher}</Code> 命令
-    </span>
-  ) : (
-    <span>
-      允许写入 <Code>{rule.matcher}</Code>
-    </span>
-  );
-}
-
 export function PermissionsSection(): React.JSX.Element {
+  const { t } = useTranslation();
   const { mode, setMode } = useChatPermission();
+
+  /** Plain-language description of a rule — never mentions the internal tool. */
+  const ruleLabel = (rule: TrustRule): string =>
+    rule.tool === 'bash'
+      ? t('settings.permissions.allowCommand', { cmd: rule.matcher })
+      : t('settings.permissions.allowPath', { path: rule.matcher });
+
   const utils = trpc.useUtils();
   const rules = trpc.settings.trustRules.useQuery();
   const refresh = (): void => {
@@ -63,7 +51,9 @@ export function PermissionsSection(): React.JSX.Element {
   return (
     <section className="flex flex-col gap-10">
       <div>
-        <h2 className="mb-3 font-medium text-fg-primary text-sm">权限模式</h2>
+        <h2 className="mb-3 font-medium text-fg-primary text-sm">
+          {t('settings.permissions.mode')}
+        </h2>
         <div className="grid grid-cols-3 gap-3">
           {PERMISSION_MODE_META.map((m) => {
             const Icon = m.icon;
@@ -85,8 +75,8 @@ export function PermissionsSection(): React.JSX.Element {
                   {active && <Check className="size-[14px] text-accent" />}
                 </div>
                 <div>
-                  <div className="font-medium text-fg-primary text-sm">{m.label}</div>
-                  <div className="text-fg-tertiary text-xs leading-snug">{m.desc}</div>
+                  <div className="font-medium text-fg-primary text-sm">{t(m.labelKey)}</div>
+                  <div className="text-fg-tertiary text-xs leading-snug">{t(m.descKey)}</div>
                 </div>
               </button>
             );
@@ -95,17 +85,17 @@ export function PermissionsSection(): React.JSX.Element {
       </div>
 
       <div>
-        <h2 className="mb-1 font-medium text-fg-primary text-sm">信任清单</h2>
-        <p className="mb-3 text-fg-tertiary text-xs">
-          这些操作越界时不再询问。多数会在审批卡点「总是允许」时自动加入；也可在此手动添加。
-        </p>
+        <h2 className="mb-1 font-medium text-fg-primary text-sm">
+          {t('settings.permissions.trustList')}
+        </h2>
+        <p className="mb-3 text-fg-tertiary text-xs">{t('settings.permissions.trustHint')}</p>
 
         <div className="flex gap-2">
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
-            placeholder="命令或路径，如 curl、npm install、~/.ssh/config"
+            placeholder={t('settings.permissions.addPlaceholder')}
             className="flex-1 rounded-lg border border-border-default bg-surface px-3 py-2 text-fg-primary text-sm outline-0 placeholder:text-fg-disabled focus:border-accent"
           />
           <button
@@ -115,10 +105,15 @@ export function PermissionsSection(): React.JSX.Element {
             className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 font-medium text-fg-on-accent text-sm hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Plus className="size-[14px]" />
-            添加
+            {t('settings.permissions.add')}
           </button>
         </div>
-        {pending && <p className="mt-2 text-fg-tertiary text-xs">将允许：{ruleLabel(pending)}</p>}
+        {pending && (
+          <p className="mt-2 text-fg-tertiary text-xs">
+            {t('settings.permissions.willAllow')}
+            {ruleLabel(pending)}
+          </p>
+        )}
 
         <ul className="mt-4 flex flex-col gap-2">
           {rules.data && rules.data.length > 0 ? (
@@ -132,7 +127,7 @@ export function PermissionsSection(): React.JSX.Element {
                 </span>
                 <button
                   type="button"
-                  title="删除"
+                  title={t('common.delete')}
                   onClick={() => deleteRule.mutate(r)}
                   className="rounded-md p-1.5 text-fg-tertiary hover:bg-surface-strong hover:text-danger"
                 >
@@ -142,7 +137,7 @@ export function PermissionsSection(): React.JSX.Element {
             ))
           ) : (
             <li className="rounded-lg border border-border-default border-dashed bg-surface px-4 py-8 text-center text-fg-tertiary text-sm">
-              还没有信任的操作。
+              {t('settings.permissions.empty')}
             </li>
           )}
         </ul>

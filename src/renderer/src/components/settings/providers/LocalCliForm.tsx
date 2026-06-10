@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 import type { ProviderView } from './types';
 
 type LocalCli = Extract<ProviderView, { kind: 'local-cli' }>;
 
 export function LocalCliForm({ provider }: { provider: LocalCli }): React.JSX.Element {
+  const { t } = useTranslation();
   // The manifest launch defaults — shown as placeholders so the user sees what
   // runs when a field is left blank.
   const defaultCommand = provider.acp.via === 'binary' ? provider.acp.command : provider.acp.bin;
@@ -14,32 +16,31 @@ export function LocalCliForm({ provider }: { provider: LocalCli }): React.JSX.El
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
       <div className="rounded-lg border border-border-default bg-surface px-4 py-4">
-        <p className="text-fg-secondary text-sm">无需 API key —— 复用你本地已登录的 CLI。</p>
-        <p className="mt-3 text-fg-tertiary text-xs">先全局安装它的 CLI / ACP 适配器:</p>
+        <p className="text-fg-secondary text-sm">{t('settings.providers.localNoKey')}</p>
+        <p className="mt-3 text-fg-tertiary text-xs">{t('settings.providers.localInstallHint')}</p>
         <pre className="mt-1.5 overflow-x-auto rounded-md bg-elevated px-3 py-2 font-mono text-fg-secondary text-xs">
           npm i -g {provider.install}
         </pre>
         <p className="mt-3 text-fg-tertiary text-xs leading-relaxed">
-          安装并登录后(如 <code>claude /login</code> / <code>codex login</code>),启用本项,
-          即可在对话框的模型选择里选它。
+          {t('settings.providers.localAfterInstall', { login: 'claude /login / codex login' })}
         </p>
       </div>
 
       <LaunchField
         providerId={provider.id}
         field="command"
-        label="Command"
+        label={t('settings.providers.command')}
         value={config.command ?? ''}
         placeholder={defaultCommand}
-        hint="启动 ACP agent 的命令,留空用默认。"
+        hint={t('settings.providers.localCommandHint')}
       />
       <LaunchField
         providerId={provider.id}
         field="args"
-        label="Arguments"
+        label={t('settings.providers.arguments')}
         value={config.args ?? ''}
         placeholder={defaultArgs || 'e.g. --acp --model …'}
-        hint="空格分隔的命令行参数,留空用默认。"
+        hint={t('settings.providers.localArgsHint')}
       />
     </div>
   );
@@ -60,6 +61,7 @@ function LaunchField({
   placeholder: string;
   hint: string;
 }): React.JSX.Element {
+  const { t } = useTranslation();
   const utils = trpc.useUtils();
   const [v, setV] = useState(value);
   const saveTimer = useRef<NodeJS.Timeout | null>(null);
@@ -81,7 +83,7 @@ function LaunchField({
         className="mb-1.5 block font-medium text-fg-secondary text-xs"
         htmlFor={`${field}-${providerId}`}
       >
-        {label} <span className="text-fg-tertiary">(Optional)</span>
+        {label} <span className="text-fg-tertiary">{t('settings.providers.optional')}</span>
       </label>
       <input
         id={`${field}-${providerId}`}

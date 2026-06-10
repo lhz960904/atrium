@@ -2,8 +2,6 @@ import { analyzeBash, type Crossing, describeWriteEscape } from '@shared/permiss
 import type { ToolName } from '@shared/tools';
 import { resolveInWorkspace } from '../sandbox/paths';
 
-export type { BoundaryKind } from '@shared/permissions/analyze';
-
 export type Classification = { crosses: false } | ({ crosses: true } & Crossing);
 
 const INSIDE: Classification = { crosses: false };

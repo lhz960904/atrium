@@ -2,6 +2,7 @@ import * as Collapsible from '@radix-ui/react-collapsible';
 import type { ClarifyResult } from '@shared/chat-types';
 import { ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ViewSegment } from '../../lib/assistant-view';
 import { LiveLabel } from './LiveLabel';
 import { SegmentList } from './SegmentList';
@@ -35,13 +36,14 @@ export function TraceBlock({
   durationMs,
   onAnswer,
 }: TraceBlockProps): React.JSX.Element {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(streaming);
   // Follow the stream: open while this part streams; once done, collapse only
   // if something follows it — otherwise the message would be a bare header.
   useEffect(() => setOpen(streaming || !hasFinal), [streaming, hasFinal]);
 
-  const rest = kind === 'thought' ? 'Thought' : 'Worked';
-  const live = kind === 'thought' ? 'Thinking' : 'Working';
+  const rest = kind === 'thought' ? t('trace.thought') : t('trace.worked');
+  const live = kind === 'thought' ? t('trace.thinking') : t('trace.working');
 
   return (
     <Collapsible.Root open={open} onOpenChange={setOpen}>
@@ -57,9 +59,14 @@ export function TraceBlock({
             <LiveLabel verb={live} createdAt={createdAt} />
           ) : (
             <span>
-              {durationMs != null ? `${rest} for ${formatRest(durationMs)}` : rest}
+              {durationMs != null
+                ? t('trace.duration', { verb: rest, duration: formatRest(durationMs) })
+                : rest}
               {kind === 'work' && toolCount > 0 && (
-                <span className="text-fg-disabled"> · {toolCount} steps</span>
+                <span className="text-fg-disabled">
+                  {' '}
+                  · {t('trace.steps', { count: toolCount })}
+                </span>
               )}
             </span>
           )}

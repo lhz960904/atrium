@@ -1,5 +1,6 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import { FileText, Package } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { openAttachment } from '../../state/attachment-viewer-store';
 import { CopyButton } from './CopyButton';
 
@@ -31,6 +32,7 @@ function renderWithMentions(text: string): React.ReactNode {
 }
 
 export function UserMessage({ parts }: { parts: AtriumUIMessage['parts'] }): React.JSX.Element {
+  const { t } = useTranslation();
   const text = parts
     .filter((p) => p.type === 'text')
     .map((p) => p.text)
@@ -43,7 +45,7 @@ export function UserMessage({ parts }: { parts: AtriumUIMessage['parts'] }): Rea
           {files.map((f, i) => {
             const view = (): void =>
               openAttachment({
-                filename: f.filename ?? '附件',
+                filename: f.filename ?? t('common.attachment'),
                 mediaType: f.mediaType,
                 url: f.url,
               });
@@ -60,7 +62,7 @@ export function UserMessage({ parts }: { parts: AtriumUIMessage['parts'] }): Rea
               >
                 <img
                   src={f.url}
-                  alt={f.filename ?? 'image'}
+                  alt={f.filename ?? t('common.attachment')}
                   className="h-full w-auto max-w-[240px] object-cover"
                 />
               </button>
@@ -73,7 +75,7 @@ export function UserMessage({ parts }: { parts: AtriumUIMessage['parts'] }): Rea
                 className="flex h-12 max-w-[220px] items-center gap-2 rounded-lg border border-border-default bg-surface px-3 text-fg-secondary text-xs hover:border-border-strong hover:bg-elevated"
               >
                 <FileText className="size-4 shrink-0 text-fg-tertiary" />
-                <span className="min-w-0 truncate">{f.filename ?? '附件'}</span>
+                <span className="min-w-0 truncate">{f.filename ?? t('common.attachment')}</span>
               </button>
             );
           })}

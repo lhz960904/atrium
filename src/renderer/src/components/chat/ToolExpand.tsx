@@ -1,7 +1,10 @@
 import type { Tool, ToolStatus } from '@shared/chat-types';
+import type { ParseKeys } from 'i18next';
 import { Ban, CheckCircle2, Loader2, TriangleAlert, XCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export function ToolExpand({ tool }: { tool: Tool }): React.JSX.Element {
+  const { t } = useTranslation();
   const isShell = tool.command !== undefined;
   const hasOutput = tool.output !== undefined && tool.output !== '';
 
@@ -21,7 +24,7 @@ export function ToolExpand({ tool }: { tool: Tool }): React.JSX.Element {
           {tool.output}
         </div>
       ) : isShell ? (
-        <div className="mb-3 text-fg-disabled italic opacity-85">No output</div>
+        <div className="mb-3 text-fg-disabled italic opacity-85">{t('tool.noOutput')}</div>
       ) : null}
 
       <ToolStatusRow status={tool.status} />
@@ -30,20 +33,24 @@ export function ToolExpand({ tool }: { tool: Tool }): React.JSX.Element {
 }
 
 function ToolStatusRow({ status }: { status: ToolStatus }): React.JSX.Element {
+  const { t } = useTranslation();
   const meta = STATUS_META[status];
   const Icon = meta.icon;
   return (
     <div className={`flex items-center justify-end gap-1 text-sm ${meta.cls}`}>
       <Icon className={`size-3 ${status === 'running' ? 'animate-spin' : ''}`} />
-      <span>{meta.label}</span>
+      <span>{t(meta.labelKey)}</span>
     </div>
   );
 }
 
-const STATUS_META: Record<ToolStatus, { label: string; cls: string; icon: typeof CheckCircle2 }> = {
-  success: { label: 'Success', cls: 'text-success', icon: CheckCircle2 },
-  error: { label: 'Error', cls: 'text-danger', icon: XCircle },
-  warning: { label: 'Warning', cls: 'text-warning', icon: TriangleAlert },
-  running: { label: 'Running…', cls: 'text-accent', icon: Loader2 },
-  cancelled: { label: 'Cancelled', cls: 'text-fg-disabled', icon: Ban },
+const STATUS_META: Record<
+  ToolStatus,
+  { labelKey: ParseKeys; cls: string; icon: typeof CheckCircle2 }
+> = {
+  success: { labelKey: 'status.success', cls: 'text-success', icon: CheckCircle2 },
+  error: { labelKey: 'status.error', cls: 'text-danger', icon: XCircle },
+  warning: { labelKey: 'status.warning', cls: 'text-warning', icon: TriangleAlert },
+  running: { labelKey: 'status.running', cls: 'text-accent', icon: Loader2 },
+  cancelled: { labelKey: 'status.cancelled', cls: 'text-fg-disabled', icon: Ban },
 };

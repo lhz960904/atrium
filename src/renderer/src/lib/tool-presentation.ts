@@ -1,4 +1,5 @@
 import type { ToolName } from '@shared/tools';
+import type { ParseKeys, TFunction } from 'i18next';
 import {
   Bot,
   FilePen,
@@ -51,12 +52,12 @@ const hostname = (u?: string): string => {
 
 export type ToolPresentation = {
   icon: LucideIcon;
-  /** Past tense, shown once the call has settled (e.g. "Read"). */
-  verb: string;
-  /** Present continuous, shown while the call is running (e.g. "Reading"). */
-  verbActive: string;
+  /** Catalog key for the past-tense verb, shown once the call has settled (e.g. "Read"). */
+  verbKey: ParseKeys;
+  /** Catalog key for the present-continuous verb, shown while the call runs (e.g. "Reading"). */
+  verbActiveKey: ParseKeys;
   target: (i: ToolInput) => string;
-  typeLabel: (i: ToolInput) => string;
+  typeLabel: (i: ToolInput, t: TFunction) => string;
   /** Shell-style tools surface a `$ command` line in the expanded card. */
   command?: (i: ToolInput) => string | undefined;
 };
@@ -71,102 +72,102 @@ const basename = (p?: string): string => (p ? (p.split('/').filter(Boolean).pop(
 export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
   read_file: {
     icon: FileText,
-    verb: 'Read',
-    verbActive: 'Reading',
+    verbKey: 'tool.verb.read',
+    verbActiveKey: 'tool.verbActive.read',
     target: (i) => basename(i.path),
-    typeLabel: (i) => `File · ${i.path ?? ''}`,
+    typeLabel: (i, t) => t('tool.type.file', { path: i.path ?? '' }),
   },
   write_file: {
     icon: FilePen,
-    verb: 'Wrote',
-    verbActive: 'Writing',
+    verbKey: 'tool.verb.write',
+    verbActiveKey: 'tool.verbActive.write',
     target: (i) => basename(i.path),
-    typeLabel: (i) => `File · ${i.path ?? ''}`,
+    typeLabel: (i, t) => t('tool.type.file', { path: i.path ?? '' }),
   },
   edit_file: {
     icon: FilePenLine,
-    verb: 'Edited',
-    verbActive: 'Editing',
+    verbKey: 'tool.verb.edit',
+    verbActiveKey: 'tool.verbActive.edit',
     target: (i) => basename(i.path),
-    typeLabel: (i) => `File · ${i.path ?? ''}`,
+    typeLabel: (i, t) => t('tool.type.file', { path: i.path ?? '' }),
   },
   list_dir: {
     icon: FolderTree,
-    verb: 'Listed',
-    verbActive: 'Listing',
+    verbKey: 'tool.verb.list',
+    verbActiveKey: 'tool.verbActive.list',
     target: (i) => basename(i.path) || 'workspace',
-    typeLabel: (i) => `Directory · ${i.path ?? '.'}`,
+    typeLabel: (i, t) => t('tool.type.directory', { path: i.path ?? '.' }),
   },
   grep: {
     icon: TextSearch,
-    verb: 'Searched',
-    verbActive: 'Searching',
+    verbKey: 'tool.verb.searchGrep',
+    verbActiveKey: 'tool.verbActive.searchGrep',
     target: (i) => i.pattern ?? '',
-    typeLabel: (i) => `Grep · ${i.path ?? 'workspace'}`,
+    typeLabel: (i, t) => t('tool.type.grep', { path: i.path ?? t('tool.workspace') }),
   },
   glob: {
     icon: FileSearch,
-    verb: 'Found files',
-    verbActive: 'Finding files',
+    verbKey: 'tool.verb.findFiles',
+    verbActiveKey: 'tool.verbActive.findFiles',
     target: (i) => i.pattern ?? '',
-    typeLabel: (i) => `Glob · ${i.path ?? 'workspace'}`,
+    typeLabel: (i, t) => t('tool.type.glob', { path: i.path ?? t('tool.workspace') }),
   },
   bash: {
     icon: Terminal,
-    verb: 'Ran',
-    verbActive: 'Running',
+    verbKey: 'tool.verb.run',
+    verbActiveKey: 'tool.verbActive.run',
     target: (i) => i.command ?? '',
-    typeLabel: () => 'Shell',
+    typeLabel: (_i, t) => t('tool.type.shell'),
     command: (i) => i.command,
   },
   bash_output: {
     icon: ScrollText,
-    verb: 'Read output',
-    verbActive: 'Reading output',
+    verbKey: 'tool.verb.readOutput',
+    verbActiveKey: 'tool.verbActive.readOutput',
     target: (i) => i.shell_id ?? '',
-    typeLabel: (i) => `Background shell · ${i.shell_id ?? ''}`,
+    typeLabel: (i, t) => t('tool.type.bgShell', { id: i.shell_id ?? '' }),
   },
   kill_shell: {
     icon: OctagonX,
-    verb: 'Stopped',
-    verbActive: 'Stopping',
+    verbKey: 'tool.verb.stop',
+    verbActiveKey: 'tool.verbActive.stop',
     target: (i) => i.shell_id ?? '',
-    typeLabel: (i) => `Background shell · ${i.shell_id ?? ''}`,
+    typeLabel: (i, t) => t('tool.type.bgShell', { id: i.shell_id ?? '' }),
   },
   web_fetch: {
     icon: Globe,
-    verb: 'Fetched',
-    verbActive: 'Fetching',
+    verbKey: 'tool.verb.fetch',
+    verbActiveKey: 'tool.verbActive.fetch',
     target: (i) => hostname(i.url),
-    typeLabel: (i) => `Web · ${i.url ?? ''}`,
+    typeLabel: (i, t) => t('tool.type.web', { url: i.url ?? '' }),
   },
   web_search: {
     icon: Search,
-    verb: 'Searched',
-    verbActive: 'Searching',
+    verbKey: 'tool.verb.searchWeb',
+    verbActiveKey: 'tool.verbActive.searchWeb',
     target: (i) => i.query ?? '',
-    typeLabel: () => 'Web search',
+    typeLabel: (_i, t) => t('tool.type.webSearch'),
   },
   task: {
     icon: Bot,
-    verb: 'Delegated',
-    verbActive: 'Delegating',
+    verbKey: 'tool.verb.delegate',
+    verbActiveKey: 'tool.verbActive.delegate',
     target: (i) => i.description ?? i.subagent ?? 'subagent',
-    typeLabel: (i) => `Subagent · ${i.subagent ?? 'general-purpose'}`,
+    typeLabel: (i, t) => t('tool.type.subagent', { name: i.subagent ?? 'general-purpose' }),
   },
   skill: {
     icon: Sparkles,
-    verb: 'Used skill',
-    verbActive: 'Using skill',
+    verbKey: 'tool.verb.useSkill',
+    verbActiveKey: 'tool.verbActive.useSkill',
     target: (i) => i.name ?? '',
-    typeLabel: (i) => `Skill · ${i.name ?? ''}`,
+    typeLabel: (i, t) => t('tool.type.skill', { name: i.name ?? '' }),
   },
   image_gen: {
     icon: ImageIcon,
-    verb: 'Generated image',
-    verbActive: 'Generating image',
+    verbKey: 'tool.verb.genImage',
+    verbActiveKey: 'tool.verbActive.genImage',
     target: (i) => i.prompt ?? '',
-    typeLabel: () => 'Image',
+    typeLabel: (_i, t) => t('tool.type.image'),
   },
 };
 

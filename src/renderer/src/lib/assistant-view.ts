@@ -11,6 +11,7 @@ import type {
 } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
 import { type DynamicToolUIPart, getStaticToolName, isStaticToolUIPart, type ToolUIPart } from 'ai';
+import type { TFunction } from 'i18next';
 import { type MarkerToolName, TOOL_PRESENTATION, type ToolInput } from './tool-presentation';
 
 /**
@@ -54,7 +55,7 @@ export type AssistantView = {
   toolCount: number;
 };
 
-export function buildAssistantView(parts: AtriumUIMessage['parts']): AssistantView {
+export function buildAssistantView(parts: AtriumUIMessage['parts'], t: TFunction): AssistantView {
   const thinking: ViewSegment[] = [];
   const work: ViewSegment[] = []; // non-reasoning: narrative + tools + clarify, in order
   let lastToolIdx = -1;
@@ -102,13 +103,13 @@ export function buildAssistantView(parts: AtriumUIMessage['parts']): AssistantVi
       // live body the card pulls from the subagent store; everything else is a
       // flat tool marker.
       if (name === 'task') work.push({ kind: 'subagent', subagent: toSubagentModel(part) });
-      else work.push({ kind: 'tool', tool: toToolModel(part, name) });
+      else work.push({ kind: 'tool', tool: toToolModel(part, name, t) });
     } else if (part.type === 'dynamic-tool') {
       // An external agent's tool call — arbitrary name, rendered generically by
       // its ACP kind (the part.toolName) + the agent-supplied title.
       lastToolIdx = work.length;
       toolCount++;
-      work.push({ kind: 'tool', tool: toDynamicToolModel(part) });
+      work.push({ kind: 'tool', tool: toDynamicToolModel(part, t) });
     }
   }
 
@@ -140,7 +141,7 @@ function toClarifySegment(part: AtriumToolPart): ClarifySegment | null {
 
 type AtriumToolPart = ToolUIPart<AtriumTools>;
 
-function toToolModel(part: AtriumToolPart, name: MarkerToolName): Tool {
+function toToolModel(part: AtriumToolPart, name: MarkerToolName, t: TFunction): Tool {
   const input = (part.input ?? {}) as ToolInput;
   const p = TOOL_PRESENTATION[name];
   const status = toStatus(part);
@@ -148,10 +149,10 @@ function toToolModel(part: AtriumToolPart, name: MarkerToolName): Tool {
     id: part.toolCallId,
     name,
     // Present continuous while it runs ("Reading"), past tense once settled ("Read").
-    verb: status === 'running' ? p.verbActive : p.verb,
+    verb: t(status === 'running' ? p.verbActiveKey : p.verbKey),
     target: p.target(input),
     status,
-    typeLabel: p.typeLabel(input),
+    typeLabel: p.typeLabel(input, t),
     command: p.command?.(input),
     output: toOutput(part),
   };
@@ -172,14 +173,14 @@ function toSubagentModel(part: AtriumToolPart): Subagent {
   };
 }
 
-function toDynamicToolModel(part: DynamicToolUIPart): Tool {
+function toDynamicToolModel(part: DynamicToolUIPart, t: TFunction): Tool {
   return {
     id: part.toolCallId,
     name: part.toolName,
     verb: '',
     target: part.title ?? part.toolName,
     status: toStatus(part),
-    typeLabel: `Agent · ${part.toolName}`,
+    typeLabel: t('tool.type.agent', { name: part.toolName }),
     output: toOutput(part),
   };
 }

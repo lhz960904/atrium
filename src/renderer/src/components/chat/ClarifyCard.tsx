@@ -3,6 +3,7 @@ import * as RadioGroup from '@radix-ui/react-radio-group';
 import type { Clarify, ClarifyOption, ClarifyQuestion, ClarifyResult } from '@shared/chat-types';
 import { ArrowRight, Check } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type ClarifyCardProps = {
   clarify: Clarify;
@@ -146,6 +147,7 @@ function CardHead({
   onTabClick: (i: number) => void;
   onCancel?: () => void;
 }): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2 border-border-default border-b bg-surface px-4 py-2">
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
@@ -185,10 +187,10 @@ function CardHead({
         <button
           type="button"
           onClick={onCancel}
-          title="取消提问，自己重新输入"
+          title={t('clarify.cancelTitle')}
           className="shrink-0 rounded-md px-2 py-1 text-fg-tertiary text-xs hover:bg-surface-strong hover:text-fg-secondary"
         >
-          取消
+          {t('clarify.cancel')}
         </button>
       )}
     </div>
@@ -210,11 +212,12 @@ function CardFoot({
   onPrev: () => void;
   onNext: () => void;
 }): React.JSX.Element {
+  const { t } = useTranslation();
   const isSubmitStep = !isMulti || isLast;
   return (
     <div className="flex items-center gap-3 border-border-default border-t bg-surface px-5 py-2.5">
       <span className="flex-1 text-fg-tertiary text-xs">
-        {isMulti ? '所有问题答完后 Atrium 才会继续' : '回答后 Atrium 会继续'}
+        {isMulti ? t('clarify.hintMulti') : t('clarify.hintSingle')}
       </span>
       {isMulti && (
         <button
@@ -223,7 +226,7 @@ function CardFoot({
           disabled={isFirst}
           className="rounded-md border border-border-default bg-surface px-3.5 py-1 text-fg-primary text-sm hover:border-border-strong disabled:cursor-not-allowed disabled:opacity-40"
         >
-          上一个
+          {t('clarify.prev')}
         </button>
       )}
       <button
@@ -232,7 +235,7 @@ function CardFoot({
         disabled={isSubmitStep && !canSubmit}
         className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-1 text-fg-on-accent text-sm hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {!isMulti ? '提交' : isLast ? '提交全部' : '下一个'}
+        {!isMulti ? t('clarify.submit') : isLast ? t('clarify.submitAll') : t('clarify.next')}
         {isMulti && !isLast && <ArrowRight className="size-3.5" />}
       </button>
     </div>
@@ -291,6 +294,7 @@ function SingleSelect({
   answer: Extract<QAnswer, { type: 'single' }>;
   onChange: (a: QAnswer) => void;
 }): React.JSX.Element {
+  const { t } = useTranslation();
   const hasPreview = options.some((o) => o.preview);
   const hasCustom = answer.custom.trim().length > 0;
 
@@ -331,7 +335,7 @@ function SingleSelect({
       type="text"
       value={answer.custom}
       onChange={(e) => onChange({ ...answer, custom: e.target.value })}
-      placeholder="或者填别的…"
+      placeholder={t('clarify.otherSingle')}
       className={customInputCls}
     />
   );
@@ -346,7 +350,7 @@ function SingleSelect({
         </div>
         <div>
           <div className="mb-1.5 font-medium text-[10px] text-fg-tertiary uppercase tracking-wider">
-            Preview · 伪代码
+            {t('clarify.preview')}
           </div>
           <pre className="max-h-[280px] min-h-[120px] overflow-auto rounded-md border border-border-default bg-canvas px-4 py-3 font-mono text-fg-secondary text-xs leading-snug">
             {preview}
@@ -373,6 +377,7 @@ function MultiSelect({
   answer: Extract<QAnswer, { type: 'multi' }>;
   onChange: (a: QAnswer) => void;
 }): React.JSX.Element {
+  const { t } = useTranslation();
   const toggle = (label: string): void => {
     const has = answer.choices.includes(label);
     onChange({
@@ -407,7 +412,6 @@ function MultiSelect({
                   className="size-2.5 fill-none stroke-fg-on-accent stroke-2"
                   aria-hidden="true"
                 >
-                  <title>Selected</title>
                   <path d="M3 8.5 6.5 12 13 4.5" />
                 </svg>
               </Checkbox.Indicator>
@@ -420,7 +424,7 @@ function MultiSelect({
         type="text"
         value={answer.custom}
         onChange={(e) => onChange({ ...answer, custom: e.target.value })}
-        placeholder="或者补充别的…"
+        placeholder={t('clarify.otherMulti')}
         className={customInputCls}
       />
     </div>
@@ -434,13 +438,14 @@ function TextInput({
   value: string;
   onChange: (text: string) => void;
 }): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <textarea
       rows={4}
       maxLength={TEXT_LIMIT}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      placeholder="自由文本输入…"
+      placeholder={t('clarify.text')}
       className="block w-full resize-y rounded-md border border-border-default bg-surface px-3.5 py-2.5 text-fg-primary text-sm placeholder:text-fg-disabled focus:border-accent focus:outline-none"
     />
   );
@@ -453,16 +458,17 @@ function ResolvedCard({
   clarify: Clarify;
   result?: ClarifyResult;
 }): React.JSX.Element {
+  const { t } = useTranslation();
   const answers = result?.answers ?? [];
   const cancelled = result?.cancelled === true;
   return (
     <div className="my-3 overflow-hidden rounded-lg border border-border-default bg-elevated">
       <div className="border-border-default border-b bg-surface px-4 py-2 font-medium text-[10.5px] text-fg-tertiary uppercase tracking-wider">
-        {cancelled ? '已取消' : '已回答'}
+        {cancelled ? t('clarify.cancelled') : t('clarify.answered')}
       </div>
       <div className="flex flex-col gap-3 px-5 py-4">
         {cancelled ? (
-          <div className="text-fg-tertiary text-sm">已取消提问，未作答。</div>
+          <div className="text-fg-tertiary text-sm">{t('clarify.cancelledNote')}</div>
         ) : (
           clarify.questions.map((q, i) => (
             <div key={q.id}>

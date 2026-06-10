@@ -1,4 +1,5 @@
 import { Paperclip, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 /** A pending composer attachment. The content is read into `url` (a data URL)
  *  at pick time, so it's a self-contained copy — moving/deleting the original
@@ -20,6 +21,7 @@ export function AttachmentChip({
   attachment: Attachment;
   onRemove: (id: string) => void;
 }): React.JSX.Element {
+  const { t } = useTranslation();
   const isImage = attachment.mediaType.startsWith('image/');
   return (
     <span className="inline-flex max-w-[220px] items-center gap-1.5 rounded-md border border-border-default bg-surface py-1 pr-1 pl-2 text-fg-secondary text-xs">
@@ -35,7 +37,7 @@ export function AttachmentChip({
       <span className="min-w-0 flex-1 truncate">{attachment.name}</span>
       <button
         type="button"
-        title="移除"
+        title={t('common.remove')}
         onClick={() => onRemove(attachment.id)}
         className="rounded p-0.5 text-fg-tertiary hover:bg-elevated hover:text-fg-primary"
       >

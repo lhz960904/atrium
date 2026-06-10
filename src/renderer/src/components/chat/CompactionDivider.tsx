@@ -1,5 +1,6 @@
 import { ChevronDown, Inbox } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 // The server prefixes the persisted summary with this preamble (for the model);
 // the divider already says "compacted", so we strip it from the shown body.
@@ -11,6 +12,7 @@ const PREAMBLE = 'Earlier conversation was compacted to save context. Summary of
  * replaced the folded-away messages.
  */
 export function CompactionDivider({ summary }: { summary: string }): React.JSX.Element {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const body = summary.replace(PREAMBLE, '').trim();
 
@@ -24,7 +26,7 @@ export function CompactionDivider({ summary }: { summary: string }): React.JSX.E
           className="flex items-center gap-1.5 text-sm hover:text-fg-secondary"
         >
           <Inbox className="size-3.5" />
-          Context compacted
+          {t('trace.compacted')}
           <ChevronDown className={`size-3 transition-transform ${open ? '' : '-rotate-90'}`} />
         </button>
         <div className="h-px flex-1 bg-border-default" />
@@ -49,10 +51,11 @@ export function CompactionDivider({ summary }: { summary: string }): React.JSX.E
  * shimmer-text label (no accent), shown inline while a fold runs.
  */
 export function CompactionProgress(): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="my-5 flex items-center gap-3">
       <div className="h-px flex-1 bg-border-default" />
-      <span className="compaction-shimmer shrink-0 text-sm">Compacting context…</span>
+      <span className="compaction-shimmer shrink-0 text-sm">{t('trace.compacting')}</span>
       <div className="h-px flex-1 bg-border-default" />
     </div>
   );

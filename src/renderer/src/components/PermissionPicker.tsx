@@ -1,6 +1,7 @@
 import * as Popover from '@radix-ui/react-popover';
 import { Check, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PERMISSION_MODE_META } from '../lib/permission-modes';
 import { useChatPermission } from '../lib/use-chat-permission';
 
@@ -11,6 +12,7 @@ import { useChatPermission } from '../lib/use-chat-permission';
  */
 export function PermissionPicker(): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
   const { mode, setMode } = useChatPermission();
   const current = PERMISSION_MODE_META.find((m) => m.id === mode) ?? PERMISSION_MODE_META[0];
   const Icon = current.icon;
@@ -24,7 +26,7 @@ export function PermissionPicker(): React.JSX.Element {
           className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-elevated ${danger ? 'text-warning hover:text-warning' : 'text-fg-tertiary hover:text-fg-secondary'}`}
         >
           <Icon className="size-[14px] shrink-0" />
-          <span>{current.label}</span>
+          <span>{t(current.labelKey)}</span>
           <ChevronDown className="size-[14px] shrink-0" />
         </button>
       </Popover.Trigger>
@@ -53,11 +55,11 @@ export function PermissionPicker(): React.JSX.Element {
                 <MIcon className="mt-0.5 size-4 shrink-0" />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5 text-sm">
-                    {m.label}
+                    {t(m.labelKey)}
                     {sel && <Check className="size-[13px] shrink-0 text-accent" />}
                   </span>
                   <span className="mt-0.5 block text-fg-tertiary text-xs leading-snug">
-                    {m.desc}
+                    {t(m.descKey)}
                   </span>
                 </span>
               </button>

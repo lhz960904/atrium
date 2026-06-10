@@ -19,7 +19,7 @@ const defaultConnect: Connect = (s) =>
 
 function notInstalledMessage(s: AcpSpec): string | undefined {
   if (!s.install) return undefined;
-  return `${s.label ?? s.command} 未安装。请运行: npm i -g ${s.install}（并确保它在 PATH 中）。`;
+  return `${s.label ?? s.command} is not installed. Run: npm i -g ${s.install} (and make sure it's on your PATH).`;
 }
 
 type Entry = { session: AcpSession; providerId: string; sessionId: string; lru: number };

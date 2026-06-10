@@ -5,6 +5,9 @@
  * (enabled flag, base URL, visible models, encrypted credentials). Display
  * name, kind, default endpoints, console URLs, etc. live here so the table
  * stays minimal and we can ship updated copy without a schema migration.
+ *
+ * `descriptionKey` is an i18n key (not display text): the renderer translates
+ * it, keeping this main-side catalog free of localized strings.
  */
 
 export type ProviderKind = 'cloud-api' | 'local-cli';
@@ -23,7 +26,7 @@ export type CloudApiManifest = {
   id: string;
   kind: 'cloud-api';
   name: string;
-  description: string;
+  descriptionKey: string;
   /** Decides how the `/models` listing request is shaped + parsed. */
   protocol: CloudApiProtocol;
   defaultBaseUrl: string;
@@ -37,7 +40,7 @@ export type LocalCliManifest = {
   id: string;
   kind: 'local-cli';
   name: string;
-  description: string;
+  descriptionKey: string;
   acp: AcpLaunch;
   /** npm package the user global-installs (we don't bundle it) — shown as a hint. */
   install: string;
@@ -51,7 +54,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'anthropic',
     kind: 'cloud-api',
     name: 'Anthropic',
-    description: 'Claude models — Opus, Sonnet, Haiku. Direct API.',
+    descriptionKey: 'settings.providers.desc.anthropic',
     protocol: 'anthropic',
     defaultBaseUrl: 'https://api.anthropic.com',
     consoleUrl: 'https://console.anthropic.com/settings/keys',
@@ -61,7 +64,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'openai',
     kind: 'cloud-api',
     name: 'OpenAI',
-    description: 'GPT-5, GPT-4.1 and o-series via OpenAI API.',
+    descriptionKey: 'settings.providers.desc.openai',
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://api.openai.com/v1',
     consoleUrl: 'https://platform.openai.com/api-keys',
@@ -71,7 +74,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'deepseek',
     kind: 'cloud-api',
     name: 'DeepSeek',
-    description: 'DeepSeek-V3 / R1. Cost-effective, strong at code & reasoning.',
+    descriptionKey: 'settings.providers.desc.deepseek',
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://api.deepseek.com',
     consoleUrl: 'https://platform.deepseek.com/api_keys',
@@ -81,7 +84,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'google',
     kind: 'cloud-api',
     name: 'Google Gemini',
-    description: 'Gemini 2.5 Pro / Flash via Google AI Studio.',
+    descriptionKey: 'settings.providers.desc.google',
     protocol: 'google-gemini',
     defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     consoleUrl: 'https://aistudio.google.com/apikey',
@@ -91,7 +94,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'moonshot',
     kind: 'cloud-api',
     name: 'Moonshot',
-    description: 'Kimi 系列（Moonshot AI）。长上下文。',
+    descriptionKey: 'settings.providers.desc.moonshot',
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://api.moonshot.cn/v1',
     consoleUrl: 'https://platform.moonshot.cn/console/api-keys',
@@ -101,7 +104,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'kimi-coding',
     kind: 'cloud-api',
     name: 'Kimi Coding Plan',
-    description: '月之暗面 · Coding 订阅版（Anthropic 兼容）。',
+    descriptionKey: 'settings.providers.desc.kimiCoding',
     protocol: 'anthropic',
     defaultBaseUrl: 'https://api.moonshot.cn/anthropic',
     consoleUrl: 'https://platform.moonshot.cn/',
@@ -111,7 +114,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'zai-coding',
     kind: 'cloud-api',
     name: 'Z.AI Coding Plan',
-    description: '智谱清言 GLM Coding 订阅版（Anthropic 兼容）。',
+    descriptionKey: 'settings.providers.desc.zaiCoding',
     protocol: 'anthropic',
     defaultBaseUrl: 'https://open.bigmodel.cn/api/anthropic',
     consoleUrl: 'https://open.bigmodel.cn/',
@@ -121,7 +124,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'openrouter',
     kind: 'cloud-api',
     name: 'OpenRouter',
-    description: '统一 API 路由 300+ 模型。',
+    descriptionKey: 'settings.providers.desc.openrouter',
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
     consoleUrl: 'https://openrouter.ai/keys',
@@ -131,7 +134,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'aihubmix',
     kind: 'cloud-api',
     name: 'AiHubMix',
-    description: '一站式 LLM 聚合，单 key 调多家模型。',
+    descriptionKey: 'settings.providers.desc.aihubmix',
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://aihubmix.com/v1',
     consoleUrl: 'https://aihubmix.com/',
@@ -142,7 +145,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'claude-code',
     kind: 'local-cli',
     name: 'Claude Code',
-    description: '通过 ACP 调用你本地已登录的 Claude Code（复用订阅，无需 API key）。',
+    descriptionKey: 'settings.providers.desc.claudeCode',
     acp: {
       via: 'adapter',
       package: '@agentclientprotocol/claude-agent-acp',
@@ -154,7 +157,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'codex-cli',
     kind: 'local-cli',
     name: 'Codex CLI',
-    description: '通过 ACP 调用你本地已登录的 Codex CLI（复用 ChatGPT 订阅）。',
+    descriptionKey: 'settings.providers.desc.codexCli',
     acp: { via: 'adapter', package: '@agentclientprotocol/codex-acp', bin: 'codex-acp' },
     install: '@agentclientprotocol/codex-acp',
   },
@@ -162,7 +165,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'gemini-cli',
     kind: 'local-cli',
     name: 'Gemini CLI',
-    description: '通过 ACP 调用你本地已登录的 Gemini CLI（自带 ACP）。',
+    descriptionKey: 'settings.providers.desc.geminiCli',
     acp: { via: 'binary', command: 'gemini', args: ['--acp'] },
     install: '@google/gemini-cli',
   },

@@ -1,9 +1,12 @@
 import { createFileRoute, notFound } from '@tanstack/react-router';
+import type { ParseKeys } from 'i18next';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { PermissionsSection } from '../../components/settings/permissions/PermissionsSection';
 import { ProvidersSection } from '../../components/settings/providers/ProvidersSection';
 import { SkillsSection } from '../../components/settings/skills/SkillsSection';
 import { SubagentsSection } from '../../components/settings/subagents/SubagentsSection';
+import { type LanguagePref, useLanguage } from '../../lib/use-language';
 import { type Theme, useThemeStore } from '../../state/theme-store';
 
 export const Route = createFileRoute('/settings/$section')({
@@ -11,59 +14,72 @@ export const Route = createFileRoute('/settings/$section')({
 });
 
 type SectionMeta = {
-  title: string;
-  sub: string;
+  titleKey: ParseKeys;
+  subKey: ParseKeys;
   /** Providers needs the full width; the rest read better at narrow column. */
   wide?: boolean;
   Component: () => React.JSX.Element;
 };
 
 const SECTIONS: Record<string, SectionMeta> = {
-  general: { title: 'General', sub: '对话风格、默认值、行为开关。', Component: PlaceholderSection },
-  appearance: { title: 'Appearance', sub: '主题与外观偏好。', Component: AppearanceSection },
+  general: {
+    titleKey: 'settings.sections.generalTitle',
+    subKey: 'settings.sections.generalSub',
+    Component: GeneralSection,
+  },
+  appearance: {
+    titleKey: 'settings.sections.appearanceTitle',
+    subKey: 'settings.sections.appearanceSub',
+    Component: AppearanceSection,
+  },
   providers: {
-    title: 'Providers',
-    sub: '配置 Atrium 如何接入语言模型。',
+    titleKey: 'settings.sections.providersTitle',
+    subKey: 'settings.sections.providersSub',
     wide: true,
     Component: ProvidersSection,
   },
   skills: {
-    title: 'Skills',
-    sub: '从 Agents、Claude、Codex 收集的技能，为 AI 赋予完成特定任务的专业能力。',
+    titleKey: 'settings.sections.skillsTitle',
+    subKey: 'settings.sections.skillsSub',
     Component: SkillsSection,
   },
   subagents: {
-    title: 'Subagents',
-    sub: 'task 工具拉起的子 agent：内置只读，自定义可配 prompt、工具与承接模型。',
+    titleKey: 'settings.sections.subagentsTitle',
+    subKey: 'settings.sections.subagentsSub',
     wide: true,
     Component: SubagentsSection,
   },
   permissions: {
-    title: 'Permissions',
-    sub: '工具调用的权限模式与信任清单。',
+    titleKey: 'settings.sections.permissionsTitle',
+    subKey: 'settings.sections.permissionsSub',
     Component: PermissionsSection,
   },
   memories: {
-    title: 'Memories',
-    sub: 'Atrium 记住的事实与上下文。',
+    titleKey: 'settings.sections.memoriesTitle',
+    subKey: 'settings.sections.memoriesSub',
     Component: PlaceholderSection,
   },
-  about: { title: 'About', sub: '关于 Atrium。', Component: PlaceholderSection },
+  about: {
+    titleKey: 'settings.sections.aboutTitle',
+    subKey: 'settings.sections.aboutSub',
+    Component: PlaceholderSection,
+  },
 };
 
 function SectionView(): React.JSX.Element {
+  const { t } = useTranslation();
   const { section } = Route.useParams();
   const meta = SECTIONS[section];
   if (!meta) throw notFound();
 
-  const { title, sub, wide = false, Component } = meta;
+  const { titleKey, subKey, wide = false, Component } = meta;
 
   return (
     <div
       className={`flex h-full flex-col ${wide ? 'px-8 py-6' : 'mx-auto max-w-[720px] px-10 py-8'}`}
     >
-      <h1 className="mb-1 font-semibold text-2xl text-fg-primary tracking-tight">{title}</h1>
-      <p className={`text-fg-tertiary text-sm ${wide ? 'mb-5' : 'mb-8'}`}>{sub}</p>
+      <h1 className="mb-1 font-semibold text-2xl text-fg-primary tracking-tight">{t(titleKey)}</h1>
+      <p className={`text-fg-tertiary text-sm ${wide ? 'mb-5' : 'mb-8'}`}>{t(subKey)}</p>
       <div className={wide ? 'min-h-0 flex-1' : ''}>
         <Component />
       </div>
@@ -71,19 +87,69 @@ function SectionView(): React.JSX.Element {
   );
 }
 
-function AppearanceSection(): React.JSX.Element {
-  const theme = useThemeStore((s) => s.theme);
-  const setTheme = useThemeStore((s) => s.setTheme);
+function GeneralSection(): React.JSX.Element {
+  const { t } = useTranslation();
+  const { pref, setLanguage } = useLanguage();
 
-  const tiles: Array<{ value: Theme; label: string; desc: string; icon: typeof Sun }> = [
-    { value: 'light', label: 'Light', desc: 'Salon 主题', icon: Sun },
-    { value: 'dark', label: 'Dark', desc: 'Studio 主题', icon: Moon },
-    { value: 'system', label: 'System', desc: '跟随系统外观', icon: Monitor },
+  const tiles: Array<{ value: LanguagePref; label: string; desc?: string }> = [
+    { value: 'zh', label: t('settings.language.zh') },
+    { value: 'en', label: t('settings.language.en') },
+    {
+      value: 'system',
+      label: t('settings.language.system'),
+      desc: t('settings.language.systemDesc'),
+    },
   ];
 
   return (
     <section>
-      <h2 className="mb-3 font-medium text-fg-primary text-sm">Theme</h2>
+      <h2 className="mb-3 font-medium text-fg-primary text-sm">{t('settings.language.title')}</h2>
+      <div className="grid grid-cols-3 gap-3">
+        {tiles.map((tile) => {
+          const active = pref === tile.value;
+          return (
+            <button
+              type="button"
+              key={tile.value}
+              onClick={() => setLanguage(tile.value)}
+              className={`relative flex min-h-[68px] flex-col gap-1.5 rounded-lg border px-4 py-3.5 text-left transition-colors ${
+                active
+                  ? 'border-accent bg-accent-soft'
+                  : 'border-border-default bg-surface hover:border-border-strong'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span
+                  className={`font-medium text-sm ${active ? 'text-accent' : 'text-fg-primary'}`}
+                >
+                  {tile.label}
+                </span>
+                {active && <Check className="size-[14px] text-accent" />}
+              </div>
+              {tile.desc && <span className="text-fg-tertiary text-xs">{tile.desc}</span>}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-4 text-fg-tertiary text-xs">{t('settings.language.note')}</p>
+    </section>
+  );
+}
+
+function AppearanceSection(): React.JSX.Element {
+  const { t } = useTranslation();
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
+
+  const tiles: Array<{ value: Theme; label: string; desc: string; icon: typeof Sun }> = [
+    { value: 'light', label: 'Light', desc: t('settings.appearance.lightDesc'), icon: Sun },
+    { value: 'dark', label: 'Dark', desc: t('settings.appearance.darkDesc'), icon: Moon },
+    { value: 'system', label: 'System', desc: t('settings.appearance.systemDesc'), icon: Monitor },
+  ];
+
+  return (
+    <section>
+      <h2 className="mb-3 font-medium text-fg-primary text-sm">{t('settings.appearance.theme')}</h2>
       <div className="grid grid-cols-3 gap-3">
         {tiles.map((tile) => {
           const Icon = tile.icon;
@@ -111,17 +177,16 @@ function AppearanceSection(): React.JSX.Element {
           );
         })}
       </div>
-      <p className="mt-4 text-fg-tertiary text-xs">
-        切换会立即生效。System 模式会跟随 macOS 外观偏好自动变换。
-      </p>
+      <p className="mt-4 text-fg-tertiary text-xs">{t('settings.appearance.note')}</p>
     </section>
   );
 }
 
 function PlaceholderSection(): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="rounded-lg border border-border-default border-dashed bg-surface px-6 py-12 text-center">
-      <p className="text-fg-tertiary text-sm">本节内容在后续步骤实装。</p>
+      <p className="text-fg-tertiary text-sm">{t('settings.placeholder')}</p>
     </div>
   );
 }

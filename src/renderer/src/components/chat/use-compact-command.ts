@@ -1,5 +1,6 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import { FoldVertical } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { trpc } from '../../lib/trpc';
 import { useCompactionStore } from '../../state/compaction-store';
 import type { SelectedModel } from '../../state/model-store';
@@ -24,10 +25,11 @@ export function useCompactCommand({
   endpoint,
   setMessages,
 }: CompactDeps): SlashCommand {
+  const { t } = useTranslation();
   const utils = trpc.useUtils();
   return {
     name: 'Compact',
-    description: '压缩对话上下文，为模型释放空间',
+    description: t('command.compactDesc'),
     icon: FoldVertical,
     run: () => {
       if (!model || useCompactionStore.getState().active[threadId]) return;

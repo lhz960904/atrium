@@ -143,7 +143,7 @@ export const providersRouter = router({
       if (!row?.blob) {
         throw new TRPCError({
           code: 'PRECONDITION_FAILED',
-          message: '请先填写 API key。',
+          message: 'Add an API key first.',
         });
       }
       const apiKey = decryptCredentials<{ key: string }>(row.blob).key;

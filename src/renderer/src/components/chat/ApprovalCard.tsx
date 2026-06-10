@@ -1,5 +1,7 @@
+import type { CrossingCode } from '@shared/permissions/analyze';
 import { Check, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { PendingApproval } from '../../lib/approvals';
 
 /** Hold the confirmation this long, then slide out and send the response. */
@@ -9,11 +11,20 @@ const SLIDE_MS = 240;
 
 type Decision = 'once' | 'always' | 'deny';
 
-const CONFIRM_LABEL: Record<Decision, string> = {
-  once: '已允许一次',
-  always: '已加入信任清单',
-  deny: '已拒绝',
-};
+const CONFIRM_KEY = {
+  once: 'approval.confirmedOnce',
+  always: 'approval.confirmedAlways',
+  deny: 'approval.confirmedDeny',
+} as const satisfies Record<Decision, string>;
+
+const REASON_KEY = {
+  network: 'approval.reason.network',
+  dangerous: 'approval.reason.dangerous',
+  substitution: 'approval.reason.substitution',
+  unparseable: 'approval.reason.unparseable',
+  wrapper: 'approval.reason.wrapper',
+  fsEscape: 'approval.reason.fsEscape',
+} as const satisfies Record<CrossingCode, string>;
 
 type ApprovalCardProps = {
   approval: PendingApproval;
@@ -41,6 +52,7 @@ export function ApprovalCard({
   onAlways,
   onDeny,
 }: ApprovalCardProps): React.JSX.Element {
+  const { t } = useTranslation();
   const [shown, setShown] = useState(false);
   const [decided, setDecided] = useState<Decision | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -64,9 +76,12 @@ export function ApprovalCard({
     );
   };
 
-  const danger = approval.crossing?.kind === 'dangerous';
+  const crossing = approval.crossing;
+  const danger = crossing?.code === 'dangerous';
   const tint = danger ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning';
-  const reason = approval.crossing?.reason ?? '需要确认';
+  const reason = crossing
+    ? t(REASON_KEY[crossing.code], { cmd: crossing.subject ?? '', path: crossing.subject ?? '' })
+    : '';
   const rule = approval.rule;
 
   return (
@@ -91,7 +106,7 @@ export function ApprovalCard({
             <Check className="size-[15px] shrink-0" />
           )}
           <span>
-            {CONFIRM_LABEL[decided]}
+            {t(CONFIRM_KEY[decided])}
             {decided === 'always' && rule ? ` · ${rule.matcher}` : ''}
           </span>
         </div>
@@ -99,10 +114,14 @@ export function ApprovalCard({
         <>
           <div className={`flex items-center gap-2 px-4 py-3 ${tint}`}>
             <TriangleAlert className="size-[15px] shrink-0" />
-            <span className="font-semibold text-fg-primary text-sm">需要确认</span>
-            <span className="min-w-0 truncate text-sm">· {reason}</span>
+            <span className="font-semibold text-fg-primary text-sm">
+              {t('approval.needConfirm')}
+            </span>
+            {reason && <span className="min-w-0 truncate text-sm">· {reason}</span>}
             {more > 0 && (
-              <span className="ml-auto shrink-0 text-fg-tertiary text-xs">还有 {more} 项</span>
+              <span className="ml-auto shrink-0 text-fg-tertiary text-xs">
+                {t('approval.more', { count: more })}
+              </span>
             )}
           </div>
           <div className="px-4 pt-3">
@@ -114,7 +133,8 @@ export function ApprovalCard({
           <div className="flex items-center gap-2 px-4 py-3">
             {rule ? (
               <span className="min-w-0 flex-1 truncate text-fg-tertiary text-xs">
-                总是允许 → 记住 <code className="font-mono text-fg-secondary">{rule.matcher}</code>
+                {t('approval.remember')}{' '}
+                <code className="font-mono text-fg-secondary">{rule.matcher}</code>
               </span>
             ) : (
               <span className="flex-1" />
@@ -124,7 +144,7 @@ export function ApprovalCard({
               onClick={() => decide('deny')}
               className="rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
             >
-              拒绝
+              {t('approval.deny')}
             </button>
             <button
               type="button"
@@ -135,7 +155,7 @@ export function ApprovalCard({
                   : 'rounded-md bg-accent px-3 py-1.5 font-medium text-fg-on-accent text-sm hover:bg-accent-hover'
               }
             >
-              允许一次
+              {t('approval.allowOnce')}
             </button>
             {rule && (
               <button
@@ -143,7 +163,7 @@ export function ApprovalCard({
                 onClick={() => decide('always')}
                 className="rounded-md bg-accent px-3 py-1.5 font-medium text-fg-on-accent text-sm hover:bg-accent-hover"
               >
-                总是允许
+                {t('approval.allowAlways')}
               </button>
             )}
           </div>

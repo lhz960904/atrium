@@ -3,6 +3,7 @@ import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChatThread } from '../../../components/chat/ChatThread';
 import type { Attachment } from '../../../components/chat/composer/AttachmentChip';
 import { useCompactCommand } from '../../../components/chat/use-compact-command';
@@ -30,19 +31,20 @@ function toFileParts(attachments: Attachment[]) {
 }
 
 function ChatView(): React.JSX.Element {
+  const { t } = useTranslation();
   const { threadId } = Route.useParams();
   const thread = trpc.threads.get.useQuery({ id: threadId });
   const endpoint = trpc.system.chatEndpoint.useQuery();
   const { selected } = useChatModel();
 
   if (thread.isLoading || endpoint.isLoading) {
-    return <Centered>Loading…</Centered>;
+    return <Centered>{t('common.loading')}</Centered>;
   }
   if (!thread.data) {
-    return <Centered>对话不存在</Centered>;
+    return <Centered>{t('chat.notFound')}</Centered>;
   }
   if (!endpoint.data) {
-    return <Centered>聊天服务未就绪</Centered>;
+    return <Centered>{t('chat.serviceNotReady')}</Centered>;
   }
 
   const initialMessages: AtriumUIMessage[] = thread.data.messages.map((m) => ({
@@ -56,7 +58,7 @@ function ChatView(): React.JSX.Element {
     <ChatRunner
       key={threadId}
       threadId={threadId}
-      title={thread.data.title ?? '未命名对话'}
+      title={thread.data.title ?? t('common.untitledChat')}
       initialMessages={initialMessages}
       model={selected}
       endpoint={endpoint.data}

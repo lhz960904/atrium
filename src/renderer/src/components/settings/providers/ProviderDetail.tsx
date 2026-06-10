@@ -1,3 +1,5 @@
+import type { ParseKeys } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 import { ApiKeyField } from './ApiKeyField';
 import { BaseUrlField } from './BaseUrlField';
@@ -7,6 +9,7 @@ import { ModelsBlock } from './ModelsBlock';
 import type { ProviderView } from './types';
 
 export function ProviderDetail({ provider }: { provider: ProviderView }): React.JSX.Element {
+  const { t } = useTranslation();
   const utils = trpc.useUtils();
   const setEnabled = trpc.providers.setEnabled.useMutation({
     onMutate: async ({ id, enabled }) => {
@@ -35,7 +38,9 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
             </h2>
             <ActiveBadge enabled={provider.enabled} />
           </div>
-          <p className="text-fg-tertiary text-sm leading-snug">{provider.description}</p>
+          <p className="text-fg-tertiary text-sm leading-snug">
+            {t(provider.descriptionKey as ParseKeys)}
+          </p>
         </div>
         <div className="shrink-0 pt-1">
           <EnableSwitch
@@ -87,16 +92,17 @@ function CloudApiForm({
 }
 
 function ActiveBadge({ enabled }: { enabled: boolean }): React.JSX.Element {
+  const { t } = useTranslation();
   if (enabled) {
     return (
       <span className="rounded-full bg-success/15 px-2 py-0.5 font-medium text-[10.5px] text-success uppercase tracking-wider">
-        Active
+        {t('settings.providers.active')}
       </span>
     );
   }
   return (
     <span className="rounded-full bg-surface-strong px-2 py-0.5 font-medium text-[10.5px] text-fg-tertiary uppercase tracking-wider">
-      Not configured
+      {t('settings.providers.notConfigured')}
     </span>
   );
 }

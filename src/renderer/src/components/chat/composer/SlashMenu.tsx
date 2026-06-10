@@ -13,6 +13,8 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { Fragment, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { zh } from '../../../i18n/zh';
 
 export type SlashMenuItem = {
   name: string;
@@ -26,19 +28,25 @@ export type SlashMenuItem = {
   skill?: string;
 };
 
-export const SLASH_COMMANDS: SlashMenuItem[] = [
-  { name: 'Branch', desc: '从当前对话开一个新分支', icon: GitBranch },
-  { name: 'Clear', desc: '清空当前对话', icon: Eraser },
-  { name: 'Compact', desc: '压缩历史上下文', icon: Box },
-  { name: 'Export', desc: '导出对话为 Markdown', icon: Download },
-  { name: 'Memories', desc: '查看 / 管理 Atrium 记住的内容', icon: Brain },
-  { name: 'Model', desc: '切换当前对话的模型', icon: Atom },
-  { name: 'Permissions', desc: '调整工具权限', icon: SlidersHorizontal },
-  { name: 'Plan mode', desc: '进入计划模式（只读 / 列计划）', icon: ListChecks },
-  { name: 'Search', desc: '搜索过往对话 / 文件 / artifact', icon: Search },
-  { name: 'Settings', desc: '打开设置面板', icon: SlidersHorizontal },
-  { name: 'Stop', desc: '停止当前 agent 运行', icon: Octagon },
-  { name: 'Theme', desc: '切换 light / dark / 跟随系统', icon: Palette },
+type SlashCommandDef = {
+  name: string;
+  descKey: `slashMenu.${keyof typeof zh.slashMenu}`;
+  icon?: LucideIcon;
+};
+
+export const SLASH_COMMANDS: SlashCommandDef[] = [
+  { name: 'Branch', descKey: 'slashMenu.branch', icon: GitBranch },
+  { name: 'Clear', descKey: 'slashMenu.clear', icon: Eraser },
+  { name: 'Compact', descKey: 'slashMenu.compact', icon: Box },
+  { name: 'Export', descKey: 'slashMenu.export', icon: Download },
+  { name: 'Memories', descKey: 'slashMenu.memories', icon: Brain },
+  { name: 'Model', descKey: 'slashMenu.model', icon: Atom },
+  { name: 'Permissions', descKey: 'slashMenu.permissions', icon: SlidersHorizontal },
+  { name: 'Plan mode', descKey: 'slashMenu.planMode', icon: ListChecks },
+  { name: 'Search', descKey: 'slashMenu.search', icon: Search },
+  { name: 'Settings', descKey: 'slashMenu.settings', icon: SlidersHorizontal },
+  { name: 'Stop', descKey: 'slashMenu.stop', icon: Octagon },
+  { name: 'Theme', descKey: 'slashMenu.theme', icon: Palette },
 ];
 
 export function SlashMenu({
@@ -55,6 +63,7 @@ export function SlashMenu({
   onHoverIndex: (index: number) => void;
   onSelect: (item: SlashMenuItem) => void;
 }): React.JSX.Element | null {
+  const { t } = useTranslation();
   const filtered = items.filter((item) =>
     query.length === 0 ? true : item.name.toLowerCase().startsWith(query.toLowerCase()),
   );
@@ -87,7 +96,9 @@ export function SlashMenu({
           return (
             <Fragment key={item.name}>
               {showSkillHeader && (
-                <li className="px-3 pt-2 pb-1 text-fg-tertiary text-xs">Skills</li>
+                <li className="px-3 pt-2 pb-1 text-fg-tertiary text-xs">
+                  {t('settings.sections.skillsTitle')}
+                </li>
               )}
               <li>
                 <button

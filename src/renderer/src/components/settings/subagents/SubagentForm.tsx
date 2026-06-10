@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 import type { ModelGroup } from '../../../lib/use-chat-model';
 import { ModelPicker, type ModelValue } from '../../ModelPicker';
@@ -40,6 +41,7 @@ export function SubagentForm({
   onDone,
   onCancel,
 }: SubagentFormProps): React.JSX.Element {
+  const { t } = useTranslation();
   const [name, setName] = useState(subagent?.name ?? '');
   const [description, setDescription] = useState(subagent?.description ?? '');
   const [systemPrompt, setSystemPrompt] = useState(subagent?.systemPrompt ?? '');
@@ -90,16 +92,16 @@ export function SubagentForm({
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-6">
       <div>
-        <span className={label}>名称</span>
+        <span className={label}>{t('settings.subagents.name')}</span>
         <input
           className={input}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="例如 code-reviewer"
+          placeholder={t('settings.subagents.namePlaceholder')}
         />
       </div>
       <div>
-        <span className={label}>描述（主 agent 据此决定何时委派）</span>
+        <span className={label}>{t('settings.subagents.descLabel')}</span>
         <textarea
           className={`${input} min-h-[60px] resize-y`}
           value={description}
@@ -107,7 +109,7 @@ export function SubagentForm({
         />
       </div>
       <div>
-        <span className={label}>System prompt</span>
+        <span className={label}>{t('settings.subagents.systemPrompt')}</span>
         <textarea
           className={`${input} min-h-[160px] resize-y font-mono text-xs`}
           value={systemPrompt}
@@ -122,7 +124,7 @@ export function SubagentForm({
             checked={restrict}
             onChange={(e) => setRestrict(e.target.checked)}
           />
-          限制可用工具（默认继承主 agent 的全部工具）
+          {t('settings.subagents.limitTools')}
         </label>
         {restrict && (
           <div className="mt-2 flex flex-wrap gap-2">
@@ -144,13 +146,13 @@ export function SubagentForm({
       </div>
 
       <div>
-        <span className={label}>承接模型</span>
+        <span className={label}>{t('settings.subagents.handoffModel')}</span>
         <ModelPicker
           value={model}
           onChange={setModel}
           groups={groups}
           variant="field"
-          inheritLabel="继承主对话模型"
+          inheritLabel={t('settings.subagents.inheritModel')}
         />
       </div>
 
@@ -163,14 +165,14 @@ export function SubagentForm({
           disabled={saving || name.trim().length === 0}
           className="rounded-md bg-accent px-3 py-1.5 text-fg-on-accent text-sm hover:bg-accent-hover disabled:opacity-40"
         >
-          {subagent ? '保存' : '创建'}
+          {subagent ? t('common.save') : t('common.create')}
         </button>
         <button
           type="button"
           onClick={onCancel}
           className="rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-elevated"
         >
-          取消
+          {t('common.cancel')}
         </button>
       </div>
     </div>

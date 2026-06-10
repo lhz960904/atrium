@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
+import type { ParseKeys } from 'i18next';
 import {
   ArrowLeft,
   Atom,
@@ -11,6 +12,7 @@ import {
   SlidersHorizontal,
   Sun,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useNavStore } from '../../state/nav-store';
 
 export const Route = createFileRoute('/settings')({
@@ -19,22 +21,23 @@ export const Route = createFileRoute('/settings')({
 
 type NavItem = {
   section: string;
-  label: string;
+  labelKey: ParseKeys;
   icon: LucideIcon;
 };
 
 const NAV_ITEMS: readonly NavItem[] = [
-  { section: 'general', label: 'General', icon: SlidersHorizontal },
-  { section: 'appearance', label: 'Appearance', icon: Sun },
-  { section: 'providers', label: 'Providers', icon: Layers },
-  { section: 'skills', label: 'Skills', icon: Package },
-  { section: 'subagents', label: 'Subagents', icon: Atom },
-  { section: 'permissions', label: 'Permissions', icon: Shield },
-  { section: 'memories', label: 'Memories', icon: Brain },
-  { section: 'about', label: 'About', icon: Info },
+  { section: 'general', labelKey: 'settings.sections.generalTitle', icon: SlidersHorizontal },
+  { section: 'appearance', labelKey: 'settings.sections.appearanceTitle', icon: Sun },
+  { section: 'providers', labelKey: 'settings.sections.providersTitle', icon: Layers },
+  { section: 'skills', labelKey: 'settings.sections.skillsTitle', icon: Package },
+  { section: 'subagents', labelKey: 'settings.sections.subagentsTitle', icon: Atom },
+  { section: 'permissions', labelKey: 'settings.sections.permissionsTitle', icon: Shield },
+  { section: 'memories', labelKey: 'settings.sections.memoriesTitle', icon: Brain },
+  { section: 'about', labelKey: 'settings.sections.aboutTitle', icon: Info },
 ];
 
 function SettingsLayout(): React.JSX.Element {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const lastAppPath = useNavStore((s) => s.lastAppPath);
 
@@ -61,7 +64,7 @@ function SettingsLayout(): React.JSX.Element {
             className="mb-4 flex items-center gap-2 rounded-md px-3 py-2 text-fg-tertiary text-sm hover:bg-surface-strong hover:text-fg-primary"
           >
             <ArrowLeft className="size-3.5" />
-            Back to app
+            {t('settings.backToApp')}
           </button>
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
@@ -77,7 +80,7 @@ function SettingsLayout(): React.JSX.Element {
                 }}
               >
                 <Icon className="size-[15px] shrink-0 text-fg-tertiary group-hover:text-fg-secondary" />
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
               </Link>
             );
           })}

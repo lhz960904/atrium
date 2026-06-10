@@ -1,5 +1,6 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
+import { useTranslation } from 'react-i18next';
 import { buildAssistantView } from '../../lib/assistant-view';
 import { ClarifyCard } from './ClarifyCard';
 import { CopyButton } from './CopyButton';
@@ -22,7 +23,8 @@ export function AssistantMessage({
   onAnswer,
   onCancel,
 }: AssistantMessageProps): React.JSX.Element {
-  const view = buildAssistantView(message.parts);
+  const { t } = useTranslation();
+  const view = buildAssistantView(message.parts, t);
   const createdAt = message.metadata?.createdAt;
 
   // While the turn is live, the trace/final split hasn't settled, so the work

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { openAttachment } from '../../state/attachment-viewer-store';
 
 type GeneratedImageProps = {
@@ -13,15 +14,16 @@ export function GeneratedImage({
   mediaType,
   filename,
 }: GeneratedImageProps): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
-      onClick={() => openAttachment({ filename: filename ?? '生成的图片', mediaType, url })}
+      onClick={() => openAttachment({ filename: filename ?? t('image.generated'), mediaType, url })}
       className="my-3 block overflow-hidden rounded-xl border border-border-default"
     >
       <img
         src={url}
-        alt={filename ?? 'generated'}
+        alt={filename ?? t('image.generated')}
         className="max-h-[200px] w-auto max-w-full object-contain"
       />
     </button>

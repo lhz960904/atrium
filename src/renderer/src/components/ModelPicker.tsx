@@ -2,6 +2,7 @@ import * as Popover from '@radix-ui/react-popover';
 import { Link } from '@tanstack/react-router';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ModelGroup } from '../lib/use-chat-model';
 import { ProviderIcon } from './settings/providers/ProviderIcon';
 
@@ -34,9 +35,10 @@ export function ModelPicker({
   groups,
   variant = 'inline',
   inheritLabel,
-  placeholder = '选择模型',
+  placeholder,
   onSelected,
 }: ModelPickerProps): React.JSX.Element {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   // An external (ACP) provider has no meaningful model id, so show its name.
@@ -45,7 +47,7 @@ export function ModelPicker({
     ? selectedGroup?.external
       ? selectedGroup.providerName
       : value.modelId
-    : (inheritLabel ?? placeholder);
+    : (inheritLabel ?? placeholder ?? t('modelPicker.placeholder'));
   const triggerClass =
     variant === 'field'
       ? 'flex w-full items-center justify-between gap-1.5 rounded-lg border border-border-default bg-surface px-3 py-2 text-fg-primary text-sm hover:border-border-strong'
@@ -96,6 +98,7 @@ function ModelList({
   inheritLabel?: string;
   onPick: (value: ModelValue) => void;
 }): React.JSX.Element {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -116,14 +119,14 @@ function ModelList({
   if (groups.length === 0) {
     return (
       <div className="px-6 py-8 text-center text-fg-tertiary text-sm">
-        没有已启用的模型。
+        {t('modelPicker.empty')}
         <br />
         <Link
           to="/settings/$section"
           params={{ section: 'providers' }}
           className="text-accent hover:underline"
         >
-          去 Settings → Providers 配置 ↗
+          {t('modelPicker.configure')}
         </Link>
       </div>
     );
@@ -139,7 +142,7 @@ function ModelList({
           ref={searchRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索模型…"
+          placeholder={t('modelPicker.search')}
           className="flex-1 border-0 bg-transparent text-fg-primary text-sm outline-0 placeholder:text-fg-disabled"
         />
       </div>
@@ -159,7 +162,9 @@ function ModelList({
           </li>
         )}
         {filtered.length === 0 ? (
-          <li className="px-3 py-6 text-center text-fg-tertiary text-sm">无匹配</li>
+          <li className="px-3 py-6 text-center text-fg-tertiary text-sm">
+            {t('modelPicker.noMatch')}
+          </li>
         ) : (
           filtered.map((g) =>
             g.external ? (

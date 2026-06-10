@@ -17,16 +17,13 @@ test('in-workspace writes stay inside', () => {
   expect(classifyToolCall('edit_file', { path: '/work/space/src/a.ts' }, ROOT).crosses).toBe(false);
 });
 
-test('writes outside the workspace cross as fs-escape', () => {
+test('writes outside the workspace cross as fsEscape', () => {
   expect(
     classifyToolCall('write_file', { path: '../secret.txt', content: '' }, ROOT),
-  ).toMatchObject({
-    crosses: true,
-    kind: 'fs-escape',
-  });
+  ).toMatchObject({ crosses: true, code: 'fsEscape' });
   expect(classifyToolCall('edit_file', { path: '/etc/hosts' }, ROOT)).toMatchObject({
     crosses: true,
-    kind: 'fs-escape',
+    code: 'fsEscape',
   });
 });
 
@@ -45,60 +42,51 @@ test('routine in-workspace shell stays inside', () => {
 test('network commands cross', () => {
   expect(classifyToolCall('bash', { command: 'curl https://example.com' }, ROOT)).toMatchObject({
     crosses: true,
-    kind: 'network',
+    code: 'network',
   });
   expect(classifyToolCall('bash', { command: 'npm install lodash' }, ROOT)).toMatchObject({
     crosses: true,
-    kind: 'network',
+    code: 'network',
   });
   expect(classifyToolCall('bash', { command: 'git push origin main' }, ROOT)).toMatchObject({
     crosses: true,
-    kind: 'network',
+    code: 'network',
   });
 });
 
 test('env-assignment prefix does not hide the real command', () => {
   expect(
     classifyToolCall('bash', { command: 'FOO=bar curl https://example.com' }, ROOT),
-  ).toMatchObject({
-    crosses: true,
-    kind: 'network',
-  });
+  ).toMatchObject({ crosses: true, code: 'network' });
 });
 
 test('dangerous commands cross', () => {
   expect(classifyToolCall('bash', { command: 'rm -rf build' }, ROOT)).toMatchObject({
     crosses: true,
-    kind: 'dangerous',
+    code: 'dangerous',
   });
   expect(classifyToolCall('bash', { command: 'sudo apt-get update' }, ROOT)).toMatchObject({
     crosses: true,
-    kind: 'dangerous',
+    code: 'dangerous',
   });
 });
 
 test('a compound command crosses if any segment does', () => {
   expect(
     classifyToolCall('bash', { command: 'cd src && curl https://example.com' }, ROOT),
-  ).toMatchObject({
-    crosses: true,
-    kind: 'network',
-  });
+  ).toMatchObject({ crosses: true, code: 'network' });
 });
 
-test('substitution and wrappers are opaque (ask to be safe)', () => {
+test('opaque commands cross (ask to be safe)', () => {
   expect(classifyToolCall('bash', { command: 'echo $(whoami)' }, ROOT)).toMatchObject({
     crosses: true,
-    kind: 'opaque',
+    code: 'substitution',
   });
   expect(classifyToolCall('bash', { command: 'cat `which node`' }, ROOT)).toMatchObject({
     crosses: true,
-    kind: 'opaque',
+    code: 'substitution',
   });
   expect(
     classifyToolCall('bash', { command: 'env FOO=bar curl https://example.com' }, ROOT),
-  ).toMatchObject({
-    crosses: true,
-    kind: 'opaque',
-  });
+  ).toMatchObject({ crosses: true, code: 'wrapper' });
 });

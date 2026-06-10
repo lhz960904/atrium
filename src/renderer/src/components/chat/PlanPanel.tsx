@@ -1,8 +1,10 @@
 import type { Todo, TodoStatus } from '@shared/chat-types';
 import { CheckCircle2, ChevronDown, Circle, ListChecks, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export function PlanPanel({ todos }: { todos: Todo[] }): React.JSX.Element {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(true);
   const done = todos.filter((t) => t.status === 'completed').length;
   const active = todos.find((t) => t.status === 'in_progress');
@@ -18,7 +20,9 @@ export function PlanPanel({ todos }: { todos: Todo[] }): React.JSX.Element {
             className="flex w-full items-center gap-3 px-4 py-3 hover:bg-surface-strong"
           >
             <ListChecks className="size-[15px] shrink-0 text-accent" />
-            <span className="shrink-0 font-medium text-fg-secondary text-sm">Plan</span>
+            <span className="shrink-0 font-medium text-fg-secondary text-sm">
+              {t('trace.plan')}
+            </span>
             {!open && active ? (
               <span className="min-w-0 flex-1 truncate text-left text-fg-primary text-sm">
                 {active.content}

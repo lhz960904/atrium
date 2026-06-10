@@ -1,5 +1,6 @@
 import { Eye, EyeOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 
 /**
@@ -20,6 +21,7 @@ export function ApiKeyField({
   hasCredentials: boolean;
   consoleUrl?: string;
 }): React.JSX.Element {
+  const { t } = useTranslation();
   const utils = trpc.useUtils();
   const [value, setValue] = useState('');
   const [reveal, setReveal] = useState(false);
@@ -73,7 +75,7 @@ export function ApiKeyField({
         className="mb-1.5 block font-medium text-fg-secondary text-xs"
         htmlFor={`apikey-${providerId}`}
       >
-        API Key
+        {t('settings.providers.apiKey')}
       </label>
       <div className="relative">
         <input
@@ -81,7 +83,7 @@ export function ApiKeyField({
           type={reveal ? 'text' : 'password'}
           value={loaded ? value : ''}
           onChange={handleChange}
-          placeholder={loaded ? 'sk-...' : 'Loading…'}
+          placeholder={loaded ? 'sk-...' : t('common.loading')}
           autoComplete="off"
           spellCheck={false}
           disabled={!loaded}
@@ -90,7 +92,7 @@ export function ApiKeyField({
         <button
           type="button"
           onClick={() => setReveal((v) => !v)}
-          title={reveal ? '隐藏' : '显示'}
+          title={reveal ? t('common.hide') : t('common.show')}
           className="-translate-y-1/2 absolute top-1/2 right-2 rounded p-1 text-fg-tertiary hover:bg-surface-strong hover:text-fg-secondary"
         >
           {reveal ? <EyeOff className="size-[14px]" /> : <Eye className="size-[14px]" />}
@@ -100,7 +102,7 @@ export function ApiKeyField({
         {consoleUrl && (
           <>
             {' '}
-            Get your API key from{' '}
+            {t('settings.providers.getKeyFrom')}{' '}
             <a
               href={consoleUrl}
               target="_blank"

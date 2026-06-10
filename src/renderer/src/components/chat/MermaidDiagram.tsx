@@ -1,5 +1,6 @@
 import { Scan, Workflow } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   type ReactZoomPanPinchRef,
   TransformComponent,
@@ -19,6 +20,7 @@ let seq = 0;
  * usually unparseable, so we fall back to its source.
  */
 export function MermaidDiagram({ chart }: { chart: string }): React.JSX.Element {
+  const { t } = useTranslation();
   const dark = useThemeStore((s) => s.resolvedTheme === 'dark');
   const [svg, setSvg] = useState('');
   const apiRef = useRef<ReactZoomPanPinchRef>(null);
@@ -69,7 +71,7 @@ export function MermaidDiagram({ chart }: { chart: string }): React.JSX.Element 
             type="button"
             onClick={() => fit(200)}
             className="rounded p-1 text-fg-tertiary transition-colors hover:bg-elevated hover:text-fg-secondary"
-            title="Fit to view"
+            title={t('common.fitToView')}
           >
             <Scan className="size-3.5" />
           </button>

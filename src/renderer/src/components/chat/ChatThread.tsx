@@ -4,6 +4,7 @@ import type { AtriumTools } from '@shared/tools';
 import { type ChatStatus, getStaticToolName, isStaticToolUIPart } from 'ai';
 import { TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { PendingApproval } from '../../lib/approvals';
 import { useCompactionStore } from '../../state/compaction-store';
 import { useImageGenStore } from '../../state/image-gen-store';
@@ -88,6 +89,7 @@ export function ChatThread({
   onCancelClarify,
   onStop,
 }: ChatThreadProps): React.JSX.Element {
+  const { t } = useTranslation();
   // Compaction is a live, per-thread status in a global store — read it here
   // rather than threading it through as a prop.
   const compacting = useCompactionStore((s) => s.active[threadId] ?? false);
@@ -195,9 +197,9 @@ export function ChatThread({
             streaming={live}
             placeholder={
               clarifyPending
-                ? '请先回答上面的问题…'
+                ? t('composer.holdClarify')
                 : approvalPending
-                  ? '请先处理上面的审批…'
+                  ? t('composer.holdApproval')
                   : undefined
             }
             attachedTop={plan != null || approvalPending}

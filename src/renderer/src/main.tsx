@@ -1,4 +1,5 @@
 import './assets/styles.css';
+import './i18n'; // initialize i18next (best-guess language; useLanguage corrects from settings)
 import './state/theme-store'; // initialize theme from persisted store + system listener
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

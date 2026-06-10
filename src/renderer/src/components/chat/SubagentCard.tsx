@@ -1,8 +1,10 @@
 import * as Collapsible from '@radix-ui/react-collapsible';
 import type { SubagentActivityTool } from '@shared/chat';
 import type { Subagent, SubagentStatus } from '@shared/chat-types';
+import type { ParseKeys } from 'i18next';
 import { Ban, Bot, ChevronDown, Loader2, Wrench } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   type MarkerToolName,
   TOOL_PRESENTATION,
@@ -14,6 +16,7 @@ import { Markdown } from './Markdown';
 /** One subagent tool call as a static line (icon + verb + target) — not the
  *  expandable ToolMarker; the subagent's per-tool detail/output isn't shown. */
 function SubagentToolLine({ tool }: { tool: SubagentActivityTool }): React.JSX.Element {
+  const { t } = useTranslation();
   const input = (tool.input ?? {}) as ToolInput;
   const p = TOOL_PRESENTATION[tool.name as MarkerToolName];
   const Icon = p.icon;
@@ -21,7 +24,7 @@ function SubagentToolLine({ tool }: { tool: SubagentActivityTool }): React.JSX.E
     <div className="flex items-center gap-2.5 py-1 text-fg-secondary text-md">
       <Icon className="size-4 shrink-0 text-fg-tertiary" />
       <span className="min-w-0 truncate">
-        <span className="text-fg-tertiary">{p.verb}</span> {p.target(input)}
+        <span className="text-fg-tertiary">{t(p.verbKey)}</span> {p.target(input)}
       </span>
     </div>
   );
@@ -88,6 +91,7 @@ export function SubagentCard({ subagent }: { subagent: Subagent }): React.JSX.El
 }
 
 function SubagentBadge({ status }: { status: SubagentStatus }): React.JSX.Element {
+  const { t } = useTranslation();
   const meta = STATUS_META[status];
   return (
     <span
@@ -96,7 +100,7 @@ function SubagentBadge({ status }: { status: SubagentStatus }): React.JSX.Elemen
       {meta.kind === 'pulse' && <span className="size-1.5 animate-pulse rounded-full bg-current" />}
       {meta.kind === 'dot' && <span className="size-1.5 rounded-full bg-current" />}
       {meta.kind === 'icon' && meta.icon && <meta.icon className="size-3" />}
-      <span>{meta.label}</span>
+      <span>{t(meta.labelKey)}</span>
     </span>
   );
 }
@@ -104,30 +108,30 @@ function SubagentBadge({ status }: { status: SubagentStatus }): React.JSX.Elemen
 const STATUS_META: Record<
   SubagentStatus,
   {
-    label: string;
+    labelKey: ParseKeys;
     cls: string;
     kind: 'pulse' | 'dot' | 'icon';
     icon?: typeof Loader2;
   }
 > = {
   streaming: {
-    label: 'Streaming',
+    labelKey: 'status.streaming',
     cls: 'bg-accent-alt-soft text-accent-alt',
     kind: 'pulse',
   },
   done: {
-    label: 'Done',
+    labelKey: 'status.done',
     cls: 'bg-[rgba(74,159,96,0.10)] text-success dark:bg-[rgba(111,213,131,0.16)] dark:text-[#6FD583]',
     kind: 'dot',
   },
   failed: {
-    label: 'Failed',
+    labelKey: 'status.failed',
     cls: 'bg-[rgba(208,74,74,0.10)] text-danger',
     kind: 'icon',
     icon: Loader2,
   },
   cancelled: {
-    label: 'Cancelled',
+    labelKey: 'status.cancelled',
     cls: 'bg-surface text-fg-disabled',
     kind: 'icon',
     icon: Ban,
@@ -135,12 +139,11 @@ const STATUS_META: Record<
 };
 
 function ToolCountChip({ count }: { count: number }): React.JSX.Element {
+  const { t } = useTranslation();
   return (
     <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface px-2 py-0.5 font-medium text-fg-tertiary text-xs">
       <Wrench className="size-2.5" />
-      <span>
-        {count} {count === 1 ? 'tool' : 'tools'}
-      </span>
+      <span>{t('tool.count', { count })}</span>
     </span>
   );
 }

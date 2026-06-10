@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { ListFilter, Search, Settings, SquarePen } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { timeAgo } from '../lib/time';
 import { trpc } from '../lib/trpc';
 
@@ -10,6 +11,7 @@ const chatRowActive =
   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm bg-sidebar-item-active text-fg-primary';
 
 export function Sidebar(): React.JSX.Element {
+  const { t } = useTranslation();
   const utils = trpc.useUtils();
   const { data: threads, isLoading } = trpc.threads.list.useQuery();
   // Poll the main process for which threads are generating; a small id list, so
@@ -40,50 +42,61 @@ export function Sidebar(): React.JSX.Element {
           className="flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
         >
           <SquarePen className="size-[15px] shrink-0" />
-          <span className="flex-1 text-left">New chat</span>
+          <span className="flex-1 text-left">{t('home.newChat')}</span>
         </Link>
-        <SbNavItem icon={<Search className="size-[15px] shrink-0" />} label="Search" />
+        <SbNavItem icon={<Search className="size-[15px] shrink-0" />} label={t('sidebar.search')} />
       </nav>
 
       <div className="flex-1 overflow-y-auto px-3 py-2">
         <SbSection
-          label="Chats"
+          label={t('sidebar.chats')}
           hoverActions={
             <>
-              <SbIconButton title="Sort / filter" icon={<ListFilter className="size-[13px]" />} />
-              <SbIconButton title="New chat" icon={<SquarePen className="size-[13px]" />} />
+              <SbIconButton
+                title={t('sidebar.sortFilter')}
+                icon={<ListFilter className="size-[13px]" />}
+              />
+              <SbIconButton
+                title={t('home.newChat')}
+                icon={<SquarePen className="size-[13px]" />}
+              />
             </>
           }
         />
         {isLoading ? (
-          <div className="px-3 py-1.5 text-fg-disabled text-sm">Loading…</div>
+          <div className="px-3 py-1.5 text-fg-disabled text-sm">{t('common.loading')}</div>
         ) : !threads || threads.length === 0 ? (
-          <div className="px-3 py-1.5 text-fg-disabled text-sm">No chats yet</div>
+          <div className="px-3 py-1.5 text-fg-disabled text-sm">{t('sidebar.noChats')}</div>
         ) : (
           <div className="flex flex-col gap-1">
-            {threads.map((t) => (
+            {threads.map((thread) => (
               <Link
-                key={t.id}
+                key={thread.id}
                 to="/chat/$threadId"
-                params={{ threadId: t.id }}
+                params={{ threadId: thread.id }}
                 className={chatRowBase}
                 activeProps={{ className: chatRowActive }}
               >
-                <span className="min-w-0 flex-1 truncate text-left">{t.title ?? '未命名对话'}</span>
-                {runningSet.has(t.id) ? (
+                <span className="min-w-0 flex-1 truncate text-left">
+                  {thread.title ?? t('common.untitledChat')}
+                </span>
+                {runningSet.has(thread.id) ? (
                   <span
                     role="status"
-                    aria-label="运行中"
+                    aria-label={t('sidebar.running')}
                     className="size-[13px] shrink-0 animate-spin rounded-full border-[1.5px] border-border-strong border-t-accent"
                   />
-                ) : t.lastReadAt != null && new Date(t.updatedAt) > new Date(t.lastReadAt) ? (
+                ) : thread.lastReadAt != null &&
+                  new Date(thread.updatedAt) > new Date(thread.lastReadAt) ? (
                   <span
                     role="status"
-                    aria-label="未读"
+                    aria-label={t('sidebar.unread')}
                     className="size-2 shrink-0 rounded-full bg-accent"
                   />
                 ) : (
-                  <span className="shrink-0 text-fg-disabled text-xs">{timeAgo(t.updatedAt)}</span>
+                  <span className="shrink-0 text-fg-disabled text-xs">
+                    {timeAgo(thread.updatedAt)}
+                  </span>
                 )}
               </Link>
             ))}
@@ -98,7 +111,7 @@ export function Sidebar(): React.JSX.Element {
           className="flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
         >
           <Settings className="size-[15px] shrink-0" />
-          <span>Settings</span>
+          <span>{t('sidebar.settings')}</span>
         </Link>
       </div>
     </aside>

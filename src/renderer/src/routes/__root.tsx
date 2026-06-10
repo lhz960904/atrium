@@ -1,13 +1,17 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router';
 import { AttachmentViewer } from '../components/AttachmentViewer';
 import { Toaster } from '../components/Toaster';
+import { useLanguage } from '../lib/use-language';
 
-export const Route = createRootRoute({
-  component: () => (
+function Root(): React.JSX.Element {
+  useLanguage(); // apply the persisted UI language on load
+  return (
     <>
       <Outlet />
       <AttachmentViewer />
       <Toaster />
     </>
-  ),
-});
+  );
+}
+
+export const Route = createRootRoute({ component: Root });

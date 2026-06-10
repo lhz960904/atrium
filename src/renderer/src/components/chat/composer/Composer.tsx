@@ -6,6 +6,7 @@ import { Placeholder, UndoRedo } from '@tiptap/extensions';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Plus, Send, Square } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ATTACHMENT_ACCEPT, classifyAttachment } from '../../../lib/attachments';
 import { useChatModel } from '../../../lib/use-chat-model';
 import { toast } from '../../../state/toast-store';
@@ -33,7 +34,7 @@ type ComposerProps = {
 
 export function Composer({
   autoFocus = false,
-  placeholder = '说点什么…',
+  placeholder,
   onSubmit,
   disabled = false,
   initialText = '',
@@ -42,6 +43,7 @@ export function Composer({
   streaming = false,
   onStop,
 }: ComposerProps): React.JSX.Element {
+  const { t } = useTranslation();
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [empty, setEmpty] = useState(initialText.trim().length === 0);
   const skill = useSlashMenu(commands ?? []);
@@ -59,7 +61,7 @@ export function Composer({
       Text,
       HardBreak,
       UndoRedo,
-      Placeholder.configure({ placeholder }),
+      Placeholder.configure({ placeholder: placeholder ?? t('composer.placeholder') }),
       ...skill.extensions,
     ],
     content: initialText,
@@ -130,7 +132,7 @@ export function Composer({
       reader.readAsDataURL(file);
     }
     if (dropped.length > 0) {
-      toast.warning(`已跳过暂不支持的文件：${dropped.join('、')}（转成文本或 PDF 后可传）`);
+      toast.warning(t('composer.skippedFiles', { files: dropped.join(t('common.listSep')) }));
     }
   };
 
@@ -167,7 +169,7 @@ export function Composer({
         />
         <button
           type="button"
-          title="附件"
+          title={t('composer.attach')}
           onClick={() => fileInputRef.current?.click()}
           className="inline-flex items-center rounded-md p-1.5 text-fg-tertiary hover:bg-elevated hover:text-fg-secondary"
         >
@@ -185,7 +187,7 @@ export function Composer({
         {streaming ? (
           <button
             type="button"
-            title="停止"
+            title={t('composer.stop')}
             onClick={onStop}
             className="rounded-md bg-danger p-1.5 text-fg-on-accent hover:bg-danger/90"
           >
@@ -194,7 +196,7 @@ export function Composer({
         ) : (
           <button
             type="button"
-            title="发送"
+            title={t('composer.send')}
             onClick={handleSend}
             disabled={!canSend}
             className="rounded-md bg-accent p-1.5 text-fg-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"

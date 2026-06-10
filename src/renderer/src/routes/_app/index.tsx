@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { FileText, FolderClosed, MessageCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { Attachment } from '../../components/chat/composer/AttachmentChip';
 import { Composer } from '../../components/chat/composer/Composer';
 import { MOCK_CONTINUE_ITEMS, MOCK_CURRENT_PROJECT } from '../../lib/mock-data';
@@ -10,16 +11,27 @@ export const Route = createFileRoute('/_app/')({
   component: HomeView,
 });
 
-function greetingFor(hour: number): string {
-  if (hour < 5) return '夜深了';
-  if (hour < 11) return '早上好';
-  if (hour < 13) return '中午好';
-  if (hour < 18) return '下午好';
-  return '晚上好';
+function greetingFor(
+  hour: number,
+):
+  | 'home.greetingNight'
+  | 'home.greetingMorning'
+  | 'home.greetingNoon'
+  | 'home.greetingAfternoon'
+  | 'home.greetingEvening' {
+  if (hour < 5) return 'home.greetingNight';
+  if (hour < 11) return 'home.greetingMorning';
+  if (hour < 13) return 'home.greetingNoon';
+  if (hour < 18) return 'home.greetingAfternoon';
+  return 'home.greetingEvening';
 }
 
 function HomeView(): React.JSX.Element {
-  const greeting = `${greetingFor(new Date().getHours())}，昊泽`;
+  const { t } = useTranslation();
+  const greeting = t('home.greeting', {
+    greeting: t(greetingFor(new Date().getHours())),
+    name: '昊泽',
+  });
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   // Create an empty thread, stash the typed text as a draft, then navigate;
@@ -35,7 +47,7 @@ function HomeView(): React.JSX.Element {
     const trimmed = text.trim();
     if (trimmed.length === 0 && attachments.length === 0) return;
     usePendingInput.getState().set({ text: trimmed, attachments });
-    const title = trimmed || attachments[0]?.name || '新对话';
+    const title = trimmed || attachments[0]?.name || t('home.newChat');
     createThread.mutate({ title: title.slice(0, 60) });
   };
 
@@ -65,7 +77,7 @@ function HomeView(): React.JSX.Element {
         {MOCK_CONTINUE_ITEMS.length > 0 && (
           <div className="flex flex-col gap-1">
             <div className="px-1 pt-3 pb-1 font-medium text-[10.5px] text-fg-tertiary uppercase tracking-wider">
-              继续上次
+              {t('home.continue')}
             </div>
             {MOCK_CONTINUE_ITEMS.map((item) => (
               <button
@@ -85,7 +97,7 @@ function HomeView(): React.JSX.Element {
                 {item.kind === 'chat-running' ? (
                   <span
                     role="status"
-                    aria-label="Running"
+                    aria-label={t('sidebar.running')}
                     className="size-[13px] shrink-0 animate-spin rounded-full border-[1.5px] border-border-strong border-t-accent"
                   />
                 ) : (

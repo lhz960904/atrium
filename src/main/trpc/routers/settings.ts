@@ -20,6 +20,17 @@ export const settingsRouter = router({
       getSettings().set('selectedModel', input);
     }),
 
+  /** UI language preference ('system' follows the OS locale). */
+  language: publicProcedure.query((): 'system' | 'en' | 'zh' => {
+    return getSettings().get('language', DEFAULTS.language);
+  }),
+
+  setLanguage: publicProcedure
+    .input(z.object({ language: z.enum(['system', 'en', 'zh']) }))
+    .mutation(({ input }) => {
+      getSettings().set('language', input.language);
+    }),
+
   /** The active tool-permission mode (default / auto-review / full-access). */
   permissionMode: publicProcedure.query((): PermissionMode => {
     return getSettings().get('permissionMode', DEFAULTS.permissionMode);
