@@ -55,6 +55,10 @@ export function runImageTurn(opts: RunImageOptions): ReadableStream<UIMessageChu
           references: referenceImages(opts.messages),
           abortSignal: opts.abortSignal,
         });
+        // start carries the server-minted messageId (injected by
+        // createUIMessageStream), binding every consumer — live or replayed
+        // after a reload — to the same message instead of minting fresh ids.
+        writer.write({ type: 'start' });
         writer.write(imageFileChunk(image));
       } finally {
         writer.write({ type: 'data-imageGeneration', data: { phase: 'done' }, transient: true });
