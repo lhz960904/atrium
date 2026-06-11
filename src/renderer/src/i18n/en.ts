@@ -295,6 +295,7 @@ export const en: typeof zh = {
         running: 'Service running · v{{version}}',
         notRunning: 'Local service not detected',
         installHint: 'Install and start Ollama and it will be detected automatically:',
+        emptyModels: 'No installed models detected.',
       },
     },
     subagents: {

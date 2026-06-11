@@ -289,6 +289,7 @@ export const zh = {
         running: '服务运行中 · v{{version}}',
         notRunning: '未检测到本地服务',
         installHint: '安装并启动 Ollama 后会自动检测到：',
+        emptyModels: '没有检测到已安装的模型。',
       },
     },
     subagents: {

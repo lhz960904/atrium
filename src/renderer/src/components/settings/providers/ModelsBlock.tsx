@@ -6,12 +6,16 @@ import { EnableSwitch } from './EnableSwitch';
 
 export function ModelsBlock({
   providerId,
-  hasCredentials,
+  canFetch,
+  emptyHint,
   models,
   enabledModels,
 }: {
   providerId: string;
-  hasCredentials: boolean;
+  /** Whether the fetch action is currently possible (key saved / service up). */
+  canFetch: boolean;
+  /** Shown in the empty state — the caller knows why the list is empty. */
+  emptyHint: string;
   models: string[];
   enabledModels: string[];
 }): React.JSX.Element {
@@ -52,7 +56,7 @@ export function ModelsBlock({
     updateConfig.mutate({ id: providerId, partial: { enabledModels: next } });
   };
 
-  const fetchDisabled = !hasCredentials || fetchModels.isLoading;
+  const fetchDisabled = !canFetch || fetchModels.isLoading;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -89,11 +93,7 @@ export function ModelsBlock({
 
       {models.length === 0 ? (
         <div className="shrink-0 rounded-lg border border-border-default border-dashed bg-surface px-6 py-8 text-center">
-          <p className="text-fg-tertiary text-sm">
-            {hasCredentials
-              ? t('settings.providers.fetchHint')
-              : t('settings.providers.fetchHintNoKey')}
-          </p>
+          <p className="text-fg-tertiary text-sm">{emptyHint}</p>
         </div>
       ) : (
         <ul
