@@ -143,8 +143,14 @@ type AtriumToolPart = ToolUIPart<AtriumTools>;
 
 function toToolModel(part: AtriumToolPart, name: MarkerToolName, t: TFunction): Tool {
   const input = (part.input ?? {}) as ToolInput;
-  const p = TOOL_PRESENTATION[name];
   const status = toStatus(part);
+  // The static-part check only proves the part is `tool-*`; the NAME is a cast,
+  // not a guarantee — a model can hallucinate a tool that doesn't exist (the
+  // call already failed server-side). Render it generically instead of crashing.
+  const p = TOOL_PRESENTATION[name] as (typeof TOOL_PRESENTATION)[MarkerToolName] | undefined;
+  if (!p) {
+    return { id: part.toolCallId, name, verb: '', target: name, status, output: toOutput(part) };
+  }
   return {
     id: part.toolCallId,
     name,
