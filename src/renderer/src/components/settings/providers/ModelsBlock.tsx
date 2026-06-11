@@ -10,6 +10,7 @@ export function ModelsBlock({
   emptyHint,
   models,
   enabledModels,
+  grow = true,
 }: {
   providerId: string;
   /** Whether the fetch action is currently possible (key saved / service up). */
@@ -18,6 +19,10 @@ export function ModelsBlock({
   emptyHint: string;
   models: string[];
   enabledModels: string[];
+  /** Fill the remaining panel height and scroll the list internally (cloud
+   *  forms). false = natural height; the surrounding panel scrolls instead —
+   *  required when content stacks below, which would crush a flex-1 block. */
+  grow?: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const utils = trpc.useUtils();
@@ -59,7 +64,7 @@ export function ModelsBlock({
   const fetchDisabled = !canFetch || fetchModels.isLoading;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={grow ? 'flex min-h-0 flex-1 flex-col' : 'flex shrink-0 flex-col'}>
       <div className="mb-2 flex shrink-0 items-center justify-between">
         <h3 className="font-medium text-fg-secondary text-xs">
           {t('settings.providers.models')}
@@ -97,8 +102,10 @@ export function ModelsBlock({
         </div>
       ) : (
         <ul
-          style={{ scrollbarGutter: 'stable' }}
-          className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto"
+          style={grow ? { scrollbarGutter: 'stable' } : undefined}
+          className={
+            grow ? 'flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto' : 'flex flex-col gap-1.5'
+          }
         >
           {sortedModels.map((m) => {
             const on = enabledSet.has(m);

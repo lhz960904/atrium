@@ -296,6 +296,16 @@ export const en: typeof zh = {
         notRunning: 'Local service not detected',
         installHint: 'Install and start Ollama and it will be detected automatically:',
         emptyModels: 'No installed models detected.',
+        downloadTitle: 'Download models',
+        downloadHint: 'Full catalog:',
+        download: 'Download',
+        customPlaceholder: 'Type a model name, e.g. qwen3:4b',
+        verifying: 'Checking…',
+        foundSize: '✓ Available · {{size}}',
+        foundCloud:
+          '✓ Cloud-hosted model · no local weights, inference runs on ollama.com (Ollama account required)',
+        notFound: '✗ Not in the model library',
+        verifyFailed: "Couldn't reach the library to verify — you can still try",
       },
     },
     subagents: {

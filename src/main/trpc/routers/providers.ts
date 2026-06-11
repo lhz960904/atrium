@@ -6,10 +6,13 @@ import { decryptCredentials, encryptCredentials } from '../../providers/credenti
 import {
   fetchOllamaModels,
   type LocalServiceStatus,
+  type ModelProbe,
   pingOllama,
+  probeOllamaRegistryCached,
 } from '../../providers/local-service';
 import { PROVIDER_MANIFEST, type ProviderManifest } from '../../providers/manifest';
 import { fetchModelIds } from '../../providers/model-fetcher';
+import { type PullState, pullManager } from '../../providers/pull-manager';
 import { publicProcedure, router } from '../trpc';
 
 /** A user-friendly view of a provider that merges manifest + DB row. */
@@ -145,6 +148,61 @@ export const providersRouter = router({
       const baseUrl =
         (row?.config as { baseUrl?: string } | null)?.baseUrl?.trim() || manifest.defaultBaseUrl;
       return pingOllama(baseUrl);
+    }),
+
+  /** Kick off a model download on the local service; progress is polled via
+   *  pullStates (the pull runs for minutes — far beyond any request). */
+  pullModel: publicProcedure
+    .input(z.object({ id: z.string(), model: z.string().min(1) }))
+    .mutation(({ ctx, input }): { started: boolean } => {
+      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
+      if (!manifest || manifest.kind !== 'local-service') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown local service id.' });
+      }
+      const row = ctx.db
+        .select({ config: providers.config })
+        .from(providers)
+        .where(eq(providers.id, input.id))
+        .get();
+      const baseUrl =
+        (row?.config as { baseUrl?: string } | null)?.baseUrl?.trim() || manifest.defaultBaseUrl;
+      return { started: pullManager.start(baseUrl, input.model.trim()) };
+    }),
+
+  /** Snapshot of in-flight (and just-finished) downloads for the polling UI. */
+  pullStates: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input }): PullState[] => {
+      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
+      if (!manifest || manifest.kind !== 'local-service') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown local service id.' });
+      }
+      return pullManager.list();
+    }),
+
+  /**
+   * Validate model names against the public registry and read their download
+   * sizes. Backs the curated rows (live sizes instead of hardcoded ones) and
+   * the validating autocomplete. A registry failure yields exists=null —
+   * "couldn't verify", which never blocks a download attempt.
+   */
+  probeModels: publicProcedure
+    .input(z.object({ id: z.string(), models: z.array(z.string().min(1)).max(20) }))
+    .query(async ({ input }): Promise<Record<string, ModelProbe>> => {
+      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
+      if (!manifest || manifest.kind !== 'local-service') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown local service id.' });
+      }
+      const entries = await Promise.all(
+        input.models.map(async (m): Promise<[string, ModelProbe]> => {
+          try {
+            return [m, await probeOllamaRegistryCached(m.trim())];
+          } catch {
+            return [m, { exists: null }];
+          }
+        }),
+      );
+      return Object.fromEntries(entries);
     }),
 
   /**
