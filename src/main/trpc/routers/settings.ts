@@ -42,6 +42,17 @@ export const settingsRouter = router({
       getSettings().set('permissionMode', input.mode);
     }),
 
+  /** The model that judges crossings in auto-review mode (null = unconfigured). */
+  reviewerModel: publicProcedure.query((): SelectedModel | null => {
+    return getSettings().get('reviewerModel', DEFAULTS.reviewerModel);
+  }),
+
+  setReviewerModel: publicProcedure
+    .input(z.object({ providerId: z.string(), modelId: z.string() }).nullable())
+    .mutation(({ input }) => {
+      getSettings().set('reviewerModel', input);
+    }),
+
   /** The tool-permission trust list ("always allow" entries). */
   trustRules: publicProcedure.query((): TrustRule[] => {
     return getSettings().get('trustRules', DEFAULTS.trustRules);

@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
-import { UI_MESSAGE_STREAM_HEADERS, type UIMessage } from 'ai';
+import { type LanguageModel, UI_MESSAGE_STREAM_HEADERS, type UIMessage } from 'ai';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { AcpPermissionBroker, isAcpDecision } from '../agent/acp/permission-broker';
@@ -60,6 +60,18 @@ type ChatBody = {
  * can't drive the user's model credits.
  */
 const log = createLogger('chat');
+
+/** Resolve the configured auto-review reviewer model, or undefined if none is
+ *  set or it no longer resolves (provider disabled / model removed). */
+function resolveReviewerModel(db: Db): LanguageModel | undefined {
+  const picked = getSettings().get('reviewerModel', null);
+  if (!picked) return undefined;
+  try {
+    return resolveModel(db, picked.providerId, picked.modelId);
+  } catch {
+    return undefined;
+  }
+}
 
 export function startHttpServer(deps: {
   db: Db;
@@ -123,14 +135,16 @@ export function startHttpServer(deps: {
       // still matches, so a restart continues the same CLI conversation.
       const bound = readAcpBinding(deps.db, threadId);
       const resume = bound?.providerId === providerId ? bound.sessionId : undefined;
+      const acpMode = permissionMode ?? DEFAULT_PERMISSION_MODE;
       const acpStream = runExternalAgentTurn({
         registry: acpSessions,
         threadId,
         spec,
         resume,
         messages: history,
-        mode: permissionMode ?? DEFAULT_PERMISSION_MODE,
+        mode: acpMode,
         broker: acpPermissions,
+        reviewerModel: acpMode === 'auto-review' ? resolveReviewerModel(deps.db) : undefined,
         abortSignal: abort.signal,
         onSession: (sessionId) => writeAcpBinding(deps.db, threadId, providerId, sessionId),
         // The stream stamps createdAt + durationMs as message metadata; persist
@@ -160,6 +174,7 @@ export function startHttpServer(deps: {
 
     const sandbox = new LocalSandbox(deps.workspaceRoot);
     const skills = getSkills();
+    const mode = permissionMode ?? DEFAULT_PERMISSION_MODE;
     const agentStream = await runAgent({
       model: resolveModel(deps.db, providerId, modelId),
       messages: history,
@@ -175,8 +190,13 @@ export function startHttpServer(deps: {
         skills,
         bgShells,
         permission: {
-          mode: permissionMode ?? DEFAULT_PERMISSION_MODE,
+          mode,
           rules: getSettings().get('trustRules', []),
+          // Resolve the reviewer only when auto-review can actually use it; a
+          // misconfigured/removed model resolves to undefined, so auto-review
+          // simply falls back to prompting rather than failing the turn.
+          reviewerModel: mode === 'auto-review' ? resolveReviewerModel(deps.db) : undefined,
+          abortSignal: abort.signal,
         },
       }),
       // skills must run after compaction: compaction may fold the original first

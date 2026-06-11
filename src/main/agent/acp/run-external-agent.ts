@@ -1,6 +1,12 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk';
 import type { PermissionMode } from '@shared/permissions';
-import { createUIMessageStream, generateId, type UIMessage, type UIMessageChunk } from 'ai';
+import {
+  createUIMessageStream,
+  generateId,
+  type LanguageModel,
+  type UIMessage,
+  type UIMessageChunk,
+} from 'ai';
 import { readableError } from '../errors';
 import { makeAcpOnPermission } from './acp-permission';
 import { ChunkEmitter } from './chunk-emitter';
@@ -19,6 +25,8 @@ export type RunExternalAgentOptions = {
   mode: PermissionMode;
   /** Parks the agent's permission requests until the user answers (see broker). */
   broker: AcpPermissionBroker;
+  /** Reviewer for auto-review mode; absent → auto-review behaves like default. */
+  reviewerModel?: LanguageModel;
   abortSignal?: AbortSignal;
   onFinish: (message: UIMessage) => void;
   /** Persist the (possibly new) ACP session id so the thread can resume later. */
@@ -82,6 +90,8 @@ export function runExternalAgentTurn(
         threadId: opts.threadId,
         mode: opts.mode,
         broker: opts.broker,
+        reviewerModel: opts.reviewerModel,
+        abortSignal: opts.abortSignal,
         write: (chunk) => writer.write(chunk),
       });
       // The turn's message opens on the first visible chunk — not before, since

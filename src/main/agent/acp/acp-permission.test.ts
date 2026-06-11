@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import type { PermissionOption, RequestPermissionRequest } from '@agentclientprotocol/sdk';
 import type { AtriumUIMessage } from '@shared/chat';
-import type { InferUIMessageChunk } from 'ai';
+import type { InferUIMessageChunk, LanguageModel } from 'ai';
+import { MockLanguageModelV3 } from 'ai/test';
 import { makeAcpOnPermission } from './acp-permission';
 import { describeAcpToolCall } from './describe';
 import { AcpPermissionBroker } from './permission-broker';
@@ -15,6 +16,9 @@ const opt = (kind: PermissionOption['kind'], optionId: string): PermissionOption
   name: optionId,
 });
 
+/** Let pending microtasks (the awaited reviewer) settle before asserting. */
+const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
 const bashRequest = (options: PermissionOption[]): RequestPermissionRequest => ({
   sessionId: 'sess',
   options,
@@ -26,13 +30,28 @@ const bashRequest = (options: PermissionOption[]): RequestPermissionRequest => (
   },
 });
 
-function harness(mode: 'default' | 'auto-review' | 'full-access') {
+function verdictModel(reply: string): LanguageModel {
+  return new MockLanguageModelV3({
+    doGenerate: async () => ({
+      content: [{ type: 'text', text: reply }],
+      finishReason: { unified: 'stop', raw: 'stop' },
+      usage: {
+        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 1, text: 1, reasoning: 0 },
+      },
+      warnings: [],
+    }),
+  });
+}
+
+function harness(mode: 'default' | 'auto-review' | 'full-access', reviewerModel?: LanguageModel) {
   const broker = new AcpPermissionBroker();
   const written: Chunk[] = [];
   const onPermission = makeAcpOnPermission({
     threadId: 't1',
     mode,
     broker,
+    reviewerModel,
     write: (chunk) => written.push(chunk),
   });
   return { broker, written, onPermission };
@@ -85,6 +104,34 @@ test('canAlways reflects an offered allow_always option', async () => {
   expect(part.data.canAlways).toBe(true);
   broker.resolve(part.data.requestId, 'allow_always');
   expect(await pending).toEqual({ outcome: { outcome: 'selected', optionId: 'always' } });
+});
+
+test('auto-review: reviewer ALLOW auto-responds with allow_once, no card', async () => {
+  const { written, onPermission } = harness('auto-review', verdictModel('ALLOW'));
+  const res = await onPermission(
+    bashRequest([opt('allow_once', 'once'), opt('allow_always', 'always')]),
+  );
+  // allow_once, not allow_always — each occurrence is judged afresh.
+  expect(res).toEqual({ outcome: { outcome: 'selected', optionId: 'once' } });
+  expect(written.length).toBe(0);
+});
+
+test('auto-review: reviewer DENY falls through to the parked card', async () => {
+  const { broker, written, onPermission } = harness('auto-review', verdictModel('DENY'));
+  const pending = onPermission(bashRequest([opt('allow_once', 'once'), opt('reject_once', 'no')]));
+  // The reviewer is awaited before parking, so let that microtask settle.
+  await tick();
+  expect(written[0]?.type).toBe('data-permissionRequest');
+  const part = written[0] as PermissionChunk;
+  broker.resolve(part.data.requestId, 'reject_once');
+  expect(await pending).toEqual({ outcome: { outcome: 'selected', optionId: 'no' } });
+});
+
+test('auto-review without a reviewer model behaves like default (parks a card)', async () => {
+  const { written, onPermission } = harness('auto-review');
+  void onPermission(bashRequest([opt('allow_once', 'once')]));
+  // No reviewer → no await before parking, so the card is emitted synchronously.
+  expect(written[0]?.type).toBe('data-permissionRequest');
 });
 
 test('cancelThread settles a parked ask as cancelled (stop/abort path)', async () => {

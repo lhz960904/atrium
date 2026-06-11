@@ -31,6 +31,10 @@ export type Settings = {
   permissionMode?: PermissionMode;
   /** The tool-permission trust list — "always allow" entries, kept across turns. */
   trustRules?: TrustRule[];
+  /** Model that judges boundary crossings in auto-review mode; null = unconfigured
+   *  (auto-review then falls back to prompting). Decoupled from the chat model.
+   **/
+  reviewerModel?: SelectedModel | null;
 };
 
 export const DEFAULTS = {
@@ -39,6 +43,7 @@ export const DEFAULTS = {
   language: 'system',
   permissionMode: DEFAULT_PERMISSION_MODE,
   trustRules: [],
+  reviewerModel: null,
 } satisfies Required<Settings>;
 
 let _conf: Conf<Settings> | null = null;

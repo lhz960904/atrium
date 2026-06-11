@@ -1,5 +1,6 @@
 import type { PermissionMode } from '@shared/permissions';
 import type { TrustRule } from '@shared/permissions/rules';
+import type { LanguageModel } from 'ai';
 import type { Db } from '../../db';
 import type { BackgroundShells } from '../sandbox/background-shells';
 import type { Sandbox } from '../sandbox/types';
@@ -22,5 +23,12 @@ export type ToolCtx = {
   db: Db;
   skills?: Skill[];
   bgShells?: BackgroundShells;
-  permission?: { mode: PermissionMode; rules?: TrustRule[] };
+  permission?: {
+    mode: PermissionMode;
+    rules?: TrustRule[];
+    /** Reviewer for auto-review mode; absent → auto-review falls back to prompting. */
+    reviewerModel?: LanguageModel;
+    /** The turn's abort signal, so a stopped turn also cancels an in-flight review. */
+    abortSignal?: AbortSignal;
+  };
 };
