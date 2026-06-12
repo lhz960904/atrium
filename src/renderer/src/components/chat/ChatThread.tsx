@@ -6,10 +6,12 @@ import { TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PendingApproval } from '../../lib/approvals';
+import { useAutoReviewStore } from '../../state/auto-review-store';
 import { useCompactionStore } from '../../state/compaction-store';
 import { useImageGenStore } from '../../state/image-gen-store';
 import { ApprovalCard } from './ApprovalCard';
 import { AssistantMessage } from './AssistantMessage';
+import { AutoReviewToast } from './AutoReviewToast';
 import { ChatHeader } from './ChatHeader';
 import { CompactionDivider, CompactionProgress } from './CompactionDivider';
 import type { Attachment } from './composer/AttachmentChip';
@@ -99,6 +101,8 @@ export function ChatThread({
   const clarifyPending = pendingClarify !== null;
   const approvalPending = approvals.length > 0;
   const lastId = messages.at(-1)?.id;
+  // The head of this thread's auto-review notice queue; each toast self-dismisses.
+  const autoReviewToast = useAutoReviewStore((s) => s.toasts[threadId]?.[0]);
 
   // "Working…" before the first token: status sits at 'submitted' until the
   // first chunk arrives (external CLI agents can take seconds). Debounced so a
@@ -192,6 +196,16 @@ export function ChatThread({
               onDeny={onDeny}
             />
           )}
+          {/* Auto-review notice yields to a real approval (they never co-occur). */}
+          {!approvalPending && autoReviewToast && (
+            <AutoReviewToast
+              key={autoReviewToast.id}
+              subject={autoReviewToast.subject}
+              onDone={() =>
+                useAutoReviewStore.getState().dismissToast(threadId, autoReviewToast.id)
+              }
+            />
+          )}
           <Composer
             disabled={live || compacting || clarifyPending || approvalPending}
             streaming={live}
@@ -202,7 +216,7 @@ export function ChatThread({
                   ? t('composer.holdApproval')
                   : undefined
             }
-            attachedTop={plan != null || approvalPending}
+            attachedTop={plan != null || approvalPending || (!approvalPending && !!autoReviewToast)}
             commands={commands}
             onSubmit={onSend}
             onStop={onStop}

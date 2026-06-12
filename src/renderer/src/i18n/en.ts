@@ -72,6 +72,7 @@ export const en: typeof zh = {
     confirmedAlways: 'Added to trust list',
     confirmedAlwaysAgent: "Allowed — this tool won't ask again",
     confirmedDeny: 'Denied',
+    autoReviewed: 'Auto-review approved',
     more: '{{count}} more',
     remember: 'Always allow → remember',
     reason: {
@@ -239,9 +240,13 @@ export const en: typeof zh = {
       modeDefaultDesc:
         'Boundary-crossing actions (network / outside writes / dangerous commands) need your OK',
       modeReviewLabel: 'Auto-review',
-      modeReviewDesc: 'A model reviews crossings (needs a local model; not enabled yet)',
+      modeReviewDesc: 'A reviewer model judges crossings first; only an allow skips the prompt',
       modeFullLabel: 'Full access',
       modeFullDesc: 'Nothing is gated',
+      reviewer: 'Reviewer model',
+      reviewerHint:
+        'Auto-review uses it to judge boundary crossings. Leave empty to use the current chat model (an external-agent chat has none, so it falls back to a prompt).',
+      reviewerNone: 'Not set (uses the chat model)',
       trustList: 'Trust list',
       trustHint:
         'These won\'t prompt when they cross the boundary. Most are added by "Always allow" on the approval card; you can also add them here.',

@@ -45,7 +45,14 @@ export function makeAcpOnPermission(deps: Deps) {
       });
       // Allow once (not always) — the reviewer judges each occurrence, so the
       // agent should keep asking rather than be permanently whitelisted.
-      if (verdict === 'allow') return autoAllow(req, 'once');
+      if (verdict === 'allow') {
+        deps.write({
+          type: 'data-autoReview',
+          data: { toolCallId: req.toolCall.toolCallId, subject: view.target },
+          transient: true,
+        });
+        return autoAllow(req, 'once');
+      }
     }
 
     const { requestId, response } = deps.broker.request(deps.threadId, req.options);

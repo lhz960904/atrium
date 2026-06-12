@@ -106,14 +106,15 @@ test('canAlways reflects an offered allow_always option', async () => {
   expect(await pending).toEqual({ outcome: { outcome: 'selected', optionId: 'always' } });
 });
 
-test('auto-review: reviewer ALLOW auto-responds with allow_once, no card', async () => {
+test('auto-review: reviewer ALLOW auto-responds with allow_once, badged not carded', async () => {
   const { written, onPermission } = harness('auto-review', verdictModel('ALLOW'));
   const res = await onPermission(
     bashRequest([opt('allow_once', 'once'), opt('allow_always', 'always')]),
   );
   // allow_once, not allow_always — each occurrence is judged afresh.
   expect(res).toEqual({ outcome: { outcome: 'selected', optionId: 'once' } });
-  expect(written.length).toBe(0);
+  // No approval card; instead a transient marker badges the call as reviewed.
+  expect(written.map((c) => c.type)).toEqual(['data-autoReview']);
 });
 
 test('auto-review: reviewer DENY falls through to the parked card', async () => {

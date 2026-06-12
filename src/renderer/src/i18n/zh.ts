@@ -73,6 +73,7 @@ export const zh = {
     confirmedAlways: '已加入信任清单',
     confirmedAlwaysAgent: '已允许，该工具不再询问',
     confirmedDeny: '已拒绝',
+    autoReviewed: '自动审查已放行',
     more: '还有 {{count}} 项',
     remember: '总是允许 → 记住',
     reason: {
@@ -237,9 +238,13 @@ export const zh = {
       modeDefaultLabel: '默认权限',
       modeDefaultDesc: '越界操作（联网 / 外部写 / 危险命令）需你确认',
       modeReviewLabel: '自动审查',
-      modeReviewDesc: '越界交 AI 审查（需本地模型，暂未启用）',
+      modeReviewDesc: '越界操作先交 reviewer 模型判定',
       modeFullLabel: '完全放行',
       modeFullDesc: '不拦截任何操作',
+      reviewer: 'Reviewer 模型',
+      reviewerHint:
+        '自动审查模式用它判断越界操作是否安全。留空则用当前对话模型（外部 agent 对话无可用模型时退回弹窗）。',
+      reviewerNone: '未配置（用对话模型）',
       trustList: '信任清单',
       trustHint:
         '这些操作越界时不再询问。多数会在审批卡点「总是允许」时自动加入；也可在此手动添加。',

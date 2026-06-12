@@ -9,6 +9,7 @@ import {
   lastAssistantMessageIsCompleteWithToolCalls,
 } from 'ai';
 import { useAcpApprovalStore } from '../state/acp-approval-store';
+import { useAutoReviewStore } from '../state/auto-review-store';
 import { useCompactionStore } from '../state/compaction-store';
 import { useImageGenStore } from '../state/image-gen-store';
 import { useModelStore } from '../state/model-store';
@@ -117,6 +118,8 @@ export function getThreadChat(
         useAcpApprovalStore.getState().push(threadId, part.data);
       } else if (part.type === 'data-permissionResolved') {
         useAcpApprovalStore.getState().remove(threadId, part.data.requestId);
+      } else if (part.type === 'data-autoReview') {
+        useAutoReviewStore.getState().mark(threadId, part.data.toolCallId, part.data.subject);
       }
     },
   });

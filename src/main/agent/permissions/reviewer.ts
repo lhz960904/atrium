@@ -7,11 +7,23 @@ export type ReviewVerdict = 'allow' | 'deny';
 /** A model this slow on the approval path is worse than just asking the user. */
 const REVIEW_TIMEOUT_MS = 6000;
 
-const SYSTEM = `You are a security gate for a coding agent. The agent wants to run one operation that was flagged as sensitive. Decide whether it is clearly safe to auto-approve, or whether a human should confirm it.
+const SYSTEM = `You are a security gate for a coding agent working inside a user's project. The agent wants to run one operation that a static check flagged as crossing the workspace boundary. Decide whether it is clearly safe to auto-approve, or whether a human should confirm it.
 
-Reply with exactly one word: ALLOW or DENY. No explanation. When in any doubt, reply DENY — a human will then confirm.
+End your reply with exactly one word on its own: ALLOW or DENY.
 
-Auto-approve only routine, clearly-harmless operations (reading public docs, installing a well-known package). DENY anything that deletes or overwrites data, exposes secrets, runs an opaque or obfuscated command, or reaches an untrusted host.`;
+ALLOW routine developer operations whose worst realistic outcome is harmless:
+- read-only network requests to public sites (GET/HEAD: fetching docs, pages, public APIs, package metadata)
+- installing well-known packages (npm/pip/brew/cargo install <known-package>)
+- reading, listing, searching files; building; running tests
+
+DENY operations that could cause real harm, exfiltrate data, or that you cannot fully judge:
+- deleting or overwriting data (rm, mv onto an existing file, truncation, force-push)
+- piping downloaded content into a shell (curl ... | sh)
+- sending local data out (POST/PUT uploads, posting secrets or files)
+- reaching internal, localhost, or cloud-metadata endpoints
+- opaque, obfuscated, or unclear commands
+
+When genuinely unsure, reply DENY — a human will then confirm.`;
 
 export type ReviewArgs = {
   model: LanguageModel;
@@ -39,12 +51,14 @@ export async function reviewBoundaryCrossing(args: ReviewArgs): Promise<ReviewVe
   const signal = args.abortSignal ? AbortSignal.any([args.abortSignal, timeout]) : timeout;
   try {
     const lead = args.risk ? `The operation ${args.risk}:` : 'The operation:';
+    // No maxOutputTokens cap: a reasoning model spends tokens thinking before it
+    // answers, and a tight cap would truncate it to empty (→ a false deny). The
+    // 6s timeout bounds latency instead; the prompt keeps the answer terse.
     const { text } = await generateText({
       model: args.model,
       system: SYSTEM,
       prompt: `${lead}\n\n${args.subject}\n\nALLOW or DENY?`,
       abortSignal: signal,
-      maxOutputTokens: 8,
     });
     return parseVerdict(text);
   } catch {

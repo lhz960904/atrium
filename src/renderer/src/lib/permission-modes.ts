@@ -7,7 +7,6 @@ export type PermissionModeMeta = {
   labelKey: ParseKeys;
   descKey: ParseKeys;
   icon: typeof Shield;
-  /** auto-review waits on the local-model reviewer — shown but not selectable yet. */
   disabled?: boolean;
 };
 
@@ -24,7 +23,6 @@ export const PERMISSION_MODE_META: PermissionModeMeta[] = [
     labelKey: 'settings.permissions.modeReviewLabel',
     descKey: 'settings.permissions.modeReviewDesc',
     icon: Bot,
-    disabled: true,
   },
   {
     id: 'full-access',

@@ -42,6 +42,11 @@ export type AtriumDataParts = {
     canAlways: boolean;
   };
   permissionResolved: { requestId: string };
+  /** A boundary-crossing tool call the auto-review reviewer silently approved.
+   *  Transient — drives a persistent "reviewed" badge on the tool marker (keyed
+   *  by toolCallId) and a one-shot toast above the composer (showing subject).
+   *  Lost on reload: the call's result persists, this is just an in-session hint. */
+  autoReview: { toolCallId: string; subject: string };
 };
 
 /**

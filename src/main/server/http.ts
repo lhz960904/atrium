@@ -61,14 +61,27 @@ type ChatBody = {
  */
 const log = createLogger('chat');
 
-/** Resolve the configured auto-review reviewer model, or undefined if none is
- *  set or it no longer resolves (provider disabled / model removed). */
-function resolveReviewerModel(db: Db): LanguageModel | undefined {
-  const picked = getSettings().get('reviewerModel', null);
-  if (!picked) return undefined;
+/**
+ * Resolve the auto-review reviewer model. Prefers the dedicated setting; when
+ * unset, falls back to this turn's chat model so auto-review works out of the
+ * box. Returns undefined (→ auto-review prompts) when nothing resolves — a
+ * removed model, or the fallback being an external agent whose model we can't
+ * drive (an ACP turn has no controllable model to inherit).
+ */
+function resolveReviewerModel(
+  db: Db,
+  fallback: { providerId: string; modelId: string },
+): LanguageModel | undefined {
+  const configured = getSettings().get('reviewerModel', null);
+  const picked = configured ?? fallback;
   try {
-    return resolveModel(db, picked.providerId, picked.modelId);
-  } catch {
+    const model = resolveModel(db, picked.providerId, picked.modelId);
+    log.info(
+      `reviewer = ${picked.providerId}/${picked.modelId}${configured ? '' : ' (inherited chat model)'}`,
+    );
+    return model;
+  } catch (err) {
+    log.info(`reviewer unresolved (${picked.providerId}/${picked.modelId}) → prompts: ${err}`);
     return undefined;
   }
 }
@@ -144,7 +157,10 @@ export function startHttpServer(deps: {
         messages: history,
         mode: acpMode,
         broker: acpPermissions,
-        reviewerModel: acpMode === 'auto-review' ? resolveReviewerModel(deps.db) : undefined,
+        reviewerModel:
+          acpMode === 'auto-review'
+            ? resolveReviewerModel(deps.db, { providerId, modelId })
+            : undefined,
         abortSignal: abort.signal,
         onSession: (sessionId) => writeAcpBinding(deps.db, threadId, providerId, sessionId),
         // The stream stamps createdAt + durationMs as message metadata; persist
@@ -195,7 +211,10 @@ export function startHttpServer(deps: {
           // Resolve the reviewer only when auto-review can actually use it; a
           // misconfigured/removed model resolves to undefined, so auto-review
           // simply falls back to prompting rather than failing the turn.
-          reviewerModel: mode === 'auto-review' ? resolveReviewerModel(deps.db) : undefined,
+          reviewerModel:
+            mode === 'auto-review'
+              ? resolveReviewerModel(deps.db, { providerId, modelId })
+              : undefined,
           abortSignal: abort.signal,
         },
       }),

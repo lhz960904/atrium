@@ -2,9 +2,12 @@ import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permission
 import type { CrossingCode } from '@shared/permissions/analyze';
 import { isAllowed, type TrustRule } from '@shared/permissions/rules';
 import type { ToolName } from '@shared/tools';
+import { createLogger } from '../../log';
 import type { ToolCtx } from '../tools/context';
 import { type Classification, classifyToolCall } from './classify';
 import { reviewBoundaryCrossing } from './reviewer';
+
+const log = createLogger('permission');
 
 /** Plain-words framing of each static crossing, handed to the reviewer as a hint. */
 const RISK: Record<CrossingCode, string> = {
@@ -69,33 +72,67 @@ function crossingSubject(input: unknown): string {
   return '';
 }
 
+/** The stream writer the run hands to tools via experimental_context, used to
+ *  badge an auto-reviewed call. Narrowed structurally so this stays decoupled. */
+type EmitContext = {
+  emit?: (chunk: {
+    type: 'data-autoReview';
+    data: { toolCallId: string; subject: string };
+    transient: true;
+  }) => void;
+};
+
 /**
  * Bind a tool's `needsApproval` to the request's permission context. Returns a
  * sync boolean on the common paths (allow / prompt) and a promise only when
  * auto-review must consult the reviewer — which, lacking a model, also falls
  * back to a prompt. The reviewer can only turn a would-be prompt into a silent
- * allow; it never widens access on its own.
+ * allow; it never widens access on its own. On a silent allow it emits an
+ * autoReview marker (via the run's stream writer in experimental_context) so
+ * the trace shows the call was reviewed rather than slipped through ungated.
  */
 export function makeNeedsApproval(toolName: ToolName, ctx: ToolCtx) {
-  return (input: unknown): boolean | Promise<boolean> => {
+  return (
+    input: unknown,
+    options?: { toolCallId: string; experimental_context?: unknown },
+  ): boolean | Promise<boolean> => {
     const permission = ctx.permission;
+    const mode = permission?.mode ?? DEFAULT_PERMISSION_MODE;
     const verdict = staticVerdict(
       toolName,
       input,
-      permission?.mode ?? DEFAULT_PERMISSION_MODE,
+      mode,
       ctx.workspaceRoot,
       permission?.rules ?? [],
     );
     if (verdict.kind === 'allow') return false;
-    if (verdict.kind === 'prompt') return true;
+    if (verdict.kind === 'prompt') {
+      log.info(`${toolName} crossing → prompt (mode=${mode})`);
+      return true;
+    }
 
     const model = permission?.reviewerModel;
-    if (!model) return true; // auto-review without a configured reviewer → ask the user
+    const subject = crossingSubject(input);
+    if (!model) {
+      log.info(`${toolName} crossing → prompt (auto-review, no reviewer model)`);
+      return true;
+    }
     return reviewBoundaryCrossing({
       model,
-      subject: crossingSubject(input),
+      subject,
       risk: RISK[verdict.crossing.code],
       abortSignal: permission.abortSignal,
-    }).then((review) => review === 'deny');
+    }).then((review) => {
+      log.info(`${toolName} crossing → reviewer ${review}: ${subject}`);
+      if (review === 'deny') return true;
+      if (options?.toolCallId) {
+        (options.experimental_context as EmitContext | undefined)?.emit?.({
+          type: 'data-autoReview',
+          data: { toolCallId: options.toolCallId, subject },
+          transient: true,
+        });
+      }
+      return false;
+    });
   };
 }

@@ -1,9 +1,11 @@
 import type { TrustRule } from '@shared/permissions/rules';
 import { Check, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ModelPicker, type ModelValue } from '../../../components/ModelPicker';
 import { PERMISSION_MODE_META } from '../../../lib/permission-modes';
 import { trpc } from '../../../lib/trpc';
+import { deriveGroups } from '../../../lib/use-chat-model';
 import { useChatPermission } from '../../../lib/use-chat-permission';
 
 /** A typed entry is a path when it looks like one (slash or ~/. prefix),
@@ -38,6 +40,21 @@ export function PermissionsSection(): React.JSX.Element {
   };
   const addRule = trpc.settings.addTrustRule.useMutation({ onSuccess: refresh });
   const deleteRule = trpc.settings.deleteTrustRule.useMutation({ onSuccess: refresh });
+
+  // Reviewer must be a real, resolvable model — drop external (ACP) providers,
+  // which have no model we can drive from main.
+  const providers = trpc.providers.list.useQuery();
+  const reviewerGroups = useMemo(
+    () => deriveGroups(providers.data ?? []).filter((g) => !g.external),
+    [providers.data],
+  );
+  const reviewerModel = trpc.settings.reviewerModel.useQuery();
+  const setReviewerModel = trpc.settings.setReviewerModel.useMutation({
+    onSuccess: () => utils.settings.reviewerModel.invalidate(),
+  });
+  const onReviewerChange = (value: ModelValue): void => {
+    setReviewerModel.mutate(value);
+  };
 
   const [draft, setDraft] = useState('');
   const pending = inputToRule(draft);
@@ -81,6 +98,22 @@ export function PermissionsSection(): React.JSX.Element {
               </button>
             );
           })}
+        </div>
+      </div>
+
+      <div>
+        <h2 className="mb-1 font-medium text-fg-primary text-sm">
+          {t('settings.permissions.reviewer')}
+        </h2>
+        <p className="mb-3 text-fg-tertiary text-xs">{t('settings.permissions.reviewerHint')}</p>
+        <div className="max-w-sm">
+          <ModelPicker
+            variant="field"
+            value={reviewerModel.data ?? null}
+            onChange={onReviewerChange}
+            groups={reviewerGroups}
+            inheritLabel={t('settings.permissions.reviewerNone')}
+          />
         </div>
       </div>
 
