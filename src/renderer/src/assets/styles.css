@@ -245,3 +245,13 @@ pre {
   float: left;
   height: 0;
 }
+
+/* While dragging the sidebar divider, kill text selection and force the resize
+   cursor everywhere — the drag travels over selectable chat content, whose
+   own user-select:text would otherwise win over a body-level style. */
+.resizing,
+.resizing * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  cursor: col-resize !important;
+}

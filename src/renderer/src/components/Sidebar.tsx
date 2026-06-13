@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { timeAgo } from '../lib/time';
 import { trpc } from '../lib/trpc';
+import { useSidebarStore } from '../state/sidebar-store';
 
 const chatRowBase =
   'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-fg-secondary hover:bg-sidebar-item-hover hover:text-fg-primary';
@@ -12,6 +13,7 @@ const chatRowActive =
 
 export function Sidebar(): React.JSX.Element {
   const { t } = useTranslation();
+  const width = useSidebarStore((s) => s.width);
   const utils = trpc.useUtils();
   const { data: threads, isLoading } = trpc.threads.list.useQuery();
   // Poll the main process for which threads are generating; a small id list, so
@@ -33,7 +35,10 @@ export function Sidebar(): React.JSX.Element {
   }, [running, utils]);
 
   return (
-    <aside className="flex h-full min-h-0 select-none flex-col border-r border-border-default bg-surface">
+    <aside
+      className="flex h-full min-h-0 select-none flex-col border-r border-border-default bg-surface"
+      style={{ width }}
+    >
       <div className="atrium-titlebar" />
 
       <nav className="flex shrink-0 flex-col gap-0.5 px-3 pt-2 pb-1">
