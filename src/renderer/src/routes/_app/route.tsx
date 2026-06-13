@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router';
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { PanelLeft, PanelLeftDashed } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Sidebar } from '../../components/Sidebar';
 import { useNavStore } from '../../state/nav-store';
@@ -74,12 +74,12 @@ function AppLayout(): React.JSX.Element {
         type="button"
         onClick={toggle}
         className="app-no-drag fixed top-[9px] z-50 rounded-md p-1.5 text-fg-tertiary transition-colors hover:bg-surface-strong hover:text-fg-primary"
-        style={{ left: collapsed ? 12 : width - 44 }}
+        style={{ left: collapsed ? 84 : width - 44 }}
       >
         {collapsed ? (
-          <PanelLeftOpen className="size-[17px]" />
+          <PanelLeft className="size-[17px]" />
         ) : (
-          <PanelLeftClose className="size-[17px]" />
+          <PanelLeftDashed className="size-[17px]" />
         )}
       </button>
     </div>
