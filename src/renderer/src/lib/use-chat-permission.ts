@@ -1,29 +1,32 @@
 import type { PermissionMode } from '@shared/permissions';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { usePermissionStore } from '../state/permission-store';
 import { trpc } from './trpc';
 
 /**
- * Hydrate the permission-mode store from the persisted setting once, and
- * persist changes — so the composer's mode survives a reload instead of
- * snapping back to the default. Mirrors useChatModel; the chat transport reads
- * the store live, so hydrating it here is enough.
+ * Hydrate the permission-mode store from the persisted setting once — globally,
+ * via the store's `hydrated` flag, not a per-instance ref — and persist changes.
+ * The chat transport reads the store live, so once hydrated the store is the
+ * single source of truth: a remounted picker (e.g. after visiting Settings or
+ * navigating to a new thread) won't snap back to a stale persisted value.
+ * Mirrors useChatModel.
  */
 export function useChatPermission(): {
   mode: PermissionMode;
   setMode: (m: PermissionMode) => void;
 } {
+  const utils = trpc.useUtils();
   const persisted = trpc.settings.permissionMode.useQuery();
-  const persist = trpc.settings.setPermissionMode.useMutation();
+  const persist = trpc.settings.setPermissionMode.useMutation({
+    onSuccess: () => utils.settings.permissionMode.invalidate(),
+  });
   const mode = usePermissionStore((s) => s.mode);
   const setStore = usePermissionStore((s) => s.setMode);
-  const hydrated = useRef(false);
+  const hydrate = usePermissionStore((s) => s.hydrate);
 
   useEffect(() => {
-    if (persisted.isLoading || hydrated.current) return;
-    if (persisted.data) setStore(persisted.data);
-    hydrated.current = true;
-  }, [persisted.isLoading, persisted.data, setStore]);
+    if (persisted.data) hydrate(persisted.data);
+  }, [persisted.data, hydrate]);
 
   const setMode = (m: PermissionMode): void => {
     setStore(m);
