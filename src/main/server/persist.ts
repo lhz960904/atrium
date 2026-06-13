@@ -138,3 +138,8 @@ export function resolveToolOutput(
   ) as UIMessage['parts'];
   upsertMessage(db, threadId, { ...msg, parts });
 }
+
+/** Replace a thread's title with the model-generated summary of its first message. */
+export function setThreadTitle(db: Db, threadId: string, title: string): void {
+  db.update(threads).set({ title }).where(eq(threads.id, threadId)).run();
+}

@@ -2,6 +2,7 @@ import { Chat } from '@ai-sdk/react';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
+import { getQueryKey } from '@trpc/react-query';
 import {
   getStaticToolName,
   isStaticToolUIPart,
@@ -16,6 +17,8 @@ import { useModelStore } from '../state/model-store';
 import { usePermissionStore } from '../state/permission-store';
 import { useSubagentStore } from '../state/subagent-store';
 import { makeChatTransport } from './chat-transport';
+import { queryClient } from './query-client';
+import { trpc } from './trpc';
 
 /**
  * Persistent per-thread Chat instances. A Chat outlives the React component
@@ -120,6 +123,13 @@ export function getThreadChat(
         useAcpApprovalStore.getState().remove(threadId, part.data.requestId);
       } else if (part.type === 'data-autoReview') {
         useAutoReviewStore.getState().mark(threadId, part.data.toolCallId, part.data.subject);
+      } else if (part.type === 'data-title') {
+        // A model-generated title landed and is already in the DB; re-fetch the
+        // places that show it (header reads threads.get, sidebar threads.list).
+        queryClient.invalidateQueries({
+          queryKey: getQueryKey(trpc.threads.get, { id: threadId }, 'query'),
+        });
+        queryClient.invalidateQueries({ queryKey: getQueryKey(trpc.threads.list) });
       }
     },
   });

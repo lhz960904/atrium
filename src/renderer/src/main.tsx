@@ -2,11 +2,12 @@ import './assets/styles.css';
 import './i18n'; // initialize i18next (best-guess language; useLanguage corrects from settings)
 import './state/theme-store'; // initialize theme from persisted store + system listener
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { createHashHistory, createRouter, RouterProvider } from '@tanstack/react-router';
 import { ipcLink } from 'electron-trpc/renderer';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { queryClient } from './lib/query-client';
 import { trpc } from './lib/trpc';
 import { routeTree } from './routeTree.gen';
 
@@ -24,15 +25,6 @@ declare module '@tanstack/react-router' {
     router: typeof router;
   }
 }
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
 
 const trpcClient = trpc.createClient({
   links: [ipcLink()],

@@ -47,6 +47,9 @@ export type AtriumDataParts = {
    *  by toolCallId) and a one-shot toast above the composer (showing subject).
    *  Lost on reload: the call's result persists, this is just an in-session hint. */
   autoReview: { toolCallId: string; subject: string };
+  /** A model-generated thread title pushed mid-turn on the first turn; the open
+   *  chat and sidebar update live, the DB is updated in parallel. */
+  title: { title: string };
 };
 
 /**

@@ -168,7 +168,11 @@ function ChatRunner({
     // Surface the sidebar spinner promptly instead of waiting for the next poll.
     if (streaming && !wasStreaming.current) utils.threads.running.invalidate();
     if (wasStreaming.current && !streaming) {
+      // threads.get/list also carry a model-generated title: on a fast turn the
+      // stream can close before the title's data-title part is emitted, so this
+      // turn-end refetch is the fallback (the title is already persisted).
       utils.threads.get.invalidate({ id: threadId });
+      utils.threads.list.invalidate();
       utils.threads.running.invalidate();
       markRead.mutate({ id: threadId });
       // Safety net: clear the indicator if a 'done' event was missed (errored

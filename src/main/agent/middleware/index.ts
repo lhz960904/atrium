@@ -7,6 +7,7 @@ export {
 export { metadataMiddleware } from './builtins/metadata';
 export { type PersistFn, persistenceMiddleware } from './builtins/persistence';
 export { type SkillsOptions, skillsMiddleware } from './builtins/skills';
+export { type SetTitleFn, titleMiddleware } from './builtins/title';
 export {
   composeAfterStep,
   composeBeforeStep,

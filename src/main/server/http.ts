@@ -12,6 +12,7 @@ import {
   metadataMiddleware,
   persistenceMiddleware,
   skillsMiddleware,
+  titleMiddleware,
 } from '../agent/middleware';
 import { isImageModel, maxContextTokens } from '../agent/models/catalog';
 import { runAgent } from '../agent/run';
@@ -33,6 +34,7 @@ import {
   readAcpBinding,
   readAcpConfig,
   resolveToolOutput,
+  setThreadTitle,
   upsertMessage,
   writeAcpBinding,
 } from './persist';
@@ -222,6 +224,11 @@ export function startHttpServer(deps: {
       // user message into a summary, and the skill index has to land on whatever
       // the post-compaction first user message is.
       middlewares: [
+        // Title is generated from the first user message, so it must run before
+        // the skills middleware injects its index into that message (and before
+        // compaction could fold it) — otherwise the title summarizes the skill
+        // index instead of the user's prompt.
+        titleMiddleware(setThreadTitle),
         metadataMiddleware(),
         compactionMiddleware({
           maxContextTokens,
