@@ -73,7 +73,7 @@ function AppLayout(): React.JSX.Element {
       <button
         type="button"
         onClick={toggle}
-        className="app-no-drag fixed top-[9px] z-50 rounded-md p-1.5 text-fg-tertiary transition-colors hover:bg-surface-strong hover:text-fg-primary"
+        className="app-no-drag fixed top-[10px] z-50 rounded-md p-1.5 text-fg-tertiary transition-colors hover:bg-surface-strong hover:text-fg-primary"
         style={{ left: collapsed ? 84 : width - 44 }}
       >
         {collapsed ? (
