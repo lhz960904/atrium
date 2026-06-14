@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { timeAgo } from '../lib/time';
 import { trpc } from '../lib/trpc';
+import { useCommandPalette } from '../state/command-palette-store';
 import { useSidebarStore } from '../state/sidebar-store';
 
 const chatRowBase =
@@ -14,6 +15,7 @@ const chatRowActive =
 export function Sidebar(): React.JSX.Element {
   const { t } = useTranslation();
   const width = useSidebarStore((s) => s.width);
+  const openPalette = useCommandPalette((s) => s.setOpen);
   const utils = trpc.useUtils();
   const { data: threads, isLoading } = trpc.threads.list.useQuery();
   // Poll the main process for which threads are generating; a small id list, so
@@ -49,7 +51,11 @@ export function Sidebar(): React.JSX.Element {
           <SquarePen className="size-[15px] shrink-0" />
           <span className="flex-1 text-left">{t('home.newChat')}</span>
         </Link>
-        <SbNavItem icon={<Search className="size-[15px] shrink-0" />} label={t('sidebar.search')} />
+        <SbNavItem
+          icon={<Search className="size-[15px] shrink-0" />}
+          label={t('sidebar.search')}
+          onClick={() => openPalette(true)}
+        />
       </nav>
 
       <div className="flex-1 overflow-y-auto px-3 py-2">
@@ -123,10 +129,19 @@ export function Sidebar(): React.JSX.Element {
   );
 }
 
-function SbNavItem({ icon, label }: { icon: React.ReactNode; label: string }): React.JSX.Element {
+function SbNavItem({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+}): React.JSX.Element {
   return (
     <button
       type="button"
+      onClick={onClick}
       className="flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
     >
       {icon}

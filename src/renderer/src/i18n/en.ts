@@ -63,6 +63,17 @@ export const en: typeof zh = {
   command: {
     compactDesc: 'Compact the conversation to free up space for the model',
   },
+  commandPalette: {
+    placeholder: 'Search chats, or type a command…',
+    groupCommands: 'Commands',
+    groupChats: 'Chats',
+    groupRecent: 'Recent',
+    empty: 'No results',
+    toDark: 'Switch to dark',
+    toLight: 'Switch to light',
+    newChat: 'New chat',
+    openSettings: 'Open settings',
+  },
   approval: {
     needConfirm: 'Confirmation needed',
     deny: 'Deny',

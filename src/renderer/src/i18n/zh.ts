@@ -64,6 +64,17 @@ export const zh = {
   command: {
     compactDesc: '压缩对话上下文，为模型释放空间',
   },
+  commandPalette: {
+    placeholder: '搜索对话，或输入命令…',
+    groupCommands: '命令',
+    groupChats: '对话',
+    groupRecent: '最近',
+    empty: '没有匹配结果',
+    toDark: '切换到深色',
+    toLight: '切换到浅色',
+    newChat: '新建对话',
+    openSettings: '打开设置',
+  },
   approval: {
     needConfirm: '需要确认',
     deny: '拒绝',
