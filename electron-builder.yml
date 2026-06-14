@@ -23,6 +23,9 @@ extraResources:
       - '**/*'
 asarUnpack:
   - resources/**
+  # jieba-wasm reads its .wasm via fs.readFileSync(__dirname/...); unpack it so
+  # the file resolves on disk rather than from inside the asar archive.
+  - node_modules/jieba-wasm/**
 mac:
   # No Apple Developer ID in CI, so the app is only ad-hoc signed. Hardened
   # Runtime enforces Library Validation (same Team ID for all nested code),
