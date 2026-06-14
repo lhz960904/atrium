@@ -24,6 +24,9 @@ dev.db-wal
 .env.*
 !.env.example
 
+# dev perf-repro fixture — a captured real conversation, kept local (not shared)
+src/renderer/src/lib/dev/real-message.json
+
 # IDE
 .idea
 *.swp

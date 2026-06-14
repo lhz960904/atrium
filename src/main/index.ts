@@ -50,6 +50,22 @@ function createWindow(): BrowserWindow {
     mainWindow.show();
   });
 
+  if (is.dev) {
+    // Enable the JS Self-Profiling API (used by the dev-only __atriumProfile) by
+    // injecting its Document Policy on the renderer document — set here rather
+    // than via Vite's server.headers, which Electron's loader doesn't reliably
+    // carry through.
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      if (details.resourceType === 'mainFrame') {
+        callback({
+          responseHeaders: { ...details.responseHeaders, 'Document-Policy': ['js-profiling'] },
+        });
+        return;
+      }
+      callback({});
+    });
+  }
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
     return { action: 'deny' };

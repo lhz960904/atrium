@@ -18,7 +18,8 @@
       "!**/drizzle/migrations",
       "!**/routeTree.gen.ts",
       "!**/*.css",
-      "!**/litellm.snapshot.json"
+      "!**/litellm.snapshot.json",
+      "!**/lib/dev/real-message.json"
     ]
   },
   "formatter": {
