@@ -2,9 +2,10 @@ import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult, Todo } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
 import { type ChatStatus, getStaticToolName, isStaticToolUIPart } from 'ai';
-import { TriangleAlert } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { ArrowDown, TriangleAlert } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useStickToBottom } from 'use-stick-to-bottom';
 import type { PendingApproval } from '../../lib/approvals';
 import { useAutoReviewStore } from '../../state/auto-review-store';
 import { useCompactionStore } from '../../state/compaction-store';
@@ -131,56 +132,55 @@ export function ChatThread({
     return () => window.removeEventListener('keydown', onKey);
   }, [live, clarifyPending, pendingClarify, onStop, onCancelClarify]);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const stickRef = useRef(true);
-
-  // Pin the view to the newest content as it streams — unless the user has
-  // scrolled up to read earlier messages, in which case leave them be.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: messages is the intended trigger to re-pin on new content
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages]);
-
-  const onScroll = (): void => {
-    const el = scrollRef.current;
-    if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-  };
+  const { scrollRef, contentRef, isAtBottom, scrollToBottom } = useStickToBottom({
+    initial: 'instant',
+  });
 
   return (
     <div className="flex h-full flex-col">
       <ChatHeader title={title} />
-      <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[760px] px-2 py-6">
-          {messages.map((msg) => {
-            const kind = msg.metadata?.kind;
-            // The ack is an internal alternation placeholder — never shown.
-            if (kind === 'compaction-ack') return null;
-            if (kind === 'compaction') {
-              return <CompactionDivider key={msg.id} summary={messageText(msg.parts)} />;
-            }
-            return msg.role === 'user' ? (
-              <UserMessage key={msg.id} parts={msg.parts} />
-            ) : (
-              <AssistantMessage
-                key={msg.id}
-                message={msg}
-                streaming={live && msg.id === lastId}
-                onAnswer={onClarify}
-                onCancel={onCancelClarify}
-              />
-            );
-          })}
-          {compacting && <CompactionProgress />}
-          {generatingImage && <ImageGeneratingProgress />}
-          {awaiting && <TurnLoading />}
-          {error && (
-            <div className="my-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-danger text-sm">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-              <span className="min-w-0 whitespace-pre-wrap break-words">{error.message}</span>
-            </div>
-          )}
+      <div className="relative min-h-0 flex-1">
+        <div ref={scrollRef} className="h-full overflow-y-auto">
+          <div ref={contentRef} className="mx-auto max-w-[760px] px-2 py-6">
+            {messages.map((msg) => {
+              const kind = msg.metadata?.kind;
+              // The ack is an internal alternation placeholder — never shown.
+              if (kind === 'compaction-ack') return null;
+              if (kind === 'compaction') {
+                return <CompactionDivider key={msg.id} summary={messageText(msg.parts)} />;
+              }
+              return msg.role === 'user' ? (
+                <UserMessage key={msg.id} parts={msg.parts} />
+              ) : (
+                <AssistantMessage
+                  key={msg.id}
+                  message={msg}
+                  streaming={live && msg.id === lastId}
+                  onAnswer={onClarify}
+                  onCancel={onCancelClarify}
+                />
+              );
+            })}
+            {compacting && <CompactionProgress />}
+            {generatingImage && <ImageGeneratingProgress />}
+            {awaiting && <TurnLoading />}
+            {error && (
+              <div className="my-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-danger text-sm">
+                <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                <span className="min-w-0 whitespace-pre-wrap break-words">{error.message}</span>
+              </div>
+            )}
+          </div>
         </div>
+        {!isAtBottom && (
+          <button
+            type="button"
+            onClick={() => scrollToBottom()}
+            className="-translate-x-1/2 absolute bottom-4 left-1/2 flex size-9 items-center justify-center rounded-full border border-border-default bg-elevated text-fg-secondary opacity-60 shadow-md transition-opacity hover:text-fg-primary hover:opacity-100"
+          >
+            <ArrowDown className="size-5" />
+          </button>
+        )}
       </div>
       <div className="shrink-0 px-6 pt-2 pb-4">
         <div className="mx-auto max-w-[760px]">
