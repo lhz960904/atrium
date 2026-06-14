@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { messagesRouter } from './routers/messages';
 import { providersRouter } from './routers/providers';
+import { searchRouter } from './routers/search';
 import { settingsRouter } from './routers/settings';
 import { skillsRouter } from './routers/skills';
 import { subagentsRouter } from './routers/subagents';
@@ -25,6 +26,7 @@ export const appRouter = router({
   })),
   threads: threadsRouter,
   messages: messagesRouter,
+  search: searchRouter,
   providers: providersRouter,
   settings: settingsRouter,
   skills: skillsRouter,

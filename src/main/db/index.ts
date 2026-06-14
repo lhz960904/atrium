@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { app } from 'electron';
+import { segment } from './jieba';
 import * as schema from './schema';
 
 export type Db = ReturnType<typeof drizzle<typeof schema>>;
@@ -23,6 +24,10 @@ export function openDb(): Db {
   _raw = new Database(dbPath);
   _raw.pragma('journal_mode = WAL');
   _raw.pragma('foreign_keys = ON');
+  // Registered before migrate(): the chat_fts triggers and backfill call it.
+  _raw.function('jieba_cut', { deterministic: true }, (text) =>
+    typeof text === 'string' ? segment(text) : '',
+  );
   _db = drizzle(_raw, { schema, casing: 'snake_case' });
 
   migrate(_db, { migrationsFolder: migrationsFolder() });
