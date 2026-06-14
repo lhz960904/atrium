@@ -1,5 +1,6 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import { FileText, Package } from 'lucide-react';
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { openAttachment } from '../../state/attachment-viewer-store';
 import { CopyButton } from './CopyButton';
@@ -31,7 +32,11 @@ function renderWithMentions(text: string): React.ReactNode {
   return nodes.length > 0 ? nodes : text;
 }
 
-export function UserMessage({ parts }: { parts: AtriumUIMessage['parts'] }): React.JSX.Element {
+export const UserMessage = memo(function UserMessage({
+  parts,
+}: {
+  parts: AtriumUIMessage['parts'];
+}): React.JSX.Element {
   const { t } = useTranslation();
   const text = parts
     .filter((p) => p.type === 'text')
@@ -93,4 +98,4 @@ export function UserMessage({ parts }: { parts: AtriumUIMessage['parts'] }): Rea
       )}
     </div>
   );
-}
+});

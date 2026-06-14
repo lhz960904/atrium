@@ -1,5 +1,6 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
+import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildAssistantView } from '../../lib/assistant-view';
 import { ClarifyCard } from './ClarifyCard';
@@ -17,14 +18,14 @@ type AssistantMessageProps = {
   onCancel: (toolCallId: string) => void;
 };
 
-export function AssistantMessage({
+export const AssistantMessage = memo(function AssistantMessage({
   message,
   streaming,
   onAnswer,
   onCancel,
 }: AssistantMessageProps): React.JSX.Element {
   const { t } = useTranslation();
-  const view = buildAssistantView(message.parts, t);
+  const view = useMemo(() => buildAssistantView(message.parts, t), [message.parts, t]);
   const createdAt = message.metadata?.createdAt;
 
   // While the turn is live, the trace/final split hasn't settled, so the work
@@ -122,4 +123,4 @@ export function AssistantMessage({
       )}
     </div>
   );
-}
+});

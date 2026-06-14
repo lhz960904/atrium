@@ -1,5 +1,6 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import { FoldVertical } from 'lucide-react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../lib/trpc';
 import { useCompactionStore } from '../../state/compaction-store';
@@ -27,35 +28,40 @@ export function useCompactCommand({
 }: CompactDeps): SlashCommand {
   const { t } = useTranslation();
   const utils = trpc.useUtils();
-  return {
-    name: 'Compact',
-    description: t('command.compactDesc'),
-    icon: FoldVertical,
-    run: () => {
-      if (!model || useCompactionStore.getState().active[threadId]) return;
-      void (async () => {
-        useCompactionStore.getState().setActive(threadId, true);
-        try {
-          await fetch(`${endpoint.baseUrl}/api/chat/${threadId}/compact`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-atrium-token': endpoint.token },
-            body: JSON.stringify({ providerId: model.providerId, modelId: model.modelId }),
-          });
-          const fresh = await utils.threads.get.fetch({ id: threadId }, { staleTime: 0 });
-          if (fresh) {
-            setMessages(
-              fresh.messages.map((m) => ({
-                id: m.id,
-                role: m.role,
-                parts: m.parts as AtriumUIMessage['parts'],
-                metadata: (m.metadata ?? undefined) as AtriumUIMessage['metadata'],
-              })),
-            );
+  // Stable across a streaming turn — a fresh object here makes the composer's
+  // `commands` array change every chunk, defeating its (and the pickers') memo.
+  return useMemo<SlashCommand>(
+    () => ({
+      name: 'Compact',
+      description: t('command.compactDesc'),
+      icon: FoldVertical,
+      run: () => {
+        if (!model || useCompactionStore.getState().active[threadId]) return;
+        void (async () => {
+          useCompactionStore.getState().setActive(threadId, true);
+          try {
+            await fetch(`${endpoint.baseUrl}/api/chat/${threadId}/compact`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-atrium-token': endpoint.token },
+              body: JSON.stringify({ providerId: model.providerId, modelId: model.modelId }),
+            });
+            const fresh = await utils.threads.get.fetch({ id: threadId }, { staleTime: 0 });
+            if (fresh) {
+              setMessages(
+                fresh.messages.map((m) => ({
+                  id: m.id,
+                  role: m.role,
+                  parts: m.parts as AtriumUIMessage['parts'],
+                  metadata: (m.metadata ?? undefined) as AtriumUIMessage['metadata'],
+                })),
+              );
+            }
+          } finally {
+            useCompactionStore.getState().setActive(threadId, false);
           }
-        } finally {
-          useCompactionStore.getState().setActive(threadId, false);
-        }
-      })();
-    },
-  };
+        })();
+      },
+    }),
+    [t, threadId, model, endpoint, setMessages, utils],
+  );
 }

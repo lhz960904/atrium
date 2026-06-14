@@ -5,7 +5,7 @@ import { Text } from '@tiptap/extension-text';
 import { Placeholder, UndoRedo } from '@tiptap/extensions';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Plus, Send, Square } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ATTACHMENT_ACCEPT, classifyAttachment } from '../../../lib/attachments';
 import { useChatModel } from '../../../lib/use-chat-model';
@@ -32,7 +32,7 @@ type ComposerProps = {
   onStop?: () => void;
 };
 
-export function Composer({
+export const Composer = memo(function Composer({
   autoFocus = false,
   placeholder,
   onSubmit,
@@ -217,4 +217,4 @@ export function Composer({
       )}
     </div>
   );
-}
+});
