@@ -98,6 +98,12 @@ body,
   --text-3xl: 1.6rem;
 }
 
+/* Streamdown defaults to list-inside; outside markers so wraps hang-indent. */
+.atrium-md :is(ul, ol) {
+  list-style-position: outside;
+  padding-left: 1.5rem;
+}
+
 /* macOS hiddenInset titleBar drag region — keeps traffic lights from overlapping content */
 .atrium-titlebar {
   -webkit-app-region: drag;
