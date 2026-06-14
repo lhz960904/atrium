@@ -77,7 +77,7 @@ export function TraceBlock({
       </Collapsible.Trigger>
       <Collapsible.Content className="atrium-collapsible">
         <div className="pt-1 pb-2">
-          <SegmentList segments={segments} onAnswer={onAnswer} />
+          <SegmentList segments={segments} onAnswer={onAnswer} streaming={streaming} />
         </div>
       </Collapsible.Content>
     </Collapsible.Root>

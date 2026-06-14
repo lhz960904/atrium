@@ -10,14 +10,20 @@ type SegmentListProps = {
   segments: ViewSegment[];
   /** Submit a clarification's answers (a card may appear inline in the trace). */
   onAnswer: (toolCallId: string, result: ClarifyResult) => void;
+  /** The turn is live — narrative tokens fade in as they arrive. */
+  streaming?: boolean;
 };
 
-export function SegmentList({ segments, onAnswer }: SegmentListProps): React.JSX.Element {
+export function SegmentList({
+  segments,
+  onAnswer,
+  streaming = false,
+}: SegmentListProps): React.JSX.Element {
   return (
     <>
       {segments.map((seg) => {
         if (seg.kind === 'narrative') {
-          return <NarrativeSegment key={seg.id} content={seg.content} />;
+          return <NarrativeSegment key={seg.id} content={seg.content} streaming={streaming} />;
         }
         if (seg.kind === 'tool') {
           return <ToolMarker key={seg.tool.id} tool={seg.tool} />;

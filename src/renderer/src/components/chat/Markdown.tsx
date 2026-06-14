@@ -1,6 +1,6 @@
 import 'katex/dist/katex.min.css';
 import remarkMath from 'remark-math';
-import { type Components, defaultRemarkPlugins, Streamdown } from 'streamdown';
+import { type AnimateOptions, type Components, defaultRemarkPlugins, Streamdown } from 'streamdown';
 import { CodeBlock } from './CodeBlock';
 import { MathFence } from './KatexMath';
 import { MermaidDiagram } from './MermaidDiagram';
@@ -57,13 +57,32 @@ const components: Components = {
   ),
 };
 
-export function Markdown({ children }: { children: string }): React.JSX.Element {
+// While a turn streams, new tokens fade in (lightly staggered) so the batched
+// throttle updates reveal as a smooth flow instead of popping in chunks; the GPU
+// runs the fade, so it doesn't add to React's per-tick work. `isAnimating` gates
+// it to the live message — settled messages render instantly, no re-fade.
+const STREAM_ANIM: AnimateOptions = {
+  animation: 'fadeIn',
+  sep: 'word',
+  duration: 220,
+  stagger: 20,
+};
+
+export function Markdown({
+  children,
+  streaming = false,
+}: {
+  children: string;
+  streaming?: boolean;
+}): React.JSX.Element {
   return (
     <Streamdown
       className="atrium-md leading-relaxed"
       controls={false}
       components={components}
       remarkPlugins={remarkPlugins}
+      animated={streaming ? STREAM_ANIM : undefined}
+      isAnimating={streaming}
     >
       {children}
     </Streamdown>
