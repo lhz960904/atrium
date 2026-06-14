@@ -3,7 +3,7 @@ import type { ClarifyResult, Todo } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
 import { type ChatStatus, getStaticToolName, isStaticToolUIPart } from 'ai';
 import { ArrowDown, TriangleAlert } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStickToBottom } from 'use-stick-to-bottom';
 import type { PendingApproval } from '../../lib/approvals';
@@ -75,6 +75,20 @@ function pendingClarifyId(messages: AtriumUIMessage[]): string | null {
   return null;
 }
 
+/** Whether the last message is an assistant turn already showing something —
+ *  once it is, the standalone loader yields to the message itself. */
+function lastAssistantHasContent(messages: AtriumUIMessage[]): boolean {
+  const last = messages.at(-1);
+  if (!last || last.role !== 'assistant') return false;
+  return last.parts.some(
+    (p) =>
+      ((p.type === 'text' || p.type === 'reasoning') && p.text.trim() !== '') ||
+      p.type === 'file' ||
+      p.type === 'dynamic-tool' ||
+      isStaticToolUIPart(p),
+  );
+}
+
 export function ChatThread({
   threadId,
   title,
@@ -105,18 +119,9 @@ export function ChatThread({
   // The head of this thread's auto-review notice queue; each toast self-dismisses.
   const autoReviewToast = useAutoReviewStore((s) => s.toasts[threadId]?.[0]);
 
-  // "Working…" before the first token: status sits at 'submitted' until the
-  // first chunk arrives (external CLI agents can take seconds). Debounced so a
-  // fast turn (cloud) doesn't flash it.
-  const [awaiting, setAwaiting] = useState(false);
-  useEffect(() => {
-    if (status !== 'submitted') {
-      setAwaiting(false);
-      return;
-    }
-    const t = setTimeout(() => setAwaiting(true), 400);
-    return () => clearTimeout(t);
-  }, [status]);
+  // Keep the assistant side non-blank from send until the message starts
+  // producing content.
+  const preloader = live && !generatingImage && !compacting && !lastAssistantHasContent(messages);
 
   // Esc takes back the turn (Claude Code style): aborts an in-flight generation,
   // or cancels a clarification that's waiting on the user. Bound only while one
@@ -163,7 +168,7 @@ export function ChatThread({
             })}
             {compacting && <CompactionProgress />}
             {generatingImage && <ImageGeneratingProgress />}
-            {awaiting && <TurnLoading />}
+            {preloader && <TurnLoading />}
             {error && (
               <div className="my-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-danger text-sm">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0" />
