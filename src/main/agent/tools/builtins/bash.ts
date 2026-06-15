@@ -21,14 +21,14 @@ export const bashTool = (ctx: ToolCtx) =>
           'Run as a long-running background shell. Returns a shell id immediately; read its output with bash_output and stop it with kill_shell.',
         ),
     }),
-    execute: async ({ command, run_in_background }) => {
+    execute: async ({ command, run_in_background }, { abortSignal }) => {
       if (run_in_background) {
         if (!ctx.bgShells) return 'Error: background shells are unavailable.';
         const shellId = ctx.bgShells.start(command, ctx.workspaceRoot);
         return `Started background shell ${shellId}. Read its output with bash_output and stop it with kill_shell.`;
       }
       try {
-        const { output, exitCode } = await ctx.sandbox.exec(command);
+        const { output, exitCode } = await ctx.sandbox.exec(command, { signal: abortSignal });
         const text = output.trimEnd();
         const body = text === '' ? '(no output)' : middleTruncate(text, BASH_MAX);
         return exitCode === 0 ? body : `${body}\nExit Code: ${exitCode}`;
