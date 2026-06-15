@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { shouldIgnore } from './ignore';
+import { killProcessTree } from './kill-tree';
 import { resolveInWorkspace } from './paths';
 import type { Sandbox } from './types';
 
@@ -56,11 +57,11 @@ export class LocalSandbox implements Sandbox {
   }
 
   /**
-   * `signal` wires this command to the run's cancellation: when the user stops
-   * the turn, Node's spawn option kills the child with SIGTERM (emitting an
-   * AbortError on 'error') instead of leaving it running detached. Without it a
-   * stopped turn would orphan whatever was mid-flight. A user-driven abort is an
-   * expected stop, not a failure, so it settles gracefully rather than throwing.
+   * `signal` wires this command to the run's cancellation: stopping the turn (or
+   * hitting the timeout) kills the whole process tree, not just the shell, so a
+   * dev server / compiler the command forked can't outlive the turn as an
+   * orphan. A user-driven abort is an expected stop, not a failure, so it settles
+   * gracefully rather than throwing.
    */
   exec(
     command: string,
@@ -74,8 +75,14 @@ export class LocalSandbox implements Sandbox {
       }
       const shell = process.env.SHELL || '/bin/zsh';
       // A pipe (not a PTY): stdout isn't a tty, so CLIs auto-drop color and
-      // progress animations, leaving clean text for the model.
-      const child = spawn(shell, ['-lc', command], { cwd: this.root, env: process.env, signal });
+      // progress animations, leaving clean text for the model. `detached` puts
+      // the shell in its own process group so killProcessTree can reap whatever
+      // it spawned.
+      const child = spawn(shell, ['-lc', command], {
+        cwd: this.root,
+        env: process.env,
+        detached: true,
+      });
       let out = '';
       let settled = false;
       const collect = (d: Buffer): void => {
@@ -83,30 +90,26 @@ export class LocalSandbox implements Sandbox {
       };
       child.stdout?.on('data', collect);
       child.stderr?.on('data', collect);
+      const onAbort = (): void => {
+        out += '\n[aborted]';
+        killProcessTree(child);
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
       const timer = setTimeout(() => {
         out += '\n[timed out]';
-        child.kill();
+        killProcessTree(child);
       }, EXEC_TIMEOUT_MS);
-      child.on('error', (err) => {
+      const finish = (settle: () => void): void => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        if (signal?.aborted) {
-          resolvePromise({ output: `${out}\n[aborted]`.trim(), exitCode: 1 });
-          return;
-        }
-        reject(err);
-      });
-      child.on('close', (code) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (signal?.aborted) {
-          resolvePromise({ output: `${out}\n[aborted]`.trim(), exitCode: code ?? 1 });
-          return;
-        }
-        resolvePromise({ output: out, exitCode: code ?? 0 });
-      });
+        signal?.removeEventListener('abort', onAbort);
+        settle();
+      };
+      child.on('error', (err) => finish(() => reject(err)));
+      child.on('close', (code) =>
+        finish(() => resolvePromise({ output: out.trim(), exitCode: code ?? 0 })),
+      );
     });
   }
 }
