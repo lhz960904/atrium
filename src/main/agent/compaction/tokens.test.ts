@@ -28,7 +28,7 @@ test('tokensOfUIMessage sums text, tool input and output', () => {
     { type: 'tool-bash', input: { cmd: 'ls' }, output: { out: 'ok' } },
   ]);
   const expected = estimateTokens(
-    'aaaa' + JSON.stringify({ cmd: 'ls' }) + JSON.stringify({ out: 'ok' }),
+    `aaaa${JSON.stringify({ cmd: 'ls' })}${JSON.stringify({ out: 'ok' })}`,
   );
   expect(tokensOfUIMessage(msg)).toBe(expected);
 });
