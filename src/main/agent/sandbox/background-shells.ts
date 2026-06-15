@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { killProcessTree } from './kill-tree';
 
 /**
  * Registry of long-running shell processes that outlive a single tool call —
@@ -40,8 +41,14 @@ type Session = {
 const defaultSpawn: SpawnShell = (command, cwd) => {
   // A pipe (not a PTY): dev servers and watchers detect the non-tty stdout and
   // emit plain text instead of color + spinner redraws, which keeps the buffer
-  // readable for the model.
-  const child = spawn(process.env.SHELL || '/bin/zsh', ['-lc', command], { cwd, env: process.env });
+  // readable for the model. `detached` puts the shell in its own process group
+  // so kill() can reap the dev server / watcher it forked, not just the shell —
+  // otherwise kill_shell and app-quit cleanup would leave those orphaned.
+  const child = spawn(process.env.SHELL || '/bin/zsh', ['-lc', command], {
+    cwd,
+    env: process.env,
+    detached: true,
+  });
   return {
     onData(cb) {
       child.stdout?.on('data', (d: Buffer) => cb(d.toString('utf8')));
@@ -51,7 +58,7 @@ const defaultSpawn: SpawnShell = (command, cwd) => {
       child.on('close', (code) => cb({ exitCode: code ?? 0 }));
     },
     kill() {
-      child.kill();
+      killProcessTree(child);
     },
   };
 };
