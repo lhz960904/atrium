@@ -55,13 +55,29 @@ export class LocalSandbox implements Sandbox {
     return out;
   }
 
-  exec(command: string): Promise<{ output: string; exitCode: number }> {
+  /**
+   * `signal` wires this command to the run's cancellation: when the user stops
+   * the turn, Node's spawn option kills the child with SIGTERM (emitting an
+   * AbortError on 'error') instead of leaving it running detached. Without it a
+   * stopped turn would orphan whatever was mid-flight. A user-driven abort is an
+   * expected stop, not a failure, so it settles gracefully rather than throwing.
+   */
+  exec(
+    command: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<{ output: string; exitCode: number }> {
     return new Promise((resolvePromise, reject) => {
+      const signal = opts?.signal;
+      if (signal?.aborted) {
+        resolvePromise({ output: '[aborted]', exitCode: 1 });
+        return;
+      }
       const shell = process.env.SHELL || '/bin/zsh';
       // A pipe (not a PTY): stdout isn't a tty, so CLIs auto-drop color and
       // progress animations, leaving clean text for the model.
-      const child = spawn(shell, ['-lc', command], { cwd: this.root, env: process.env });
+      const child = spawn(shell, ['-lc', command], { cwd: this.root, env: process.env, signal });
       let out = '';
+      let settled = false;
       const collect = (d: Buffer): void => {
         out += d.toString('utf8');
       };
@@ -72,11 +88,23 @@ export class LocalSandbox implements Sandbox {
         child.kill();
       }, EXEC_TIMEOUT_MS);
       child.on('error', (err) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
+        if (signal?.aborted) {
+          resolvePromise({ output: `${out}\n[aborted]`.trim(), exitCode: 1 });
+          return;
+        }
         reject(err);
       });
       child.on('close', (code) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
+        if (signal?.aborted) {
+          resolvePromise({ output: `${out}\n[aborted]`.trim(), exitCode: code ?? 1 });
+          return;
+        }
         resolvePromise({ output: out, exitCode: code ?? 0 });
       });
     });

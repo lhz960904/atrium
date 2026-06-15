@@ -32,9 +32,9 @@ export const webFetchTool = () =>
         .describe('Why you are fetching this page, in short words. ALWAYS PROVIDE THIS FIRST.'),
       url: z.url().describe('The absolute http(s) URL to fetch.'),
     }),
-    execute: async ({ url }) => {
+    execute: async ({ url }, { abortSignal }) => {
       try {
-        return await fetchAsMarkdown(url);
+        return await fetchAsMarkdown(url, abortSignal);
       } catch (err) {
         if (err instanceof Error && err.name === 'TimeoutError') {
           return `Error: timed out fetching ${url} after ${FETCH_TIMEOUT_MS / 1000}s`;
@@ -44,16 +44,20 @@ export const webFetchTool = () =>
     },
   });
 
-async function fetchAsMarkdown(url: string): Promise<string> {
+async function fetchAsMarkdown(url: string, abortSignal?: AbortSignal): Promise<string> {
   const parsed = new URL(url);
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     return `Error: only http(s) URLs are supported, got ${parsed.protocol}`;
   }
 
+  // Abort on either the fetch timeout or the user stopping the turn; whichever
+  // fires first propagates its reason, so a timeout still surfaces as TimeoutError.
+  const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const signal = abortSignal ? AbortSignal.any([abortSignal, timeout]) : timeout;
   const res = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,application/xhtml+xml,*/*' },
     redirect: 'follow',
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal,
   });
   if (!res.ok) return `Error: HTTP ${res.status} ${res.statusText} for ${url}`;
 

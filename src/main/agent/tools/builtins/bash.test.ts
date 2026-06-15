@@ -55,6 +55,22 @@ test('surfaces exec errors as an Error string', async () => {
   );
 });
 
+test('forwards the abort signal to sandbox.exec', async () => {
+  const ac = new AbortController();
+  let received: AbortSignal | undefined;
+  const t = bashTool(
+    ctx({
+      exec: async (_command, o) => {
+        received = o?.signal;
+        return { output: 'ok', exitCode: 0 };
+      },
+    }),
+  );
+  // biome-ignore lint/suspicious/noExplicitAny: only abortSignal matters here
+  await t.execute?.({ description: 'x', command: 'echo' }, { abortSignal: ac.signal } as any);
+  expect(received).toBe(ac.signal);
+});
+
 const noopProc: ShellProc = { onData() {}, onExit() {}, kill() {} };
 
 test('run_in_background starts a shell via the registry and returns its id', async () => {

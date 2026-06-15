@@ -12,5 +12,8 @@ export interface Sandbox {
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string, append?: boolean): Promise<{ bytes: number }>;
   list(path: string, maxDepth?: number): Promise<string[]>;
-  exec(command: string): Promise<{ output: string; exitCode: number }>;
+  exec(
+    command: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<{ output: string; exitCode: number }>;
 }
