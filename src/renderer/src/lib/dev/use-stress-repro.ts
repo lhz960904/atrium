@@ -23,12 +23,21 @@ const notStress = (m: AtriumUIMessage): boolean => !m.id.startsWith(STRESS_PREFI
 
 /**
  * The actual "AI Agent 记忆机制解析" answer captured from the DB (~32k chars,
- * ~178 small Prism code blocks). Loaded lazily so the fixture never ships in the
- * prod bundle — reproducing against the real bytes removes any guesswork about
- * what made it jank.
+ * ~178 small Prism code blocks). The fixture is kept out of git (see .gitignore),
+ * so it may be absent — import.meta.glob resolves to an empty set when the file
+ * isn't there, keeping typecheck and the prod build green without it, while still
+ * loading the real bytes locally where guesswork about the jank disappears.
  */
+const realMessageFixture = import.meta.glob('./real-message.json');
+
 async function loadReal(): Promise<AtriumUIMessage> {
-  const mod = await import('./real-message.json');
+  const load = realMessageFixture['./real-message.json'];
+  if (!load) {
+    throw new Error(
+      '[stress] real-message.json is local-only and not present here — capture one before using the stress repro.',
+    );
+  }
+  const mod = (await load()) as { default?: AtriumUIMessage };
   return (mod.default ?? mod) as unknown as AtriumUIMessage;
 }
 
