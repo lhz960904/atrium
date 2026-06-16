@@ -2,9 +2,9 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type ModelMessage, tool, type UIMessage } from 'ai';
 import { z } from 'zod';
+import { stripFrontmatter } from '../../../shared/frontmatter';
 import type { CompactionPreserver } from '../../compaction/preserver';
 import type { RunContext } from '../../middleware';
-import { stripFrontmatter } from '../../skills/discover';
 import { type ActiveSkill, SKILL_FILE, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
 
 export type SkillToolDeps = {

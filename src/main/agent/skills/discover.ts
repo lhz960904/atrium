@@ -1,7 +1,7 @@
 import { readdir, readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parse as parseYaml } from 'yaml';
 import { createLogger } from '../../log';
+import { parseFrontmatter } from '../../shared/frontmatter';
 import {
   SKILL_FILE,
   type Skill,
@@ -19,8 +19,6 @@ export type SkillFrontmatter = {
   allowedTools?: string[];
 };
 
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---/;
-
 /**
  * Parse a SKILL.md's leading YAML frontmatter. Returns null when there's no
  * frontmatter block, when it isn't valid YAML, or when the required name /
@@ -30,18 +28,9 @@ const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---/;
  * Code authors it as a string); either normalizes to a trimmed string array.
  */
 export function parseSkillFrontmatter(content: string): SkillFrontmatter | null {
-  const m = FRONTMATTER_RE.exec(content);
-  if (!m) return null;
+  const rec = parseFrontmatter(content);
+  if (!rec) return null;
 
-  let data: unknown;
-  try {
-    data = parseYaml(m[1]);
-  } catch {
-    return null;
-  }
-  if (!data || typeof data !== 'object') return null;
-
-  const rec = data as Record<string, unknown>;
   const name = rec.name;
   const description = rec.description;
   if (typeof name !== 'string' || !name.trim()) return null;
@@ -53,14 +42,6 @@ export function parseSkillFrontmatter(content: string): SkillFrontmatter | null 
     description: description.trim(),
     ...(allowedTools && { allowedTools }),
   };
-}
-
-/** Strip the leading YAML frontmatter block, returning just the skill body. */
-export function stripFrontmatter(content: string): string {
-  return content
-    .replace(FRONTMATTER_RE, '')
-    .replace(/^\s*\n/, '')
-    .trimEnd();
 }
 
 function normalizeAllowedTools(raw: unknown): string[] | undefined {
