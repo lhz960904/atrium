@@ -9,6 +9,7 @@ import { runExternalAgentTurn } from '../agent/acp/run-external-agent';
 import {
   compactionMiddleware,
   compactThread,
+  instructionsMiddleware,
   metadataMiddleware,
   persistenceMiddleware,
   skillsMiddleware,
@@ -220,9 +221,9 @@ export function startHttpServer(deps: {
           abortSignal: abort.signal,
         },
       }),
-      // skills must run after compaction: compaction may fold the original first
-      // user message into a summary, and the skill index has to land on whatever
-      // the post-compaction first user message is.
+      // skills and instructions must run after compaction: compaction may fold the
+      // original first user message into a summary, and their injected blocks have
+      // to land on whatever the post-compaction first user message is.
       middlewares: [
         // Title is generated from the first user message, so it must run before
         // the skills middleware injects its index into that message (and before
@@ -236,6 +237,8 @@ export function startHttpServer(deps: {
           preservers: [todoPreserver, skillPreserver],
         }),
         skillsMiddleware({ skills }),
+        // After skills so <custom-instructions> stacks above the skills index.
+        instructionsMiddleware(),
         // Upsert, not insert-ignore: when a turn resumes after an
         // ask_clarification answer, the model extends the SAME assistant message
         // (reused id), and that continuation must overwrite the stored copy.
