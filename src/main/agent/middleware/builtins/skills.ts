@@ -1,7 +1,7 @@
 import type { ToolName } from '@shared/tools';
-import type { UIMessage } from 'ai';
 import { scopeToolsForSkill } from '../../skills/scope';
 import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
+import { injectSystemReminder } from '../shared/reminder';
 import type { AgentMiddleware, RunContext, StepOverride } from '../types';
 
 export type SkillsOptions = {
@@ -22,12 +22,11 @@ function escapeXml(s: string): string {
  * the activation signal that the live indicator, tool scoping and compaction
  * rescue all key off.
  */
-function buildIndexReminder(skills: Skill[]): string {
+function buildSkillsIndex(skills: Skill[]): string {
   const entries = skills
     .map((s) => `  <skill name="${escapeXml(s.name)}">${escapeXml(s.description)}</skill>`)
     .join('\n');
-  return `<system-reminder>
-You have skills available — saved procedures for specific kinds of tasks. Only each skill's name and short description is shown here, not its instructions.
+  return `You have skills available — saved procedures for specific kinds of tasks. Only each skill's name and short description is shown here, not its instructions.
 
 <available_skills>
 ${entries}
@@ -35,25 +34,13 @@ ${entries}
 
 When a request matches a skill, load it with the skill tool (by name) and follow the instructions it returns. Load it through the skill tool — don't open the skill file yourself, and don't claim to use a skill you haven't loaded. If none fit, just proceed normally.
 
-When a user message contains a tag like <skill-use>name</skill-use>, the user has explicitly invoked that skill — load it with the skill tool and follow it.
-</system-reminder>`;
+When a user message contains a tag like <skill-use>name</skill-use>, the user has explicitly invoked that skill — load it with the skill tool and follow it.`;
 }
 
 /**
- * Inject the available-skills index into the first user message as a
- * system-reminder. Kept out of the system prompt on purpose: the index is
- * filesystem-derived and changes between sessions, so it belongs in the
- * volatile-context region (alongside date/memory), not in the largest, most
- * cacheable block. Placing it after the system prompt keeps that block's prefix
- * cache intact when the skill set changes.
- *
- * Injection is non-destructive — it clones the target message and rebuilds the
- * array rather than mutating parts in place, so the reminder never leaks into
- * the original messages the UI and DB render from.
- *
- * Must run after compaction in the chain: compaction can fold the original
- * first user message into a summary, and the index has to land on whatever the
- * post-compaction first user message is.
+ * Surface the skills index (beforeRun) and scope tools to an active skill (beforeStep).
+ * beforeRun must run after compaction — the index has to land on the post-compaction
+ * first user message, not the original one it may have folded away.
  */
 export function skillsMiddleware(options: SkillsOptions): AgentMiddleware {
   const { skills } = options;
@@ -61,16 +48,7 @@ export function skillsMiddleware(options: SkillsOptions): AgentMiddleware {
     name: 'skills',
     beforeRun(ctx: RunContext): void {
       if (skills.length === 0) return;
-      const msgs = ctx.request.messages;
-      const idx = msgs.findIndex((m) => m.role === 'user');
-      if (idx < 0) return;
-
-      const target = msgs[idx];
-      const injected: UIMessage = {
-        ...target,
-        parts: [{ type: 'text', text: buildIndexReminder(skills) }, ...target.parts],
-      };
-      ctx.request.messages = [...msgs.slice(0, idx), injected, ...msgs.slice(idx + 1)];
+      ctx.request.messages = injectSystemReminder(ctx.request.messages, buildSkillsIndex(skills));
     },
 
     // Once a skill is loaded (the skill tool records it in scratch), scope the
