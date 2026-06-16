@@ -149,6 +149,7 @@ export const en: typeof zh = {
       delegate: 'Delegated',
       useSkill: 'Used skill',
       genImage: 'Generated image',
+      memory: 'Memory',
     },
     verbActive: {
       read: 'Reading',
@@ -165,6 +166,7 @@ export const en: typeof zh = {
       delegate: 'Delegating',
       useSkill: 'Using skill',
       genImage: 'Generating image',
+      memory: 'Memory',
     },
     type: {
       file: 'File · {{path}}',
@@ -178,7 +180,13 @@ export const en: typeof zh = {
       subagent: 'Subagent · {{name}}',
       skill: 'Skill · {{name}}',
       image: 'Image',
+      memory: 'Memory',
       agent: 'Agent · {{name}}',
+    },
+    memory: {
+      view: 'View',
+      write: 'Write',
+      delete: 'Delete',
     },
     workspace: 'workspace',
     noOutput: 'No output',

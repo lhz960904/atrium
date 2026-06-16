@@ -24,7 +24,7 @@ function SubagentToolLine({ tool }: { tool: SubagentActivityTool }): React.JSX.E
     <div className="flex items-center gap-2.5 py-1 text-fg-secondary text-md">
       <Icon className="size-4 shrink-0 text-fg-tertiary" />
       <span className="min-w-0 truncate">
-        <span className="text-fg-tertiary">{t(p.verbKey)}</span> {p.target(input)}
+        <span className="text-fg-tertiary">{t(p.verbKey)}</span> {p.target(input, t)}
       </span>
     </div>
   );

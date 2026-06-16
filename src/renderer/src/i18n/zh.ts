@@ -150,6 +150,7 @@ export const zh = {
       delegate: '委派',
       useSkill: '使用技能',
       genImage: '已生成图片',
+      memory: '记忆',
     },
     verbActive: {
       read: '读取中',
@@ -166,6 +167,7 @@ export const zh = {
       delegate: '委派中',
       useSkill: '使用技能中',
       genImage: '生成图片中',
+      memory: '记忆',
     },
     type: {
       file: '文件 · {{path}}',
@@ -179,7 +181,13 @@ export const zh = {
       subagent: '子智能体 · {{name}}',
       skill: '技能 · {{name}}',
       image: '图片',
+      memory: '记忆',
       agent: 'Agent · {{name}}',
+    },
+    memory: {
+      view: '查看',
+      write: '写入',
+      delete: '删除',
     },
     workspace: '工作区',
     noOutput: '无输出',

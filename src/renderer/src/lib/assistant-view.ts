@@ -156,7 +156,7 @@ function toToolModel(part: AtriumToolPart, name: MarkerToolName, t: TFunction): 
     name,
     // Present continuous while it runs ("Reading"), past tense once settled ("Read").
     verb: t(status === 'running' ? p.verbActiveKey : p.verbKey),
-    target: p.target(input),
+    target: p.target(input, t),
     status,
     typeLabel: p.typeLabel(input, t),
     command: p.command?.(input),

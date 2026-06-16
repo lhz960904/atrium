@@ -2,6 +2,7 @@ import type { ToolName } from '@shared/tools';
 import type { ParseKeys, TFunction } from 'i18next';
 import {
   Bot,
+  Brain,
   FilePen,
   FilePenLine,
   FileSearch,
@@ -56,7 +57,7 @@ export type ToolPresentation = {
   verbKey: ParseKeys;
   /** Catalog key for the present-continuous verb, shown while the call runs (e.g. "Reading"). */
   verbActiveKey: ParseKeys;
-  target: (i: ToolInput) => string;
+  target: (i: ToolInput, t: TFunction) => string;
   typeLabel: (i: ToolInput, t: TFunction) => string;
   /** Shell-style tools surface a `$ command` line in the expanded card. */
   command?: (i: ToolInput) => string | undefined;
@@ -168,6 +169,20 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     verbActiveKey: 'tool.verbActive.genImage',
     target: (i) => i.prompt ?? '',
     typeLabel: (_i, t) => t('tool.type.image'),
+  },
+  memory: {
+    icon: Brain,
+    verbKey: 'tool.verb.memory',
+    verbActiveKey: 'tool.verbActive.memory',
+    target: (i, t) =>
+      t(
+        i.command === 'write'
+          ? 'tool.memory.write'
+          : i.command === 'delete'
+            ? 'tool.memory.delete'
+            : 'tool.memory.view',
+      ),
+    typeLabel: (_i, t) => t('tool.type.memory'),
   },
 };
 
