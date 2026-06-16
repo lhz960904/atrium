@@ -73,8 +73,15 @@ function AppLayout(): React.JSX.Element {
       <button
         type="button"
         onClick={toggle}
-        className="app-no-drag fixed top-[10px] z-50 rounded-md p-1.5 text-fg-tertiary transition-colors hover:bg-surface-strong hover:text-fg-primary"
-        style={{ left: collapsed ? 84 : width - 44 }}
+        className="app-no-drag fixed top-[9px] z-50 rounded-md p-1.5 text-fg-tertiary hover:bg-surface-strong hover:text-fg-primary"
+        style={{
+          left: collapsed ? 84 : width - 44,
+          // Slide in lockstep with the sidebar's grid collapse; no transition
+          // while dragging so the button tracks the divider 1:1.
+          transition: dragging
+            ? 'none'
+            : 'left 200ms ease-out, color 150ms, background-color 150ms',
+        }}
       >
         {collapsed ? (
           <PanelLeft className="size-[17px]" />
