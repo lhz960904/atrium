@@ -127,6 +127,8 @@ export const en: typeof zh = {
     greetingEvening: 'Good evening',
     greeting: '{{greeting}}, {{name}}',
     greetingNoName: '{{greeting}}',
+    getAcquaintedTitle: "Let's get acquainted",
+    getAcquaintedSub: "We haven't met yet — tell me who you are, and who you'd like me to be.",
     continue: 'Continue',
     newChat: 'New chat',
   },

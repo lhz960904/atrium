@@ -128,6 +128,8 @@ export const zh = {
     greetingEvening: '晚上好',
     greeting: '{{greeting}}，{{name}}',
     greetingNoName: '{{greeting}}',
+    getAcquaintedTitle: '认识一下',
+    getAcquaintedSub: '我们还没认识 — 聊几句，让我了解你，也想想你希望我是谁。',
     continue: '继续上次',
     newChat: '新对话',
   },

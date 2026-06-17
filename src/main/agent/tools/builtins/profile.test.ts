@@ -27,11 +27,9 @@ test('write then view round-trips each target independently', async () => {
   expect(await dispatchProfile(dir, { command: 'view', target: 'user' })).toBe('name: 昊泽');
 });
 
-test('view a missing profile guides to get-acquainted; write without content throws', async () => {
+test('view a missing profile returns (empty); write without content throws', async () => {
   const dir = await tmp();
-  expect(await dispatchProfile(dir, { command: 'view', target: 'soul' })).toContain(
-    'get-acquainted',
-  );
+  expect(await dispatchProfile(dir, { command: 'view', target: 'soul' })).toBe('(empty)');
   await expect(dispatchProfile(dir, { command: 'write', target: 'user' })).rejects.toThrow(
     'content',
   );

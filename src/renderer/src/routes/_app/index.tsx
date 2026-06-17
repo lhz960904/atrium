@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { MessageCircle } from 'lucide-react';
+import { Handshake, MessageCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Attachment } from '../../components/chat/composer/AttachmentChip';
 import { Composer } from '../../components/chat/composer/Composer';
@@ -32,6 +32,7 @@ function greetingFor(
 function HomeView(): React.JSX.Element {
   const { t } = useTranslation();
   const { data: displayName } = trpc.profile.displayName.useQuery();
+  const { data: needsOnboarding } = trpc.profile.needsOnboarding.useQuery();
   const timeGreeting = t(greetingFor(new Date().getHours()));
   const greeting = displayName
     ? t('home.greeting', { greeting: timeGreeting, name: displayName })
@@ -60,6 +61,13 @@ function HomeView(): React.JSX.Element {
     createThread.mutate({ title: title.slice(0, 60) });
   };
 
+  const startOnboarding = (): void => {
+    usePendingInput
+      .getState()
+      .set({ text: '<skill-use>get-acquainted</skill-use>', attachments: [] });
+    createThread.mutate({ title: t('home.getAcquaintedTitle') });
+  };
+
   return (
     <div className="relative flex h-full flex-col items-center justify-center px-6 py-10">
       {/* No header bar here; top strip keeps the window draggable over empty space. */}
@@ -72,6 +80,22 @@ function HomeView(): React.JSX.Element {
 
         {/* Composer */}
         <Composer autoFocus onSubmit={handleSubmit} disabled={createThread.isLoading} />
+
+        {/* First run: invite the user to get acquainted (writes SOUL.md / USER.md). */}
+        {needsOnboarding && (
+          <button
+            type="button"
+            onClick={startOnboarding}
+            disabled={createThread.isLoading}
+            className="flex w-full items-center gap-3 rounded-lg border border-border-default px-3 py-2.5 text-left hover:border-accent hover:bg-surface"
+          >
+            <Handshake className="size-[15px] shrink-0 text-accent" />
+            <div className="min-w-0 flex-1">
+              <div className="text-fg-primary text-sm">{t('home.getAcquaintedTitle')}</div>
+              <div className="truncate text-fg-tertiary text-xs">{t('home.getAcquaintedSub')}</div>
+            </div>
+          </button>
+        )}
 
         {/* Continue from — most recent chats */}
         {recent.length > 0 && (

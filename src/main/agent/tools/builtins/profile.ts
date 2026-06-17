@@ -19,10 +19,6 @@ export const profileInputSchema = z.object({
 
 type ProfileCommand = { command: 'view' | 'write'; target: 'soul' | 'user'; content?: string };
 
-// An empty/missing read nudges the model to run onboarding rather than report a blank.
-const guidance = (target: 'soul' | 'user'): string =>
-  `No ${target} profile is set yet. Load the "get-acquainted" skill with the skill tool and run that short conversation once — it writes both the user's profile and your persona.`;
-
 export async function dispatchProfile(dir: string, cmd: ProfileCommand): Promise<string> {
   await mkdir(dir, { recursive: true });
   const path = join(dir, cmd.target === 'soul' ? SOUL_FILE : USER_FILE);
@@ -31,9 +27,9 @@ export async function dispatchProfile(dir: string, cmd: ProfileCommand): Promise
     try {
       content = await readFile(path, 'utf8');
     } catch {
-      // missing → fall through to the guidance
+      // missing → empty
     }
-    return content.trim() || guidance(cmd.target);
+    return content.trim() || '(empty)';
   }
   if (!cmd.content) throw new Error('write requires content');
   await writeFile(path, cmd.content, 'utf8');
