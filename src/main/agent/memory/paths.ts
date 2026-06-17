@@ -3,6 +3,8 @@ import { join } from 'node:path';
 export type MemoryScope = 'global' | 'project';
 
 export const MEMORY_INDEX = 'MEMORY.md';
+export const MEMORY_SCOPES: MemoryScope[] = ['global', 'project']; // broad → specific
+export const MEMORY_INDEX_BUDGET = 25 * 1024; // injected index byte budget, per scope
 
 // Lazy require: electron only exists in the app runtime, so importing it at the
 // top would make this module (and the memory tool) unloadable under bun/tests.

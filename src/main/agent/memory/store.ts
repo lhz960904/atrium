@@ -52,6 +52,18 @@ export async function deleteMemory(dir: string, name: string): Promise<void> {
   await regenerateIndex(dir);
 }
 
+/** Read MEMORY.md clipped to a byte budget; '' when absent. */
+export async function readIndexClipped(dir: string, budget: number): Promise<string> {
+  let content: string;
+  try {
+    content = await readFile(join(dir, MEMORY_INDEX), 'utf8');
+  } catch {
+    return '';
+  }
+  const buf = Buffer.from(content, 'utf8');
+  return buf.length <= budget ? content : buf.subarray(0, budget).toString('utf8');
+}
+
 /**
  * Rebuild MEMORY.md from the topic files' frontmatter, so the index can never
  * drift from disk and the model never has to maintain it by hand.

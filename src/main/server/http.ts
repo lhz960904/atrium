@@ -10,6 +10,7 @@ import {
   compactionMiddleware,
   compactThread,
   instructionsMiddleware,
+  memoryMiddleware,
   metadataMiddleware,
   persistenceMiddleware,
   skillsMiddleware,
@@ -237,7 +238,9 @@ export function startHttpServer(deps: {
           preservers: [todoPreserver, skillPreserver],
         }),
         skillsMiddleware({ skills }),
-        // After skills so <custom-instructions> stacks above the skills index.
+        // Run skills → memory → instructions so the injected blocks end up ordered
+        // custom-instructions → memory → skills after each prepend.
+        memoryMiddleware(),
         instructionsMiddleware(),
         // Upsert, not insert-ignore: when a turn resumes after an
         // ask_clarification answer, the model extends the SAME assistant message

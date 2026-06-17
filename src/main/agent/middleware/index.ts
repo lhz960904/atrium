@@ -5,6 +5,7 @@ export {
   compactThread,
 } from './builtins/compaction';
 export { type InstructionsOptions, instructionsMiddleware } from './builtins/instructions';
+export { type MemoryOptions, memoryMiddleware } from './builtins/memory';
 export { metadataMiddleware } from './builtins/metadata';
 export { type PersistFn, persistenceMiddleware } from './builtins/persistence';
 export { type SkillsOptions, skillsMiddleware } from './builtins/skills';

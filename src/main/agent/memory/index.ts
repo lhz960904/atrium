@@ -1,4 +1,12 @@
-export { encodeWorkspace, MEMORY_INDEX, type MemoryScope, memoryDir } from './paths';
+export {
+  encodeWorkspace,
+  MEMORY_INDEX,
+  MEMORY_INDEX_BUDGET,
+  MEMORY_SCOPES,
+  type MemoryScope,
+  memoryDir,
+} from './paths';
+export { type MemoryState, readState, recordSessionTouch } from './state';
 export {
   deleteMemory,
   fileName,
@@ -6,6 +14,7 @@ export {
   type MemoryInput,
   type MemoryType,
   parseTopic,
+  readIndexClipped,
   regenerateIndex,
   renderTopic,
   writeMemory,
