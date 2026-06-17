@@ -28,7 +28,6 @@ function scheduler(dirs: string[], ran: string[]): DreamScheduler {
       ran.push(dir);
     },
     model: () => ({}) as never,
-    activeSessionId: () => null,
   };
 }
 

@@ -1,3 +1,4 @@
+export { runDream } from './dream';
 export { acquireLock, releaseLock } from './lock';
 export {
   DREAM_GATES,

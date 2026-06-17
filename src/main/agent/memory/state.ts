@@ -44,20 +44,15 @@ export async function recordSessionTouch(dir: string, sessionId: string): Promis
 
 /**
  * The consolidation gate, mirroring Claude's auto-dream: a scan throttle, then a
- * time-since-last-consolidation gate, then a distinct-session-count gate (the active
- * session is excluded so we never consolidate one still being written). Records the
- * scan time as a side effect, so the throttle holds across calls.
+ * time-since-last-consolidation gate, then a distinct-session-count gate. Records
+ * the scan time as a side effect, so the throttle holds across calls.
  */
-export async function shouldConsolidate(
-  dir: string,
-  now: number,
-  activeSessionId?: string,
-): Promise<boolean> {
+export async function shouldConsolidate(dir: string, now: number): Promise<boolean> {
   const s = await readState(dir);
   if (now - s.lastScanAt < DREAM_SCAN_THROTTLE_MS) return false;
   await writeState(dir, { ...s, lastScanAt: now });
   if (now - s.lastConsolidatedAt < DREAM_GATES.minHours * 3_600_000) return false;
-  return s.touchedSessions.filter((id) => id !== activeSessionId).length >= DREAM_GATES.minSessions;
+  return s.touchedSessions.length >= DREAM_GATES.minSessions;
 }
 
 export async function markConsolidated(dir: string, now: number): Promise<void> {

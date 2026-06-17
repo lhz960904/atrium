@@ -55,12 +55,6 @@ test('shouldConsolidate: too few distinct sessions → false', async () => {
   expect(await shouldConsolidate(dir, NOW)).toBe(false);
 });
 
-test('shouldConsolidate: the active session is excluded from the count', async () => {
-  const dir = await tmp();
-  await seedSessions(dir, ['s1', 's2', 's3', 's4', 'active']);
-  expect(await shouldConsolidate(dir, NOW, 'active')).toBe(false); // 4 < 5 after exclusion
-});
-
 test('shouldConsolidate: scan throttle blocks a second call within the window', async () => {
   const dir = await tmp();
   await seedSessions(dir, ['s1', 's2', 's3', 's4', 's5']);

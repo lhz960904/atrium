@@ -6,12 +6,14 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { app, BrowserWindow, safeStorage, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
+import { runDream, startDreamScheduler } from './agent/memory';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
 import { refreshSkills } from './agent/skills/registry';
 import { closeDb, openDb } from './db';
 import { createLogger, initLogging } from './log';
+import { resolveModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
-import { openSettings } from './settings/conf';
+import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { appRouter } from './trpc/router';
 
@@ -109,6 +111,20 @@ app.whenReady().then(async () => {
 
   // Discover skills before serving so the first turn already sees the index.
   await refreshSkills();
+
+  // Background memory consolidation (dream) — runs off the conversation path,
+  // gated so it only fires for memory that has actually accumulated.
+  startDreamScheduler({
+    runDream,
+    model: () => {
+      try {
+        const sel = getSettings().get('selectedModel', null);
+        return sel ? resolveModel(db, sel.providerId, sel.modelId) : null;
+      } catch {
+        return null;
+      }
+    },
+  });
 
   const chatEndpoint = await startHttpServer({ db, token: randomUUID(), workspaceRoot });
   serverEndpoint = chatEndpoint;

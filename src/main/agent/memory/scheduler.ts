@@ -8,20 +8,22 @@ const log = createLogger('memory');
 
 export type DreamScheduler = {
   runDream: (dir: string, model: LanguageModel) => Promise<void>;
-  model: () => LanguageModel;
-  activeSessionId: () => string | null;
+  /** The model to consolidate with; null when none is configured → skip the sweep. */
+  model: () => LanguageModel | null;
   /** Dirs to sweep; defaults to every memory dir on disk. Injectable for tests. */
   listDirs?: () => Promise<string[]>;
 };
 
 /** One pass: consolidate every memory dir that's due, each guarded by the lock. */
 export async function dreamSweep(opts: DreamScheduler, now: number): Promise<void> {
+  const model = opts.model();
+  if (!model) return;
   const dirs = await (opts.listDirs ?? listMemoryDirs)();
   for (const dir of dirs) {
-    if (!(await shouldConsolidate(dir, now, opts.activeSessionId() ?? undefined))) continue;
+    if (!(await shouldConsolidate(dir, now))) continue;
     if (!(await acquireLock(dir, now))) continue;
     void opts
-      .runDream(dir, opts.model())
+      .runDream(dir, model)
       .catch((err) => log.error(`dream failed: ${dir}`, err))
       .finally(() => releaseLock(dir));
   }
