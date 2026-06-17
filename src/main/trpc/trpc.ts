@@ -12,7 +12,6 @@ import type { ChatEndpoint } from '../server/http';
 export type Context = {
   db: Db;
   chatEndpoint: ChatEndpoint;
-  workspaceRoot: string;
 };
 
 const t = initTRPC.context<Context>().create({ isServer: true });

@@ -137,7 +137,7 @@ app.whenReady().then(async () => {
   createIPCHandler({
     router: appRouter,
     windows: [mainWindow],
-    createContext: async () => ({ db, chatEndpoint, workspaceRoot }),
+    createContext: async () => ({ db, chatEndpoint }),
   });
 
   app.on('activate', () => {
@@ -146,7 +146,7 @@ app.whenReady().then(async () => {
       createIPCHandler({
         router: appRouter,
         windows: [win],
-        createContext: async () => ({ db, chatEndpoint, workspaceRoot }),
+        createContext: async () => ({ db, chatEndpoint }),
       });
     }
   });

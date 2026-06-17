@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Atom,
   Brain,
+  Fingerprint,
   Info,
   Layers,
   type LucideIcon,
@@ -32,6 +33,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { section: 'skills', labelKey: 'settings.sections.skillsTitle', icon: Package },
   { section: 'subagents', labelKey: 'settings.sections.subagentsTitle', icon: Atom },
   { section: 'permissions', labelKey: 'settings.sections.permissionsTitle', icon: Shield },
+  { section: 'identity', labelKey: 'settings.sections.identityTitle', icon: Fingerprint },
   { section: 'memories', labelKey: 'settings.sections.memoriesTitle', icon: Brain },
   { section: 'about', labelKey: 'settings.sections.aboutTitle', icon: Info },
 ];

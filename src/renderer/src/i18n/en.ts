@@ -243,6 +243,8 @@ export const en: typeof zh = {
         'Sub-agents the task tool spawns: built-ins are read-only; custom ones configure prompt, tools, and handoff model.',
       permissionsTitle: 'Permissions',
       permissionsSub: 'Tool-permission mode and trust list.',
+      identityTitle: 'Identity',
+      identitySub: 'Who you are, and who your assistant is. Both are injected into every turn.',
       memoriesTitle: 'Memories',
       memoriesSub: 'Facts and context Atrium remembers.',
       aboutTitle: 'About',
@@ -262,6 +264,27 @@ export const en: typeof zh = {
       system: 'System',
       systemDesc: 'Follow the system language',
       note: 'The interface updates immediately when you switch.',
+    },
+    identity: {
+      you: 'You',
+      youHint: 'Your name here is how the home screen greets you.',
+      assistant: 'Your assistant',
+      assistantHint: 'The persona injected into the system prompt.',
+      notSet: 'Not set yet.',
+      reacquaint: 'Get acquainted again',
+      reacquaintHint: 'Run the conversational onboarding again to rewrite both.',
+      emptyTitle: "We haven't met yet",
+      emptyBody:
+        'Chat a little so I learn who you are and settle who I should be. You can edit both here anytime.',
+      start: 'Get acquainted',
+    },
+    memories: {
+      scopeGlobal: 'Global',
+      scopeProject: 'This project',
+      count: '{{n}} stored',
+      empty:
+        "No memories yet. I'll write things worth remembering here as we chat — you don't add them by hand.",
+      deleteConfirm: 'Delete this memory?',
     },
     permissions: {
       mode: 'Permission mode',

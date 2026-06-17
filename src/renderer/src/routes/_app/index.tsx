@@ -5,6 +5,7 @@ import type { Attachment } from '../../components/chat/composer/AttachmentChip';
 import { Composer } from '../../components/chat/composer/Composer';
 import { timeAgo } from '../../lib/time';
 import { trpc } from '../../lib/trpc';
+import { useStartOnboarding } from '../../lib/use-onboarding';
 import { usePendingInput } from '../../state/pending-input-store';
 
 /** How many recent chats the home "continue" list shows. */
@@ -61,12 +62,7 @@ function HomeView(): React.JSX.Element {
     createThread.mutate({ title: title.slice(0, 60) });
   };
 
-  const startOnboarding = (): void => {
-    usePendingInput
-      .getState()
-      .set({ text: '<skill-use>get-acquainted</skill-use>', attachments: [] });
-    createThread.mutate({ title: t('home.getAcquaintedTitle') });
-  };
+  const { start: startOnboarding, isPending: onboardingPending } = useStartOnboarding();
 
   return (
     <div className="relative flex h-full flex-col items-center justify-center px-6 py-10">
@@ -86,7 +82,7 @@ function HomeView(): React.JSX.Element {
           <button
             type="button"
             onClick={startOnboarding}
-            disabled={createThread.isLoading}
+            disabled={onboardingPending}
             className="flex w-full items-center gap-3 rounded-lg border border-border-default px-3 py-2.5 text-left hover:border-accent hover:bg-surface"
           >
             <Handshake className="size-[15px] shrink-0 text-accent" />

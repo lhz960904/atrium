@@ -2,6 +2,8 @@ import { createFileRoute, notFound } from '@tanstack/react-router';
 import type { ParseKeys } from 'i18next';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { IdentitySection } from '../../components/settings/identity/IdentitySection';
+import { MemoriesSection } from '../../components/settings/memories/MemoriesSection';
 import { PermissionsSection } from '../../components/settings/permissions/PermissionsSection';
 import { ProvidersSection } from '../../components/settings/providers/ProvidersSection';
 import { SkillsSection } from '../../components/settings/skills/SkillsSection';
@@ -54,10 +56,15 @@ const SECTIONS: Record<string, SectionMeta> = {
     subKey: 'settings.sections.permissionsSub',
     Component: PermissionsSection,
   },
+  identity: {
+    titleKey: 'settings.sections.identityTitle',
+    subKey: 'settings.sections.identitySub',
+    Component: IdentitySection,
+  },
   memories: {
     titleKey: 'settings.sections.memoriesTitle',
     subKey: 'settings.sections.memoriesSub',
-    Component: PlaceholderSection,
+    Component: MemoriesSection,
   },
   about: {
     titleKey: 'settings.sections.aboutTitle',
