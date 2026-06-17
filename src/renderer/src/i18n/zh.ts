@@ -278,7 +278,6 @@ export const zh = {
     },
     memories: {
       scopeGlobal: '全局',
-      scopeProject: '本项目',
       count: '{{n}} 条',
       empty: '还没有记忆。聊天时我会在值得记住的事情上自己写进来——你不用手动加。',
       deleteConfirm: '删除这条记忆？',

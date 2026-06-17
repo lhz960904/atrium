@@ -280,7 +280,6 @@ export const en: typeof zh = {
     },
     memories: {
       scopeGlobal: 'Global',
-      scopeProject: 'This project',
       count: '{{n}} stored',
       empty:
         "No memories yet. I'll write things worth remembering here as we chat — you don't add them by hand.",
