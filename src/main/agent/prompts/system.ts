@@ -15,10 +15,11 @@ export function workspaceGuidance(workspaceRoot: string): string {
 File and shell tools operate inside this workspace. Use absolute paths under it (e.g. ${workspaceRoot}/notes.txt). Paths outside the workspace are rejected.`;
 }
 
-export function buildSystemPrompt(workspaceRoot: string): string {
+export function buildSystemPrompt(workspaceRoot: string, opts: { soul?: string } = {}): string {
+  const soul = opts.soul ? `<soul>\n${opts.soul}\n</soul>\n\n` : '';
   return `You are Atrium, a capable AI assistant running on the user's Mac.
 
-${workspaceGuidance(workspaceRoot)}
+${soul}${workspaceGuidance(workspaceRoot)}
 
 Prefer using tools to inspect real state over guessing. When you call a tool, first explain briefly why. After gathering what you need, give a clear, direct answer.
 

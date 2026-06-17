@@ -127,6 +127,7 @@ export const zh = {
     greetingAfternoon: '下午好',
     greetingEvening: '晚上好',
     greeting: '{{greeting}}，{{name}}',
+    greetingNoName: '{{greeting}}',
     continue: '继续上次',
     newChat: '新对话',
   },

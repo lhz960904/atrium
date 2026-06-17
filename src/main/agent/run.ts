@@ -20,6 +20,7 @@ import {
   runAfterRun,
   runBeforeRun,
 } from './middleware';
+import { readSoul } from './profile/paths';
 import { buildSystemPrompt } from './prompts';
 import type { Sandbox } from './sandbox/types';
 
@@ -50,13 +51,14 @@ export type RunAgentOptions = {
  * completion + multicasts), so a client disconnect can't cancel generation.
  */
 export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UIMessageChunk>> {
+  const soul = await readSoul();
   const ctx: RunContext = {
     threadId: opts.threadId,
     db: opts.db,
     sandbox: opts.sandbox,
     workspaceRoot: opts.workspaceRoot,
     request: {
-      system: buildSystemPrompt(opts.workspaceRoot),
+      system: buildSystemPrompt(opts.workspaceRoot, { soul }),
       messages: opts.messages,
       tools: opts.tools,
     },

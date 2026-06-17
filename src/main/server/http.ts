@@ -13,6 +13,7 @@ import {
   memoryMiddleware,
   metadataMiddleware,
   persistenceMiddleware,
+  profileMiddleware,
   skillsMiddleware,
   titleMiddleware,
 } from '../agent/middleware';
@@ -242,6 +243,8 @@ export function startHttpServer(deps: {
         // custom-instructions → memory → skills after each prepend.
         memoryMiddleware(),
         instructionsMiddleware(),
+        // Last injector → its block lands on top: <user-profile> above the rest.
+        profileMiddleware(),
         // Upsert, not insert-ignore: when a turn resumes after an
         // ask_clarification answer, the model extends the SAME assistant message
         // (reused id), and that continuation must overwrite the stored copy.

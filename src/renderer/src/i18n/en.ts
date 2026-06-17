@@ -126,6 +126,7 @@ export const en: typeof zh = {
     greetingAfternoon: 'Good afternoon',
     greetingEvening: 'Good evening',
     greeting: '{{greeting}}, {{name}}',
+    greetingNoName: '{{greeting}}',
     continue: 'Continue',
     newChat: 'New chat',
   },

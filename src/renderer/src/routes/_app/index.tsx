@@ -31,12 +31,11 @@ function greetingFor(
 
 function HomeView(): React.JSX.Element {
   const { t } = useTranslation();
-  // Name stays fixed until the memory bootstrap lets the user introduce
-  // themselves; the time-of-day greeting is already live.
-  const greeting = t('home.greeting', {
-    greeting: t(greetingFor(new Date().getHours())),
-    name: '昊泽',
-  });
+  const { data: displayName } = trpc.profile.displayName.useQuery();
+  const timeGreeting = t(greetingFor(new Date().getHours()));
+  const greeting = displayName
+    ? t('home.greeting', { greeting: timeGreeting, name: displayName })
+    : t('home.greetingNoName', { greeting: timeGreeting });
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const { data: threads } = trpc.threads.list.useQuery();

@@ -8,6 +8,7 @@ export { type InstructionsOptions, instructionsMiddleware } from './builtins/ins
 export { type MemoryOptions, memoryMiddleware } from './builtins/memory';
 export { metadataMiddleware } from './builtins/metadata';
 export { type PersistFn, persistenceMiddleware } from './builtins/persistence';
+export { type ProfileOptions, profileMiddleware } from './builtins/profile';
 export { type SkillsOptions, skillsMiddleware } from './builtins/skills';
 export { type SetTitleFn, titleMiddleware } from './builtins/title';
 export {
