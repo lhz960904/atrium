@@ -143,7 +143,7 @@ export function ChatThread({
 
   return (
     <div className="flex h-full flex-col">
-      <ChatHeader title={title} />
+      <ChatHeader threadId={threadId} title={title} />
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} className="h-full overflow-y-auto">
           <div ref={contentRef} className="mx-auto max-w-[760px] px-2 py-6">

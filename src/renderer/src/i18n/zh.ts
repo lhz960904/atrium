@@ -136,6 +136,10 @@ export const zh = {
   chat: {
     notFound: '对话不存在',
     serviceNotReady: '聊天服务未就绪',
+    more: '更多',
+    rename: '重命名',
+    archive: '归档',
+    archived: '已归档',
   },
   tool: {
     verb: {
