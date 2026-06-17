@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import { memoryRouter } from './routers/memory';
 import { messagesRouter } from './routers/messages';
 import { profileRouter } from './routers/profile';
 import { providersRouter } from './routers/providers';
@@ -27,6 +28,7 @@ export const appRouter = router({
   })),
   threads: threadsRouter,
   messages: messagesRouter,
+  memory: memoryRouter,
   profile: profileRouter,
   search: searchRouter,
   providers: providersRouter,

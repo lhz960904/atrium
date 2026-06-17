@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deleteMemory, fileName, parseTopic, renderTopic, writeMemory } from './store';
+import { deleteMemory, fileName, listTopics, parseTopic, renderTopic, writeMemory } from './store';
 
 const created: string[] = [];
 afterAll(async () => {
@@ -81,4 +81,23 @@ test('delete removes the file and its index line', async () => {
   await writeMemory(dir, { name: 'Temp', description: 'gone soon', type: 'project', body: 'x' });
   await deleteMemory(dir, 'Temp');
   expect(await readMd(dir, 'MEMORY.md')).not.toContain('Temp');
+});
+
+test('listTopics returns parsed entries with raw content, sorted by name; skips the index', async () => {
+  const dir = await tmp();
+  await writeMemory(dir, {
+    name: 'Build Cmd',
+    description: 'use bun',
+    type: 'project',
+    body: 'run',
+  });
+  await writeMemory(dir, { name: 'Aliases', description: 'g=git', type: 'preference', body: 'x' });
+  const entries = await listTopics(dir);
+  expect(entries.map((e) => e.name)).toEqual(['Aliases', 'Build Cmd']);
+  expect(entries[1]).toMatchObject({ description: 'use bun', type: 'project' });
+  expect(entries[1].content).toContain('run');
+});
+
+test('listTopics on a missing dir returns empty', async () => {
+  expect(await listTopics(join(tmpdir(), 'mem-does-not-exist-xyz'))).toEqual([]);
 });

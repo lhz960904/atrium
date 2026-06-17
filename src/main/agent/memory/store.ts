@@ -40,6 +40,26 @@ export function parseTopic(content: string): TopicMeta | null {
   return name && description && type ? { name, description, type } : null;
 }
 
+export type MemoryEntry = TopicMeta & { content: string };
+
+/** Every stored topic in a scope, parsed, with its raw markdown — for the settings browser. */
+export async function listTopics(dir: string): Promise<MemoryEntry[]> {
+  let files: string[];
+  try {
+    files = await readdir(dir);
+  } catch {
+    return [];
+  }
+  const entries: MemoryEntry[] = [];
+  for (const file of files) {
+    if (!file.endsWith('.md') || file === MEMORY_INDEX) continue;
+    const content = await readFile(join(dir, file), 'utf8').catch(() => '');
+    const meta = parseTopic(content);
+    if (meta) entries.push({ ...meta, content });
+  }
+  return entries.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function writeMemory(dir: string, m: MemoryInput): Promise<string> {
   const file = fileName(m.name);
   await writeFile(join(dir, file), renderTopic(m), 'utf8');
