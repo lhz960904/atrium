@@ -1,14 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { asc, desc, eq } from 'drizzle-orm';
+import { asc, desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { messages, threads } from '../../db/schema';
 import { getRunningThreadIds } from '../../server/resumable';
 import { publicProcedure, router } from '../trpc';
 
 export const threadsRouter = router({
-  /** All threads, most-recently-updated first. */
+  /** Active (non-archived) threads, most-recently-updated first. */
   list: publicProcedure.query(({ ctx }) => {
-    return ctx.db.select().from(threads).orderBy(desc(threads.updatedAt)).all();
+    return ctx.db
+      .select()
+      .from(threads)
+      .where(isNull(threads.archivedAt))
+      .orderBy(desc(threads.updatedAt))
+      .all();
   }),
 
   /** Thread ids whose agent is currently generating — the source of truth lives
@@ -111,4 +116,9 @@ export const threadsRouter = router({
         .where(eq(threads.id, input.id))
         .run();
     }),
+
+  /** Archive a thread — drops it from the sidebar list without deleting it. */
+  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    ctx.db.update(threads).set({ archivedAt: new Date() }).where(eq(threads.id, input.id)).run();
+  }),
 });

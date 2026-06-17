@@ -14,6 +14,9 @@ export const threads = sqliteTable('threads', {
   /** When the user last viewed this thread; null = never (treated as read).
    *  A thread is "unread" in the sidebar when updatedAt is newer than this. */
   lastReadAt: integer('last_read_at', { mode: 'timestamp_ms' }),
+  /** When the user archived this thread; null = active. Archived threads drop
+   *  out of the sidebar list but stay openable by id and keep their messages. */
+  archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
 });
 
 export const messages = sqliteTable(
