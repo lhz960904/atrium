@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readState, recordSessionTouch } from './state';
+import { markConsolidated, readState, recordSessionTouch, shouldConsolidate } from './state';
 
 const created: string[] = [];
 afterAll(async () => {
@@ -33,4 +33,37 @@ test('readState returns empty defaults when there is no state file', async () =>
 
 test('recordSessionTouch on a missing dir is a no-op, not a throw', async () => {
   await recordSessionTouch(join(tmpdir(), 'mem-state-nope-xyz', 'inner'), 'a');
+});
+
+const HOUR = 3_600_000;
+const NOW = 2_000_000_000_000;
+const seedSessions = async (dir: string, ids: string[]) => {
+  for (const id of ids) await recordSessionTouch(dir, id);
+};
+
+test('shouldConsolidate: all gates pass → true; markConsolidated resets the counter', async () => {
+  const dir = await tmp();
+  await seedSessions(dir, ['s1', 's2', 's3', 's4', 's5']);
+  expect(await shouldConsolidate(dir, NOW)).toBe(true);
+  await markConsolidated(dir, NOW);
+  expect(await shouldConsolidate(dir, NOW + 25 * HOUR)).toBe(false); // counter reset → session gate fails
+});
+
+test('shouldConsolidate: too few distinct sessions → false', async () => {
+  const dir = await tmp();
+  await seedSessions(dir, ['s1', 's2', 's3']);
+  expect(await shouldConsolidate(dir, NOW)).toBe(false);
+});
+
+test('shouldConsolidate: the active session is excluded from the count', async () => {
+  const dir = await tmp();
+  await seedSessions(dir, ['s1', 's2', 's3', 's4', 'active']);
+  expect(await shouldConsolidate(dir, NOW, 'active')).toBe(false); // 4 < 5 after exclusion
+});
+
+test('shouldConsolidate: scan throttle blocks a second call within the window', async () => {
+  const dir = await tmp();
+  await seedSessions(dir, ['s1', 's2', 's3', 's4', 's5']);
+  expect(await shouldConsolidate(dir, NOW)).toBe(true);
+  expect(await shouldConsolidate(dir, NOW + 60_000)).toBe(false); // 1 min later → throttled
 });
