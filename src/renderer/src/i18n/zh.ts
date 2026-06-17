@@ -152,6 +152,7 @@ export const zh = {
       useSkill: '使用技能',
       genImage: '已生成图片',
       memory: '记忆',
+      profile: '身份',
     },
     verbActive: {
       read: '读取中',
@@ -169,6 +170,7 @@ export const zh = {
       useSkill: '使用技能中',
       genImage: '生成图片中',
       memory: '记忆',
+      profile: '身份',
     },
     type: {
       file: '文件 · {{path}}',
@@ -183,12 +185,17 @@ export const zh = {
       skill: '技能 · {{name}}',
       image: '图片',
       memory: '记忆',
+      profile: '身份',
       agent: 'Agent · {{name}}',
     },
     memory: {
       view: '查看',
       write: '写入',
       delete: '删除',
+    },
+    profile: {
+      view: '查看',
+      write: '写入',
     },
     workspace: '工作区',
     noOutput: '无输出',

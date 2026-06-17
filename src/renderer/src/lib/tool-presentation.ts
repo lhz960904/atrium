@@ -9,6 +9,7 @@ import {
   FileText,
   FolderTree,
   Globe,
+  Handshake,
   Image as ImageIcon,
   type LucideIcon,
   OctagonX,
@@ -183,6 +184,13 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
             : 'tool.memory.view',
       ),
     typeLabel: (_i, t) => t('tool.type.memory'),
+  },
+  profile: {
+    icon: Handshake,
+    verbKey: 'tool.verb.profile',
+    verbActiveKey: 'tool.verbActive.profile',
+    target: (i, t) => t(i.command === 'write' ? 'tool.profile.write' : 'tool.profile.view'),
+    typeLabel: (_i, t) => t('tool.type.profile'),
   },
 };
 

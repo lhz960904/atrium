@@ -2,11 +2,11 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseFrontmatter } from '../../shared/frontmatter';
 
-const SOUL_FILE = 'SOUL.md';
-const USER_FILE = 'USER.md';
+export const SOUL_FILE = 'SOUL.md';
+export const USER_FILE = 'USER.md';
 
 // Lazy require: electron only exists in the app runtime (keeps this loadable under bun).
-function profileDir(): string {
+export function profileDir(): string {
   const { app } = require('electron') as typeof import('electron');
   return join(app.getPath('userData'), 'profile');
 }

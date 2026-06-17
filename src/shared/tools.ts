@@ -23,6 +23,7 @@ export const TOOL_NAMES = [
   'ask_clarification',
   'image_gen',
   'memory',
+  'profile',
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];

@@ -14,6 +14,7 @@ import { imageGenTool } from './builtins/image-gen';
 import { killShellTool } from './builtins/kill-shell';
 import { listDirTool } from './builtins/list-dir';
 import { memoryTool } from './builtins/memory';
+import { profileTool } from './builtins/profile';
 import { readFileTool } from './builtins/read-file';
 import { skillTool } from './builtins/skill';
 import { taskTool } from './builtins/task';
@@ -57,5 +58,6 @@ export function getTools(ctx: ToolCtx): Record<ToolName, Tool> {
     ask_clarification: askClarificationTool(),
     image_gen: imageGenTool({ models: listEnabledImageModels(ctx.db) }),
     memory: memoryTool(ctx),
+    profile: profileTool(),
   };
 }

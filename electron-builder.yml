@@ -21,6 +21,10 @@ extraResources:
     to: drizzle/migrations
     filter:
       - '**/*'
+  - from: skills
+    to: skills
+    filter:
+      - '**/*'
 asarUnpack:
   - resources/**
   # jieba-wasm reads its .wasm via fs.readFileSync(__dirname/...); unpack it so

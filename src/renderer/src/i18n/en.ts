@@ -151,6 +151,7 @@ export const en: typeof zh = {
       useSkill: 'Used skill',
       genImage: 'Generated image',
       memory: 'Memory',
+      profile: 'Identity',
     },
     verbActive: {
       read: 'Reading',
@@ -168,6 +169,7 @@ export const en: typeof zh = {
       useSkill: 'Using skill',
       genImage: 'Generating image',
       memory: 'Memory',
+      profile: 'Identity',
     },
     type: {
       file: 'File · {{path}}',
@@ -182,12 +184,17 @@ export const en: typeof zh = {
       skill: 'Skill · {{name}}',
       image: 'Image',
       memory: 'Memory',
+      profile: 'Identity',
       agent: 'Agent · {{name}}',
     },
     memory: {
       view: 'View',
       write: 'Write',
       delete: 'Delete',
+    },
+    profile: {
+      view: 'View',
+      write: 'Write',
     },
     workspace: 'workspace',
     noOutput: 'No output',
