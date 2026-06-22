@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
 import type { ParseKeys } from 'i18next';
 import {
+  Archive,
   ArrowLeft,
   Atom,
   Brain,
@@ -35,6 +36,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { section: 'permissions', labelKey: 'settings.sections.permissionsTitle', icon: Shield },
   { section: 'identity', labelKey: 'settings.sections.identityTitle', icon: Fingerprint },
   { section: 'memories', labelKey: 'settings.sections.memoriesTitle', icon: Brain },
+  { section: 'archived', labelKey: 'settings.sections.archivedTitle', icon: Archive },
   { section: 'about', labelKey: 'settings.sections.aboutTitle', icon: Info },
 ];
 
