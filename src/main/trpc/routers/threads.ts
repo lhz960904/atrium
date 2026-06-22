@@ -127,4 +127,9 @@ export const threadsRouter = router({
   archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     ctx.db.update(threads).set({ archivedAt: new Date() }).where(eq(threads.id, input.id)).run();
   }),
+
+  /** Restore an archived thread back into the sidebar list. */
+  unarchive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    ctx.db.update(threads).set({ archivedAt: null }).where(eq(threads.id, input.id)).run();
+  }),
 });
