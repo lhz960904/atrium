@@ -26,7 +26,7 @@ function createWindow(): BrowserWindow {
     minHeight: 560,
     show: false,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 19, y: 16 },
+    trafficLightPosition: { x: 19, y: 18 },
     backgroundColor: '#16161B',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
