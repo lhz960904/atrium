@@ -7,6 +7,7 @@ import { trpc } from '../lib/trpc';
 import { useCommandPalette } from '../state/command-palette-store';
 import { useSidebarStore } from '../state/sidebar-store';
 import { toast } from '../state/toast-store';
+import { Tooltip } from './Tooltip';
 
 const chatRowBase =
   'group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-fg-secondary hover:bg-sidebar-item-hover hover:text-fg-primary';
@@ -121,20 +122,21 @@ export function Sidebar(): React.JSX.Element {
                         </span>
                       )}
                     </span>
-                    <button
-                      type="button"
-                      title={t('chat.archive')}
-                      aria-label={t('chat.archive')}
-                      onClick={(e) => {
-                        // Inside the row's <Link>: keep the click from navigating.
-                        e.preventDefault();
-                        e.stopPropagation();
-                        archive.mutate({ id: thread.id });
-                      }}
-                      className="absolute right-0 hidden rounded p-0.5 text-fg-tertiary hover:bg-elevated hover:text-fg-primary group-hover:block"
-                    >
-                      <Archive className="size-[13px]" />
-                    </button>
+                    <Tooltip content={t('chat.archive')}>
+                      <button
+                        type="button"
+                        aria-label={t('chat.archive')}
+                        onClick={(e) => {
+                          // Inside the row's <Link>: keep the click from navigating.
+                          e.preventDefault();
+                          e.stopPropagation();
+                          archive.mutate({ id: thread.id });
+                        }}
+                        className="absolute right-0 hidden p-0.5 text-fg-tertiary hover:text-fg-primary group-hover:block"
+                      >
+                        <Archive className="size-[13px]" />
+                      </button>
+                    </Tooltip>
                   </span>
                 )}
               </Link>
