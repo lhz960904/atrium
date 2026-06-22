@@ -18,65 +18,41 @@ export const Route = createFileRoute('/settings/$section')({
 
 type SectionMeta = {
   titleKey: ParseKeys;
-  subKey: ParseKeys;
   /** Providers needs the full width; the rest read better at narrow column. */
   wide?: boolean;
   Component: () => React.JSX.Element;
 };
 
 const SECTIONS: Record<string, SectionMeta> = {
-  general: {
-    titleKey: 'settings.sections.generalTitle',
-    subKey: 'settings.sections.generalSub',
-    Component: GeneralSection,
-  },
-  appearance: {
-    titleKey: 'settings.sections.appearanceTitle',
-    subKey: 'settings.sections.appearanceSub',
-    Component: AppearanceSection,
-  },
+  general: { titleKey: 'settings.sections.generalTitle', Component: GeneralSection },
+  identity: { titleKey: 'settings.sections.identityTitle', Component: IdentitySection },
+  appearance: { titleKey: 'settings.sections.appearanceTitle', Component: AppearanceSection },
+  memories: { titleKey: 'settings.sections.memoriesTitle', Component: MemoriesSection },
+  pets: { titleKey: 'settings.sections.petsTitle', Component: PlaceholderSection },
+  keyboard: { titleKey: 'settings.sections.keyboardTitle', Component: PlaceholderSection },
+  usage: { titleKey: 'settings.sections.usageTitle', Component: PlaceholderSection },
   providers: {
     titleKey: 'settings.sections.providersTitle',
-    subKey: 'settings.sections.providersSub',
     wide: true,
     Component: ProvidersSection,
   },
-  skills: {
-    titleKey: 'settings.sections.skillsTitle',
-    subKey: 'settings.sections.skillsSub',
-    Component: SkillsSection,
-  },
+  skills: { titleKey: 'settings.sections.skillsTitle', Component: SkillsSection },
   subagents: {
     titleKey: 'settings.sections.subagentsTitle',
-    subKey: 'settings.sections.subagentsSub',
     wide: true,
     Component: SubagentsSection,
   },
-  permissions: {
-    titleKey: 'settings.sections.permissionsTitle',
-    subKey: 'settings.sections.permissionsSub',
-    Component: PermissionsSection,
-  },
-  identity: {
-    titleKey: 'settings.sections.identityTitle',
-    subKey: 'settings.sections.identitySub',
-    Component: IdentitySection,
-  },
-  memories: {
-    titleKey: 'settings.sections.memoriesTitle',
-    subKey: 'settings.sections.memoriesSub',
-    Component: MemoriesSection,
-  },
-  archived: {
-    titleKey: 'settings.sections.archivedTitle',
-    subKey: 'settings.sections.archivedSub',
-    Component: ArchivedSection,
-  },
-  about: {
-    titleKey: 'settings.sections.aboutTitle',
-    subKey: 'settings.sections.aboutSub',
-    Component: PlaceholderSection,
-  },
+  mcp: { titleKey: 'settings.sections.mcpTitle', Component: PlaceholderSection },
+  browser: { titleKey: 'settings.sections.browserTitle', Component: PlaceholderSection },
+  computer: { titleKey: 'settings.sections.computerTitle', Component: PlaceholderSection },
+  permissions: { titleKey: 'settings.sections.permissionsTitle', Component: PermissionsSection },
+  hooks: { titleKey: 'settings.sections.hooksTitle', Component: PlaceholderSection },
+  connections: { titleKey: 'settings.sections.connectionsTitle', Component: PlaceholderSection },
+  git: { titleKey: 'settings.sections.gitTitle', Component: PlaceholderSection },
+  environments: { titleKey: 'settings.sections.environmentsTitle', Component: PlaceholderSection },
+  worktrees: { titleKey: 'settings.sections.worktreesTitle', Component: PlaceholderSection },
+  archived: { titleKey: 'settings.sections.archivedTitle', Component: ArchivedSection },
+  about: { titleKey: 'settings.sections.aboutTitle', Component: PlaceholderSection },
 };
 
 function SectionView(): React.JSX.Element {
@@ -85,14 +61,17 @@ function SectionView(): React.JSX.Element {
   const meta = SECTIONS[section];
   if (!meta) throw notFound();
 
-  const { titleKey, subKey, wide = false, Component } = meta;
+  const { titleKey, wide = false, Component } = meta;
 
   return (
     <div
       className={`flex h-full flex-col ${wide ? 'px-8 py-6' : 'mx-auto max-w-[720px] px-10 py-8'}`}
     >
-      <h1 className="mb-1 font-semibold text-2xl text-fg-primary tracking-tight">{t(titleKey)}</h1>
-      <p className={`text-fg-tertiary text-sm ${wide ? 'mb-5' : 'mb-8'}`}>{t(subKey)}</p>
+      <h1
+        className={`font-semibold text-2xl text-fg-primary tracking-tight ${wide ? 'mb-5' : 'mb-6'}`}
+      >
+        {t(titleKey)}
+      </h1>
       <div className={wide ? 'min-h-0 flex-1' : ''}>
         <Component />
       </div>
