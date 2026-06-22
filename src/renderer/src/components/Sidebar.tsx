@@ -1,16 +1,18 @@
 import { Link } from '@tanstack/react-router';
-import { ListFilter, Search, Settings, SquarePen } from 'lucide-react';
+import { Archive, ListFilter, Search, Settings, SquarePen } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { timeAgo } from '../lib/time';
 import { trpc } from '../lib/trpc';
 import { useCommandPalette } from '../state/command-palette-store';
 import { useSidebarStore } from '../state/sidebar-store';
+import { toast } from '../state/toast-store';
+import { Tooltip } from './Tooltip';
 
 const chatRowBase =
-  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-fg-secondary hover:bg-sidebar-item-hover hover:text-fg-primary';
+  'group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm text-fg-secondary hover:bg-sidebar-item-hover hover:text-fg-primary';
 const chatRowActive =
-  'flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm bg-sidebar-item-active text-fg-primary';
+  'group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm bg-sidebar-item-active text-fg-primary';
 
 export function Sidebar(): React.JSX.Element {
   const { t } = useTranslation();
@@ -22,6 +24,12 @@ export function Sidebar(): React.JSX.Element {
   // the interval is cheap (unlike polling message content).
   const { data: running } = trpc.threads.running.useQuery(undefined, { refetchInterval: 2000 });
   const runningSet = new Set(running);
+  const archive = trpc.threads.archive.useMutation({
+    onSuccess: () => {
+      utils.threads.list.invalidate();
+      toast.success(t('chat.archived'));
+    },
+  });
 
   // A background run has no client mounted to refresh the list when it finishes,
   // so its unread dot would lag until a manual refresh. Watch the polled running
@@ -97,16 +105,38 @@ export function Sidebar(): React.JSX.Element {
                     aria-label={t('sidebar.running')}
                     className="size-[13px] shrink-0 animate-spin rounded-full border-[1.5px] border-border-strong border-t-accent"
                   />
-                ) : thread.lastReadAt != null &&
-                  new Date(thread.updatedAt) > new Date(thread.lastReadAt) ? (
-                  <span
-                    role="status"
-                    aria-label={t('sidebar.unread')}
-                    className="size-2 shrink-0 rounded-full bg-accent"
-                  />
                 ) : (
-                  <span className="shrink-0 text-fg-disabled text-xs">
-                    {timeAgo(thread.updatedAt)}
+                  // Status indicator yields to a one-click archive button on row hover.
+                  <span className="relative flex shrink-0 items-center">
+                    <span className="flex items-center group-hover:invisible">
+                      {thread.lastReadAt != null &&
+                      new Date(thread.updatedAt) > new Date(thread.lastReadAt) ? (
+                        <span
+                          role="status"
+                          aria-label={t('sidebar.unread')}
+                          className="size-2 rounded-full bg-accent"
+                        />
+                      ) : (
+                        <span className="text-fg-disabled text-xs">
+                          {timeAgo(thread.updatedAt)}
+                        </span>
+                      )}
+                    </span>
+                    <Tooltip content={t('chat.archive')}>
+                      <button
+                        type="button"
+                        aria-label={t('chat.archive')}
+                        onClick={(e) => {
+                          // Inside the row's <Link>: keep the click from navigating.
+                          e.preventDefault();
+                          e.stopPropagation();
+                          archive.mutate({ id: thread.id });
+                        }}
+                        className="absolute right-0 hidden p-0.5 text-fg-tertiary hover:text-fg-primary group-hover:block"
+                      >
+                        <Archive className="size-[13px]" />
+                      </button>
+                    </Tooltip>
                   </span>
                 )}
               </Link>

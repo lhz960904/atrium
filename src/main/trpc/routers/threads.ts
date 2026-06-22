@@ -1,14 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { asc, desc, eq } from 'drizzle-orm';
+import { asc, desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { messages, threads } from '../../db/schema';
 import { getRunningThreadIds } from '../../server/resumable';
 import { publicProcedure, router } from '../trpc';
 
 export const threadsRouter = router({
-  /** All threads, most-recently-updated first. */
+  /** Active (non-archived) threads, most-recently-updated first. */
   list: publicProcedure.query(({ ctx }) => {
-    return ctx.db.select().from(threads).orderBy(desc(threads.updatedAt)).all();
+    return ctx.db
+      .select()
+      .from(threads)
+      .where(isNull(threads.archivedAt))
+      .orderBy(desc(threads.updatedAt))
+      .all();
   }),
 
   /** Thread ids whose agent is currently generating — the source of truth lives
@@ -101,14 +106,30 @@ export const threadsRouter = router({
     ctx.db.update(threads).set({ lastReadAt: new Date() }).where(eq(threads.id, input.id)).run();
   }),
 
-  /** Rename a thread; also bumps updatedAt so it floats to the top of the sidebar. */
+  /**
+   * Rename a thread; bumps updatedAt so it floats to the top of the sidebar.
+   * Advance lastReadAt in lockstep — a rename is a deliberate edit by someone
+   * viewing the thread, so it must not trip the unread dot the way new activity
+   * does (which bumps updatedAt past lastReadAt).
+   */
   updateTitle: publicProcedure
     .input(z.object({ id: z.string(), title: z.string() }))
     .mutation(({ ctx, input }) => {
+      const now = new Date();
       ctx.db
         .update(threads)
-        .set({ title: input.title, updatedAt: new Date() })
+        .set({ title: input.title, updatedAt: now, lastReadAt: now })
         .where(eq(threads.id, input.id))
         .run();
     }),
+
+  /** Archive a thread — drops it from the sidebar list without deleting it. */
+  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    ctx.db.update(threads).set({ archivedAt: new Date() }).where(eq(threads.id, input.id)).run();
+  }),
+
+  /** Restore an archived thread back into the sidebar list. */
+  unarchive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    ctx.db.update(threads).set({ archivedAt: null }).where(eq(threads.id, input.id)).run();
+  }),
 });

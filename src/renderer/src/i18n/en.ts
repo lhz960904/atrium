@@ -135,6 +135,10 @@ export const en: typeof zh = {
   chat: {
     notFound: "This chat doesn't exist",
     serviceNotReady: 'Chat service not ready',
+    more: 'More',
+    rename: 'Rename',
+    archive: 'Archive',
+    archived: 'Archived',
   },
   tool: {
     verb: {
@@ -247,6 +251,8 @@ export const en: typeof zh = {
       identitySub: 'Who you are, and who your assistant is. Both are injected into every turn.',
       memoriesTitle: 'Memories',
       memoriesSub: 'Facts and context Atrium remembers.',
+      archivedTitle: 'Archived chats',
+      archivedSub: 'Restore archived chats, or delete them for good.',
       aboutTitle: 'About',
       aboutSub: 'About Atrium.',
     },
@@ -284,6 +290,15 @@ export const en: typeof zh = {
       empty:
         "No memories yet. I'll write things worth remembering here as we chat — you don't add them by hand.",
       deleteConfirm: 'Delete this memory?',
+    },
+    archived: {
+      count: '{{n}} archived',
+      empty: 'No archived chats yet.',
+      searchPlaceholder: 'Search archived chats',
+      noResults: 'No chats match your search.',
+      restore: 'Restore',
+      restored: 'Chat restored',
+      deleteConfirm: 'Permanently delete this chat? This cannot be undone.',
     },
     permissions: {
       mode: 'Permission mode',

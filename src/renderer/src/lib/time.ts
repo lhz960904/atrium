@@ -1,12 +1,14 @@
+function toStamp(date: Date | number | string): number {
+  return typeof date === 'number'
+    ? date
+    : typeof date === 'string'
+      ? new Date(date).getTime()
+      : date.getTime();
+}
+
 /** Codex-style short time-ago: 5m / 2h / 3d / 1w / 2mo */
 export function timeAgo(date: Date | number | string): string {
-  const stamp =
-    typeof date === 'number'
-      ? date
-      : typeof date === 'string'
-        ? new Date(date).getTime()
-        : date.getTime();
-  const ms = Date.now() - stamp;
+  const ms = Date.now() - toStamp(date);
   const min = Math.floor(ms / 60_000);
   if (min < 1) return 'now';
   if (min < 60) return `${min}m`;
@@ -18,4 +20,11 @@ export function timeAgo(date: Date | number | string): string {
   if (week < 5) return `${week}w`;
   const month = Math.floor(day / 30);
   return `${month}mo`;
+}
+
+/** Absolute, localized date + time: "Jun 6, 2026, 11:09 PM" / "2026年6月6日 23:09". */
+export function formatDateTime(date: Date | number | string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(
+    toStamp(date),
+  );
 }

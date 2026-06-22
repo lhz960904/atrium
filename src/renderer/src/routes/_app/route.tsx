@@ -73,7 +73,7 @@ function AppLayout(): React.JSX.Element {
       <button
         type="button"
         onClick={toggle}
-        className="app-no-drag fixed top-[9px] z-50 rounded-md p-1.5 text-fg-tertiary hover:bg-surface-strong hover:text-fg-primary"
+        className="app-no-drag fixed top-[11px] z-50 rounded-md p-1.5 text-fg-tertiary hover:bg-surface-strong hover:text-fg-primary"
         style={{
           left: collapsed ? 84 : width - 44,
           // Slide in lockstep with the sidebar's grid collapse; no transition
