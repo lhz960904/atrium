@@ -106,13 +106,19 @@ export const threadsRouter = router({
     ctx.db.update(threads).set({ lastReadAt: new Date() }).where(eq(threads.id, input.id)).run();
   }),
 
-  /** Rename a thread; also bumps updatedAt so it floats to the top of the sidebar. */
+  /**
+   * Rename a thread; bumps updatedAt so it floats to the top of the sidebar.
+   * Advance lastReadAt in lockstep — a rename is a deliberate edit by someone
+   * viewing the thread, so it must not trip the unread dot the way new activity
+   * does (which bumps updatedAt past lastReadAt).
+   */
   updateTitle: publicProcedure
     .input(z.object({ id: z.string(), title: z.string() }))
     .mutation(({ ctx, input }) => {
+      const now = new Date();
       ctx.db
         .update(threads)
-        .set({ title: input.title, updatedAt: new Date() })
+        .set({ title: input.title, updatedAt: now, lastReadAt: now })
         .where(eq(threads.id, input.id))
         .run();
     }),
