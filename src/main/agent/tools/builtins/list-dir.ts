@@ -1,6 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { resolveInWorkspace } from '../../sandbox/paths';
+import { resolveAbsolute } from '../../sandbox/paths';
 import type { ToolCtx } from '../context';
 import { headTruncate } from '../output';
 
@@ -24,7 +24,7 @@ export const listDirTool = (ctx: ToolCtx) =>
     execute: async ({ path }) => {
       const target = path ?? '.';
       try {
-        const abs = resolveInWorkspace(ctx.workspaceRoot, target);
+        const abs = resolveAbsolute(ctx.workspaceRoot, target);
         const entries = await ctx.sandbox.list(abs);
         if (entries.length === 0) return '(empty)';
         return headTruncate(

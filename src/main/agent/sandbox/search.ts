@@ -2,7 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import fg from 'fast-glob';
 import { IGNORE_GLOBS } from './ignore';
-import { resolveInWorkspace } from './paths';
+import { resolveAbsolute } from './paths';
 
 /**
  * Pure-Node content (grep) and filename (glob) search. File discovery is done
@@ -71,7 +71,7 @@ function walk(base: string, pattern: string, onlyFiles: boolean): AsyncIterable<
 
 export async function globFiles(root: string, opts: GlobOptions): Promise<GlobResult> {
   const max = clamp(opts.maxResults, GLOB_DEFAULT, GLOB_CAP);
-  const base = opts.path ? resolveInWorkspace(root, opts.path) : root;
+  const base = opts.path ? resolveAbsolute(root, opts.path) : root;
   const scope = opts.path ? toPosix(relative(root, base)) : '';
   const paths: string[] = [];
   for await (const rel of walk(base, opts.pattern, false)) {
@@ -83,7 +83,7 @@ export async function globFiles(root: string, opts: GlobOptions): Promise<GlobRe
 
 export async function grepFiles(root: string, opts: GrepOptions): Promise<GrepResult> {
   const max = clamp(opts.maxResults, GREP_DEFAULT, GREP_CAP);
-  const base = opts.path ? resolveInWorkspace(root, opts.path) : root;
+  const base = opts.path ? resolveAbsolute(root, opts.path) : root;
   const scope = opts.path ? toPosix(relative(root, base)) : '';
   const re = new RegExp(
     opts.literal ? escapeRegex(opts.pattern) : opts.pattern,

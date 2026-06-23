@@ -1,6 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { resolveInWorkspace } from '../../sandbox/paths';
+import { resolveAbsolute } from '../../sandbox/paths';
 import type { ToolCtx } from '../context';
 import { fsErrorMessage, headTruncate } from '../output';
 
@@ -28,7 +28,7 @@ export const readFileTool = (ctx: ToolCtx) =>
     }),
     execute: async ({ path, start_line, end_line }) => {
       try {
-        const abs = resolveInWorkspace(ctx.workspaceRoot, path);
+        const abs = resolveAbsolute(ctx.workspaceRoot, path);
         let content = await ctx.sandbox.readFile(abs);
         if (content === '') return '(empty)';
         if (start_line != null && end_line != null) {

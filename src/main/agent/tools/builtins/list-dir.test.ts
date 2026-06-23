@@ -65,17 +65,17 @@ test('maps a missing directory to a friendly message', async () => {
   );
 });
 
-test('rejects a path that escapes the workspace', async () => {
-  let listed = false;
+test('lists a path outside the workspace (reads are unrestricted)', async () => {
+  let gotPath = '';
   const t = listDirTool(
     ctx({
-      list: async () => {
-        listed = true;
-        return [];
+      list: async (p) => {
+        gotPath = p;
+        return ['out.txt'];
       },
     }),
   );
   const out = await t.execute?.({ description: 'x', path: '../x' }, opts);
-  expect(out).toContain('escapes the workspace');
-  expect(listed).toBe(false);
+  expect(out).toBe('out.txt');
+  expect(gotPath).toBe('/x');
 });

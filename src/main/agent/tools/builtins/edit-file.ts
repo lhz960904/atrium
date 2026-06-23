@@ -1,6 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { resolveInWorkspace } from '../../sandbox/paths';
+import { resolveAbsolute } from '../../sandbox/paths';
 import type { ToolCtx } from '../context';
 import { fsErrorMessage } from '../output';
 
@@ -39,7 +39,7 @@ export const editFileTool = (ctx: ToolCtx) =>
         if (old_string === new_string)
           return 'Error: old_string and new_string are identical — nothing to change.';
 
-        const abs = resolveInWorkspace(ctx.workspaceRoot, path);
+        const abs = resolveAbsolute(ctx.workspaceRoot, path);
         const content = await ctx.sandbox.readFile(abs);
         const count = content.split(old_string).length - 1;
         if (count === 0)

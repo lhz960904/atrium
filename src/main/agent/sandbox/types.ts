@@ -5,8 +5,9 @@
  * This keeps tools unit-testable (inject a mock) and leaves a seam for future
  * sandbox backends (ACP / remote). LocalSandbox is the only impl for now.
  *
- * Paths are interpreted relative to the sandbox's workspace root; every impl
- * must reject escapes (`../` / absolute paths outside the root).
+ * Paths are interpreted relative to the sandbox's workspace root; absolute
+ * paths pass through. Reads may reach outside the root; the write boundary is
+ * enforced by the permission gate above the sandbox, not here.
  */
 export interface Sandbox {
   readFile(path: string): Promise<string>;

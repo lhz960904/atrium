@@ -3,16 +3,17 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { shouldIgnore } from './ignore';
 import { killProcessTree } from './kill-tree';
-import { resolveInWorkspace } from './paths';
+import { resolveAbsolute } from './paths';
 import type { Sandbox } from './types';
 
 const EXEC_TIMEOUT_MS = 120_000;
 
 /**
  * Local filesystem + shell sandbox rooted at a workspace directory. NOT a
- * security jail: it confines the *path* tools to the workspace (rejecting
- * `..`/absolute escapes) and runs commands with the user's own permissions —
- * the trust model of a local coding agent.
+ * security jail: relative paths resolve against the root and commands run with
+ * the user's own permissions — the trust model of a local coding agent. Reads
+ * may reach anywhere on disk; the workspace-write boundary is enforced upstream
+ * by the permission gate, not here.
  *
  * Returns raw content and throws on error; the tools layer truncates output
  * and turns errors into model-readable strings.
@@ -20,23 +21,19 @@ const EXEC_TIMEOUT_MS = 120_000;
 export class LocalSandbox implements Sandbox {
   constructor(private readonly root: string) {}
 
-  private resolveInside(p: string): string {
-    return resolveInWorkspace(this.root, p);
-  }
-
   async readFile(p: string): Promise<string> {
-    return readFile(this.resolveInside(p), 'utf8');
+    return readFile(resolveAbsolute(this.root, p), 'utf8');
   }
 
   async writeFile(p: string, content: string, append = false): Promise<{ bytes: number }> {
-    const abs = this.resolveInside(p);
+    const abs = resolveAbsolute(this.root, p);
     await mkdir(dirname(abs), { recursive: true });
     await writeFile(abs, content, { encoding: 'utf8', flag: append ? 'a' : 'w' });
     return { bytes: Buffer.byteLength(content, 'utf8') };
   }
 
   async list(p = '.', maxDepth = 2): Promise<string[]> {
-    const root = this.resolveInside(p);
+    const root = resolveAbsolute(this.root, p);
     const out: string[] = [];
     const walk = async (dir: string, rel: string, depth: number): Promise<void> => {
       const entries = await readdir(dir, { withFileTypes: true });

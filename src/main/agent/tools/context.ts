@@ -8,8 +8,9 @@ import type { Skill } from '../skills/types';
 
 /**
  * Injected into every tool factory. `workspaceRoot` lets path tools normalize
- * the model's path (relative or absolute) to an absolute one under the root
- * via resolveInWorkspace — the sandbox guards again as a safety net. `db` is
+ * the model's path (relative or absolute) to an absolute one against the root
+ * via resolveAbsolute; reads may reach outside it, while out-of-workspace
+ * writes are gated by the permission layer. `db` is
  * here for tools that need it (e.g. task, to list the available subagents).
  * `skills` are the ones discovered at startup, so the skill tool can load a
  * body by name; absent until discovery is wired, so it defaults to none.

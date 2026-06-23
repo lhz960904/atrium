@@ -78,17 +78,17 @@ test('maps fs error codes to friendly messages', async () => {
   );
 });
 
-test('rejects a path that escapes the workspace (tool-level guard)', async () => {
-  let read = false;
+test('reads a path outside the workspace (reads are unrestricted)', async () => {
+  let gotPath = '';
   const t = readFileTool(
     ctx({
-      readFile: async () => {
-        read = true;
-        return 'should not happen';
+      readFile: async (p) => {
+        gotPath = p;
+        return 'outside body';
       },
     }),
   );
   const out = await t.execute?.({ description: 'x', path: '../x' }, opts);
-  expect(out).toContain('escapes the workspace');
-  expect(read).toBe(false); // guarded before touching the sandbox
+  expect(out).toBe('outside body');
+  expect(gotPath).toBe('/x'); // resolved to absolute, no boundary rejection
 });

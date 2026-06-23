@@ -1,6 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { resolveInWorkspace } from '../../sandbox/paths';
+import { resolveAbsolute } from '../../sandbox/paths';
 import type { ToolCtx } from '../context';
 import { fsErrorMessage } from '../output';
 
@@ -21,7 +21,7 @@ export const writeFileTool = (ctx: ToolCtx) =>
     }),
     execute: async ({ path, content, append }) => {
       try {
-        const abs = resolveInWorkspace(ctx.workspaceRoot, path);
+        const abs = resolveAbsolute(ctx.workspaceRoot, path);
         const { bytes } = await ctx.sandbox.writeFile(abs, content, append ?? false);
         return `Wrote ${bytes} bytes to ${path}.`;
       } catch (err) {

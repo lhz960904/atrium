@@ -63,17 +63,17 @@ test('maps permission errors to a friendly message', async () => {
   );
 });
 
-test('rejects a path that escapes the workspace before touching the sandbox', async () => {
-  let wrote = false;
+test('writes outside the workspace (the boundary is the approval gate, not this tool)', async () => {
+  let gotPath = '';
   const t = writeFileTool(
     ctx({
-      writeFile: async () => {
-        wrote = true;
-        return { bytes: 0 };
+      writeFile: async (p, content) => {
+        gotPath = p;
+        return { bytes: Buffer.byteLength(content, 'utf8') };
       },
     }),
   );
   const out = await t.execute?.({ description: 'x', path: '../x', content: 'x' }, opts);
-  expect(out).toContain('escapes the workspace');
-  expect(wrote).toBe(false);
+  expect(gotPath).toBe('/x');
+  expect(out).toContain('1 bytes');
 });

@@ -4,7 +4,8 @@
  * directory later — kept as one builder for now.
  *
  * The workspace root is injected so the model can address files with absolute
- * paths (its natural mode, from Claude Code), all confined under this root.
+ * paths (its natural mode, from Claude Code); it's the default for tools and
+ * the write boundary, though reads may reach outside it.
  */
 /**
  * The workspace/paths rule shared by the main agent and subagents — any agent
@@ -12,7 +13,7 @@
  */
 export function workspaceGuidance(workspaceRoot: string): string {
   return `Your workspace is: ${workspaceRoot}
-File and shell tools operate inside this workspace. Use absolute paths under it (e.g. ${workspaceRoot}/notes.txt). Paths outside the workspace are rejected.`;
+File and shell tools default to this directory — address files with absolute paths (e.g. ${workspaceRoot}/notes.txt), and relative paths resolve against it. You can read files anywhere on the machine; writing outside the workspace asks the user for approval.`;
 }
 
 export function buildSystemPrompt(workspaceRoot: string, opts: { soul?: string } = {}): string {

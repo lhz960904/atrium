@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { resolveInWorkspace } from './paths';
+import { resolveAbsolute, resolveInWorkspace } from './paths';
 
 const ROOT = '/work/space';
 
@@ -23,4 +23,14 @@ test('rejects absolute paths outside the root', () => {
 
 test('rejects a sibling dir sharing a name prefix', () => {
   expect(() => resolveInWorkspace(ROOT, '../space-evil')).toThrow('escapes the workspace');
+});
+
+test('resolveAbsolute resolves under the root without a boundary check', () => {
+  expect(resolveAbsolute(ROOT, 'src/a.ts')).toBe('/work/space/src/a.ts');
+  expect(resolveAbsolute(ROOT, '.')).toBe(ROOT);
+});
+
+test('resolveAbsolute lets paths reach outside the root (reads + gated writes)', () => {
+  expect(resolveAbsolute(ROOT, '../secret')).toBe('/work/secret');
+  expect(resolveAbsolute(ROOT, '/etc/passwd')).toBe('/etc/passwd');
 });

@@ -140,13 +140,14 @@ test('maps fs error codes to friendly messages', async () => {
   ).toBe('Error: File not found: nope.ts');
 });
 
-test('rejects a path that escapes the workspace before touching the sandbox', async () => {
-  let read = false;
+test('edits a path outside the workspace (the boundary is the approval gate, not this tool)', async () => {
+  let wrotePath = '';
   const t = editFileTool(
     ctx({
-      readFile: async () => {
-        read = true;
-        return 'x';
+      readFile: async () => 'a',
+      writeFile: async (p, content) => {
+        wrotePath = p;
+        return { bytes: content.length };
       },
     }),
   );
@@ -154,6 +155,6 @@ test('rejects a path that escapes the workspace before touching the sandbox', as
     { description: 'd', path: '../x', old_string: 'a', new_string: 'b' },
     opts,
   );
-  expect(out).toContain('escapes the workspace');
-  expect(read).toBe(false);
+  expect(out).toBe('Edited ../x.');
+  expect(wrotePath).toBe('/x');
 });
