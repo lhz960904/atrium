@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { messages, threads } from '../../db/schema';
+import { messages, projects, threads } from '../../db/schema';
 import { getRunningThreadIds } from '../../server/resumable';
 import { publicProcedure, router } from '../trpc';
 
@@ -128,9 +128,25 @@ export const threadsRouter = router({
     ctx.db.update(threads).set({ archivedAt: new Date() }).where(eq(threads.id, input.id)).run();
   }),
 
-  /** Restore an archived thread back into the sidebar list. */
+  /**
+   * Restore an archived thread back into the sidebar list. If its project was
+   * archived too, revive the project — otherwise the thread would point at a
+   * hidden project and never show up.
+   */
   unarchive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    const thread = ctx.db
+      .select({ projectId: threads.projectId })
+      .from(threads)
+      .where(eq(threads.id, input.id))
+      .get();
     ctx.db.update(threads).set({ archivedAt: null }).where(eq(threads.id, input.id)).run();
+    if (thread?.projectId) {
+      ctx.db
+        .update(projects)
+        .set({ archivedAt: null })
+        .where(eq(projects.id, thread.projectId))
+        .run();
+    }
   }),
 
   /** Pin / unpin to the sidebar's Pinned section; doesn't reorder by recency. */

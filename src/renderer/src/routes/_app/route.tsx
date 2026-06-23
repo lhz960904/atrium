@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, useLocation } from '@tanstack/react-router';
 import { PanelLeft, PanelLeftDashed } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Sidebar } from '../../components/Sidebar';
+import { Sidebar } from '../../components/sidebar/Sidebar';
 import { useNavStore } from '../../state/nav-store';
 import { useSidebarStore } from '../../state/sidebar-store';
 

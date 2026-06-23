@@ -29,8 +29,13 @@ export function ArchivedSection(): React.JSX.Element {
 
   const unarchive = trpc.threads.unarchive.useMutation({
     onSuccess: async () => {
-      // Restored threads rejoin the sidebar and the active palette scope.
-      await Promise.all([utils.search.chats.invalidate(), utils.threads.list.invalidate()]);
+      // Restored threads rejoin the sidebar and the active palette scope; the
+      // project list refreshes too in case restoring revived an archived project.
+      await Promise.all([
+        utils.search.chats.invalidate(),
+        utils.threads.list.invalidate(),
+        utils.projects.list.invalidate(),
+      ]);
       toast.success(t('settings.archived.restored'));
     },
   });
