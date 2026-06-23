@@ -132,4 +132,13 @@ export const threadsRouter = router({
   unarchive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     ctx.db.update(threads).set({ archivedAt: null }).where(eq(threads.id, input.id)).run();
   }),
+
+  /** Pin / unpin to the sidebar's Pinned section; doesn't reorder by recency. */
+  pin: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    ctx.db.update(threads).set({ pinned: true }).where(eq(threads.id, input.id)).run();
+  }),
+
+  unpin: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    ctx.db.update(threads).set({ pinned: false }).where(eq(threads.id, input.id)).run();
+  }),
 });
