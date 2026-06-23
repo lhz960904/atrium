@@ -19,18 +19,20 @@ export function memoryDir(scope: MemoryScope, workspaceRoot: string): string {
   return join(memoryBase(), 'projects', encodeWorkspace(workspaceRoot));
 }
 
-// Workspace path → directory name (like Claude Code: '/' → '-'), so the dir name reverse-reads to the project.
+// Workspace path → directory name. Path segments are joined with '^', a character
+// folder names almost never contain, so the trailing segment reads back as the
+// project folder even when the name itself holds '-' or '.' (e.g. code-artisan).
 export function encodeWorkspace(workspaceRoot: string): string {
-  return workspaceRoot.replace(/[:\\/]+/g, '-');
+  return workspaceRoot.replace(/[:\\/]+/g, '^');
 }
 
 export type ProjectScope = { key: string; name: string };
 
-// The encoded key joined the path with '-', so the trailing segment is roughly the
-// workspace folder name. Lossy when the folder name itself contains '-', but good
-// enough for a settings label until we persist the real path alongside the memory.
+// The encoded key joins path segments with '^', so the trailing segment is the
+// workspace folder name — recoverable even when that name contains '-' or '.',
+// unless the folder name itself contains a '^' (rare enough to accept here).
 export function projectName(key: string): string {
-  return key.split('-').filter(Boolean).pop() || key;
+  return key.split('^').filter(Boolean).pop() || key;
 }
 
 export function mapProjects(dirNames: string[]): ProjectScope[] {
