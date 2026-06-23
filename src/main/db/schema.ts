@@ -17,6 +17,25 @@ export const threads = sqliteTable('threads', {
   /** When the user archived this thread; null = active. Archived threads drop
    *  out of the sidebar list but stay openable by id and keep their messages. */
   archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
+  /** Pinned to the top of the sidebar; the Pinned section mixes pinned threads
+   *  and pinned projects. */
+  pinned: integer({ mode: 'boolean' }).notNull().default(false),
+});
+
+/**
+ * A user-added project: a directory used as the workspace root for its threads.
+ * Threads reference it via threads.project_id with NO foreign key — delete and
+ * archive fan out to the project's threads explicitly in the router, so SQLite
+ * never has to rebuild the table to add an FK to an existing column. pinned
+ * shares the sidebar's Pinned section with threads; archivedAt mirrors threads.
+ */
+export const projects = sqliteTable('projects', {
+  id: text().primaryKey(),
+  path: text().notNull().unique(),
+  name: text().notNull(),
+  pinned: integer({ mode: 'boolean' }).notNull().default(false),
+  archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
+  createdAt: timestamp(),
 });
 
 export const messages = sqliteTable(
@@ -91,6 +110,8 @@ export const subagents = sqliteTable('subagents', {
 
 export type Thread = typeof threads.$inferSelect;
 export type NewThread = typeof threads.$inferInsert;
+export type Project = typeof projects.$inferSelect;
+export type NewProject = typeof projects.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
 export type Artifact = typeof artifacts.$inferSelect;
