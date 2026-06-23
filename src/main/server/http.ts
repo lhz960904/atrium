@@ -36,6 +36,7 @@ import {
   persistMessage,
   readAcpBinding,
   readAcpConfig,
+  resolveThreadWorkspace,
   resolveToolOutput,
   setThreadTitle,
   upsertMessage,
@@ -94,7 +95,7 @@ function resolveReviewerModel(
 export function startHttpServer(deps: {
   db: Db;
   token: string;
-  workspaceRoot: string;
+  projectlessRoot: string;
 }): Promise<ChatEndpoint> {
   const app = new Hono();
   // Long-running shells (dev servers, watchers) outlive a request, so the
@@ -137,16 +138,16 @@ export function startHttpServer(deps: {
     else if (message.role === 'assistant') upsertMessage(deps.db, threadId, message);
     const history = loadThreadMessages(deps.db, threadId);
 
+    // Resolve the thread's workspace per request: its project's directory, or
+    // the projectless fallback. Drives the sandbox, tools, and ACP spec below.
+    const workspaceRoot = resolveThreadWorkspace(deps.db, threadId, deps.projectlessRoot);
+
     const abort = new AbortController();
 
     // An external CLI agent (Claude Code / Codex / Gemini) handles the whole
     // turn over ACP, bypassing our own agent loop.
     if (getProviderManifest(providerId)?.kind === 'local-cli') {
-      const spec = resolveAcpSpec(
-        providerId,
-        deps.workspaceRoot,
-        readAcpConfig(deps.db, providerId),
-      );
+      const spec = resolveAcpSpec(providerId, workspaceRoot, readAcpConfig(deps.db, providerId));
       if (!spec) return c.text(`unknown local-cli provider ${providerId}`, 400);
       log.info(`turn ${providerId} → external agent (acp)`);
       // Resume the agent's prior session for this thread when the bound provider
@@ -193,20 +194,20 @@ export function startHttpServer(deps: {
       return new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS });
     }
 
-    const sandbox = new LocalSandbox(deps.workspaceRoot);
+    const sandbox = new LocalSandbox(workspaceRoot);
     const skills = getSkills();
     const mode = permissionMode ?? DEFAULT_PERMISSION_MODE;
     const agentStream = await runAgent({
       model: resolveModel(deps.db, providerId, modelId),
       messages: history,
-      workspaceRoot: deps.workspaceRoot,
+      workspaceRoot,
       threadId,
       db: deps.db,
       sandbox,
       abortSignal: abort.signal,
       tools: getTools({
         sandbox,
-        workspaceRoot: deps.workspaceRoot,
+        workspaceRoot,
         db: deps.db,
         skills,
         bgShells,

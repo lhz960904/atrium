@@ -104,10 +104,10 @@ app.whenReady().then(async () => {
     );
   }
 
-  // Agent workspace — fixed for now (aligned with ~/Documents/Codex); the
-  // tools read/write/exec only inside it.
-  const workspaceRoot = join(homedir(), 'Documents', 'Atrium');
-  mkdirSync(workspaceRoot, { recursive: true });
+  // Fallback workspace root for projectless conversations; project-scoped
+  // threads run in their project's directory instead, resolved per request.
+  const projectlessRoot = join(homedir(), 'Documents', 'Atrium');
+  mkdirSync(projectlessRoot, { recursive: true });
 
   // Discover skills before serving so the first turn already sees the index.
   await refreshSkills();
@@ -126,7 +126,7 @@ app.whenReady().then(async () => {
     },
   });
 
-  const chatEndpoint = await startHttpServer({ db, token: randomUUID(), workspaceRoot });
+  const chatEndpoint = await startHttpServer({ db, token: randomUUID(), projectlessRoot });
   serverEndpoint = chatEndpoint;
 
   app.on('browser-window-created', (_, window) => {

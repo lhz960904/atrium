@@ -1,7 +1,27 @@
 import type { UIMessage } from 'ai';
 import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../db';
-import { messages, providers, threads } from '../db/schema';
+import { messages, projects, providers, threads } from '../db/schema';
+
+/**
+ * The workspace root a thread runs in: its project's directory, or the
+ * projectless fallback when it has no project (or the project was deleted).
+ * All file tools, the sandbox, and the system prompt for a turn scope to this.
+ */
+export function resolveThreadWorkspace(db: Db, threadId: string, projectlessRoot: string): string {
+  const row = db
+    .select({ projectId: threads.projectId })
+    .from(threads)
+    .where(eq(threads.id, threadId))
+    .get();
+  if (!row?.projectId) return projectlessRoot;
+  const project = db
+    .select({ path: projects.path })
+    .from(projects)
+    .where(eq(projects.id, row.projectId))
+    .get();
+  return project?.path ?? projectlessRoot;
+}
 
 /** Load a thread's messages from the DB as UIMessages, oldest first. */
 export function loadThreadMessages(db: Db, threadId: string): UIMessage[] {
