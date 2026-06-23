@@ -31,3 +31,4 @@ src/renderer/src/lib/dev/real-message.json
 .idea
 *.swp
 .tanstack
+.playwright-mcp
