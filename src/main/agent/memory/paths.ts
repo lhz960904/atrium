@@ -7,10 +7,6 @@ export const MEMORY_INDEX = 'MEMORY.md';
 export const MEMORY_SCOPES: MemoryScope[] = ['global', 'project']; // broad → specific
 export const MEMORY_INDEX_BUDGET = 25 * 1024; // injected index byte budget, per scope
 
-export const DREAM_GATES = { minHours: 24, minSessions: 5 }; // borrowed from Claude's auto-dream
-export const DREAM_SCAN_THROTTLE_MS = 10 * 60_000; // don't re-scan a dir within this window
-export const DREAM_SCAN_INTERVAL_MS = 30 * 60_000; // background sweep period
-
 // Lazy require: electron only exists in the app runtime, so importing it at the
 // top would make this module (and the memory tool) unloadable under bun/tests.
 function memoryBase(): string {

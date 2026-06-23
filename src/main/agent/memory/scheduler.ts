@@ -1,10 +1,11 @@
 import type { LanguageModel } from 'ai';
 import { createLogger } from '../../log';
 import { acquireLock, releaseLock } from './lock';
-import { DREAM_SCAN_INTERVAL_MS, listMemoryDirs } from './paths';
+import { listMemoryDirs } from './paths';
 import { shouldConsolidate } from './state';
 
 const log = createLogger('memory');
+const DREAM_SCAN_INTERVAL_MS = 30 * 60_000; // background sweep period
 
 export type DreamScheduler = {
   runDream: (dir: string, model: LanguageModel) => Promise<void>;

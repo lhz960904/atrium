@@ -1,9 +1,6 @@
 export { runDream } from './dream';
 export { acquireLock, releaseLock } from './lock';
 export {
-  DREAM_GATES,
-  DREAM_SCAN_INTERVAL_MS,
-  DREAM_SCAN_THROTTLE_MS,
   encodeWorkspace,
   listMemoryDirs,
   MEMORY_INDEX,

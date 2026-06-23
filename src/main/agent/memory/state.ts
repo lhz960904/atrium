@@ -1,6 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DREAM_GATES, DREAM_SCAN_THROTTLE_MS } from './paths';
+
+const DREAM_GATES = { minHours: 24, minSessions: 5 }; // borrowed from Claude's auto-dream
+const DREAM_SCAN_THROTTLE_MS = 10 * 60_000; // don't re-scan a dir within this window
 
 export type MemoryState = {
   lastConsolidatedAt: number;
