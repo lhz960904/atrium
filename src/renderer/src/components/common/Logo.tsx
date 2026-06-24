@@ -21,7 +21,14 @@ export function Logo({ className, variant = 'color' }: LogoProps): React.JSX.Ele
   if (variant === 'mono') {
     const maskId = `atrium-mono-${id}`;
     return (
-      <svg width="24" height="24" viewBox="0 0 96 96" fill="none" className={className} aria-hidden>
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 96 96"
+        fill="none"
+        className={className}
+        aria-hidden="true"
+      >
         <defs>
           <mask id={maskId}>
             <rect width="96" height="96" rx="22" fill="#fff" />
@@ -45,7 +52,14 @@ export function Logo({ className, variant = 'color' }: LogoProps): React.JSX.Ele
   const bgId = `atrium-bg-${id}`;
   const shineId = `atrium-shine-${id}`;
   return (
-    <svg width="24" height="24" viewBox="0 0 96 96" fill="none" className={className} aria-hidden>
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 96 96"
+      fill="none"
+      className={className}
+      aria-hidden="true"
+    >
       <defs>
         <linearGradient id={bgId} x1="0" y1="0" x2="96" y2="96" gradientUnits="userSpaceOnUse">
           <stop offset="0%" stopColor="#8487FF" />
