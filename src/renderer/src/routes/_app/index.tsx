@@ -1,12 +1,15 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { Handshake, MessageCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Attachment } from '../../components/chat/composer/AttachmentChip';
 import { Composer } from '../../components/chat/composer/Composer';
+import { ProjectPicker } from '../../components/chat/composer/ProjectPicker';
 import { timeAgo } from '../../lib/time';
 import { trpc } from '../../lib/trpc';
 import { useStartOnboarding } from '../../lib/use-onboarding';
 import { usePendingInput } from '../../state/pending-input-store';
+import { usePendingProject } from '../../state/pending-project-store';
 
 /** How many recent chats the home "continue" list shows. */
 const RECENT_LIMIT = 5;
@@ -45,6 +48,20 @@ function HomeView(): React.JSX.Element {
   const runningSet = new Set(running);
   const recent = (threads ?? []).slice(0, RECENT_LIMIT);
 
+  // A sidebar project's "new chat" sets the pending project; seed the picker from
+  // it — live, so it updates even when home is already open — then clear it.
+  // Projectless new-chat entries leave it null, so the picker defaults to none.
+  const requested = usePendingProject((s) => s.projectId);
+  const [projectId, setProjectId] = useState<string | null>(
+    () => usePendingProject.getState().projectId,
+  );
+  useEffect(() => {
+    if (requested !== null) {
+      setProjectId(requested);
+      usePendingProject.getState().consume();
+    }
+  }, [requested]);
+
   // Create an empty thread, stash the typed text as a draft, then navigate;
   // the chat view auto-sends the draft once its model is ready.
   const createThread = trpc.threads.create.useMutation({
@@ -59,7 +76,7 @@ function HomeView(): React.JSX.Element {
     if (trimmed.length === 0 && attachments.length === 0) return;
     usePendingInput.getState().set({ text: trimmed, attachments });
     const title = trimmed || attachments[0]?.name || t('home.newChat');
-    createThread.mutate({ title: title.slice(0, 60) });
+    createThread.mutate({ title: title.slice(0, 60), projectId: projectId ?? undefined });
   };
 
   const { start: startOnboarding, isPending: onboardingPending } = useStartOnboarding();
@@ -74,8 +91,13 @@ function HomeView(): React.JSX.Element {
           {greeting}
         </h1>
 
-        {/* Composer */}
-        <Composer autoFocus onSubmit={handleSubmit} disabled={createThread.isLoading} />
+        {/* Composer — the folder button in its toolbar picks the new chat's project */}
+        <Composer
+          autoFocus
+          onSubmit={handleSubmit}
+          disabled={createThread.isLoading}
+          toolbarLeft={<ProjectPicker value={projectId} onChange={setProjectId} />}
+        />
 
         {/* First run: invite the user to get acquainted (writes SOUL.md / USER.md). */}
         {needsOnboarding && (

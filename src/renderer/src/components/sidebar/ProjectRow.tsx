@@ -2,6 +2,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, SquarePen } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { usePendingProject } from '../../state/pending-project-store';
 import { ProjectMenu } from './ProjectMenu';
 import { RowAction } from './primitives';
 import type { ProjectItem, ThreadItem } from './types';
@@ -51,9 +52,11 @@ export function ProjectRow({
           <RowAction
             title={t('home.newChat')}
             icon={<SquarePen className="size-[13px]" />}
-            // Project-scoped chat creation lands in a later step; for now this
-            // opens a new chat from home.
-            onClick={() => navigate({ to: '/' })}
+            // Seed the home composer with this project, then open it.
+            onClick={() => {
+              usePendingProject.getState().set(project.id);
+              navigate({ to: '/' });
+            }}
           />
         </span>
       </div>
@@ -63,11 +66,13 @@ export function ProjectRow({
       >
         <div className="overflow-hidden">
           {threads.length === 0 ? (
-            <div className="px-3 py-1 pl-8 text-fg-disabled text-sm">
+            <div className="px-3 py-1 pl-[35px] text-fg-disabled text-sm">
               {t('sidebar.projectNoChats')}
             </div>
           ) : (
-            <div className="flex flex-col gap-1 pl-3">{threads.map(renderThread)}</div>
+            // Indent by the project's folder icon (15px) + gap (8px) so a thread's
+            // text lines up under the project name instead of sitting further left.
+            <div className="flex flex-col gap-1 pl-[23px]">{threads.map(renderThread)}</div>
           )}
         </div>
       </div>

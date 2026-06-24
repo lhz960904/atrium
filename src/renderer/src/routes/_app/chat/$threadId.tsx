@@ -61,6 +61,7 @@ function ChatView(): React.JSX.Element {
     <ChatRunner
       key={threadId}
       threadId={threadId}
+      projectId={thread.data.projectId}
       title={thread.data.title ?? t('common.untitledChat')}
       initialMessages={initialMessages}
       model={selected}
@@ -71,12 +72,14 @@ function ChatView(): React.JSX.Element {
 
 function ChatRunner({
   threadId,
+  projectId,
   title,
   initialMessages,
   model,
   endpoint,
 }: {
   threadId: string;
+  projectId: string | null;
   title: string;
   initialMessages: AtriumUIMessage[];
   model: SelectedModel | null;
@@ -232,6 +235,7 @@ function ChatRunner({
   return (
     <ChatThread
       threadId={threadId}
+      projectId={projectId}
       title={title}
       messages={messages}
       status={status}

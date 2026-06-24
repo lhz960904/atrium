@@ -17,6 +17,7 @@ import { ChatHeader } from './ChatHeader';
 import { CompactionDivider, CompactionProgress } from './CompactionDivider';
 import type { Attachment } from './composer/AttachmentChip';
 import { Composer } from './composer/Composer';
+import { ProjectBadge } from './composer/ProjectBadge';
 import type { SlashCommand } from './composer/slash-menu';
 import { ImageGeneratingProgress } from './ImageGeneratingProgress';
 import { PlanPanel } from './PlanPanel';
@@ -25,6 +26,8 @@ import { UserMessage } from './UserMessage';
 
 type ChatThreadProps = {
   threadId: string;
+  /** The thread's project (its working directory), or null for projectless. */
+  projectId: string | null;
   title: string;
   messages: AtriumUIMessage[];
   status: ChatStatus;
@@ -91,6 +94,7 @@ function lastAssistantHasContent(messages: AtriumUIMessage[]): boolean {
 
 export function ChatThread({
   threadId,
+  projectId,
   title,
   messages,
   status,
@@ -225,6 +229,7 @@ export function ChatThread({
             commands={commands}
             onSubmit={onSend}
             onStop={onStop}
+            toolbarLeft={<ProjectBadge projectId={projectId} />}
           />
         </div>
       </div>

@@ -30,6 +30,8 @@ type ComposerProps = {
   streaming?: boolean;
   /** Stop the in-flight generation (abort). */
   onStop?: () => void;
+  /** Extra control rendered next to the attach button (e.g. the project picker). */
+  toolbarLeft?: React.ReactNode;
 };
 
 export const Composer = memo(function Composer({
@@ -42,6 +44,7 @@ export const Composer = memo(function Composer({
   commands,
   streaming = false,
   onStop,
+  toolbarLeft,
 }: ComposerProps): React.JSX.Element {
   const { t } = useTranslation();
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -175,6 +178,7 @@ export const Composer = memo(function Composer({
         >
           <Plus className="size-[14px]" />
         </button>
+        {toolbarLeft}
         <PermissionPicker />
         <span className="flex-1" />
         {/* refocus the editor after a model pick (popover steals focus) */}
