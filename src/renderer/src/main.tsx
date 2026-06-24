@@ -1,44 +1,18 @@
-import './assets/styles.css';
-import './i18n'; // initialize i18next (best-guess language; useLanguage corrects from settings)
-import './state/theme-store'; // initialize theme from persisted store + system listener
-
-import { QueryClientProvider } from '@tanstack/react-query';
-import { createHashHistory, createRouter, RouterProvider } from '@tanstack/react-router';
-import { ipcLink } from 'electron-trpc/renderer';
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-import { queryClient } from './lib/query-client';
-import { trpc } from './lib/trpc';
-import { routeTree } from './routeTree.gen';
-
-// Hash history so routing works when the packaged app loads the renderer over
-// file:// — browser history would read the on-disk index.html path as the route
-// and resolve to Not Found.
-const router = createRouter({
-  routeTree,
-  defaultPreload: 'intent',
-  history: createHashHistory(),
-});
-
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router;
+/**
+ * Renderer entry. React Scan (dev-only) instruments React by patching the
+ * DevTools hook, and that must happen before react-dom's reconciler initializes
+ * — which it does the moment the app module (with its react-dom import) is
+ * evaluated. So the app can't be imported statically here: we start React Scan
+ * first, then dynamically import and mount the app. The dev branch is
+ * tree-shaken from the production bundle.
+ */
+async function bootstrap(): Promise<void> {
+  if (import.meta.env.DEV) {
+    const { scan } = await import('react-scan');
+    scan();
   }
+  const { mount } = await import('./app');
+  mount();
 }
 
-const trpcClient = trpc.createClient({
-  links: [ipcLink()],
-});
-
-const rootEl = document.getElementById('root');
-if (!rootEl) throw new Error('Missing #root');
-
-createRoot(rootEl).render(
-  <StrictMode>
-    <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </trpc.Provider>
-  </StrictMode>,
-);
+void bootstrap();
