@@ -17,12 +17,22 @@ export type DreamScheduler = {
 
 /** One pass: consolidate every memory dir that's due, each guarded by the lock. */
 export async function dreamSweep(opts: DreamScheduler, now: number): Promise<void> {
-  const model = opts.model();
-  if (!model) return;
   const dirs = await (opts.listDirs ?? listMemoryDirs)();
+  let model: LanguageModel | null = null;
   for (const dir of dirs) {
     if (!(await shouldConsolidate(dir, now))) continue;
     if (!(await acquireLock(dir, now))) continue;
+    // Resolve the model only once a dir is actually due and locked. model()
+    // decrypts the provider key, which reaches into the OS keychain; resolving it
+    // up-front would prompt for keychain access on every idle sweep — including
+    // the one that runs at app launch, when nothing needs consolidating.
+    if (model === null) {
+      model = opts.model();
+      if (!model) {
+        await releaseLock(dir);
+        return;
+      }
+    }
     void opts
       .runDream(dir, model)
       .catch((err) => log.error(`dream failed: ${dir}`, err))
