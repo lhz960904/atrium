@@ -72,6 +72,9 @@ let serverEndpoint: ChatEndpoint | undefined;
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.atrium.app');
+  // Dev runs from the Electron binary, so the Dock shows its default icon until
+  // we set ours explicitly; packaged macOS builds already carry build/icon.icns.
+  if (process.platform === 'darwin') app.dock?.setIcon(icon);
   initLogging();
 
   const db = openDb();
