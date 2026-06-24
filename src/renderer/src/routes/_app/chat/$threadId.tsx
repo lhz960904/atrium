@@ -8,9 +8,6 @@ import { ChatThread } from '../../../components/chat/ChatThread';
 import type { Attachment } from '../../../components/chat/composer/AttachmentChip';
 import { useCompactCommand } from '../../../components/chat/use-compact-command';
 import { getThreadChat } from '../../../lib/chat-store';
-import '../../../lib/dev/js-profiler';
-import { perf } from '../../../lib/dev/perf-recorder';
-import { useStressRepro } from '../../../lib/dev/use-stress-repro';
 import { getActivePlan } from '../../../lib/plan';
 import { trpc } from '../../../lib/trpc';
 import { useApprovals } from '../../../lib/use-approvals';
@@ -117,20 +114,6 @@ function ChatRunner({
     stop,
     error,
   } = useChat<AtriumUIMessage>({ chat, resume, experimental_throttle: 50 });
-
-  // Dev-only: window.__atriumStress to reproduce long-message render jank.
-  useStressRepro(setMessages);
-
-  // Dev-only: time switching into this thread (first render → paint).
-  const perfThreadRef = useRef<string | null>(null);
-  if (import.meta.env.DEV && perfThreadRef.current !== threadId) {
-    perfThreadRef.current = threadId;
-    perf.markThreadStart();
-  }
-  // biome-ignore lint/correctness/useExhaustiveDependencies: measure once per thread switch, not per message tick
-  useEffect(() => {
-    if (import.meta.env.DEV) perf.measureThreadSwitch(`(${messages.length} msgs)`);
-  }, [threadId]);
 
   // Stopping: detach this client immediately, then tell main to abort the run
   // (the producer is decoupled for resume, so stop() alone won't reach it).
