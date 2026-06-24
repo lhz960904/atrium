@@ -3,14 +3,14 @@ import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
-import { app, BrowserWindow, safeStorage, shell } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
 import { runDream, startDreamScheduler } from './agent/memory';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
 import { refreshSkills } from './agent/skills/registry';
 import { closeDb, openDb } from './db';
-import { createLogger, initLogging } from './log';
+import { initLogging } from './log';
 import { resolveModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
 import { getSettings, openSettings } from './settings/conf';
@@ -81,12 +81,6 @@ app.whenReady().then(async () => {
   // snapshot), then let it refresh from the litellm catalog in the background.
   populateModelCatalog();
   startModelCatalogRefresh();
-
-  if (!safeStorage.isEncryptionAvailable()) {
-    createLogger('app').warn(
-      'safeStorage encryption unavailable — provider credential writes will throw.',
-    );
-  }
 
   // Fallback workspace root for projectless conversations; project-scoped
   // threads run in their project's directory instead, resolved per request.
