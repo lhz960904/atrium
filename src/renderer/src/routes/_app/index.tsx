@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { Handshake, MessageCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Attachment } from '../../components/chat/composer/AttachmentChip';
 import { Composer } from '../../components/chat/composer/Composer';
@@ -64,16 +64,24 @@ function HomeView(): React.JSX.Element {
 
   // Create an empty thread, stash the typed text as a draft, then navigate;
   // the chat view auto-sends the draft once its model is ready.
+  // The ref is a synchronous re-entrancy lock: isLoading only flips next render,
+  // so a rapid second submit would otherwise create a duplicate thread.
+  const submittingRef = useRef(false);
   const createThread = trpc.threads.create.useMutation({
     onSuccess: async ({ id }) => {
       await utils.threads.list.invalidate();
       navigate({ to: '/chat/$threadId', params: { threadId: id } });
+    },
+    onError: () => {
+      submittingRef.current = false;
     },
   });
 
   const handleSubmit = (text: string, attachments: Attachment[]): void => {
     const trimmed = text.trim();
     if (trimmed.length === 0 && attachments.length === 0) return;
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     usePendingInput.getState().set({ text: trimmed, attachments });
     const title = trimmed || attachments[0]?.name || t('home.newChat');
     createThread.mutate({ title: title.slice(0, 60), projectId: projectId ?? undefined });
