@@ -2,15 +2,20 @@ import type { AgentMiddleware } from '../types';
 
 /**
  * Stamps per-message observability onto the UIMessage: createdAt at the start,
- * durationMs + totalTokens + contextTokens at the finish. Holds run state in
+ * durationMs + token breakdown + contextTokens at the finish. Holds run state in
  * closure (one instance per run), so it must not be shared across runs.
  *
- * `totalTokens` is cumulative across steps (a cost figure). `contextTokens` is
- * the last step's input + output — the size of the prompt at turn end, which is
- * the accurate base for compaction's threshold check (cumulative usage would
- * overcount a multi-step tool loop several times over).
+ * `totalTokens` is cumulative across steps (a cost figure). `inputTokens` is
+ * inclusive of cache read + write (AI SDK semantics); the cache split is carried
+ * separately so the UI can show cost and cache-hit ratio. `contextTokens` is the
+ * last step's input + output — the size of the prompt at turn end, the accurate
+ * base for compaction's threshold check (cumulative usage would overcount a
+ * multi-step tool loop several times over).
  */
-export function metadataMiddleware(): AgentMiddleware {
+export function metadataMiddleware(model?: {
+  providerId: string;
+  modelId: string;
+}): AgentMiddleware {
   let startedAt = 0;
   let contextTokens: number | undefined;
   return {
@@ -25,9 +30,16 @@ export function metadataMiddleware(): AgentMiddleware {
         return undefined;
       }
       if (part.type === 'finish') {
+        const u = part.totalUsage;
         return {
           durationMs: Date.now() - startedAt,
-          totalTokens: part.totalUsage.totalTokens,
+          providerId: model?.providerId,
+          modelId: model?.modelId,
+          totalTokens: u.totalTokens,
+          inputTokens: u.inputTokens,
+          outputTokens: u.outputTokens,
+          cacheReadTokens: u.inputTokenDetails?.cacheReadTokens,
+          cacheCreationTokens: u.inputTokenDetails?.cacheWriteTokens,
           contextTokens,
         };
       }

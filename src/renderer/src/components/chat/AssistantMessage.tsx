@@ -3,6 +3,7 @@ import type { ClarifyResult } from '@shared/chat-types';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildAssistantView } from '../../lib/assistant-view';
+import { formatTokens } from '../../lib/format';
 import { ClarifyCard } from './ClarifyCard';
 import { CopyButton } from './CopyButton';
 import { GeneratedImage } from './GeneratedImage';
@@ -63,6 +64,11 @@ export const AssistantMessage = memo(function AssistantMessage({
 
   const hasFinal = view.final.length > 0;
   const durationMs = message.metadata?.durationMs;
+  const totalTokens = message.metadata?.totalTokens;
+  // A pure-answer turn (no thinking, no tool trace) renders no trace header, so
+  // its token total would be invisible — surface it in the hover footer instead.
+  const bottomTokens =
+    view.thinking.length === 0 && view.trace.length === 0 ? totalTokens : undefined;
   // The textual answer — the final narrative after any tool trace. Only this
   // gets a copy button; the tool-call trace above it doesn't.
   const answer = view.final
@@ -79,6 +85,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           hasFinal={hasFinal || view.trace.length > 0}
           // The whole-turn duration equals thinking time only when no tool ran.
           durationMs={view.toolCount === 0 ? durationMs : undefined}
+          totalTokens={view.toolCount === 0 ? totalTokens : undefined}
           onAnswer={onAnswer}
         />
       )}
@@ -90,6 +97,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           streaming={false}
           hasFinal={hasFinal}
           durationMs={durationMs}
+          totalTokens={totalTokens}
           onAnswer={onAnswer}
         />
       )}
@@ -116,9 +124,14 @@ export const AssistantMessage = memo(function AssistantMessage({
           />
         ) : null,
       )}
-      {answer.length > 0 && (
-        <div className="opacity-0 transition-opacity group-hover:opacity-100">
-          <CopyButton text={answer} />
+      {(answer.length > 0 || bottomTokens != null) && (
+        <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+          {answer.length > 0 && <CopyButton text={answer} />}
+          {bottomTokens != null && (
+            <span className="text-fg-disabled text-xs">
+              {t('trace.tokens', { tokens: formatTokens(bottomTokens) })}
+            </span>
+          )}
         </div>
       )}
     </div>

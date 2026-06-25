@@ -35,9 +35,9 @@ export function ProjectBadge({ projectId }: { projectId: string | null }): React
       <button
         type="button"
         aria-disabled
-        className="flex cursor-default items-center gap-1.5 rounded-md px-2 py-1 text-fg-tertiary text-sm"
+        className="flex h-7 cursor-default items-center gap-1.5 rounded-md px-2.5 text-fg-tertiary text-sm"
       >
-        <Folder className="size-[13px] shrink-0" />
+        <Folder className="size-[14px] shrink-0" />
         <span className="max-w-[160px] truncate">
           {active ? project.name : t('composer.noProject')}
         </span>

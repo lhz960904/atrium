@@ -32,6 +32,8 @@ type ComposerProps = {
   onStop?: () => void;
   /** Extra control rendered next to the attach button (e.g. the project picker). */
   toolbarLeft?: React.ReactNode;
+  /** Status readout rendered just after the permission picker (e.g. the token counter). */
+  toolbarStatus?: React.ReactNode;
 };
 
 export const Composer = memo(function Composer({
@@ -45,6 +47,7 @@ export const Composer = memo(function Composer({
   streaming = false,
   onStop,
   toolbarLeft,
+  toolbarStatus,
 }: ComposerProps): React.JSX.Element {
   const { t } = useTranslation();
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -174,12 +177,13 @@ export const Composer = memo(function Composer({
           type="button"
           title={t('composer.attach')}
           onClick={() => fileInputRef.current?.click()}
-          className="inline-flex items-center rounded-md p-1.5 text-fg-tertiary hover:bg-elevated hover:text-fg-secondary"
+          className="inline-flex size-7 items-center justify-center rounded-md text-fg-tertiary hover:bg-elevated hover:text-fg-secondary"
         >
           <Plus className="size-[14px]" />
         </button>
         {toolbarLeft}
         <PermissionPicker />
+        {toolbarStatus}
         <span className="flex-1" />
         {/* refocus the editor after a model pick (popover steals focus) */}
         <ModelPicker
@@ -193,7 +197,7 @@ export const Composer = memo(function Composer({
             type="button"
             title={t('composer.stop')}
             onClick={onStop}
-            className="rounded-md bg-danger p-1.5 text-fg-on-accent hover:bg-danger/90"
+            className="inline-flex size-7 items-center justify-center rounded-md bg-danger text-fg-on-accent hover:bg-danger/90"
           >
             <Square className="size-[11px]" fill="currentColor" />
           </button>
@@ -203,7 +207,7 @@ export const Composer = memo(function Composer({
             title={t('composer.send')}
             onClick={handleSend}
             disabled={!canSend}
-            className="rounded-md bg-accent p-1.5 text-fg-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
+            className="inline-flex size-7 items-center justify-center rounded-md bg-accent text-fg-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
           >
             <Send className="size-[14px]" />
           </button>

@@ -23,7 +23,7 @@ export function PermissionPicker(): React.JSX.Element {
       <Popover.Trigger asChild>
         <button
           type="button"
-          className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-elevated ${danger ? 'text-warning hover:text-warning' : 'text-fg-tertiary hover:text-fg-secondary'}`}
+          className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm hover:bg-elevated ${danger ? 'text-warning hover:text-warning' : 'text-fg-tertiary hover:text-fg-secondary'}`}
         >
           <Icon className="size-[14px] shrink-0" />
           <span>{t(current.labelKey)}</span>

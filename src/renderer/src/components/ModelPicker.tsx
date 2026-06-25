@@ -51,7 +51,7 @@ export function ModelPicker({
   const triggerClass =
     variant === 'field'
       ? 'flex w-full items-center justify-between gap-1.5 rounded-lg border border-border-default bg-surface px-3 py-2 text-fg-primary text-sm hover:border-border-strong'
-      : 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-fg-tertiary text-sm hover:bg-elevated hover:text-fg-secondary';
+      : 'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-fg-tertiary text-sm hover:bg-elevated hover:text-fg-secondary';
   // field: match the trigger width; inline (composer): a fixed, right-aligned menu.
   const widthClass = variant === 'field' ? 'w-[var(--radix-popover-trigger-width)]' : 'w-80';
 

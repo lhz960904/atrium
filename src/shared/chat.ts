@@ -71,7 +71,20 @@ export type AcpPermissionDecision = Exclude<PermissionOptionKind, 'reject_always
 export type AtriumMessageMetadata = {
   createdAt?: number;
   durationMs?: number;
+  /** The model that produced this turn — fixed within a turn, but can change
+   *  between turns when the user switches. Keys per-message cost + the context
+   *  window denominator; a turn's tokens are all priced at this model's rates. */
+  providerId?: string;
+  modelId?: string;
   totalTokens?: number;
+  /** Turn-total input tokens (inclusive of cache read + write), from totalUsage. */
+  inputTokens?: number;
+  /** Turn-total output tokens, from totalUsage. */
+  outputTokens?: number;
+  /** Cached input tokens read this turn (the 0.1× cheap ones) — cache-hit signal. */
+  cacheReadTokens?: number;
+  /** Cached input tokens written this turn (the 1.25× cache-creation ones). */
+  cacheCreationTokens?: number;
   /** Prompt tokens at turn end (last step input+output) — compaction's counting base. */
   contextTokens?: number;
   /** Marks the persisted compaction checkpoint pair (summary + its ack). */

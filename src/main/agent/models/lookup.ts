@@ -1,4 +1,4 @@
-import type { Modality, ModelCapabilities, ModelInfo, ModelsCatalog } from './types';
+import type { Modality, ModelCapabilities, ModelInfo, ModelPricing, ModelsCatalog } from './types';
 
 /** Conservative window for ids the dataset doesn't know — compact early, never overflow. */
 export const FALLBACK_CONTEXT_TOKENS = 128_000;
@@ -32,6 +32,16 @@ export function findModelInfo(catalog: ModelsCatalog, modelId: string): ModelInf
 export function maxContextTokensFrom(catalog: ModelsCatalog, modelId: string): number {
   const info = findModelInfo(catalog, modelId);
   return info?.max_input_tokens ?? info?.max_tokens ?? FALLBACK_CONTEXT_TOKENS;
+}
+
+export function modelPricingFrom(catalog: ModelsCatalog, modelId: string): ModelPricing {
+  const info = findModelInfo(catalog, modelId);
+  return {
+    input: info?.input_cost_per_token ?? 0,
+    output: info?.output_cost_per_token ?? 0,
+    cacheRead: info?.cache_read_input_token_cost ?? 0,
+    cacheCreation: info?.cache_creation_input_token_cost ?? 0,
+  };
 }
 
 export function capabilitiesFrom(catalog: ModelsCatalog, modelId: string): ModelCapabilities {

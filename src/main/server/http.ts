@@ -234,7 +234,7 @@ export function startHttpServer(deps: {
         // compaction could fold it) — otherwise the title summarizes the skill
         // index instead of the user's prompt.
         titleMiddleware(setThreadTitle),
-        metadataMiddleware(),
+        metadataMiddleware({ providerId, modelId }),
         compactionMiddleware({
           maxContextTokens,
           persist: persistMessage,

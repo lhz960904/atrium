@@ -19,6 +19,7 @@ import type { Attachment } from './composer/AttachmentChip';
 import { Composer } from './composer/Composer';
 import { ProjectBadge } from './composer/ProjectBadge';
 import type { SlashCommand } from './composer/slash-menu';
+import { TokenCounter } from './composer/TokenCounter';
 import { ImageGeneratingProgress } from './ImageGeneratingProgress';
 import { PlanPanel } from './PlanPanel';
 import { TurnLoading } from './TurnLoading';
@@ -230,6 +231,7 @@ export function ChatThread({
             onSubmit={onSend}
             onStop={onStop}
             toolbarLeft={<ProjectBadge projectId={projectId} />}
+            toolbarStatus={<TokenCounter messages={messages} />}
           />
         </div>
       </div>

@@ -22,6 +22,19 @@ export type ModelInfo = {
   supports_function_calling?: boolean;
   supports_reasoning?: boolean;
   supports_pdf_input?: boolean;
+  /** USD per token. Cache rates are the discounted (read) / surcharged (write) tiers. */
+  input_cost_per_token?: number;
+  output_cost_per_token?: number;
+  cache_read_input_token_cost?: number;
+  cache_creation_input_token_cost?: number;
+};
+
+/** Per-token USD rates Atrium prices a turn with (0 when the dataset omits them). */
+export type ModelPricing = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheCreation: number;
 };
 
 /** litellm's file shape: a flat map keyed by model id. */

@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { app } from 'electron';
 import { createLogger } from '../../log';
 import snapshotData from './litellm.snapshot.json';
-import { capabilitiesFrom, maxContextTokensFrom } from './lookup';
-import type { ModelCapabilities, ModelsCatalog } from './types';
+import { capabilitiesFrom, maxContextTokensFrom, modelPricingFrom } from './lookup';
+import type { ModelCapabilities, ModelPricing, ModelsCatalog } from './types';
 
 const log = createLogger('models');
 
@@ -89,6 +89,10 @@ export function startModelCatalogRefresh(): void {
 
 export function maxContextTokens(modelId: string): number {
   return maxContextTokensFrom(catalog, modelId);
+}
+
+export function modelPricing(modelId: string): ModelPricing {
+  return modelPricingFrom(catalog, modelId);
 }
 
 export function modelCapabilities(modelId: string): ModelCapabilities {

@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ViewSegment } from '../../lib/assistant-view';
+import { formatTokens } from '../../lib/format';
 import { LiveLabel } from './LiveLabel';
 import { SegmentList } from './SegmentList';
 
@@ -17,6 +18,8 @@ type TraceBlockProps = {
   hasFinal: boolean;
   createdAt?: number;
   durationMs?: number;
+  /** Turn-total tokens, shown next to the duration once the turn ends. */
+  totalTokens?: number;
   onAnswer: (toolCallId: string, result: ClarifyResult) => void;
 };
 
@@ -34,6 +37,7 @@ export function TraceBlock({
   hasFinal,
   createdAt,
   durationMs,
+  totalTokens,
   onAnswer,
 }: TraceBlockProps): React.JSX.Element {
   const { t } = useTranslation();
@@ -66,6 +70,12 @@ export function TraceBlock({
                 <span className="text-fg-disabled">
                   {' '}
                   · {t('trace.steps', { count: toolCount })}
+                </span>
+              )}
+              {totalTokens != null && (
+                <span className="text-fg-disabled">
+                  {' '}
+                  · {t('trace.tokens', { tokens: formatTokens(totalTokens) })}
                 </span>
               )}
             </span>
