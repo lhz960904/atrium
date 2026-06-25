@@ -12,6 +12,13 @@ export default defineConfig({
         '@shared': resolve('src/shared'),
       },
     },
+    build: {
+      rollupOptions: {
+        // linkedom 的可选 peer 依赖；不 external 时 Vite 会生成顶层 throw 桩，dev 不 tree-shake 会直接崩。
+        // external 后保留原始 require，由 linkedom 自身 try/catch 回退到 canvas-shim。
+        external: ['canvas'],
+      },
+    },
   },
   preload: {
     resolve: {
