@@ -58,7 +58,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
     sandbox: opts.sandbox,
     workspaceRoot: opts.workspaceRoot,
     request: {
-      system: buildSystemPrompt(opts.workspaceRoot, { soul }),
+      system: buildSystemPrompt(opts.workspaceRoot, { soul, platform: process.platform }),
       messages: opts.messages,
       tools: opts.tools,
     },
