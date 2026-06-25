@@ -1,3 +1,5 @@
+import type { PermissionMode } from '@shared/permissions';
+
 /**
  * The workspace/paths rule shared by the main agent and subagents — any agent
  * with file/shell tools needs it to address files correctly.
@@ -19,6 +21,21 @@ function platformLabel(platform: NodeJS.Platform): string {
       return platform;
   }
 }
+
+/**
+ * The gate enforces the permission mode; this note only tells the model how
+ * approvals behave right now, so it doesn't ask for permission the gate would
+ * grant or assume safety the gate won't. The mode is a per-thread setting the
+ * user rarely changes, so it rides in the static prompt alongside the workspace.
+ */
+const MODE_NOTES: Record<PermissionMode, string> = {
+  default:
+    "You're in default mode: actions inside the workspace run on their own, while anything that reaches outside it or looks risky pauses for the user to approve. Don't ask for permission in prose — take the action and let the approval prompt handle it.",
+  'auto-review':
+    "You're in auto-review mode: risky or out-of-workspace actions are vetted by an automatic reviewer instead of interrupting the user, so proceed confidently and don't ask for permission in prose.",
+  'full-access':
+    "You're in full-access mode: every action runs immediately with no approval step, so take extra care with destructive or irreversible operations — nothing will catch them for you.",
+};
 
 const COMMUNICATION = `# Communication
 - Lead with the result. Drop the preamble and the postamble — don't restate the request or pad the ending, and skip the flattery.
@@ -52,7 +69,7 @@ const SAFETY = `# Version control and safety
 
 export function buildSystemPrompt(
   workspaceRoot: string,
-  opts: { soul?: string; platform?: NodeJS.Platform } = {},
+  opts: { soul?: string; platform?: NodeJS.Platform; mode?: PermissionMode } = {},
 ): string {
   const identity =
     "You are Atrium, a capable agent that works alongside the user on their own computer — with direct access to their files, shell, and the web. You're at your strongest on software and technical work, but you're general-purpose: research, writing, analysis, and everyday automation are all in scope.";
@@ -61,9 +78,10 @@ export function buildSystemPrompt(
     ? `<soul>\n${opts.soul}\n</soul>\n\nThis is who you are. It governs your voice — tone, warmth, humor, and the language you reply in — and takes precedence over the communication notes below wherever they touch tone or language.`
     : undefined;
 
-  const environment = opts.platform
-    ? `${workspaceGuidance(workspaceRoot)}\nYou're running on ${platformLabel(opts.platform)}.`
-    : workspaceGuidance(workspaceRoot);
+  const env = [workspaceGuidance(workspaceRoot)];
+  if (opts.platform) env.push(`You're running on ${platformLabel(opts.platform)}.`);
+  if (opts.mode) env.push(MODE_NOTES[opts.mode]);
+  const environment = env.join('\n');
 
   return [identity, soul, COMMUNICATION, environment, CODEBASE, WORKFLOW, SAFETY]
     .filter(Boolean)

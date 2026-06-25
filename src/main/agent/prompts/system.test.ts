@@ -20,6 +20,17 @@ test('maps the platform to a friendly label when provided, omits it otherwise', 
   expect(buildSystemPrompt('/tmp/ws')).not.toContain('running on');
 });
 
+test('states how approvals behave under the active permission mode, or stays silent without one', () => {
+  expect(buildSystemPrompt('/tmp/ws', { mode: 'full-access' })).toContain('full-access mode');
+  const review = buildSystemPrompt('/tmp/ws', { mode: 'auto-review' });
+  expect(review).toContain('auto-review mode');
+  expect(review).toContain('reviewer');
+  const none = buildSystemPrompt('/tmp/ws');
+  expect(none).not.toContain('full-access');
+  expect(none).not.toContain('auto-review');
+  expect(none).not.toContain('default mode');
+});
+
 test('injects the soul with a precedence note over the style guidance', () => {
   const p = buildSystemPrompt('/tmp/ws', { soul: 'You are 小Q. Reply in 简体中文.' });
   expect(p).toContain('<soul>\nYou are 小Q. Reply in 简体中文.\n</soul>');

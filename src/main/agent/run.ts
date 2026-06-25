@@ -1,3 +1,4 @@
+import type { PermissionMode } from '@shared/permissions';
 import type { ToolName } from '@shared/tools';
 import {
   convertToModelMessages,
@@ -34,6 +35,8 @@ export type RunAgentOptions = {
   sandbox: Sandbox;
   tools: Record<ToolName, Tool>;
   middlewares: AgentMiddleware[];
+  /** Active permission mode, surfaced in the system prompt so the model knows how approvals behave. */
+  permissionMode: PermissionMode;
   abortSignal?: AbortSignal;
 };
 
@@ -58,7 +61,11 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
     sandbox: opts.sandbox,
     workspaceRoot: opts.workspaceRoot,
     request: {
-      system: buildSystemPrompt(opts.workspaceRoot, { soul, platform: process.platform }),
+      system: buildSystemPrompt(opts.workspaceRoot, {
+        soul,
+        platform: process.platform,
+        mode: opts.permissionMode,
+      }),
       messages: opts.messages,
       tools: opts.tools,
     },

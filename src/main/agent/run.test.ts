@@ -45,6 +45,7 @@ async function collectAssistants(text: string): Promise<UIMessage[]> {
     sandbox: {} as Sandbox,
     tools: {} as RunAgentOptions['tools'],
     middlewares: [capture],
+    permissionMode: 'default',
   });
   // Drain the chunk stream to completion so afterRun fires.
   const reader = stream.getReader();

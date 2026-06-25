@@ -204,6 +204,7 @@ export function startHttpServer(deps: {
       threadId,
       db: deps.db,
       sandbox,
+      permissionMode: mode,
       abortSignal: abort.signal,
       tools: getTools({
         sandbox,
