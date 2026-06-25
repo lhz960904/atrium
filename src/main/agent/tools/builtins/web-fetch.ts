@@ -4,6 +4,7 @@ import { parseHTML } from 'linkedom';
 import TurndownService from 'turndown';
 import { z } from 'zod';
 import { headTruncate } from '../output';
+import { fenceUntrusted } from './web/fence';
 
 const FETCH_MAX = 50_000;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -70,7 +71,7 @@ async function fetchAsMarkdown(url: string, abortSignal?: AbortSignal): Promise<
     if (isBinary(contentType)) {
       return `Error: ${url} is ${contentType.split(';')[0] || 'binary'} content, which cannot be read as text.`;
     }
-    return headTruncate(body.trim(), FETCH_MAX, 'content was truncated');
+    return fenceUntrusted(headTruncate(body.trim(), FETCH_MAX, 'content was truncated'), url);
   }
 
   const html = body.length > MAX_HTML_BYTES ? body.slice(0, MAX_HTML_BYTES) : body;
@@ -85,7 +86,10 @@ async function fetchAsMarkdown(url: string, abortSignal?: AbortSignal): Promise<
 
   const title = article?.title?.trim();
   const heading = title ? `# ${title}\n\n` : '';
-  return headTruncate(`${heading}${markdown}`, FETCH_MAX, 'content was truncated');
+  return fenceUntrusted(
+    headTruncate(`${heading}${markdown}`, FETCH_MAX, 'content was truncated'),
+    url,
+  );
 }
 
 function isBinary(contentType: string): boolean {

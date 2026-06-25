@@ -43,15 +43,18 @@ test('extracts the main article as markdown, dropping nav and footer', async () 
   expect(out).toContain('paragraph number 1');
   expect(out).not.toContain('subscribe to our newsletter');
   expect(out).not.toContain('all rights reserved');
+  // Page content is attacker-controllable, so it comes back fenced as untrusted.
+  expect(out).toContain('<untrusted-content>');
 });
 
-test('passes non-HTML text content through unchanged', async () => {
+test('fences non-HTML text content as untrusted', async () => {
   stubFetch({ contentType: 'text/plain', body: 'plain body text' });
-  const out = await webFetchTool().execute?.(
+  const out = (await webFetchTool().execute?.(
     { description: 'x', url: 'https://example.com/raw.txt' },
     opts,
-  );
-  expect(out).toBe('plain body text');
+  )) as string;
+  expect(out).toContain('plain body text');
+  expect(out).toContain('<untrusted-content>');
 });
 
 test('rejects binary content types', async () => {

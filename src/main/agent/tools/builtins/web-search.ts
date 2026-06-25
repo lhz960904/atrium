@@ -1,6 +1,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import { DDG, formatResults } from './web/engines';
+import { fenceUntrusted } from './web/fence';
 import { runSearch } from './web/run-search';
 
 export const webSearchTool = () =>
@@ -13,7 +14,7 @@ export const webSearchTool = () =>
     execute: async ({ query }) => {
       try {
         const results = await runSearch(DDG, query);
-        return formatResults(query, results);
+        return fenceUntrusted(formatResults(query, results), 'web search results');
       } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`;
       }
