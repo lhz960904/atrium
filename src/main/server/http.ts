@@ -12,6 +12,7 @@ import {
   instructionsMiddleware,
   memoryMiddleware,
   metadataMiddleware,
+  permissionModeMiddleware,
   persistenceMiddleware,
   profileMiddleware,
   skillsMiddleware,
@@ -239,6 +240,10 @@ export function startHttpServer(deps: {
           persist: persistMessage,
           preservers: [todoPreserver, skillPreserver],
         }),
+        // After compaction (so it lands on the post-compaction first user
+        // message) and ahead of the other injectors, so the operating mode sits
+        // at the bottom of the reminder stack, right above the user's request.
+        permissionModeMiddleware({ mode }),
         skillsMiddleware({ skills }),
         // Run skills → memory → instructions so the injected blocks end up ordered
         // custom-instructions → memory → skills after each prepend.

@@ -7,6 +7,10 @@ export {
 export { type InstructionsOptions, instructionsMiddleware } from './builtins/instructions';
 export { type MemoryOptions, memoryMiddleware } from './builtins/memory';
 export { metadataMiddleware } from './builtins/metadata';
+export {
+  type PermissionModeOptions,
+  permissionModeMiddleware,
+} from './builtins/permission-mode';
 export { type PersistFn, persistenceMiddleware } from './builtins/persistence';
 export { type ProfileOptions, profileMiddleware } from './builtins/profile';
 export { type SkillsOptions, skillsMiddleware } from './builtins/skills';
