@@ -21,6 +21,12 @@ type SectionMeta = {
   titleKey: ParseKeys;
   /** Providers needs the full width; the rest read better at narrow column. */
   wide?: boolean;
+  /**
+   * Section fills the panel height and owns its own scroll (two-pane layouts).
+   * Such sections don't get the outer content scroll — it would double up with
+   * theirs and the page header would no longer stay pinned cleanly.
+   */
+  fill?: boolean;
   Component: () => React.JSX.Element;
 };
 
@@ -35,12 +41,14 @@ const SECTIONS: Record<string, SectionMeta> = {
   providers: {
     titleKey: 'settings.sections.providersTitle',
     wide: true,
+    fill: true,
     Component: ProvidersSection,
   },
   skills: { titleKey: 'settings.sections.skillsTitle', Component: SkillsSection },
   subagents: {
     titleKey: 'settings.sections.subagentsTitle',
     wide: true,
+    fill: true,
     Component: SubagentsSection,
   },
   mcp: { titleKey: 'settings.sections.mcpTitle', Component: PlaceholderSection },
@@ -62,20 +70,28 @@ function SectionView(): React.JSX.Element {
   const meta = SECTIONS[section];
   if (!meta) throw notFound();
 
-  const { titleKey, wide = false, Component } = meta;
+  const { titleKey, wide = false, fill = false, Component } = meta;
 
   return (
-    <div
-      className={`flex h-full flex-col ${wide ? 'px-8 py-6' : 'mx-auto max-w-[720px] px-10 py-8'}`}
-    >
-      <h1
-        className={`font-semibold text-2xl text-fg-primary tracking-tight ${wide ? 'mb-5' : 'mb-6'}`}
-      >
-        {t(titleKey)}
-      </h1>
-      <div className={wide ? 'min-h-0 flex-1' : ''}>
-        <Component />
-      </div>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Pinned header — only the content area below it scrolls. Every section
+          shares the px-8 gutter so titles and content align panel-wide. */}
+      <header className="shrink-0 px-8 pt-6 pb-5">
+        <h1 className="font-semibold text-2xl text-fg-primary tracking-tight">{t(titleKey)}</h1>
+      </header>
+      {fill ? (
+        <div className="min-h-0 flex-1 px-8 pb-6">
+          <Component />
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10">
+          {/* Narrow sections cap line length for readability; wide flowing
+              sections (usage) fill the panel. */}
+          <div className={wide ? '' : 'w-full max-w-[760px]'}>
+            <Component />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

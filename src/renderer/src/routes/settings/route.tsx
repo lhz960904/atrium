@@ -212,7 +212,7 @@ function SettingsLayout(): React.JSX.Element {
           })}
         </div>
       </aside>
-      <main className="relative min-w-0 overflow-y-auto">
+      <main className="relative flex min-w-0 flex-col overflow-hidden">
         {/* Top 36px only ever shows the section title, so a drag strip is safe here. */}
         <div className="app-drag absolute inset-x-0 top-0 z-10 h-9" />
         <Outlet />
