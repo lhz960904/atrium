@@ -9,6 +9,7 @@ import { PermissionsSection } from '../../components/settings/permissions/Permis
 import { ProvidersSection } from '../../components/settings/providers/ProvidersSection';
 import { SkillsSection } from '../../components/settings/skills/SkillsSection';
 import { SubagentsSection } from '../../components/settings/subagents/SubagentsSection';
+import { UsageSection } from '../../components/settings/usage/UsageSection';
 import { type LanguagePref, useLanguage } from '../../lib/use-language';
 import { type Theme, useThemeStore } from '../../state/theme-store';
 
@@ -30,7 +31,7 @@ const SECTIONS: Record<string, SectionMeta> = {
   memories: { titleKey: 'settings.sections.memoriesTitle', Component: MemoriesSection },
   pets: { titleKey: 'settings.sections.petsTitle', Component: PlaceholderSection },
   keyboard: { titleKey: 'settings.sections.keyboardTitle', Component: PlaceholderSection },
-  usage: { titleKey: 'settings.sections.usageTitle', Component: PlaceholderSection },
+  usage: { titleKey: 'settings.sections.usageTitle', wide: true, Component: UsageSection },
   providers: {
     titleKey: 'settings.sections.providersTitle',
     wide: true,
