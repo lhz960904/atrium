@@ -183,6 +183,10 @@
   --code-fg:          var(--fg-primary);
   --kbd-bg:           var(--bg-surface-strong);
   --kbd-fg:           var(--fg-secondary);
+  /* Scrollbar thumb — warm grey, lighter than the OS default's heavy black so
+     it sits softly on the light paper. Applied via the standard scrollbar-color
+     property, which tints the overlay scrollbar while keeping its auto-hide. */
+  --scrollbar-thumb: rgba(55, 53, 47, 0.32);
 }
 
 /* ============================================================
@@ -262,6 +266,8 @@
   --code-fg:          var(--fg-secondary);
   --kbd-bg:           var(--bg-elevated);
   --kbd-fg:           var(--fg-secondary);
+  /* Soft white thumb, low alpha so it lifts just off the dark surface. */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.22);
 }
 
 /* ============================================================

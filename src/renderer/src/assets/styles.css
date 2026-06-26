@@ -146,6 +146,20 @@ pre {
   font-family: var(--font-mono);
 }
 
+/* Scrollbars — the standard scrollbar-color/-width properties (NOT the webkit
+   ::-webkit-scrollbar pseudo-elements). The webkit ones force an always-visible,
+   space-taking custom scrollbar; the standard ones only tint + thin the native
+   overlay scrollbar, so it still auto-hides and takes no layout space. Inherited,
+   so declaring on html cascades everywhere; the [data-theme] rule re-resolves the
+   thumb token for any subtree that overrides the theme. */
+html {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+[data-theme] {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
 /* Keyframe, not a transition, so the height reveal fires reliably on mount. */
 @keyframes plan-enter {
   from {
