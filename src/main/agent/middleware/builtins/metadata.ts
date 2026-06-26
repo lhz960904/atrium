@@ -1,3 +1,4 @@
+import { tokenCountsOf } from '../../../db/usage';
 import type { AgentMiddleware } from '../types';
 
 /**
@@ -30,16 +31,11 @@ export function metadataMiddleware(model?: {
         return undefined;
       }
       if (part.type === 'finish') {
-        const u = part.totalUsage;
         return {
           durationMs: Date.now() - startedAt,
           providerId: model?.providerId,
           modelId: model?.modelId,
-          totalTokens: u.totalTokens,
-          inputTokens: u.inputTokens,
-          outputTokens: u.outputTokens,
-          cacheReadTokens: u.inputTokenDetails?.cacheReadTokens,
-          cacheCreationTokens: u.inputTokenDetails?.cacheWriteTokens,
+          ...tokenCountsOf(part.totalUsage),
           contextTokens,
         };
       }

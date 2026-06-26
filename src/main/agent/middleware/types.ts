@@ -27,6 +27,10 @@ export type RunContext = {
   request: AgentRequest;
   /** The run's model, reused by middleware (e.g. compaction's summarizer). */
   model: LanguageModel;
+  /** The run's model identity, for the usage ledger. Optional: test contexts
+   *  omit it, and a subagent inherits its parent's when not pinned to its own. */
+  providerId?: string;
+  modelId?: string;
   /** Write a UI stream part (transient data events, …); a no-op outside a stream. */
   emit: UIMessageStreamWriter['write'];
   /** Cross-step scratch space; each middleware namespaces its own keys. */

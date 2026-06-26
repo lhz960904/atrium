@@ -1,7 +1,7 @@
 import type { ToolName } from '@shared/tools';
 import type { Tool } from 'ai';
 import { listEnabledImageModels } from '../../providers/image-models';
-import { maxContextTokens } from '../models/catalog';
+import { maxContextTokens, modelPricing } from '../models/catalog';
 import { makeNeedsApproval } from '../permissions';
 import { listSubagentDefs } from '../subagent/defs';
 import { askClarificationTool } from './builtins/ask-clarification';
@@ -52,6 +52,7 @@ export function getTools(ctx: ToolCtx): Record<ToolName, Tool> {
     web_search: webSearchTool(),
     task: taskTool({
       maxContextTokens,
+      pricingOf: modelPricing,
       subagents: listSubagentDefs(ctx.db),
     }),
     skill: skillTool({ skills: ctx.skills ?? [] }),

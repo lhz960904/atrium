@@ -11,6 +11,7 @@ export { type PersistFn, persistenceMiddleware } from './builtins/persistence';
 export { type ProfileOptions, profileMiddleware } from './builtins/profile';
 export { type SkillsOptions, skillsMiddleware } from './builtins/skills';
 export { type SetTitleFn, titleMiddleware } from './builtins/title';
+export { usageMiddleware } from './builtins/usage';
 export {
   composeAfterStep,
   composeBeforeStep,

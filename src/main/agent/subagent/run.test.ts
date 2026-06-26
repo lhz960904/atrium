@@ -109,3 +109,64 @@ test('runs the full loop but returns only the final text, never tool output', as
   expect(result.text).toBe('FINAL SYNTHESIS');
   expect(result.text).not.toContain('TOOL_RESULT_SHOULD_NOT_SURFACE');
 });
+
+test('records its own usage under the inherited model (kind=subagent)', async () => {
+  const model = new MockLanguageModelV3({
+    doStream: async () => ({ stream: simulateReadableStream({ chunks: textChunks('ANSWER') }) }),
+  });
+  let row: Record<string, unknown> | undefined;
+  const captureDb = {
+    insert: () => ({
+      values: (v: Record<string, unknown>) => ({
+        run: () => {
+          row = v;
+        },
+      }),
+    }),
+  } as unknown as Db;
+
+  await runSubagent({
+    // No pinned model on `def`, so the child inherits the parent's identity.
+    parent: { ...parentCtx(model), db: captureDb, providerId: 'anthropic', modelId: 'claude-x' },
+    agent: def,
+    prompt: 'do the task',
+    subagentId: 's1',
+    maxContextTokens: () => 200_000,
+    pricingOf: () => ({ input: 0.001, output: 0.002, cacheRead: 0, cacheCreation: 0 }),
+  });
+
+  expect(row?.kind).toBe('subagent');
+  expect(row?.providerId).toBe('anthropic');
+  expect(row?.modelId).toBe('claude-x');
+  expect(row?.inputTokens).toBe(1);
+  expect(row?.outputTokens).toBe(1);
+  expect(row?.totalTokens).toBe(2);
+  // 1 noCache input * 0.001 + 1 output * 0.002 = 0.003 USD → 3000 micros.
+  expect(row?.costUsdMicros).toBe(3000);
+});
+
+test('skips recording when no pricing is injected', async () => {
+  const model = new MockLanguageModelV3({
+    doStream: async () => ({ stream: simulateReadableStream({ chunks: textChunks('ANSWER') }) }),
+  });
+  let inserted = false;
+  const captureDb = {
+    insert: () => ({
+      values: () => ({
+        run: () => {
+          inserted = true;
+        },
+      }),
+    }),
+  } as unknown as Db;
+
+  await runSubagent({
+    parent: { ...parentCtx(model), db: captureDb, providerId: 'anthropic', modelId: 'claude-x' },
+    agent: def,
+    prompt: 'do the task',
+    subagentId: 's1',
+    maxContextTokens: () => 200_000,
+  });
+
+  expect(inserted).toBe(false);
+});

@@ -27,6 +27,9 @@ import type { Sandbox } from './sandbox/types';
 
 export type RunAgentOptions = {
   model: LanguageModel;
+  /** The model's identity (provider + id), recorded in the usage ledger. */
+  providerId?: string;
+  modelId?: string;
   messages: UIMessage[];
   /** Absolute workspace root, surfaced to the model in the system prompt. */
   workspaceRoot: string;
@@ -70,6 +73,8 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
       tools: opts.tools,
     },
     model: opts.model,
+    providerId: opts.providerId,
+    modelId: opts.modelId,
     emit: () => {},
     scratch: new Map(),
   };

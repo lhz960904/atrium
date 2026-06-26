@@ -16,8 +16,9 @@ import {
   profileMiddleware,
   skillsMiddleware,
   titleMiddleware,
+  usageMiddleware,
 } from '../agent/middleware';
-import { isImageModel, maxContextTokens } from '../agent/models/catalog';
+import { isImageModel, maxContextTokens, modelPricing } from '../agent/models/catalog';
 import { runAgent } from '../agent/run';
 import { runImageTurn } from '../agent/run-image';
 import { BackgroundShells, LocalSandbox } from '../agent/sandbox';
@@ -199,6 +200,8 @@ export function startHttpServer(deps: {
     const mode = permissionMode ?? DEFAULT_PERMISSION_MODE;
     const agentStream = await runAgent({
       model: resolveModel(deps.db, providerId, modelId),
+      providerId,
+      modelId,
       messages: history,
       workspaceRoot,
       threadId,
@@ -235,6 +238,7 @@ export function startHttpServer(deps: {
         // index instead of the user's prompt.
         titleMiddleware(setThreadTitle),
         metadataMiddleware({ providerId, modelId }),
+        usageMiddleware(modelPricing),
         compactionMiddleware({
           maxContextTokens,
           persist: persistMessage,

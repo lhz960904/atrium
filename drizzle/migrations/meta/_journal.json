@@ -50,6 +50,13 @@
       "when": 1782223875254,
       "tag": "0006_fat_felicia_hardy",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1782431473491,
+      "tag": "0007_jittery_maddog",
+      "breakpoints": true
     }
   ]
 }

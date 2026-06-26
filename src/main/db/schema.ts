@@ -108,6 +108,39 @@ export const subagents = sqliteTable('subagents', {
   updatedAt: timestamp(),
 });
 
+/**
+ * Per-LLM-call usage ledger: one row per model call (main chat turn, subagent,
+ * title, …). Tokens and cost are frozen at write time — cost from the model's
+ * pricing at that moment, so a later price change doesn't rewrite history. This
+ * is the system of record for the usage/billing page; message metadata stays the
+ * live, in-chat readout. threadId set-nulls on thread delete so spend survives.
+ */
+export const usage = sqliteTable(
+  'usage',
+  {
+    id: text().primaryKey(),
+    threadId: text('thread_id').references(() => threads.id, { onDelete: 'set null' }),
+    /** The assistant message this call produced; null for non-message calls. */
+    messageId: text('message_id'),
+    providerId: text('provider_id').notNull(),
+    modelId: text('model_id').notNull(),
+    kind: text({ enum: ['chat', 'subagent', 'title', 'summary', 'review'] }).notNull(),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    cacheReadTokens: integer('cache_read_tokens').notNull().default(0),
+    cacheCreationTokens: integer('cache_creation_tokens').notNull().default(0),
+    totalTokens: integer('total_tokens').notNull().default(0),
+    /** Frozen micro-USD (1e-6 dollar) from the model's pricing at write time. */
+    costUsdMicros: integer('cost_usd_micros').notNull().default(0),
+    createdAt: timestamp(),
+  },
+  (table) => [
+    index('usage_created_at_idx').on(table.createdAt),
+    index('usage_thread_idx').on(table.threadId),
+    index('usage_model_idx').on(table.modelId),
+  ],
+);
+
 export type Thread = typeof threads.$inferSelect;
 export type NewThread = typeof threads.$inferInsert;
 export type Project = typeof projects.$inferSelect;
@@ -120,3 +153,5 @@ export type Provider = typeof providers.$inferSelect;
 export type NewProvider = typeof providers.$inferInsert;
 export type Subagent = typeof subagents.$inferSelect;
 export type NewSubagent = typeof subagents.$inferInsert;
+export type Usage = typeof usage.$inferSelect;
+export type NewUsage = typeof usage.$inferInsert;

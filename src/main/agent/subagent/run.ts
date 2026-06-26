@@ -1,7 +1,9 @@
 import type { ToolName } from '@shared/tools';
 import { convertToModelMessages, generateId, stepCountIs, streamText, type UIMessage } from 'ai';
+import { recordUsage, tokenCountsOf } from '../../db/usage';
 import { createLogger } from '../../log';
 import { compactionMiddleware, composeBeforeStep, type RunContext } from '../middleware';
+import type { ModelPricing } from '../models/types';
 import { workspaceGuidance } from '../prompts';
 import { todoPreserver } from '../tools/builtins/todo';
 import { filterToolsForSubagent, type SubagentDef } from './defs';
@@ -23,6 +25,8 @@ export type RunSubagentOptions = {
   /** Context window per model id (injected, like compaction — avoids importing
    *  the Electron-bound catalog here so this stays unit-testable). */
   maxContextTokens: (modelId: string) => number;
+  /** Pricing lookup for the usage ledger; omitted in tests (skips recording). */
+  pricingOf?: (modelId: string) => ModelPricing;
   abortSignal?: AbortSignal;
 };
 
@@ -45,10 +49,14 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   // credential store, which we don't want loaded when there's nothing to resolve
   // (and which would break non-Electron unit tests on import).
   let model = parent.model;
+  let providerId = parent.providerId;
+  let modelId = parent.modelId;
   if (agent.providerId && agent.modelId) {
     try {
       const { resolveModel } = await import('../../providers/resolve');
       model = resolveModel(parent.db, agent.providerId, agent.modelId);
+      providerId = agent.providerId;
+      modelId = agent.modelId;
     } catch (err) {
       log.warn(
         `subagent '${agent.name}' pinned model ${agent.providerId}/${agent.modelId} is unavailable, inheriting the parent's model: ${(err as Error).message}`,
@@ -69,6 +77,8 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
     workspaceRoot: parent.workspaceRoot,
     request: { system, messages, tools },
     model,
+    providerId,
+    modelId,
     // The child's own middleware (within-turn compaction) doesn't emit; its
     // activity is bubbled to the parent's stream below via parent.emit instead.
     emit: () => {},
@@ -113,7 +123,23 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   try {
     // Drive the loop to completion, then take the final assistant text.
     const text = (await result.text).trim();
-    const usage = { totalTokens: (await result.totalUsage).totalTokens };
+    const totalUsage = await result.totalUsage;
+    // Subagent calls are separate model calls, invisible to the parent turn's
+    // usage — record them on their own so the ledger isn't an undercount.
+    if (opts.pricingOf && providerId && modelId) {
+      recordUsage(
+        parent.db,
+        {
+          threadId: parent.threadId,
+          kind: 'subagent',
+          providerId,
+          modelId,
+          ...tokenCountsOf(totalUsage),
+        },
+        opts.pricingOf(modelId),
+      );
+    }
+    const usage = { totalTokens: totalUsage.totalTokens };
     emit({ phase: 'done', status: 'done' });
     if (text) return { text, usage };
 

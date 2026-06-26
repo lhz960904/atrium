@@ -1,4 +1,5 @@
 import type { AtriumUIMessage } from '@shared/chat';
+import { costBreakdownUsd } from '@shared/cost';
 import type { RouterOutputs } from './trpc';
 
 /** modelId → { maxContextTokens, pricing } from the models.info tRPC query. */
@@ -59,7 +60,6 @@ export function aggregateUsage(
     const outputTokens = md.outputTokens ?? 0;
     const cacheRead = md.cacheReadTokens ?? 0;
     const cacheCreation = md.cacheCreationTokens ?? 0;
-    const noCache = Math.max(0, inputTokens - cacheRead - cacheCreation);
     acc.inputTokens += inputTokens;
     acc.outputTokens += outputTokens;
     acc.cacheReadTokens += cacheRead;
@@ -67,9 +67,18 @@ export function aggregateUsage(
     acc.totalTokens += md.totalTokens;
     const pricing = md.modelId ? info?.[md.modelId]?.pricing : undefined;
     if (pricing) {
-      acc.inputCost += noCache * pricing.input;
-      acc.outputCost += outputTokens * pricing.output;
-      acc.cacheCost += cacheRead * pricing.cacheRead + cacheCreation * pricing.cacheCreation;
+      const c = costBreakdownUsd(
+        {
+          inputTokens,
+          outputTokens,
+          cacheReadTokens: cacheRead,
+          cacheCreationTokens: cacheCreation,
+        },
+        pricing,
+      );
+      acc.inputCost += c.input;
+      acc.outputCost += c.output;
+      acc.cacheCost += c.cache;
     } else {
       acc.costComplete = false;
     }
