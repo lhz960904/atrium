@@ -11,6 +11,7 @@ import { skillsRouter } from './routers/skills';
 import { subagentsRouter } from './routers/subagents';
 import { systemRouter } from './routers/system';
 import { threadsRouter } from './routers/threads';
+import { usageRouter } from './routers/usage';
 import { publicProcedure, router } from './trpc';
 
 /**
@@ -40,6 +41,7 @@ export const appRouter = router({
   skills: skillsRouter,
   subagents: subagentsRouter,
   system: systemRouter,
+  usage: usageRouter,
 });
 
 export type AppRouter = typeof appRouter;
