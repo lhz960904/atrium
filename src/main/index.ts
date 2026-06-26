@@ -17,9 +17,15 @@ import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { appRouter } from './trpc/router';
 
+// Kept alive across hide/show so reopening from the Dock restores the exact
+// prior view instead of booting a fresh window. isQuitting lets the real quit
+// (Cmd+Q / before-quit) bypass the hide-on-close interception below.
+let mainWindow: BrowserWindow | null = null;
+let isQuitting = false;
+
 function createWindow(): BrowserWindow {
   const initial = getInitialWindowState();
-  const mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: initial.width,
     height: initial.height,
     minWidth: 880,
@@ -42,28 +48,40 @@ function createWindow(): BrowserWindow {
   // on macOS, and entering fullscreen on a non-maximized window gives the
   // user the Space-aware mode they expect.
   if (initial.fullscreen) {
-    mainWindow.setFullScreen(true);
+    win.setFullScreen(true);
   } else if (initial.maximized) {
-    mainWindow.maximize();
+    win.maximize();
   }
-  attachWindowStatePersistence(mainWindow);
+  attachWindowStatePersistence(win);
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show();
+  win.on('ready-to-show', () => {
+    win.show();
   });
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  // On macOS the red traffic light hides the window rather than destroying it,
+  // keeping the renderer (route, scroll, in-flight state) alive so reopening
+  // from the Dock lands back on the previous page. The OS convention is for the
+  // app to stay resident until Cmd+Q.
+  win.on('close', (event) => {
+    if (process.platform === 'darwin' && !isQuitting) {
+      event.preventDefault();
+      win.hide();
+    }
+  });
+
+  win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
     return { action: 'deny' };
   });
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
+    win.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+    win.loadFile(join(__dirname, '../renderer/index.html'));
   }
 
-  return mainWindow;
+  mainWindow = win;
+  return win;
 }
 
 // Held at module scope so before-quit can dispose it (kill background shells) —
@@ -114,22 +132,27 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window);
   });
 
-  const mainWindow = createWindow();
+  const win = createWindow();
   createIPCHandler({
     router: appRouter,
-    windows: [mainWindow],
+    windows: [win],
     createContext: async () => ({ db, chatEndpoint }),
   });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      const win = createWindow();
-      createIPCHandler({
-        router: appRouter,
-        windows: [win],
-        createContext: async () => ({ db, chatEndpoint }),
-      });
+    // Hide-on-close keeps the window alive, so the common Dock re-open just
+    // re-shows it (preserving the previous view). Only rebuild from scratch if
+    // it was genuinely destroyed (non-macOS, or after a full quit cycle).
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      return;
     }
+    const next = createWindow();
+    createIPCHandler({
+      router: appRouter,
+      windows: [next],
+      createContext: async () => ({ db, chatEndpoint }),
+    });
   });
 });
 
@@ -140,6 +163,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
   serverEndpoint?.dispose();
   closeDb();
 });
