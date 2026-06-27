@@ -65,7 +65,15 @@ function createWindow(): BrowserWindow {
   win.on('close', (event) => {
     if (process.platform === 'darwin' && !isQuitting) {
       event.preventDefault();
-      win.hide();
+      // Hiding a window that's in a native fullscreen Space blacks out the
+      // screen — the empty Space lingers with nothing left to show. Leave
+      // fullscreen first and hide only once the (async) Space transition ends.
+      if (win.isFullScreen()) {
+        win.once('leave-full-screen', () => win.hide());
+        win.setFullScreen(false);
+      } else {
+        win.hide();
+      }
     }
   });
 
