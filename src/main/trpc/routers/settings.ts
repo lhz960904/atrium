@@ -18,6 +18,7 @@ export const settingsRouter = router({
     return {
       general: getSettings('general'),
       appearance: getSettings('appearance'),
+      keyboard: getSettings('keyboard'),
       permissions: getSettings('permissions'),
     };
   }),

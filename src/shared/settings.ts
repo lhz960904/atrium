@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { KEYBINDING_COMMANDS } from './keybindings';
 import { DEFAULT_PERMISSION_MODE, PERMISSION_MODES } from './permissions';
 import type { TrustRule } from './permissions/rules';
 
@@ -49,6 +50,12 @@ const appearanceShape = z.object({
   }),
 });
 
+const keyboardShape = z.object({
+  /** Per-command binding overrides; only changed commands are stored. A command
+   *  absent here uses its DEFAULT_KEYBINDINGS entry. */
+  bindings: z.partialRecord(z.enum(KEYBINDING_COMMANDS), z.string()).default({}),
+});
+
 const permissionsShape = z.object({
   /** Active tool-permission mode, persisted so a reload doesn't reset it. */
   mode: z.enum(PERMISSION_MODES).default(DEFAULT_PERMISSION_MODE),
@@ -63,6 +70,7 @@ const permissionsShape = z.object({
 export const SettingsSchema = z.object({
   general: generalShape.default(generalShape.parse({})),
   appearance: appearanceShape.default(appearanceShape.parse({})),
+  keyboard: keyboardShape.default(keyboardShape.parse({})),
   permissions: permissionsShape.default(permissionsShape.parse({})),
 });
 
@@ -85,6 +93,7 @@ function patchShape<T extends z.ZodObject>(obj: T): z.ZodObject {
 export const SettingsPatchSchema = z.object({
   general: patchShape(generalShape).optional(),
   appearance: patchShape(appearanceShape).optional(),
+  keyboard: patchShape(keyboardShape).optional(),
   permissions: patchShape(permissionsShape).optional(),
 });
 

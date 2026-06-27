@@ -40,25 +40,12 @@ export function CommandPalette(): React.JSX.Element {
   const navigate = useNavigate();
   const open = useCommandPalette((s) => s.open);
   const setOpen = useCommandPalette((s) => s.setOpen);
-  const toggle = useCommandPalette((s) => s.toggle);
 
   const isDark = useThemeStore((s) => s.resolvedTheme === 'dark');
   const setTheme = useThemeStore((s) => s.setTheme);
 
   const [input, setInput] = useState('');
   const [debounced, setDebounced] = useState('');
-
-  // Global ⌘K / Ctrl+K toggles the palette from anywhere.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        toggle();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [toggle]);
 
   useEffect(() => {
     const id = setTimeout(() => setDebounced(input), SEARCH_DEBOUNCE_MS);

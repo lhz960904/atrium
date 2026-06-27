@@ -3,10 +3,12 @@ import { useEffect } from 'react';
 import { AttachmentViewer } from '../components/AttachmentViewer';
 import { CommandPalette } from '../components/CommandPalette';
 import { Toaster } from '../components/Toaster';
+import { useKeybindings } from '../lib/use-keybindings';
 import { useLanguage } from '../lib/use-language';
 
 function Root(): React.JSX.Element {
   useLanguage(); // apply the persisted UI language on load
+  useKeybindings(); // global app shortcuts (⌘K/⌘N/⌘B/⌘,)
   const navigate = useNavigate();
 
   // The menu-bar "New Chat" item routes the renderer to home (the new-chat screen).

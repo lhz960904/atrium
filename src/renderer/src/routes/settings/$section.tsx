@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Select } from '../../components/Select';
 import { ArchivedSection } from '../../components/settings/archived/ArchivedSection';
 import { IdentitySection } from '../../components/settings/identity/IdentitySection';
+import { KeyboardSection } from '../../components/settings/keyboard/KeyboardSection';
 import { MemoriesSection } from '../../components/settings/memories/MemoriesSection';
 import { PermissionsSection } from '../../components/settings/permissions/PermissionsSection';
 import { EnableSwitch } from '../../components/settings/providers/EnableSwitch';
@@ -41,7 +42,7 @@ const SECTIONS: Record<string, SectionMeta> = {
   appearance: { titleKey: 'settings.sections.appearanceTitle', Component: AppearanceSection },
   memories: { titleKey: 'settings.sections.memoriesTitle', Component: MemoriesSection },
   pets: { titleKey: 'settings.sections.petsTitle', Component: PlaceholderSection },
-  keyboard: { titleKey: 'settings.sections.keyboardTitle', Component: PlaceholderSection },
+  keyboard: { titleKey: 'settings.sections.keyboardTitle', Component: KeyboardSection },
   usage: { titleKey: 'settings.sections.usageTitle', wide: true, Component: UsageSection },
   providers: {
     titleKey: 'settings.sections.providersTitle',
