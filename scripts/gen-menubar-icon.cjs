@@ -137,7 +137,10 @@ function encode(alpha, size) {
 
 const img = decode('resources/icon.png');
 const mask = buildMask(img);
-fs.writeFileSync('resources/menubarTemplate.png', encode(downscaleAlpha(mask, img.W, img.H, 20, 20), 20));
+fs.writeFileSync(
+  'resources/menubarTemplate.png',
+  encode(downscaleAlpha(mask, img.W, img.H, 20, 20), 20),
+);
 fs.writeFileSync(
   'resources/menubarTemplate@2x.png',
   encode(downscaleAlpha(mask, img.W, img.H, 40, 40), 40),
