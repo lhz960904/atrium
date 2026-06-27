@@ -18,6 +18,12 @@ const windowStateShape = z.object({
 
 const selectedModelShape = z.object({ providerId: z.string(), modelId: z.string() });
 
+/** Composer key combo that sends a message; the others insert a newline.
+ *  'enter' = Enter sends (default); 'mod' = ⌘/Ctrl+Enter sends; 'shift' =
+ *  Shift+Enter sends. In the two non-default modes a bare Enter is a newline. */
+export const COMPOSER_SEND_KEYS = ['enter', 'mod', 'shift'] as const;
+export type ComposerSendKey = (typeof COMPOSER_SEND_KEYS)[number];
+
 const generalShape = z.object({
   /** UI language; 'system' follows the OS locale. */
   language: z.enum(['system', 'en', 'zh']).default('system'),
@@ -27,6 +33,10 @@ const generalShape = z.object({
   autoGenerateTitle: z.boolean().default(true),
   /** Show the app's icon in the macOS menu bar. Off by default. */
   showInMenuBar: z.boolean().default(false),
+  /** Hide the per-session token/context readout in the composer toolbar. */
+  composerHideTokenUsage: z.boolean().default(false),
+  /** Which key combo sends vs. inserts a newline in the composer. */
+  composerSendKey: z.enum(COMPOSER_SEND_KEYS).default('enter'),
 });
 
 const appearanceShape = z.object({

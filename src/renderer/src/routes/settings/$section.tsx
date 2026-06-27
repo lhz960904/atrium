@@ -1,3 +1,4 @@
+import type { ComposerSendKey } from '@shared/settings';
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import type { ParseKeys } from 'i18next';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
@@ -141,11 +142,17 @@ function SettingRow({
   );
 }
 
+// ⌘ on Apple keyboards, Ctrl everywhere else — only affects the option label;
+// the composer itself accepts either modifier (see isSendCombo).
+const MOD_LABEL = navigator.userAgent.includes('Macintosh') ? '⌘' : 'Ctrl';
+
 function GeneralSection(): React.JSX.Element {
   const { t } = useTranslation();
   const { pref, setLanguage } = useLanguage();
   const { value: autoTitle, set: setAutoTitle } = useSetting('general.autoGenerateTitle');
   const { value: inMenuBar, set: setInMenuBar } = useSetting('general.showInMenuBar');
+  const { value: hideTokens, set: setHideTokens } = useSetting('general.composerHideTokenUsage');
+  const { value: sendKey, set: setSendKey } = useSetting('general.composerSendKey');
   const utils = trpc.useUtils();
   const openAtLogin = trpc.settings.openAtLogin.useQuery();
   const setOpenAtLogin = trpc.settings.setOpenAtLogin.useMutation({
@@ -157,6 +164,12 @@ function GeneralSection(): React.JSX.Element {
     { value: 'system', label: t('settings.language.system') },
     { value: 'zh', label: t('settings.language.zh') },
     { value: 'en', label: t('settings.language.en') },
+  ];
+
+  const sendKeyOptions: ReadonlyArray<{ value: ComposerSendKey; label: string }> = [
+    { value: 'enter', label: t('settings.general.sendKeyEnter') },
+    { value: 'mod', label: t('settings.general.sendKeyMod', { mod: MOD_LABEL }) },
+    { value: 'shift', label: t('settings.general.sendKeyShift') },
   ];
 
   return (
@@ -193,6 +206,26 @@ function GeneralSection(): React.JSX.Element {
           label={t('settings.general.showInMenuBar')}
           desc={t('settings.general.showInMenuBarDesc')}
           control={<EnableSwitch on={inMenuBar} onToggle={() => setInMenuBar(!inMenuBar)} />}
+        />
+      </SettingGroup>
+
+      <SettingGroup title={t('settings.general.groupComposer')}>
+        <SettingRow
+          label={t('settings.general.sendKey')}
+          desc={t('settings.general.sendKeyDesc')}
+          control={
+            <Select
+              value={sendKey}
+              onChange={setSendKey}
+              options={sendKeyOptions}
+              aria-label={t('settings.general.sendKey')}
+            />
+          }
+        />
+        <SettingRow
+          label={t('settings.general.hideTokenUsage')}
+          desc={t('settings.general.hideTokenUsageDesc')}
+          control={<EnableSwitch on={hideTokens} onToggle={() => setHideTokens(!hideTokens)} />}
         />
       </SettingGroup>
     </div>

@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStickToBottom } from 'use-stick-to-bottom';
 import type { PendingApproval } from '../../lib/approvals';
+import { useSetting } from '../../lib/use-setting';
 import { useAutoReviewStore } from '../../state/auto-review-store';
 import { useCompactionStore } from '../../state/compaction-store';
 import { useImageGenStore } from '../../state/image-gen-store';
@@ -112,6 +113,7 @@ export function ChatThread({
   onStop,
 }: ChatThreadProps): React.JSX.Element {
   const { t } = useTranslation();
+  const { value: hideTokenUsage } = useSetting('general.composerHideTokenUsage');
   // Compaction is a live, per-thread status in a global store — read it here
   // rather than threading it through as a prop.
   const compacting = useCompactionStore((s) => s.active[threadId] ?? false);
@@ -231,7 +233,7 @@ export function ChatThread({
             onSubmit={onSend}
             onStop={onStop}
             toolbarLeft={<ProjectBadge projectId={projectId} />}
-            toolbarStatus={<TokenCounter messages={messages} />}
+            toolbarStatus={hideTokenUsage ? undefined : <TokenCounter messages={messages} />}
           />
         </div>
       </div>

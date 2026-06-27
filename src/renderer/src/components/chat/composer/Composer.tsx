@@ -1,3 +1,4 @@
+import type { ComposerSendKey } from '@shared/settings';
 import { Document } from '@tiptap/extension-document';
 import { HardBreak } from '@tiptap/extension-hard-break';
 import { Paragraph } from '@tiptap/extension-paragraph';
@@ -9,6 +10,7 @@ import { memo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ATTACHMENT_ACCEPT, classifyAttachment } from '../../../lib/attachments';
 import { useChatModel } from '../../../lib/use-chat-model';
+import { useSetting } from '../../../lib/use-setting';
 import { toast } from '../../../state/toast-store';
 import { ModelPicker } from '../../ModelPicker';
 import { PermissionPicker } from '../../PermissionPicker';
@@ -36,6 +38,16 @@ type ComposerProps = {
   toolbarStatus?: React.ReactNode;
 };
 
+/** True when the pressed Enter combo should send under the chosen mode; every
+ *  other Enter combo falls through to a newline. ⌘ and Ctrl are interchangeable
+ *  for 'mod' so the same binding works across platforms. */
+function isSendCombo(event: KeyboardEvent, mode: ComposerSendKey): boolean {
+  const mod = event.metaKey || event.ctrlKey;
+  if (mode === 'mod') return mod && !event.shiftKey;
+  if (mode === 'shift') return event.shiftKey && !mod;
+  return !event.shiftKey && !mod;
+}
+
 export const Composer = memo(function Composer({
   autoFocus = false,
   placeholder,
@@ -54,10 +66,14 @@ export const Composer = memo(function Composer({
   const [empty, setEmpty] = useState(initialText.trim().length === 0);
   const skill = useSlashMenu(commands ?? []);
   const { selected, setSelected, groups } = useChatModel();
+  const { value: sendKey } = useSetting('general.composerSendKey');
 
   // The editor is created once, so handleKeyDown closes over the first render;
-  // route Enter-to-send through a ref so it sees the latest state.
+  // route Enter handling through refs so it sees the latest send fn + key mode.
   const sendRef = useRef<() => void>(() => {});
+  const sendKeyRef = useRef<ComposerSendKey>(sendKey);
+  sendKeyRef.current = sendKey;
+  const editorRef = useRef<ReturnType<typeof useEditor>>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
@@ -81,16 +97,22 @@ export const Composer = memo(function Composer({
         if (skill.isOpen()) return false;
         // IME composing (e.g. pinyin): Enter confirms the candidate, never sends.
         if (event.isComposing || event.keyCode === 229) return false;
-        if (event.key === 'Enter' && !event.shiftKey) {
+        if (event.key !== 'Enter') return false;
+        if (isSendCombo(event, sendKeyRef.current)) {
           event.preventDefault();
           sendRef.current();
           return true;
         }
-        return false;
+        // Every non-send Enter is a newline; insert a hard break ourselves and
+        // consume the event so the same combo can't also split the paragraph.
+        event.preventDefault();
+        editorRef.current?.commands.setHardBreak();
+        return true;
       },
     },
     onUpdate: ({ editor }) => setEmpty(editor.isEmpty),
   });
+  editorRef.current = editor;
 
   const handleSend = (): void => {
     if (disabled || !editor) return;
