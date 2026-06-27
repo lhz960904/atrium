@@ -2,15 +2,19 @@ import { createFileRoute, notFound } from '@tanstack/react-router';
 import type { ParseKeys } from 'i18next';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { Select } from '../../components/Select';
 import { ArchivedSection } from '../../components/settings/archived/ArchivedSection';
 import { IdentitySection } from '../../components/settings/identity/IdentitySection';
 import { MemoriesSection } from '../../components/settings/memories/MemoriesSection';
 import { PermissionsSection } from '../../components/settings/permissions/PermissionsSection';
+import { EnableSwitch } from '../../components/settings/providers/EnableSwitch';
 import { ProvidersSection } from '../../components/settings/providers/ProvidersSection';
 import { SkillsSection } from '../../components/settings/skills/SkillsSection';
 import { SubagentsSection } from '../../components/settings/subagents/SubagentsSection';
 import { UsageSection } from '../../components/settings/usage/UsageSection';
+import { trpc } from '../../lib/trpc';
 import { type LanguagePref, useLanguage } from '../../lib/use-language';
+import { useSetting } from '../../lib/use-setting';
 import { type Theme, useThemeStore } from '../../state/theme-store';
 
 export const Route = createFileRoute('/settings/$section')({
@@ -96,52 +100,98 @@ function SectionView(): React.JSX.Element {
   );
 }
 
+/** A titled card grouping related settings. Purely a visual cluster — storage
+ *  stays flat, so the useSetting paths inside are unaffected. */
+function SettingGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <section>
+      <h2 className="mb-3 font-semibold text-fg-primary text-sm">{title}</h2>
+      <div className="divide-y divide-border-default rounded-xl border border-border-default bg-surface">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/** One settings row inside a SettingGroup: label + optional description on the
+ *  left, control on the right. */
+function SettingRow({
+  label,
+  desc,
+  control,
+}: {
+  label: string;
+  desc?: string;
+  control: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className="flex items-center justify-between gap-6 px-4 py-3.5">
+      <div className="min-w-0">
+        <div className="font-medium text-fg-primary text-sm">{label}</div>
+        {desc && <div className="mt-0.5 text-fg-tertiary text-xs">{desc}</div>}
+      </div>
+      <div className="shrink-0">{control}</div>
+    </div>
+  );
+}
+
 function GeneralSection(): React.JSX.Element {
   const { t } = useTranslation();
   const { pref, setLanguage } = useLanguage();
+  const { value: autoTitle, set: setAutoTitle } = useSetting('general.autoGenerateTitle');
+  const utils = trpc.useUtils();
+  const openAtLogin = trpc.settings.openAtLogin.useQuery();
+  const setOpenAtLogin = trpc.settings.setOpenAtLogin.useMutation({
+    onSuccess: () => utils.settings.openAtLogin.invalidate(),
+  });
+  const launchOn = openAtLogin.data ?? false;
 
-  const tiles: Array<{ value: LanguagePref; label: string; desc?: string }> = [
+  const languageOptions: ReadonlyArray<{ value: LanguagePref; label: string }> = [
+    { value: 'system', label: t('settings.language.system') },
     { value: 'zh', label: t('settings.language.zh') },
     { value: 'en', label: t('settings.language.en') },
-    {
-      value: 'system',
-      label: t('settings.language.system'),
-      desc: t('settings.language.systemDesc'),
-    },
   ];
 
   return (
-    <section>
-      <h2 className="mb-3 font-medium text-fg-primary text-sm">{t('settings.language.title')}</h2>
-      <div className="grid grid-cols-3 gap-3">
-        {tiles.map((tile) => {
-          const active = pref === tile.value;
-          return (
-            <button
-              type="button"
-              key={tile.value}
-              onClick={() => setLanguage(tile.value)}
-              className={`relative flex min-h-[68px] flex-col gap-1.5 rounded-lg border px-4 py-3.5 text-left transition-colors ${
-                active
-                  ? 'border-accent bg-accent-soft'
-                  : 'border-border-default bg-surface hover:border-border-strong'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span
-                  className={`font-medium text-sm ${active ? 'text-accent' : 'text-fg-primary'}`}
-                >
-                  {tile.label}
-                </span>
-                {active && <Check className="size-[14px] text-accent" />}
-              </div>
-              {tile.desc && <span className="text-fg-tertiary text-xs">{tile.desc}</span>}
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-4 text-fg-tertiary text-xs">{t('settings.language.note')}</p>
-    </section>
+    <div className="flex flex-col gap-8">
+      <SettingGroup title={t('settings.general.groupGeneral')}>
+        <SettingRow
+          label={t('settings.general.language')}
+          desc={t('settings.general.languageDesc')}
+          control={
+            <Select
+              value={pref}
+              onChange={setLanguage}
+              options={languageOptions}
+              aria-label={t('settings.general.language')}
+            />
+          }
+        />
+        <SettingRow
+          label={t('settings.general.autoTitle')}
+          desc={t('settings.general.autoTitleDesc')}
+          control={<EnableSwitch on={autoTitle} onToggle={() => setAutoTitle(!autoTitle)} />}
+        />
+      </SettingGroup>
+      <SettingGroup title={t('settings.general.groupStartup')}>
+        <SettingRow
+          label={t('settings.general.launchAtLogin')}
+          desc={t('settings.general.launchAtLoginDesc')}
+          control={
+            <EnableSwitch
+              on={launchOn}
+              onToggle={() => setOpenAtLogin.mutate({ enabled: !launchOn })}
+            />
+          }
+        />
+      </SettingGroup>
+    </div>
   );
 }
 

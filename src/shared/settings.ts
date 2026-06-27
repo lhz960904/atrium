@@ -23,6 +23,8 @@ const generalShape = z.object({
   language: z.enum(['system', 'en', 'zh']).default('system'),
   /** Last-picked chat model; null until the user has any enabled model. */
   selectedModel: selectedModelShape.nullable().default(null),
+  /** Summarize a thread's first message into its title. On by default. */
+  autoGenerateTitle: z.boolean().default(true),
 });
 
 const appearanceShape = z.object({
@@ -52,17 +54,31 @@ export const SettingsSchema = z.object({
   permissions: permissionsShape.default(permissionsShape.parse({})),
 });
 
-/** A patch is partial at BOTH levels: an omitted key keeps its stored value
- *  rather than snapping back to the schema default (which a shallow `.partial()`
- *  would do — e.g. patching `permissions.mode` would wipe `trustRules`). */
+/**
+ * A patch must carry ONLY the keys being set. zod v4's `.partial()` keeps each
+ * field's `.default`, so parsing `{ language }` would refill `selectedModel`,
+ * `autoGenerateTitle`, … to their defaults — and the spread in the patch
+ * procedure would then overwrite those stored values. Strip the defaults so an
+ * omitted field stays absent (undefined) and survives the merge untouched.
+ */
+function patchShape<T extends z.ZodObject>(obj: T): z.ZodObject {
+  const shape: Record<string, z.ZodType> = {};
+  for (const [key, field] of Object.entries(obj.shape)) {
+    const f = field as z.ZodType & { removeDefault?: () => z.ZodType };
+    shape[key] = typeof f.removeDefault === 'function' ? f.removeDefault() : f;
+  }
+  return z.object(shape).partial();
+}
+
 export const SettingsPatchSchema = z.object({
-  general: generalShape.partial().optional(),
-  appearance: appearanceShape.partial().optional(),
-  permissions: permissionsShape.partial().optional(),
+  general: patchShape(generalShape).optional(),
+  appearance: patchShape(appearanceShape).optional(),
+  permissions: patchShape(permissionsShape).optional(),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;
-export type SettingsPatch = z.infer<typeof SettingsPatchSchema>;
+/** Deep-partial: any subset of scopes, each carrying any subset of its keys. */
+export type SettingsPatch = { [S in keyof Settings]?: Partial<Settings[S]> };
 export type SettingsScope = keyof Settings;
 export type WindowState = z.infer<typeof windowStateShape>;
 export type SelectedModel = z.infer<typeof selectedModelShape>;

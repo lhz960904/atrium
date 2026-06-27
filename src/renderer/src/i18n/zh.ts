@@ -338,6 +338,16 @@ export const zh = {
       systemDesc: '跟随系统语言',
       note: '切换后界面文案会立即更新。',
     },
+    general: {
+      groupGeneral: '通用',
+      groupStartup: '启动',
+      language: '语言',
+      languageDesc: '界面语言。跟随系统时使用操作系统语言。',
+      autoTitle: '自动生成会话标题',
+      autoTitleDesc: '新会话时把首条消息总结成标题。',
+      launchAtLogin: '开机自动启动',
+      launchAtLoginDesc: '登录后自动打开 Atrium。',
+    },
     identity: {
       you: '你',
       youHint: '这里的 name 决定首页怎么称呼你。',

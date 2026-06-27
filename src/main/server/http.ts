@@ -31,7 +31,7 @@ import { createLogger } from '../log';
 import { resolveAcpSpec } from '../providers/acp-spec';
 import { getProviderManifest } from '../providers/manifest';
 import { resolveModel } from '../providers/resolve';
-import { DEFAULTS, getSettings } from '../settings/conf';
+import { getSettings } from '../settings/conf';
 import {
   loadThreadMessages,
   persistMessage,
@@ -79,7 +79,7 @@ function resolveReviewerModel(
   db: Db,
   fallback: { providerId: string; modelId: string },
 ): LanguageModel | undefined {
-  const configured = getSettings().get('permissions', DEFAULTS.permissions).reviewerModel;
+  const configured = getSettings('permissions.reviewerModel');
   const picked = configured ?? fallback;
   try {
     const model = resolveModel(db, picked.providerId, picked.modelId);
@@ -217,7 +217,7 @@ export function startHttpServer(deps: {
         bgShells,
         permission: {
           mode,
-          rules: getSettings().get('permissions', DEFAULTS.permissions).trustRules,
+          rules: getSettings('permissions.trustRules'),
           // Resolve the reviewer only when auto-review can actually use it; a
           // misconfigured/removed model resolves to undefined, so auto-review
           // simply falls back to prompting rather than failing the turn.
@@ -235,8 +235,9 @@ export function startHttpServer(deps: {
         // Title is generated from the first user message, so it must run before
         // the skills middleware injects its index into that message (and before
         // compaction could fold it) — otherwise the title summarizes the skill
-        // index instead of the user's prompt.
-        titleMiddleware(setThreadTitle),
+        // index instead of the user's prompt. Omitted entirely when the user has
+        // turned auto-titling off.
+        ...(getSettings('general.autoGenerateTitle') ? [titleMiddleware(setThreadTitle)] : []),
         metadataMiddleware({ providerId, modelId }),
         usageMiddleware(modelPricing),
         compactionMiddleware({

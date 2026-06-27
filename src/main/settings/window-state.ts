@@ -1,5 +1,5 @@
 import type { BrowserWindow } from 'electron';
-import { DEFAULTS, getSettings, type WindowState } from './conf';
+import { getSettings, type WindowState } from './conf';
 
 /**
  * Returns the size + maximized + fullscreen state to use for the next
@@ -8,7 +8,7 @@ import { DEFAULTS, getSettings, type WindowState } from './conf';
  * an external monitor that's no longer plugged in" failure modes.
  */
 export function getInitialWindowState(): WindowState {
-  return getSettings().get('appearance', DEFAULTS.appearance).windowState;
+  return getSettings('appearance.windowState');
 }
 
 /**
@@ -18,7 +18,7 @@ export function getInitialWindowState(): WindowState {
  * sensible window rather than a screen-sized one.
  */
 function snapshot(win: BrowserWindow): WindowState {
-  const previous = getSettings().get('appearance', DEFAULTS.appearance).windowState;
+  const previous = getSettings('appearance.windowState');
   const maximized = win.isMaximized();
   const fullscreen = win.isFullScreen();
   if (maximized || fullscreen) {
@@ -31,9 +31,7 @@ function snapshot(win: BrowserWindow): WindowState {
 /** Read-modify-write the appearance scope so a windowState write preserves any
  *  sibling appearance settings (e.g. a future theme). */
 function persist(win: BrowserWindow): void {
-  const conf = getSettings();
-  const appearance = conf.get('appearance', DEFAULTS.appearance);
-  conf.set('appearance', { ...appearance, windowState: snapshot(win) });
+  getSettings().set('appearance', { ...getSettings('appearance'), windowState: snapshot(win) });
 }
 
 /**

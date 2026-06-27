@@ -1,5 +1,6 @@
 import type { TrustRule } from '@shared/permissions/rules';
-import { SETTINGS_DEFAULTS, type Settings, SettingsPatchSchema } from '@shared/settings';
+import { type Settings, SettingsPatchSchema } from '@shared/settings';
+import { app } from 'electron';
 import { z } from 'zod';
 import { getSettings } from '../../settings/conf';
 import { publicProcedure, router } from '../trpc';
@@ -8,17 +9,16 @@ const ruleInput = z.object({ tool: z.string(), matcher: z.string() });
 const sameRule = (a: TrustRule, b: TrustRule): boolean =>
   a.tool === b.tool && a.matcher === b.matcher;
 
-const permissions = () => getSettings().get('permissions', SETTINGS_DEFAULTS.permissions);
+const permissions = () => getSettings('permissions');
 
 export const settingsRouter = router({
   /** The full settings object — persisted values over defaults, per scope. The
    *  single read for every preference; the renderer's `useSetting` selects in. */
   all: publicProcedure.query((): Settings => {
-    const store = getSettings().store;
     return {
-      general: { ...SETTINGS_DEFAULTS.general, ...store.general },
-      appearance: { ...SETTINGS_DEFAULTS.appearance, ...store.appearance },
-      permissions: { ...SETTINGS_DEFAULTS.permissions, ...store.permissions },
+      general: getSettings('general'),
+      appearance: getSettings('appearance'),
+      permissions: getSettings('permissions'),
     };
   }),
 
@@ -27,10 +27,21 @@ export const settingsRouter = router({
   patch: publicProcedure.input(SettingsPatchSchema).mutation(({ input }) => {
     const conf = getSettings();
     for (const scope of Object.keys(input) as (keyof Settings)[]) {
-      const cur = conf.get(scope, SETTINGS_DEFAULTS[scope]);
-      conf.set(scope, { ...cur, ...input[scope] });
+      conf.set(scope, { ...getSettings(scope), ...input[scope] });
     }
   }),
+
+  // "Launch at login" lives in the OS login items (the user can also flip it in
+  // System Settings), so it's read/written there directly rather than in conf.
+  openAtLogin: publicProcedure.query((): boolean => {
+    return app.getLoginItemSettings().openAtLogin;
+  }),
+
+  setOpenAtLogin: publicProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(({ input }) => {
+      app.setLoginItemSettings({ openAtLogin: input.enabled });
+    }),
 
   // permissions.trustRules keeps dedicated procedures: add/delete carry dedup
   // logic a blind patch can't express.

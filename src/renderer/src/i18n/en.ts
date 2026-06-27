@@ -338,6 +338,16 @@ export const en: typeof zh = {
       systemDesc: 'Follow the system language',
       note: 'The interface updates immediately when you switch.',
     },
+    general: {
+      groupGeneral: 'General',
+      groupStartup: 'Startup',
+      language: 'Language',
+      languageDesc: 'Interface language. System follows your OS setting.',
+      autoTitle: 'Auto-generate chat titles',
+      autoTitleDesc: 'Summarize the first message into a title on a new chat.',
+      launchAtLogin: 'Launch at login',
+      launchAtLoginDesc: 'Open Atrium automatically when you sign in.',
+    },
     identity: {
       you: 'You',
       youHint: 'Your name here is how the home screen greets you.',
