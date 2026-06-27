@@ -1,75 +1,57 @@
-import { PERMISSION_MODES, type PermissionMode } from '@shared/permissions';
 import type { TrustRule } from '@shared/permissions/rules';
+import { SETTINGS_DEFAULTS, type Settings, SettingsPatchSchema } from '@shared/settings';
 import { z } from 'zod';
-import { DEFAULTS, getSettings, type SelectedModel } from '../../settings/conf';
+import { getSettings } from '../../settings/conf';
 import { publicProcedure, router } from '../trpc';
 
 const ruleInput = z.object({ tool: z.string(), matcher: z.string() });
 const sameRule = (a: TrustRule, b: TrustRule): boolean =>
   a.tool === b.tool && a.matcher === b.matcher;
 
+const permissions = () => getSettings().get('permissions', SETTINGS_DEFAULTS.permissions);
+
 export const settingsRouter = router({
-  /** The persisted default chat model, or null if none chosen yet. */
-  selectedModel: publicProcedure.query((): SelectedModel | null => {
-    return getSettings().get('selectedModel', DEFAULTS.selectedModel);
+  /** The full settings object — persisted values over defaults, per scope. The
+   *  single read for every preference; the renderer's `useSetting` selects in. */
+  all: publicProcedure.query((): Settings => {
+    const store = getSettings().store;
+    return {
+      general: { ...SETTINGS_DEFAULTS.general, ...store.general },
+      appearance: { ...SETTINGS_DEFAULTS.appearance, ...store.appearance },
+      permissions: { ...SETTINGS_DEFAULTS.permissions, ...store.permissions },
+    };
   }),
 
-  setSelectedModel: publicProcedure
-    .input(z.object({ providerId: z.string(), modelId: z.string() }))
-    .mutation(({ input }) => {
-      getSettings().set('selectedModel', input);
-    }),
-
-  /** UI language preference ('system' follows the OS locale). */
-  language: publicProcedure.query((): 'system' | 'en' | 'zh' => {
-    return getSettings().get('language', DEFAULTS.language);
+  /** Merge a scoped partial patch into settings. The generic writer for every
+   *  preference, so adding a setting needs no new procedure. */
+  patch: publicProcedure.input(SettingsPatchSchema).mutation(({ input }) => {
+    const conf = getSettings();
+    for (const scope of Object.keys(input) as (keyof Settings)[]) {
+      const cur = conf.get(scope, SETTINGS_DEFAULTS[scope]);
+      conf.set(scope, { ...cur, ...input[scope] });
+    }
   }),
 
-  setLanguage: publicProcedure
-    .input(z.object({ language: z.enum(['system', 'en', 'zh']) }))
-    .mutation(({ input }) => {
-      getSettings().set('language', input.language);
-    }),
-
-  /** The active tool-permission mode (default / auto-review / full-access). */
-  permissionMode: publicProcedure.query((): PermissionMode => {
-    return getSettings().get('permissionMode', DEFAULTS.permissionMode);
-  }),
-
-  setPermissionMode: publicProcedure
-    .input(z.object({ mode: z.enum(PERMISSION_MODES) }))
-    .mutation(({ input }) => {
-      getSettings().set('permissionMode', input.mode);
-    }),
-
-  /** The model that judges crossings in auto-review mode (null = unconfigured). */
-  reviewerModel: publicProcedure.query((): SelectedModel | null => {
-    return getSettings().get('reviewerModel', DEFAULTS.reviewerModel);
-  }),
-
-  setReviewerModel: publicProcedure
-    .input(z.object({ providerId: z.string(), modelId: z.string() }).nullable())
-    .mutation(({ input }) => {
-      getSettings().set('reviewerModel', input);
-    }),
-
-  /** The tool-permission trust list ("always allow" entries). */
+  // permissions.trustRules keeps dedicated procedures: add/delete carry dedup
+  // logic a blind patch can't express.
   trustRules: publicProcedure.query((): TrustRule[] => {
-    return getSettings().get('trustRules', DEFAULTS.trustRules);
+    return permissions().trustRules;
   }),
 
   addTrustRule: publicProcedure.input(ruleInput).mutation(({ input }) => {
     const rule = input as TrustRule;
-    const cur = getSettings().get('trustRules', DEFAULTS.trustRules);
-    if (!cur.some((r) => sameRule(r, rule))) getSettings().set('trustRules', [...cur, rule]);
+    const cur = permissions();
+    if (!cur.trustRules.some((r) => sameRule(r, rule))) {
+      getSettings().set('permissions', { ...cur, trustRules: [...cur.trustRules, rule] });
+    }
   }),
 
   deleteTrustRule: publicProcedure.input(ruleInput).mutation(({ input }) => {
     const rule = input as TrustRule;
-    const cur = getSettings().get('trustRules', DEFAULTS.trustRules);
-    getSettings().set(
-      'trustRules',
-      cur.filter((r) => !sameRule(r, rule)),
-    );
+    const cur = permissions();
+    getSettings().set('permissions', {
+      ...cur,
+      trustRules: cur.trustRules.filter((r) => !sameRule(r, rule)),
+    });
   }),
 });

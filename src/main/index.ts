@@ -13,7 +13,7 @@ import { closeDb, openDb } from './db';
 import { initLogging } from './log';
 import { resolveModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
-import { getSettings, openSettings } from './settings/conf';
+import { DEFAULTS, getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { appRouter } from './trpc/router';
 
@@ -117,7 +117,7 @@ app.whenReady().then(async () => {
     runDream,
     model: () => {
       try {
-        const sel = getSettings().get('selectedModel', null);
+        const sel = getSettings().get('general', DEFAULTS.general).selectedModel;
         return sel ? resolveModel(db, sel.providerId, sel.modelId) : null;
       } catch {
         return null;

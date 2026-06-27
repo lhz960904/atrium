@@ -8,7 +8,7 @@ import { DEFAULTS, getSettings, type WindowState } from './conf';
  * an external monitor that's no longer plugged in" failure modes.
  */
 export function getInitialWindowState(): WindowState {
-  return getSettings().get('windowState', DEFAULTS.windowState);
+  return getSettings().get('appearance', DEFAULTS.appearance).windowState;
 }
 
 /**
@@ -18,8 +18,7 @@ export function getInitialWindowState(): WindowState {
  * sensible window rather than a screen-sized one.
  */
 function snapshot(win: BrowserWindow): WindowState {
-  const conf = getSettings();
-  const previous = conf.get('windowState', DEFAULTS.windowState);
+  const previous = getSettings().get('appearance', DEFAULTS.appearance).windowState;
   const maximized = win.isMaximized();
   const fullscreen = win.isFullScreen();
   if (maximized || fullscreen) {
@@ -29,20 +28,25 @@ function snapshot(win: BrowserWindow): WindowState {
   return { width, height, maximized: false, fullscreen: false };
 }
 
+/** Read-modify-write the appearance scope so a windowState write preserves any
+ *  sibling appearance settings (e.g. a future theme). */
+function persist(win: BrowserWindow): void {
+  const conf = getSettings();
+  const appearance = conf.get('appearance', DEFAULTS.appearance);
+  conf.set('appearance', { ...appearance, windowState: snapshot(win) });
+}
+
 /**
  * Hook the window's lifecycle so the next launch can restore size +
  * maximized + fullscreen state. Resize bursts are debounced so we don't
  * hammer the settings file while the user is dragging the corner.
  */
 export function attachWindowStatePersistence(win: BrowserWindow): void {
-  const conf = getSettings();
   let timer: NodeJS.Timeout | null = null;
 
   const save = (): void => {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      conf.set('windowState', snapshot(win));
-    }, 200);
+    timer = setTimeout(() => persist(win), 200);
   };
 
   win.on('resize', save);
@@ -53,6 +57,6 @@ export function attachWindowStatePersistence(win: BrowserWindow): void {
   win.on('close', () => {
     if (timer) clearTimeout(timer);
     // Flush a final write so the very last resize before close is captured.
-    conf.set('windowState', snapshot(win));
+    persist(win);
   });
 }

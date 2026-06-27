@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { trpc } from './trpc';
+import { useSetting } from './use-setting';
 
 export type LanguagePref = 'system' | 'en' | 'zh';
 
@@ -17,20 +17,17 @@ export function resolveLang(pref: LanguagePref): 'en' | 'zh' {
  */
 export function useLanguage(): { pref: LanguagePref; setLanguage: (p: LanguagePref) => void } {
   const { i18n } = useTranslation();
-  const persisted = trpc.settings.language.useQuery();
-  const persist = trpc.settings.setLanguage.useMutation();
-  const utils = trpc.useUtils();
-  const pref: LanguagePref = persisted.data ?? 'system';
+  const { value: pref, set, isLoading } = useSetting('general.language');
 
   useEffect(() => {
-    if (persisted.isLoading) return;
+    if (isLoading) return;
     const lng = resolveLang(pref);
     if (i18n.language !== lng) void i18n.changeLanguage(lng);
-  }, [persisted.isLoading, pref, i18n]);
+  }, [isLoading, pref, i18n]);
 
   const setLanguage = (p: LanguagePref): void => {
     void i18n.changeLanguage(resolveLang(p));
-    persist.mutate({ language: p }, { onSuccess: () => utils.settings.language.invalidate() });
+    set(p);
   };
 
   return { pref, setLanguage };

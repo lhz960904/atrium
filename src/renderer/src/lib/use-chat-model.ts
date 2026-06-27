@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { type SelectedModel, useModelStore } from '../state/model-store';
 import { trpc } from './trpc';
+import { useSetting } from './use-setting';
 
 /** A provider with its enabled models, for the picker's grouped list. `external`
  *  marks a local-CLI/ACP provider — the picker shows it as a single entry (the
@@ -68,8 +69,11 @@ function firstModel(groups: ModelGroup[]): SelectedModel | null {
  */
 export function useChatModel() {
   const providers = trpc.providers.list.useQuery();
-  const persisted = trpc.settings.selectedModel.useQuery();
-  const persist = trpc.settings.setSelectedModel.useMutation();
+  const {
+    value: persistedModel,
+    set: persistModel,
+    isLoading: persistLoading,
+  } = useSetting('general.selectedModel');
   const selected = useModelStore((s) => s.selected);
   const setStore = useModelStore((s) => s.setSelected);
 
@@ -77,16 +81,16 @@ export function useChatModel() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: setStore is stable
   useEffect(() => {
-    if (!providers.data || persisted.isLoading) return;
+    if (!providers.data || persistLoading) return;
     if (isValid(selected, groups)) return;
-    const candidate = persisted.data ?? null;
+    const candidate = persistedModel ?? null;
     const next = isValid(candidate, groups) ? candidate : firstModel(groups);
     if (next) setStore(next);
-  }, [providers.data, persisted.data, persisted.isLoading, selected, groups]);
+  }, [providers.data, persistedModel, persistLoading, selected, groups]);
 
   const setSelected = (m: SelectedModel): void => {
     setStore(m);
-    persist.mutate(m);
+    persistModel(m);
   };
 
   return { selected, groups, setSelected, loading: providers.isLoading };

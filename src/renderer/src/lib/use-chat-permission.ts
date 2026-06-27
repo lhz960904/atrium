@@ -1,7 +1,7 @@
 import type { PermissionMode } from '@shared/permissions';
 import { useEffect } from 'react';
 import { usePermissionStore } from '../state/permission-store';
-import { trpc } from './trpc';
+import { useSetting } from './use-setting';
 
 /**
  * Hydrate the permission-mode store from the persisted setting once — globally,
@@ -15,22 +15,18 @@ export function useChatPermission(): {
   mode: PermissionMode;
   setMode: (m: PermissionMode) => void;
 } {
-  const utils = trpc.useUtils();
-  const persisted = trpc.settings.permissionMode.useQuery();
-  const persist = trpc.settings.setPermissionMode.useMutation({
-    onSuccess: () => utils.settings.permissionMode.invalidate(),
-  });
+  const { value: persistedMode, set: persistMode, isLoading } = useSetting('permissions.mode');
   const mode = usePermissionStore((s) => s.mode);
   const setStore = usePermissionStore((s) => s.setMode);
   const hydrate = usePermissionStore((s) => s.hydrate);
 
   useEffect(() => {
-    if (persisted.data) hydrate(persisted.data);
-  }, [persisted.data, hydrate]);
+    if (!isLoading) hydrate(persistedMode);
+  }, [isLoading, persistedMode, hydrate]);
 
   const setMode = (m: PermissionMode): void => {
     setStore(m);
-    persist.mutate({ mode: m });
+    persistMode(m);
   };
 
   return { mode, setMode };

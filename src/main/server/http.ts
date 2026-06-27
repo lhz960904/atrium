@@ -31,7 +31,7 @@ import { createLogger } from '../log';
 import { resolveAcpSpec } from '../providers/acp-spec';
 import { getProviderManifest } from '../providers/manifest';
 import { resolveModel } from '../providers/resolve';
-import { getSettings } from '../settings/conf';
+import { DEFAULTS, getSettings } from '../settings/conf';
 import {
   loadThreadMessages,
   persistMessage,
@@ -79,7 +79,7 @@ function resolveReviewerModel(
   db: Db,
   fallback: { providerId: string; modelId: string },
 ): LanguageModel | undefined {
-  const configured = getSettings().get('reviewerModel', null);
+  const configured = getSettings().get('permissions', DEFAULTS.permissions).reviewerModel;
   const picked = configured ?? fallback;
   try {
     const model = resolveModel(db, picked.providerId, picked.modelId);
@@ -217,7 +217,7 @@ export function startHttpServer(deps: {
         bgShells,
         permission: {
           mode,
-          rules: getSettings().get('trustRules', []),
+          rules: getSettings().get('permissions', DEFAULTS.permissions).trustRules,
           // Resolve the reviewer only when auto-review can actually use it; a
           // misconfigured/removed model resolves to undefined, so auto-review
           // simply falls back to prompting rather than failing the turn.

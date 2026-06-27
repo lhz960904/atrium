@@ -7,6 +7,7 @@ import { PERMISSION_MODE_META } from '../../../lib/permission-modes';
 import { trpc } from '../../../lib/trpc';
 import { deriveGroups } from '../../../lib/use-chat-model';
 import { useChatPermission } from '../../../lib/use-chat-permission';
+import { useSetting } from '../../../lib/use-setting';
 
 /** A typed entry is a path when it looks like one (slash or ~/. prefix),
  *  otherwise a shell command. The user never picks a tool — just types the
@@ -48,12 +49,9 @@ export function PermissionsSection(): React.JSX.Element {
     () => deriveGroups(providers.data ?? []).filter((g) => !g.external),
     [providers.data],
   );
-  const reviewerModel = trpc.settings.reviewerModel.useQuery();
-  const setReviewerModel = trpc.settings.setReviewerModel.useMutation({
-    onSuccess: () => utils.settings.reviewerModel.invalidate(),
-  });
+  const { value: reviewerModel, set: setReviewerModel } = useSetting('permissions.reviewerModel');
   const onReviewerChange = (value: ModelValue): void => {
-    setReviewerModel.mutate(value);
+    setReviewerModel(value);
   };
 
   const [draft, setDraft] = useState('');
@@ -109,7 +107,7 @@ export function PermissionsSection(): React.JSX.Element {
         <div className="max-w-sm">
           <ModelPicker
             variant="field"
-            value={reviewerModel.data ?? null}
+            value={reviewerModel}
             onChange={onReviewerChange}
             groups={reviewerGroups}
             inheritLabel={t('settings.permissions.reviewerNone')}
