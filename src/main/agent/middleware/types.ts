@@ -15,7 +15,7 @@ import type { Sandbox } from '../sandbox/types';
 export type AgentRequest = {
   system: string;
   messages: UIMessage[];
-  tools: Record<ToolName, Tool>;
+  tools: Record<string, Tool>;
 };
 
 /** Persists across the whole turn; the runner closes over it into every hook. */

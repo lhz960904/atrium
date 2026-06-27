@@ -6,6 +6,8 @@ import { cors } from 'hono/cors';
 import { AcpPermissionBroker, isAcpDecision } from '../agent/acp/permission-broker';
 import { AcpSessionRegistry } from '../agent/acp/registry';
 import { runExternalAgentTurn } from '../agent/acp/run-external-agent';
+import { mcpManager } from '../agent/mcp/manager';
+import { buildMcpTools } from '../agent/mcp/tool-adapter';
 import {
   compactionMiddleware,
   compactThread,
@@ -215,6 +217,7 @@ export function startHttpServer(deps: {
         db: deps.db,
         skills,
         bgShells,
+        mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager),
         permission: {
           mode,
           rules: getSettings('permissions.trustRules'),

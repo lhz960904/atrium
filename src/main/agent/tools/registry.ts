@@ -25,10 +25,12 @@ import { writeFileTool } from './builtins/write-file';
 import type { ToolCtx } from './context';
 
 /**
- * Assemble the built-in tools for a given sandbox context. The return type is
- * keyed by ToolName, so the registry and the shared name contract can't drift.
- * The task tool advertises the available subagents (from ctx.db), resolved per
- * call so freshly created ones show up.
+ * Assemble the agent's toolset for a sandbox context: the built-ins (keyed by
+ * ToolName, so they can't drift from the shared name contract) plus any MCP
+ * server tools (keyed by their qualified mcp__<server>__<tool> name) — hence the
+ * Record<string, Tool> return. Built-ins are spread last so an MCP server can
+ * never shadow one. The task tool advertises the available subagents (from
+ * ctx.db), resolved per call so freshly created ones show up.
  */
 /** Gate a tool behind the permission check — it pauses for approval when the
  *  call crosses the workspace boundary under the active mode. */
@@ -36,8 +38,9 @@ function gate(name: ToolName, ctx: ToolCtx, t: Tool): Tool {
   return { ...t, needsApproval: makeNeedsApproval(name, ctx) };
 }
 
-export function getTools(ctx: ToolCtx): Record<ToolName, Tool> {
+export function getTools(ctx: ToolCtx): Record<string, Tool> {
   return {
+    ...ctx.mcpTools,
     read_file: readFileTool(ctx),
     write_file: gate('write_file', ctx, writeFileTool(ctx)),
     edit_file: gate('edit_file', ctx, editFileTool(ctx)),
