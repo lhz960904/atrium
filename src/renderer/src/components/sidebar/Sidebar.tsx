@@ -1,6 +1,6 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { FolderPlus, Search, Settings, SquarePen } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../lib/trpc';
 import { useCommandPalette } from '../../state/command-palette-store';
@@ -10,7 +10,7 @@ import { SbIconButton, SbNavItem, SbSection } from './primitives';
 import { ThreadRow } from './ThreadRow';
 import type { ProjectItem, ThreadItem } from './types';
 
-export function Sidebar(): React.JSX.Element {
+export const Sidebar = memo(function Sidebar(): React.JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const width = useSidebarStore((s) => s.width);
@@ -166,4 +166,4 @@ export function Sidebar(): React.JSX.Element {
       </div>
     </aside>
   );
-}
+});
