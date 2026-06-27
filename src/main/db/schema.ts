@@ -109,6 +109,26 @@ export const subagents = sqliteTable('subagents', {
 });
 
 /**
+ * One row per MCP (Model Context Protocol) server the user configures. Atrium
+ * connects to these as an MCP client and merges their tools into the agent's
+ * toolset, namespaced `mcp__<server>__<tool>`. Non-secret config (transport,
+ * command/args/url, non-secret env and headers) lives in `config`; secret env
+ * vars, headers and tokens are safeStorage-encrypted in `credentialsEncrypted`.
+ * `name` is the unique, user-visible identifier that also seeds the namespace.
+ */
+export const mcpServers = sqliteTable('mcp_servers', {
+  id: text().primaryKey(),
+  name: text().notNull().unique(),
+  enabled: integer({ mode: 'boolean' }).notNull().default(false),
+  transport: text({ enum: ['stdio', 'http', 'sse'] }).notNull(),
+  config: text({ mode: 'json' }),
+  /** safeStorage-encrypted JSON; null when no credentials are stored. */
+  credentialsEncrypted: blob('credentials_encrypted', { mode: 'buffer' }),
+  createdAt: timestamp(),
+  updatedAt: timestamp(),
+});
+
+/**
  * Per-LLM-call usage ledger: one row per model call (main chat turn, subagent,
  * title, …). Tokens and cost are frozen at write time — cost from the model's
  * pricing at that moment, so a later price change doesn't rewrite history. This
@@ -153,5 +173,7 @@ export type Provider = typeof providers.$inferSelect;
 export type NewProvider = typeof providers.$inferInsert;
 export type Subagent = typeof subagents.$inferSelect;
 export type NewSubagent = typeof subagents.$inferInsert;
+export type McpServerRow = typeof mcpServers.$inferSelect;
+export type NewMcpServerRow = typeof mcpServers.$inferInsert;
 export type Usage = typeof usage.$inferSelect;
 export type NewUsage = typeof usage.$inferInsert;
