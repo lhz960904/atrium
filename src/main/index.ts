@@ -11,6 +11,7 @@ import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/c
 import { refreshSkills } from './agent/skills/registry';
 import { closeDb, openDb } from './db';
 import { initLogging } from './log';
+import { setupMenuBar } from './menu-bar';
 import { resolveModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
 import { getSettings, openSettings } from './settings/conf';
@@ -147,12 +148,12 @@ app.whenReady().then(async () => {
     createContext: async () => ({ db, chatEndpoint }),
   });
 
-  app.on('activate', () => {
-    // Hide-on-close keeps the window alive, so the common Dock re-open just
-    // re-shows it (preserving the previous view). Only rebuild from scratch if
-    // it was genuinely destroyed (non-macOS, or after a full quit cycle).
+  // Show (or, after a full quit cycle / non-macOS, rebuild) the main window.
+  // Hide-on-close keeps it alive, so the common path just re-shows it.
+  const showWindow = (): void => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
+      mainWindow.focus();
       return;
     }
     const next = createWindow();
@@ -161,7 +162,17 @@ app.whenReady().then(async () => {
       windows: [next],
       createContext: async () => ({ db, chatEndpoint }),
     });
+  };
+
+  setupMenuBar({
+    showWindow,
+    newChat: () => {
+      showWindow();
+      mainWindow?.webContents.send('menu:new-chat');
+    },
   });
+
+  app.on('activate', showWindow);
 });
 
 app.on('window-all-closed', () => {

@@ -145,6 +145,7 @@ function GeneralSection(): React.JSX.Element {
   const { t } = useTranslation();
   const { pref, setLanguage } = useLanguage();
   const { value: autoTitle, set: setAutoTitle } = useSetting('general.autoGenerateTitle');
+  const { value: inMenuBar, set: setInMenuBar } = useSetting('general.showInMenuBar');
   const utils = trpc.useUtils();
   const openAtLogin = trpc.settings.openAtLogin.useQuery();
   const setOpenAtLogin = trpc.settings.setOpenAtLogin.useMutation({
@@ -178,8 +179,6 @@ function GeneralSection(): React.JSX.Element {
           desc={t('settings.general.autoTitleDesc')}
           control={<EnableSwitch on={autoTitle} onToggle={() => setAutoTitle(!autoTitle)} />}
         />
-      </SettingGroup>
-      <SettingGroup title={t('settings.general.groupStartup')}>
         <SettingRow
           label={t('settings.general.launchAtLogin')}
           desc={t('settings.general.launchAtLoginDesc')}
@@ -189,6 +188,11 @@ function GeneralSection(): React.JSX.Element {
               onToggle={() => setOpenAtLogin.mutate({ enabled: !launchOn })}
             />
           }
+        />
+        <SettingRow
+          label={t('settings.general.showInMenuBar')}
+          desc={t('settings.general.showInMenuBarDesc')}
+          control={<EnableSwitch on={inMenuBar} onToggle={() => setInMenuBar(!inMenuBar)} />}
         />
       </SettingGroup>
     </div>

@@ -340,13 +340,14 @@ export const en: typeof zh = {
     },
     general: {
       groupGeneral: 'General',
-      groupStartup: 'Startup',
       language: 'Language',
       languageDesc: 'Interface language. System follows your OS setting.',
       autoTitle: 'Auto-generate chat titles',
       autoTitleDesc: 'Summarize the first message into a title on a new chat.',
       launchAtLogin: 'Launch at login',
       launchAtLoginDesc: 'Open Atrium automatically when you sign in.',
+      showInMenuBar: 'Show in menu bar',
+      showInMenuBarDesc: 'Keep an Atrium icon in the macOS menu bar for quick actions.',
     },
     identity: {
       you: 'You',

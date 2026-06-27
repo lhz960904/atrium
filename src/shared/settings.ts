@@ -25,6 +25,8 @@ const generalShape = z.object({
   selectedModel: selectedModelShape.nullable().default(null),
   /** Summarize a thread's first message into its title. On by default. */
   autoGenerateTitle: z.boolean().default(true),
+  /** Show the app's icon in the macOS menu bar. Off by default. */
+  showInMenuBar: z.boolean().default(false),
 });
 
 const appearanceShape = z.object({
