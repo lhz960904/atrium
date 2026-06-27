@@ -77,7 +77,6 @@ const NAV_ITEMS: readonly NavItem[] = [
     icon: Brain,
     group: 'personal',
   },
-  { section: 'pets', labelKey: 'settings.sections.petsTitle', icon: PawPrint, group: 'personal' },
   {
     section: 'keyboard',
     labelKey: 'settings.sections.keyboardTitle',
@@ -127,13 +126,6 @@ const NAV_ITEMS: readonly NavItem[] = [
     section: 'connections',
     labelKey: 'settings.sections.connectionsTitle',
     icon: Globe,
-    group: 'coding',
-  },
-  { section: 'git', labelKey: 'settings.sections.gitTitle', icon: GitBranch, group: 'coding' },
-  {
-    section: 'environments',
-    labelKey: 'settings.sections.environmentsTitle',
-    icon: Box,
     group: 'coding',
   },
   {

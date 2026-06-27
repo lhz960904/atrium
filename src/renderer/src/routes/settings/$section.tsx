@@ -41,7 +41,6 @@ const SECTIONS: Record<string, SectionMeta> = {
   identity: { titleKey: 'settings.sections.identityTitle', Component: IdentitySection },
   appearance: { titleKey: 'settings.sections.appearanceTitle', Component: AppearanceSection },
   memories: { titleKey: 'settings.sections.memoriesTitle', Component: MemoriesSection },
-  pets: { titleKey: 'settings.sections.petsTitle', Component: PlaceholderSection },
   keyboard: { titleKey: 'settings.sections.keyboardTitle', Component: KeyboardSection },
   usage: { titleKey: 'settings.sections.usageTitle', wide: true, Component: UsageSection },
   providers: {
@@ -63,8 +62,6 @@ const SECTIONS: Record<string, SectionMeta> = {
   permissions: { titleKey: 'settings.sections.permissionsTitle', Component: PermissionsSection },
   hooks: { titleKey: 'settings.sections.hooksTitle', Component: PlaceholderSection },
   connections: { titleKey: 'settings.sections.connectionsTitle', Component: PlaceholderSection },
-  git: { titleKey: 'settings.sections.gitTitle', Component: PlaceholderSection },
-  environments: { titleKey: 'settings.sections.environmentsTitle', Component: PlaceholderSection },
   worktrees: { titleKey: 'settings.sections.worktreesTitle', Component: PlaceholderSection },
   archived: { titleKey: 'settings.sections.archivedTitle', Component: ArchivedSection },
   about: { titleKey: 'settings.sections.aboutTitle', Component: PlaceholderSection },
