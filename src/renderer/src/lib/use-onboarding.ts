@@ -9,7 +9,7 @@ import { trpc } from './trpc';
  * handshake card and the identity settings so the skill name lives in one place.
  */
 export function useStartOnboarding(): { start: () => void; isPending: boolean } {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const utils = trpc.useUtils();
   const createThread = trpc.threads.create.useMutation({
@@ -20,9 +20,14 @@ export function useStartOnboarding(): { start: () => void; isPending: boolean } 
   });
 
   const start = (): void => {
-    usePendingInput
-      .getState()
-      .set({ text: '<skill-use>get-acquainted</skill-use>', attachments: [] });
+    // The opener is the AI's first message, so the skill has no user reply to
+    // detect language from — seed it from the UI language via a hidden tag
+    // (UserMessage strips it from the bubble; the model still reads it).
+    const lang = i18n.language.startsWith('zh') ? '简体中文' : 'English';
+    usePendingInput.getState().set({
+      text: `<skill-use>get-acquainted</skill-use>\n<reply-language>${lang}</reply-language>`,
+      attachments: [],
+    });
     createThread.mutate({ title: t('home.getAcquaintedTitle') });
   };
 

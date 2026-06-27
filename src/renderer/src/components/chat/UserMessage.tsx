@@ -12,6 +12,9 @@ import { CopyButton } from './CopyButton';
  * composer. New reference kinds (files, repos…) add a branch here.
  */
 const SKILL_USE = /<skill-use>([^<]+)<\/skill-use>/g;
+// The onboarding kickoff carries the UI language for the AI in a hidden tag —
+// the model reads it, but it should never show in the user's bubble.
+const REPLY_LANGUAGE = /\n?<reply-language>[^<]*<\/reply-language>/g;
 
 function renderWithMentions(text: string): React.ReactNode {
   const nodes: React.ReactNode[] = [];
@@ -41,7 +44,8 @@ export const UserMessage = memo(function UserMessage({
   const text = parts
     .filter((p) => p.type === 'text')
     .map((p) => p.text)
-    .join('');
+    .join('')
+    .replace(REPLY_LANGUAGE, '');
   const files = parts.filter((p) => p.type === 'file');
   return (
     <div className="group mb-5 flex flex-col items-end gap-1.5">
