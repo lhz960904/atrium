@@ -61,3 +61,14 @@ test('shouldConsolidate: scan throttle blocks a second call within the window', 
   expect(await shouldConsolidate(dir, NOW)).toBe(true);
   expect(await shouldConsolidate(dir, NOW + 60_000)).toBe(false); // 1 min later → throttled
 });
+
+// A deleted/never-created scope dir (e.g. after a memory reset) must not crash
+// the dream sweep — writeState swallows ENOENT for every caller.
+test('shouldConsolidate on a missing dir returns false, not a throw', async () => {
+  const missing = join(tmpdir(), 'mem-state-nope-xyz', 'inner');
+  expect(await shouldConsolidate(missing, NOW)).toBe(false);
+});
+
+test('markConsolidated on a missing dir is a no-op, not a throw', async () => {
+  await markConsolidated(join(tmpdir(), 'mem-state-nope-xyz', 'inner'), NOW);
+});

@@ -26,22 +26,24 @@ export async function readState(dir: string): Promise<MemoryState> {
 }
 
 /**
- * Record that a session touched this scope, for the consolidation gate (deduped).
- * No-op when the scope dir doesn't exist yet — there's nothing to consolidate there.
+ * Persist memory state. No-ops when the scope dir is absent (memories were
+ * deleted, or none written yet): there's nothing to consolidate there, so every
+ * caller — including the dream sweep — must tolerate a missing dir rather than
+ * crash on ENOENT. Other write errors still propagate.
  */
 async function writeState(dir: string, s: MemoryState): Promise<void> {
-  await writeFile(join(dir, STATE_FILE), JSON.stringify(s), 'utf8');
+  try {
+    await writeFile(join(dir, STATE_FILE), JSON.stringify(s), 'utf8');
+  } catch (err) {
+    if ((err as { code?: string }).code !== 'ENOENT') throw err;
+  }
 }
 
 export async function recordSessionTouch(dir: string, sessionId: string): Promise<void> {
   const s = await readState(dir);
   if (s.touchedSessions.includes(sessionId)) return;
   s.touchedSessions.push(sessionId);
-  try {
-    await writeState(dir, s);
-  } catch {
-    // scope dir absent (no memories yet) → skip
-  }
+  await writeState(dir, s);
 }
 
 /**
