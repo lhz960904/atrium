@@ -1,12 +1,16 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import {
   getDefaultEnvironment,
   StdioClientTransport,
 } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
+import { createLogger } from '../../log';
 import type { ResolvedMcpServer } from './config';
 
+const log = createLogger('mcp');
 const CLIENT_INFO = { name: 'atrium', version: '0.0.0' };
 const CONNECT_TIMEOUT_MS = 30_000;
 const DEFAULT_CALL_TIMEOUT_MS = 120_000;
@@ -29,9 +33,7 @@ export class McpConnection {
   }
 
   async connect(): Promise<void> {
-    const client = new Client(CLIENT_INFO, { capabilities: {} });
-    await client.connect(createTransport(this.server), { timeout: CONNECT_TIMEOUT_MS });
-    this.client = client;
+    this.client = await openClient(this.server);
     await this.refreshTools();
   }
 
@@ -72,17 +74,62 @@ export class McpConnection {
   }
 }
 
-function createTransport(server: ResolvedMcpServer): StdioClientTransport {
+/**
+ * Open a connected Client for a server, picking the transport. For `http` we use
+ * Streamable HTTP and fall back to SSE for servers that only speak the legacy
+ * transport. OAuth isn't wired yet — auth is via bearer/header (see httpHeaders).
+ */
+async function openClient(server: ResolvedMcpServer): Promise<Client> {
   if (server.transport === 'stdio') {
-    return new StdioClientTransport({
-      command: server.command,
-      args: server.args,
-      env: stdioEnv(server),
-      cwd: server.cwd,
-    });
+    return dial(
+      new StdioClientTransport({
+        command: server.command,
+        args: server.args,
+        env: stdioEnv(server),
+        cwd: server.cwd,
+      }),
+    );
   }
-  // Streamable HTTP / SSE (with OAuth) lands in a later milestone.
-  throw new Error(`MCP transport "${server.transport}" is not supported yet`);
+
+  const url = new URL(server.url);
+  const requestInit: RequestInit = { headers: httpHeaders(server) };
+  if (server.transport === 'sse') {
+    return dial(new SSEClientTransport(url, { requestInit }));
+  }
+  try {
+    return await dial(new StreamableHTTPClientTransport(url, { requestInit }));
+  } catch (err) {
+    log.info(`"${server.name}": Streamable HTTP failed, falling back to SSE`, err);
+    return dial(new SSEClientTransport(url, { requestInit }));
+  }
+}
+
+async function dial(
+  transport: StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport,
+): Promise<Client> {
+  const client = new Client(CLIENT_INFO, { capabilities: {} });
+  await client.connect(transport, { timeout: CONNECT_TIMEOUT_MS });
+  return client;
+}
+
+/*
+ * Final HTTP headers: a Bearer from the named host env var (lowest precedence),
+ * then headers whose values come from named host env vars, then the server's
+ * explicit headers (static config + decrypted secrets), which win on conflict.
+ */
+function httpHeaders(
+  server: Extract<ResolvedMcpServer, { transport: 'http' | 'sse' }>,
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (server.bearerTokenEnvVar) {
+    const token = process.env[server.bearerTokenEnvVar];
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  for (const [name, varName] of Object.entries(server.headersFromEnv)) {
+    const value = process.env[varName];
+    if (value !== undefined) headers[name] = value;
+  }
+  return { ...headers, ...server.headers };
 }
 
 /*
