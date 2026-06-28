@@ -17,6 +17,7 @@ import { resolveModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
 import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
+import { fixPath } from './shell-path';
 import { appRouter } from './trpc/router';
 
 // Kept alive across hide/show so reopening from the Dock restores the exact
@@ -104,6 +105,9 @@ app.whenReady().then(async () => {
   // we set ours explicitly; packaged macOS builds already carry build/icon.icns.
   if (process.platform === 'darwin') app.dock?.setIcon(icon);
   initLogging();
+  // Resolve the user's real PATH before anything spawns (MCP stdio servers, shells),
+  // so npx/uvx/python are found even when launched from the Dock.
+  fixPath();
 
   const db = openDb();
   openSettings();
