@@ -49,7 +49,7 @@ export function Toaster(): React.JSX.Element {
             onOpenChange={(open) => {
               if (!open) remove(item.id);
             }}
-            className={`toast-enter relative flex max-w-[440px] items-start gap-2 overflow-hidden rounded-lg border bg-elevated px-3.5 py-2.5 shadow-lg data-[swipe=cancel]:translate-y-0 data-[swipe=move]:translate-y-[var(--radix-toast-swipe-move-y)] data-[swipe=move]:transition-none ${v.border}`}
+            className={`toast-enter pointer-events-auto relative flex max-w-[440px] items-start gap-2 overflow-hidden rounded-lg border bg-elevated px-3.5 py-2.5 shadow-lg data-[swipe=cancel]:translate-y-0 data-[swipe=move]:translate-y-[var(--radix-toast-swipe-move-y)] data-[swipe=move]:transition-none ${v.border}`}
           >
             {/* opaque elevated base + a kind tint over it, so content behind
                 never shows through and overlaps the text */}
@@ -75,7 +75,7 @@ export function Toaster(): React.JSX.Element {
           </Toast.Root>
         );
       })}
-      <Toast.Viewport className="fixed inset-x-0 top-12 z-[var(--z-toast)] m-0 flex list-none flex-col items-center gap-2 px-4 outline-none" />
+      <Toast.Viewport className="pointer-events-none fixed inset-x-0 top-12 z-[var(--z-toast)] m-0 flex list-none flex-col items-center gap-2 px-4 outline-none" />
     </Toast.Provider>
   );
 }
