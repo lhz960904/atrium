@@ -532,6 +532,8 @@ export const en: typeof zh = {
       authenticate: 'Authenticate',
       authenticating: 'Authenticating…',
       attentionBadge: 'Some servers need attention',
+      attentionToast: '{{count}} MCP server(s) need attention',
+      attentionToastAction: 'Review',
       status: {
         connected: 'Connected',
         'needs-auth': 'Needs authorization',

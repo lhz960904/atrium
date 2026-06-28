@@ -524,6 +524,8 @@ export const zh = {
       authenticate: '授权',
       authenticating: '授权中…',
       attentionBadge: '部分服务需要处理',
+      attentionToast: '{{count}} 个 MCP 服务需要处理',
+      attentionToastAction: '查看',
       status: {
         connected: '已连接',
         'needs-auth': '需要授权',
