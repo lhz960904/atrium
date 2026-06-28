@@ -1,3 +1,4 @@
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import {
@@ -109,6 +110,7 @@ async function openClient(server: ResolvedMcpServer, oauthStore?: McpOAuthStore)
   try {
     return await dial(new StreamableHTTPClientTransport(url, { requestInit, authProvider }));
   } catch (err) {
+    if (err instanceof UnauthorizedError) throw err; // needs auth, not a transport mismatch
     log.info(`"${server.name}": Streamable HTTP failed, falling back to SSE`, err);
     return dial(new SSEClientTransport(url, { requestInit, authProvider }));
   }

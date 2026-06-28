@@ -529,6 +529,15 @@ export const en: typeof zh = {
       count: '{{count}} configured',
       emptyList: 'No MCP servers yet.',
       emptyHint: 'Pick an MCP server on the left, or add one.',
+      authenticate: 'Authenticate',
+      authenticating: 'Authenticating…',
+      status: {
+        connected: 'Connected',
+        'needs-auth': 'Needs authorization',
+        error: 'Connection error',
+        connecting: 'Connecting…',
+        disabled: 'Disabled',
+      },
     },
     skills: {
       empty:

@@ -8,7 +8,7 @@ import {
   mcpSecretsSchema,
   parseConfig,
 } from '../../agent/mcp/config';
-import { mcpManager } from '../../agent/mcp/manager';
+import { type McpServerStatus, mcpManager } from '../../agent/mcp/manager';
 import { decryptSecrets, encryptSecrets } from '../../agent/mcp/secrets';
 import type { Db } from '../../db';
 import { mcpServers } from '../../db/schema';
@@ -22,6 +22,8 @@ type McpServerView = {
   transport: McpTransport;
   config: Record<string, unknown> | null;
   hasCredentials: boolean;
+  /** Live connection status (only meaningful while enabled); absent = not attempted. */
+  status?: McpServerStatus;
 };
 
 const fields = z.object({
@@ -34,8 +36,9 @@ const fields = z.object({
 });
 
 export const mcpRouter = router({
-  list: publicProcedure.query(({ ctx }): McpServerView[] =>
-    ctx.db
+  list: publicProcedure.query(({ ctx }): McpServerView[] => {
+    const statuses = mcpManager.serverStatuses();
+    return ctx.db
       .select()
       .from(mcpServers)
       .all()
@@ -46,8 +49,13 @@ export const mcpRouter = router({
         transport: r.transport,
         config: r.config as Record<string, unknown> | null,
         hasCredentials: !!r.credentialsEncrypted,
-      })),
-  ),
+        status: statuses[r.id],
+      }));
+  }),
+
+  authenticate: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(({ input }) => mcpManager.authenticate(input.id)),
 
   create: publicProcedure.input(fields).mutation(({ ctx, input }) => {
     assertNameFree(ctx.db, input.name);

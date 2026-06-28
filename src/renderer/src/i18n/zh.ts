@@ -521,6 +521,15 @@ export const zh = {
       count: '已配置 {{count}} 个',
       emptyList: '还没有 MCP 服务。',
       emptyHint: '选择左侧的 MCP 服务，或添加一个。',
+      authenticate: '授权',
+      authenticating: '授权中…',
+      status: {
+        connected: '已连接',
+        'needs-auth': '需要授权',
+        error: '连接失败',
+        connecting: '连接中…',
+        disabled: '已禁用',
+      },
     },
     skills: {
       empty: '没有发现 skill。把 {{file}} 目录放进 {{dirA}}、{{dirB}} 或 {{dirC}} 后重启。',

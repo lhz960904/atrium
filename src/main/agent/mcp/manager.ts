@@ -1,3 +1,4 @@
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { Db } from '../../db';
 import { createLogger } from '../../log';
@@ -9,6 +10,9 @@ import { loadEnabledServers, oauthStore, resolveServerById } from './store';
 
 const log = createLogger('mcp');
 
+/** Live per-server connection status, surfaced to the settings UI. */
+export type McpServerStatus = 'connected' | 'needs-auth' | 'error';
+
 /**
  * Process-wide registry of connected MCP servers. Connects enabled servers,
  * aggregates their tools into one uniquely-named catalog, and routes calls back
@@ -17,6 +21,7 @@ const log = createLogger('mcp');
  */
 export class McpManager {
   private readonly connections = new Map<string, McpConnection>();
+  private readonly statuses = new Map<string, McpServerStatus>();
   private db: Db | null = null;
 
   async init(db: Db): Promise<void> {
@@ -33,17 +38,32 @@ export class McpManager {
     try {
       await conn.connect();
       this.connections.set(server.id, conn);
+      this.statuses.set(server.id, 'connected');
       log.info(`connected "${server.name}" (${conn.listTools().length} tools)`);
     } catch (err) {
-      log.error(`failed to connect "${server.name}":`, err);
+      // Needs-auth is an expected state (no tokens yet → user clicks Authenticate),
+      // not a failure — log it quietly without the stack; reserve error for real faults.
+      if (err instanceof UnauthorizedError) {
+        this.statuses.set(server.id, 'needs-auth');
+        log.info(`"${server.name}" needs authorization`);
+      } else {
+        this.statuses.set(server.id, 'error');
+        log.error(`failed to connect "${server.name}":`, err);
+      }
     }
   }
 
   async disconnect(serverId: string): Promise<void> {
+    this.statuses.delete(serverId);
     const conn = this.connections.get(serverId);
     if (!conn) return;
     this.connections.delete(serverId);
     await conn.close();
+  }
+
+  /** Live status per server id (only servers we've attempted to connect). */
+  serverStatuses(): Record<string, McpServerStatus> {
+    return Object.fromEntries(this.statuses);
   }
 
   /** Reconnect a server by id after its config changed, or drop it if now disabled. */
@@ -55,18 +75,28 @@ export class McpManager {
 
   /** Run the interactive OAuth flow for an http server, then reconnect with the tokens. */
   async authenticate(id: string): Promise<void> {
-    if (!this.db) throw new Error('MCP manager not initialized');
-    const server = resolveServerById(this.db, id);
+    const db = this.db;
+    if (!db) throw new Error('MCP manager not initialized');
+    const server = resolveServerById(db, id);
     if (!server || server.transport === 'stdio') {
       throw new Error('OAuth is only available for HTTP MCP servers');
     }
     const { shell } = require('electron') as typeof import('electron');
-    await runInteractiveOAuth(
-      server.url,
-      { headers: httpHeaders(server) },
-      oauthStore(this.db, id),
-      (url) => void shell.openExternal(url),
-    );
+    try {
+      await runInteractiveOAuth(
+        server.url,
+        { headers: httpHeaders(server) },
+        oauthStore(db, id),
+        (url) => void shell.openExternal(url),
+      );
+    } catch (err) {
+      // The server may have been deleted or disabled while the browser flow was
+      // open (or it timed out after the user walked away). If it's gone now the
+      // error is moot — swallow it; otherwise surface it to the UI.
+      if (resolveServerById(db, id)?.enabled) throw err;
+      log.info(`auth for "${server.name}" abandoned (server removed or disabled)`);
+      return;
+    }
     await this.reload(id);
   }
 

@@ -10,6 +10,8 @@ export type McpServerItem = {
   transport: 'stdio' | 'http' | 'sse';
   config: Record<string, unknown> | null;
   hasCredentials: boolean;
+  /** Live connection status from the manager; absent while connecting/not attempted. */
+  status?: 'connected' | 'needs-auth' | 'error';
 };
 
 type Pair = { key: string; value: string };
