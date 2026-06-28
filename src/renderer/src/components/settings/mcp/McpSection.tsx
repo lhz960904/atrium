@@ -107,10 +107,14 @@ function Row({
   onDelete: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
+  const cfg = item.config ?? {};
   const subtitle =
     item.transport === 'stdio'
-      ? String(item.config?.command ?? '')
-      : String(item.config?.url ?? '');
+      ? [cfg.command, ...(Array.isArray(cfg.args) ? cfg.args : [])]
+          .filter(Boolean)
+          .map(String)
+          .join(' ')
+      : String(cfg.url ?? '');
   return (
     <div className="group flex items-center gap-3 rounded-lg border border-border-default bg-surface px-4 py-3">
       <input
@@ -133,7 +137,10 @@ function Row({
           </span>
         </span>
         {subtitle && (
-          <span className="mt-0.5 max-w-full truncate font-mono text-fg-tertiary text-xs">
+          <span
+            title={subtitle}
+            className="mt-0.5 max-w-full truncate font-mono text-fg-tertiary text-xs"
+          >
             {subtitle}
           </span>
         )}
