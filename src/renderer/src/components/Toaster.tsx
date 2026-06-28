@@ -45,7 +45,7 @@ export function Toaster(): React.JSX.Element {
             key={item.id}
             // Actionable toasts live longer so there's time to click; plain ones
             // keep the provider's short auto-dismiss.
-            duration={item.action ? 10000 : undefined}
+            duration={item.action ? 5000 : undefined}
             onOpenChange={(open) => {
               if (!open) remove(item.id);
             }}

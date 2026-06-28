@@ -10,6 +10,10 @@ import { loadEnabledServers, oauthStore, resolveServerById } from './store';
 
 const log = createLogger('mcp');
 
+// Reconnect backoff after an unexpected drop: 1s, 2s, 4s … capped at 30s.
+const RECONNECT_BASE_MS = 1_000;
+const RECONNECT_MAX_MS = 30_000;
+
 /** Live per-server connection status, surfaced to the settings UI. */
 export type McpServerStatus = 'connected' | 'needs-auth' | 'error';
 
@@ -23,6 +27,7 @@ export class McpManager {
   private readonly connections = new Map<string, McpConnection>();
   private readonly statuses = new Map<string, McpServerStatus>();
   private readonly pendingAuth = new Map<string, AbortController>();
+  private readonly reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private db: Db | null = null;
 
   async init(db: Db): Promise<void> {
@@ -30,17 +35,29 @@ export class McpManager {
     await Promise.allSettled(loadEnabledServers(db).map((s) => this.connect(s)));
   }
 
-  private async connect(server: ResolvedMcpServer): Promise<void> {
+  /**
+   * Establish the connection: on success store it, mark connected, clear any
+   * pending reconnect, and wire the drop handler. Throws on failure so callers
+   * decide whether to classify-and-stop (initial connect) or back off (reconnect).
+   */
+  private async establish(server: ResolvedMcpServer): Promise<void> {
     // HTTP/SSE servers get an OAuth store so the silent provider can use/refresh
     // saved tokens; stdio servers never authenticate.
     const store =
       this.db && server.transport !== 'stdio' ? oauthStore(this.db, server.id) : undefined;
-    const conn = new McpConnection(server, store);
+    const conn = new McpConnection(server, store, () => this.handleDrop(server.id));
+    await conn.connect();
+    this.connections.set(server.id, conn);
+    this.statuses.set(server.id, 'connected');
+    this.cancelReconnect(server.id);
+    log.info(`connected "${server.name}" (${conn.listTools().length} tools)`);
+  }
+
+  /** Initial connect (startup / reload): a failure is classified and left as-is —
+   *  only a drop after a successful connect starts the backoff reconnect loop. */
+  private async connect(server: ResolvedMcpServer): Promise<void> {
     try {
-      await conn.connect();
-      this.connections.set(server.id, conn);
-      this.statuses.set(server.id, 'connected');
-      log.info(`connected "${server.name}" (${conn.listTools().length} tools)`);
+      await this.establish(server);
     } catch (err) {
       // Needs-auth is an expected state (no tokens yet → user clicks Authenticate),
       // not a failure — log it quietly without the stack; reserve error for real faults.
@@ -54,11 +71,56 @@ export class McpManager {
     }
   }
 
+  /** A live connection closed unexpectedly — drop it and start reconnecting. */
+  private handleDrop(id: string): void {
+    const conn = this.connections.get(id);
+    if (!conn) return; // an intentional close already removed it
+    this.connections.delete(id);
+    this.statuses.set(id, 'error');
+    log.info(`"${conn.name}" connection dropped; reconnecting`);
+    this.scheduleReconnect(id, 0);
+  }
+
+  private scheduleReconnect(id: string, attempt: number): void {
+    const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempt);
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(id);
+      void this.reconnect(id, attempt);
+    }, delay);
+    this.reconnectTimers.set(id, timer);
+  }
+
+  private async reconnect(id: string, attempt: number): Promise<void> {
+    const server = this.db ? resolveServerById(this.db, id) : null;
+    if (!server?.enabled) return; // deleted or disabled while waiting → give up
+    try {
+      await this.establish(server);
+      log.info(`reconnected "${server.name}"`);
+    } catch (err) {
+      if (err instanceof UnauthorizedError) {
+        // Auth won't recover on its own — stop and wait for the user to re-auth.
+        this.statuses.set(id, 'needs-auth');
+        return;
+      }
+      this.statuses.set(id, 'error');
+      this.scheduleReconnect(id, attempt + 1);
+    }
+  }
+
+  private cancelReconnect(id: string): void {
+    const timer = this.reconnectTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      this.reconnectTimers.delete(id);
+    }
+  }
+
   async disconnect(serverId: string): Promise<void> {
     // Cancel an in-flight auth so deleting/disabling a server doesn't leave the
     // browser flow hanging until its timeout.
     this.pendingAuth.get(serverId)?.abort();
     this.pendingAuth.delete(serverId);
+    this.cancelReconnect(serverId);
     this.statuses.delete(serverId);
     const conn = this.connections.get(serverId);
     if (!conn) return;
@@ -123,7 +185,7 @@ export class McpManager {
     );
   }
 
-  callTool(
+  async callTool(
     serverId: string,
     rawName: string,
     args: Record<string, unknown>,
@@ -131,10 +193,19 @@ export class McpManager {
   ): Promise<CallToolResult> {
     const conn = this.connections.get(serverId);
     if (!conn) throw new Error(`MCP server ${serverId} is not connected`);
-    return conn.callTool(rawName, args, opts);
+    try {
+      return await conn.callTool(rawName, args, opts);
+    } catch (err) {
+      // A call that 401s mid-session means the saved token expired and couldn't
+      // refresh — surface it as needs-auth so the user can re-authenticate.
+      if (err instanceof UnauthorizedError) this.statuses.set(serverId, 'needs-auth');
+      throw err;
+    }
   }
 
   async dispose(): Promise<void> {
+    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
+    this.reconnectTimers.clear();
     const conns = [...this.connections.values()];
     this.connections.clear();
     await Promise.allSettled(conns.map((c) => c.close()));

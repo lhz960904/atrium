@@ -21,10 +21,15 @@ const DEFAULT_CALL_TIMEOUT_MS = 120_000;
 export class McpConnection {
   private client: Client | null = null;
   private tools: Tool[] = [];
+  // Set before an intentional close() so the transport's onclose can tell a
+  // deliberate shutdown from an unexpected drop.
+  private closing = false;
 
   constructor(
     readonly server: ResolvedMcpServer,
     private readonly oauthStore?: McpOAuthStore,
+    /** Called when the transport closes unexpectedly (i.e. not via close()). */
+    private readonly onDrop?: () => void,
   ) {}
 
   get id(): string {
@@ -38,7 +43,11 @@ export class McpConnection {
   }
 
   async connect(): Promise<void> {
-    this.client = await openClient(this.server, this.oauthStore);
+    const client = await openClient(this.server, this.oauthStore);
+    client.onclose = () => {
+      if (!this.closing) this.onDrop?.();
+    };
+    this.client = client;
     await this.refreshTools();
   }
 
@@ -67,6 +76,7 @@ export class McpConnection {
   }
 
   async close(): Promise<void> {
+    this.closing = true;
     const client = this.client;
     this.client = null;
     this.tools = [];
