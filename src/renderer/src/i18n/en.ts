@@ -531,6 +531,7 @@ export const en: typeof zh = {
       emptyHint: 'Pick an MCP server on the left, or add one.',
       authenticate: 'Authenticate',
       authenticating: 'Authenticating…',
+      attentionBadge: 'Some servers need attention',
       status: {
         connected: 'Connected',
         'needs-auth': 'Needs authorization',

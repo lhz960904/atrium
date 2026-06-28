@@ -523,6 +523,7 @@ export const zh = {
       emptyHint: '选择左侧的 MCP 服务，或添加一个。',
       authenticate: '授权',
       authenticating: '授权中…',
+      attentionBadge: '部分服务需要处理',
       status: {
         connected: '已连接',
         'needs-auth': '需要授权',
