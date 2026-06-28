@@ -53,6 +53,24 @@ export const mcpRouter = router({
       }));
   }),
 
+  /** Enabled servers that need the user's attention (needs-auth or failed) — for the
+   *  startup prompt + nav badge. */
+  attention: publicProcedure.query(
+    ({ ctx }): Array<{ id: string; name: string; reason: McpServerStatus }> => {
+      const statuses = mcpManager.serverStatuses();
+      const names = new Map(
+        ctx.db
+          .select({ id: mcpServers.id, name: mcpServers.name })
+          .from(mcpServers)
+          .all()
+          .map((r): [string, string] => [r.id, r.name]),
+      );
+      return Object.entries(statuses)
+        .filter(([, status]) => status !== 'connected')
+        .map(([id, reason]) => ({ id, name: names.get(id) ?? id, reason }));
+    },
+  ),
+
   authenticate: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(({ input }) => mcpManager.authenticate(input.id)),
