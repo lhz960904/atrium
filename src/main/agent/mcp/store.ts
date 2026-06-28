@@ -20,3 +20,9 @@ export function loadEnabledServers(db: Db): ResolvedMcpServer[] {
   }
   return servers;
 }
+
+/** Resolve a single server by id (config-validated, secrets merged), or null. */
+export function resolveServerById(db: Db, id: string): ResolvedMcpServer | null {
+  const row = db.select().from(mcpServers).where(eq(mcpServers.id, id)).get();
+  return row ? resolveMcpServer(row, decryptSecrets(row.credentialsEncrypted)) : null;
+}

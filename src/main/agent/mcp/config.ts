@@ -96,3 +96,10 @@ export function resolveMcpServer(row: McpServerRow, secrets: McpSecrets): Resolv
     bearerTokenEnvVar: c.bearerTokenEnvVar,
   };
 }
+
+export type McpTransport = 'stdio' | 'http' | 'sse';
+
+/** Validate stored config against the schema its transport selects (throws on bad). */
+export function parseConfig(transport: McpTransport, config: unknown): StdioConfig | HttpConfig {
+  return transport === 'stdio' ? stdioConfigSchema.parse(config) : httpConfigSchema.parse(config);
+}

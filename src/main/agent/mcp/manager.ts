@@ -37,6 +37,12 @@ export class McpManager {
     await conn.close();
   }
 
+  /** Reconnect a server after its config changed: drop the old connection, dial anew. */
+  async reload(server: ResolvedMcpServer): Promise<void> {
+    await this.disconnect(server.id);
+    await this.connect(server);
+  }
+
   /** Every tool across the connected servers, uniquely named and ready to adapt. */
   catalog(): McpToolEntry[] {
     return buildCatalog(
