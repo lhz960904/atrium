@@ -3,6 +3,7 @@ import { Pencil, Plus, Server, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
+import { EnableSwitch } from '../providers/EnableSwitch';
 import { McpForm, type McpServerItem } from './McpForm';
 
 /** What the form dialog is editing: a server, `new`, or closed. */
@@ -137,13 +138,6 @@ function Row({
   const state = !item.enabled ? 'disabled' : (item.status ?? 'connecting');
   return (
     <div className="group flex items-center gap-3 rounded-lg border border-border-default bg-surface px-4 py-3">
-      <input
-        type="checkbox"
-        checked={item.enabled}
-        onChange={(e) => onToggle(e.target.checked)}
-        title={t('settings.mcp.enabled')}
-        className="shrink-0"
-      />
       <span
         title={t(`settings.mcp.status.${state}`)}
         className={`size-2 shrink-0 rounded-full ${DOT[state]}`}
@@ -169,16 +163,8 @@ function Row({
           </span>
         )}
       </button>
-      {item.enabled && item.status === 'needs-auth' && (
-        <button
-          type="button"
-          onClick={onAuthenticate}
-          disabled={authenticating}
-          className="shrink-0 rounded-md border border-border-default px-2.5 py-1 text-fg-secondary text-xs hover:bg-elevated disabled:opacity-50"
-        >
-          {authenticating ? t('settings.mcp.authenticating') : t('settings.mcp.authenticate')}
-        </button>
-      )}
+      {/* Edit/delete reveal on hover; placed before the always-visible auth + switch
+          so their reserved space reads as mid-row whitespace, never an edge gap. */}
       <button
         type="button"
         onClick={onEdit}
@@ -195,6 +181,17 @@ function Row({
       >
         <Trash2 className="size-4" />
       </button>
+      {item.enabled && item.status === 'needs-auth' && (
+        <button
+          type="button"
+          onClick={onAuthenticate}
+          disabled={authenticating}
+          className="shrink-0 rounded-md border border-border-default px-2.5 py-1 text-fg-secondary text-xs hover:bg-elevated disabled:opacity-50"
+        >
+          {authenticating ? t('settings.mcp.authenticating') : t('settings.mcp.authenticate')}
+        </button>
+      )}
+      <EnableSwitch on={item.enabled} onToggle={() => onToggle(!item.enabled)} />
     </div>
   );
 }
