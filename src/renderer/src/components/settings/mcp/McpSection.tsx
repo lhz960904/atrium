@@ -16,12 +16,15 @@ export function McpSection(): React.JSX.Element {
   const utils = trpc.useUtils();
   const [editing, setEditing] = useState<Editing>(null);
 
-  const setEnabled = trpc.mcp.setEnabled.useMutation({
-    onSuccess: () => utils.mcp.list.invalidate(),
-  });
-  const del = trpc.mcp.delete.useMutation({ onSuccess: () => utils.mcp.list.invalidate() });
+  // Refresh both the list and the attention badge (nav red dot) after any change.
+  const refresh = (): void => {
+    void utils.mcp.list.invalidate();
+    void utils.mcp.attention.invalidate();
+  };
+  const setEnabled = trpc.mcp.setEnabled.useMutation({ onSuccess: refresh });
+  const del = trpc.mcp.delete.useMutation({ onSuccess: refresh });
   const authenticate = trpc.mcp.authenticate.useMutation({
-    onSuccess: () => utils.mcp.list.invalidate(),
+    onSuccess: refresh,
     onError: (e) => window.alert(e.message),
   });
 

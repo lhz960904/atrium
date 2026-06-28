@@ -92,7 +92,12 @@ export class McpManager {
 
   private async reconnect(id: string, attempt: number): Promise<void> {
     const server = this.db ? resolveServerById(this.db, id) : null;
-    if (!server?.enabled) return; // deleted or disabled while waiting → give up
+    if (!server?.enabled) {
+      // Deleted or disabled while waiting → stop and forget its status, so a
+      // racing reconnect can't leave a stale entry behind the attention badge.
+      this.statuses.delete(id);
+      return;
+    }
     try {
       await this.establish(server);
       log.info(`reconnected "${server.name}"`);

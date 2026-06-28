@@ -58,16 +58,18 @@ export const mcpRouter = router({
   attention: publicProcedure.query(
     ({ ctx }): Array<{ id: string; name: string; reason: McpServerStatus }> => {
       const statuses = mcpManager.serverStatuses();
-      const names = new Map(
+      const byId = new Map(
         ctx.db
-          .select({ id: mcpServers.id, name: mcpServers.name })
+          .select({ id: mcpServers.id, name: mcpServers.name, enabled: mcpServers.enabled })
           .from(mcpServers)
           .all()
-          .map((r): [string, string] => [r.id, r.name]),
+          .map((r) => [r.id, r] as const),
       );
+      // Only flag servers that still exist and are enabled — a stale manager
+      // status for a deleted/disabled server must never keep the nav badge lit.
       return Object.entries(statuses)
-        .filter(([, status]) => status !== 'connected')
-        .map(([id, reason]) => ({ id, name: names.get(id) ?? id, reason }));
+        .filter(([id, status]) => status !== 'connected' && byId.get(id)?.enabled)
+        .map(([id, reason]) => ({ id, name: byId.get(id)?.name ?? id, reason }));
     },
   ),
 
