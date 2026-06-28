@@ -1,5 +1,5 @@
+import { isMcpToolName, parseMcpToolName } from '@shared/mcp';
 import { analyzeBash, type Crossing, describeWriteEscape } from '@shared/permissions/analyze';
-import type { ToolName } from '@shared/tools';
 import { resolveInWorkspace } from '../sandbox/paths';
 
 export type Classification = { crosses: false } | ({ crosses: true } & Crossing);
@@ -16,10 +16,16 @@ const INSIDE: Classification = { crosses: false };
  * workspace path check.
  */
 export function classifyToolCall(
-  tool: ToolName,
+  tool: string,
   input: unknown,
   workspaceRoot: string,
 ): Classification {
+  // Tools from MCP servers run in an external process we don't sandbox, so they
+  // always cross the boundary and go through approval — unlike the default-allow
+  // fallthrough below, which is for our own in-workspace read tools.
+  if (isMcpToolName(tool)) {
+    return { crosses: true, code: 'mcp', subject: parseMcpToolName(tool)?.server };
+  }
   switch (tool) {
     case 'bash': {
       const command = stringField(input, 'command');

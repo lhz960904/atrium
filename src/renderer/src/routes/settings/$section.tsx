@@ -7,6 +7,7 @@ import { Select } from '../../components/Select';
 import { ArchivedSection } from '../../components/settings/archived/ArchivedSection';
 import { IdentitySection } from '../../components/settings/identity/IdentitySection';
 import { KeyboardSection } from '../../components/settings/keyboard/KeyboardSection';
+import { McpSection } from '../../components/settings/mcp/McpSection';
 import { MemoriesSection } from '../../components/settings/memories/MemoriesSection';
 import { PermissionsSection } from '../../components/settings/permissions/PermissionsSection';
 import { EnableSwitch } from '../../components/settings/providers/EnableSwitch';
@@ -56,7 +57,7 @@ const SECTIONS: Record<string, SectionMeta> = {
     fill: true,
     Component: SubagentsSection,
   },
-  mcp: { titleKey: 'settings.sections.mcpTitle', Component: PlaceholderSection },
+  mcp: { titleKey: 'settings.sections.mcpTitle', wide: true, fill: true, Component: McpSection },
   browser: { titleKey: 'settings.sections.browserTitle', Component: PlaceholderSection },
   computer: { titleKey: 'settings.sections.computerTitle', Component: PlaceholderSection },
   permissions: { titleKey: 'settings.sections.permissionsTitle', Component: PermissionsSection },

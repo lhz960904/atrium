@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import { mcpRouter } from './routers/mcp';
 import { memoryRouter } from './routers/memory';
 import { messagesRouter } from './routers/messages';
 import { modelsRouter } from './routers/models';
@@ -32,6 +33,7 @@ export const appRouter = router({
   threads: threadsRouter,
   messages: messagesRouter,
   models: modelsRouter,
+  mcp: mcpRouter,
   memory: memoryRouter,
   profile: profileRouter,
   projects: projectsRouter,

@@ -1,0 +1,61 @@
+import { createHash } from 'node:crypto';
+import { MCP_TOOL_PREFIX, MCP_TOOL_SEP } from '@shared/mcp';
+
+export { isMcpToolName, parseMcpToolName } from '@shared/mcp';
+
+/*
+ * Builds the qualified `mcp__<server>__<tool>` name a server tool is surfaced
+ * under. The name must satisfy the model providers' function-name rule
+ * (^[a-zA-Z0-9_-]+$, ≤64 bytes), so segments are slugged and the whole thing is
+ * truncated + hashed when needed. The result is lossy: actual routing keeps the
+ * raw (server, tool) pair in a side map, so this never needs to be reversible.
+ * The pure parse/recognize half lives in @shared/mcp (the renderer needs it).
+ */
+const MAX_BYTES = 64;
+// Fixed overhead of the hashed form: `mcp` + `__` + `__` + `_` + 6 hex.
+const SUFFIX_LEN = 7;
+
+/**
+ * Sanitize one segment to ^[a-zA-Z0-9_-]+$. Runs of `_` are collapsed so a
+ * segment can never contain the `__` separator — that keeps the qualified name
+ * splittable at its first `__`. Never returns empty.
+ */
+export function slug(input: string): string {
+  const s = input
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_-]+|[_-]+$/g, '');
+  return s || 'x';
+}
+
+/**
+ * Produce a unique, valid model-visible name for one server tool. `taken` is the
+ * set of names already emitted in this build and is mutated with the result, so
+ * siblings that sanitize/truncate to the same string get a hash suffix derived
+ * from the raw (server, tool) — a stable identity, never a positional index, so
+ * a name survives a sibling being added or removed between builds.
+ */
+export function qualifyToolName(server: string, tool: string, taken: Set<string>): string {
+  const sv = slug(server);
+  const tl = slug(tool);
+  // slug output is ASCII, so .length is the byte length.
+  const plain = `${MCP_TOOL_PREFIX}${MCP_TOOL_SEP}${sv}${MCP_TOOL_SEP}${tl}`;
+  if (plain.length <= MAX_BYTES && !taken.has(plain)) {
+    taken.add(plain);
+    return plain;
+  }
+
+  const suffix = `_${hash6(`${server} ${tool}`)}`;
+  const budget =
+    MAX_BYTES - (MCP_TOOL_PREFIX.length + MCP_TOOL_SEP.length + MCP_TOOL_SEP.length + SUFFIX_LEN);
+  const svCut = sv.slice(0, Math.max(1, Math.floor(budget / 2)));
+  const tlCut = tl.slice(0, Math.max(1, budget - svCut.length));
+  let name = `${MCP_TOOL_PREFIX}${MCP_TOOL_SEP}${svCut}${MCP_TOOL_SEP}${tlCut}${suffix}`;
+  for (let k = 1; taken.has(name); k++) name = `${name}${k}`;
+  taken.add(name);
+  return name;
+}
+
+function hash6(s: string): string {
+  return createHash('sha1').update(s).digest('hex').slice(0, 6);
+}

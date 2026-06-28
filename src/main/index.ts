@@ -6,6 +6,7 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { app, BrowserWindow, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
+import { mcpManager } from './agent/mcp/manager';
 import { runDream, startDreamScheduler } from './agent/memory';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
 import { refreshSkills } from './agent/skills/registry';
@@ -16,6 +17,7 @@ import { resolveModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
 import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
+import { loadShellEnv } from './shell-path';
 import { appRouter } from './trpc/router';
 
 // Kept alive across hide/show so reopening from the Dock restores the exact
@@ -103,6 +105,9 @@ app.whenReady().then(async () => {
   // we set ours explicitly; packaged macOS builds already carry build/icon.icns.
   if (process.platform === 'darwin') app.dock?.setIcon(icon);
   initLogging();
+  // Load the user's real login-shell environment before anything spawns (MCP stdio
+  // servers, shells), so PATH and their exported vars match what the terminal has.
+  loadShellEnv();
 
   const db = openDb();
   openSettings();
@@ -111,6 +116,10 @@ app.whenReady().then(async () => {
   // snapshot), then let it refresh from the litellm catalog in the background.
   populateModelCatalog();
   startModelCatalogRefresh();
+
+  // Connect configured MCP servers in the background so their tools join the
+  // toolset once ready; a slow or failing server never blocks startup.
+  void mcpManager.init(db);
 
   // Fallback workspace root for projectless conversations; project-scoped
   // threads run in their project's directory instead, resolved per request.
@@ -184,5 +193,6 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true;
   serverEndpoint?.dispose();
+  void mcpManager.dispose();
   closeDb();
 });

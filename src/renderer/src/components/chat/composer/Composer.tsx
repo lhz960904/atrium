@@ -6,7 +6,7 @@ import { Text } from '@tiptap/extension-text';
 import { Placeholder, UndoRedo } from '@tiptap/extensions';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Plus, Send, Square } from 'lucide-react';
-import { memo, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ATTACHMENT_ACCEPT, classifyAttachment } from '../../../lib/attachments';
 import { useChatModel } from '../../../lib/use-chat-model';
@@ -75,6 +75,10 @@ export const Composer = memo(function Composer({
   sendKeyRef.current = sendKey;
   const editorRef = useRef<ReturnType<typeof useEditor>>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Resolved placeholder; t() recomputes this when the UI language changes. The
+  // editor reads it live through a ref (extension config is captured once).
+  const ph = placeholder ?? t('composer.placeholder');
+  const phRef = useRef(ph);
 
   const editor = useEditor({
     extensions: [
@@ -83,7 +87,7 @@ export const Composer = memo(function Composer({
       Text,
       HardBreak,
       UndoRedo,
-      Placeholder.configure({ placeholder: placeholder ?? t('composer.placeholder') }),
+      Placeholder.configure({ placeholder: () => phRef.current }),
       ...skill.extensions,
     ],
     content: initialText,
@@ -113,6 +117,14 @@ export const Composer = memo(function Composer({
     onUpdate: ({ editor }) => setEmpty(editor.isEmpty),
   });
   editorRef.current = editor;
+
+  // The extension's placeholder fn reads phRef; refresh it and recompute the
+  // decoration when the resolved text changes (language/prop), so it isn't
+  // frozen to the language active during the startup race.
+  useEffect(() => {
+    phRef.current = ph;
+    editor?.view.dispatch(editor.state.tr);
+  }, [editor, ph]);
 
   const handleSend = (): void => {
     if (disabled || !editor) return;

@@ -12,7 +12,8 @@ export type CrossingCode =
   | 'substitution'
   | 'unparseable'
   | 'wrapper'
-  | 'fsEscape';
+  | 'fsEscape'
+  | 'mcp';
 
 export type Crossing = { code: CrossingCode; subject?: string };
 

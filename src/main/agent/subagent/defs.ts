@@ -37,19 +37,19 @@ export const SUBAGENT_DENIED_TOOLS = new Set<string>(['task', 'skill', 'ask_clar
 
 /** Narrow the parent's tools to what a subagent def permits. */
 export function filterToolsForSubagent(
-  parentTools: Record<ToolName, Tool>,
+  parentTools: Record<string, Tool>,
   def: Pick<SubagentDef, 'toolAllow' | 'toolDeny'>,
-): Record<ToolName, Tool> {
+): Record<string, Tool> {
   const allow = def.toolAllow ? new Set<string>(def.toolAllow) : null;
   const deny = new Set<string>(def.toolDeny ?? []);
-  const out: Partial<Record<ToolName, Tool>> = {};
-  for (const name of Object.keys(parentTools) as ToolName[]) {
+  const out: Record<string, Tool> = {};
+  for (const [name, tool] of Object.entries(parentTools)) {
     if (SUBAGENT_DENIED_TOOLS.has(name)) continue;
     if (allow && !allow.has(name)) continue;
     if (deny.has(name)) continue;
-    out[name] = parentTools[name];
+    out[name] = tool;
   }
-  return out as Record<ToolName, Tool>;
+  return out;
 }
 
 const GENERAL_PURPOSE: SubagentDef = {

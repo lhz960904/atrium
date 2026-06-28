@@ -6,11 +6,9 @@ import {
   Archive,
   ArrowLeft,
   Atom,
-  Box,
   Brain,
   Fingerprint,
   Gauge,
-  GitBranch,
   Globe,
   Info,
   Keyboard,
@@ -18,7 +16,6 @@ import {
   type LucideIcon,
   MousePointerClick,
   Package,
-  PawPrint,
   Server,
   Shield,
   SlidersHorizontal,
@@ -27,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Fragment } from 'react';
 import { useTranslation } from 'react-i18next';
+import { trpc } from '../../lib/trpc';
 import { useNavStore } from '../../state/nav-store';
 
 export const Route = createFileRoute('/settings')({
@@ -147,6 +145,8 @@ function SettingsLayout(): React.JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const lastAppPath = useNavStore((s) => s.lastAppPath);
+  const attention = trpc.mcp.attention.useQuery(undefined, { refetchInterval: 4000 });
+  const mcpNeedsAttention = (attention.data?.length ?? 0) > 0;
 
   const goBackToApp = (): void => {
     // TanStack Router navigate({ to }) strictly matches typed routes at
@@ -198,6 +198,12 @@ function SettingsLayout(): React.JSX.Element {
                 >
                   <Icon className="size-[15px] shrink-0 text-fg-tertiary group-hover:text-fg-secondary" />
                   <span>{t(item.labelKey)}</span>
+                  {item.section === 'mcp' && mcpNeedsAttention && (
+                    <span
+                      title={t('settings.mcp.attentionBadge')}
+                      className="ml-auto size-2 shrink-0 rounded-full bg-danger"
+                    />
+                  )}
                 </Link>
               </Fragment>
             );

@@ -1,5 +1,4 @@
 import type { PermissionMode } from '@shared/permissions';
-import type { ToolName } from '@shared/tools';
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -36,7 +35,7 @@ export type RunAgentOptions = {
   threadId: string;
   db: Db;
   sandbox: Sandbox;
-  tools: Record<ToolName, Tool>;
+  tools: Record<string, Tool>;
   middlewares: AgentMiddleware[];
   /** Active permission mode, surfaced in the system prompt so the model knows how approvals behave. */
   permissionMode: PermissionMode;

@@ -1,15 +1,16 @@
-import type { ToolName } from '@shared/tools';
+import { isMcpToolName, parseMcpToolName } from '@shared/mcp';
 import { commandName, splitSubcommands, subcommand } from './command';
 import { isDangerous, isWrapper, NETWORK_COMMANDS, NETWORK_SUBCOMMANDS } from './lists';
 
 /**
  * A remembered "always allow" entry. `matcher` is a bash command prefix
- * (`curl`, `npm install`, `rm`) for bash, or an exact path for write/edit.
+ * (`curl`, `npm install`, `rm`) for bash, an exact path for write/edit, or — when
+ * `tool` is the sentinel `'mcp'` — an MCP server name (covers all its tools).
  * The trust list grows as the user picks "always allow" on an approval; a later
  * call the list covers skips the gate. Must agree with the gate's crossing
  * detection (same command lists), so it lives beside it in shared.
  */
-export type TrustRule = { tool: ToolName; matcher: string };
+export type TrustRule = { tool: string; matcher: string };
 
 /**
  * The crossing subjects of a bash command — the command identities that make it
@@ -51,14 +52,19 @@ function field(input: unknown, key: string): string | null {
   return null;
 }
 
-const isFileTool = (tool: ToolName): boolean => tool === 'write_file' || tool === 'edit_file';
+const isFileTool = (tool: string): boolean => tool === 'write_file' || tool === 'edit_file';
 
 /**
  * The rule "always allow" would create for this call, or null when it can't reduce
  * to one — an opaque command, or a compound crossing several distinct ways.
  * Those only get "allow once".
  */
-export function deriveRule(tool: ToolName, input: unknown): TrustRule | null {
+export function deriveRule(tool: string, input: unknown): TrustRule | null {
+  if (isMcpToolName(tool)) {
+    // Server-level "always allow": one rule covers every tool on that server.
+    const server = parseMcpToolName(tool)?.server;
+    return server ? { tool: 'mcp', matcher: server } : null;
+  }
   if (tool === 'bash') {
     const command = field(input, 'command');
     if (!command) return null;
@@ -76,7 +82,11 @@ export function deriveRule(tool: ToolName, input: unknown): TrustRule | null {
 }
 
 /** Whether the trust list already covers this call (so the gate can skip it). */
-export function isAllowed(rules: TrustRule[], tool: ToolName, input: unknown): boolean {
+export function isAllowed(rules: TrustRule[], tool: string, input: unknown): boolean {
+  if (isMcpToolName(tool)) {
+    const server = parseMcpToolName(tool)?.server;
+    return server != null && rules.some((r) => r.tool === 'mcp' && r.matcher === server);
+  }
   if (tool === 'bash') {
     const command = field(input, 'command');
     if (!command) return false;

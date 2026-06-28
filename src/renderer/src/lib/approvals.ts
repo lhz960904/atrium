@@ -1,8 +1,8 @@
 import type { AtriumUIMessage } from '@shared/chat';
+import { isMcpToolName, parseMcpToolName } from '@shared/mcp';
 import { analyzeBash, type Crossing, describeWriteEscape } from '@shared/permissions/analyze';
 import { deriveRule, type TrustRule } from '@shared/permissions/rules';
-import type { AtriumTools, ToolName } from '@shared/tools';
-import { getStaticToolName, isStaticToolUIPart } from 'ai';
+import { getToolName, isToolOrDynamicToolUIPart } from 'ai';
 import type { AcpPendingApproval } from '../state/acp-approval-store';
 
 /** A tool call paused for user approval, with its crossing reason for display. */
@@ -46,16 +46,31 @@ export function getPendingApprovals(messages: AtriumUIMessage[]): PendingApprova
   for (const msg of messages) {
     if (msg.role !== 'assistant') continue;
     for (const part of msg.parts) {
-      if (isStaticToolUIPart(part) && part.state === 'approval-requested') {
-        pending.push(describe(part.approval.id, getStaticToolName<AtriumTools>(part), part.input));
+      // Both our built-ins (static tool-* parts) and MCP tools (dynamic-tool
+      // parts) can pause for approval, so accept either shape here.
+      if (isToolOrDynamicToolUIPart(part) && part.state === 'approval-requested') {
+        pending.push(describe(part.approval.id, getToolName(part), part.input));
       }
     }
   }
   return pending;
 }
 
-function describe(approvalId: string, toolName: ToolName, input: unknown): PendingApproval {
+function describe(approvalId: string, toolName: string, input: unknown): PendingApproval {
   const rule = deriveRule(toolName, input);
+  if (isMcpToolName(toolName)) {
+    const parsed = parseMcpToolName(toolName);
+    const server = parsed?.server ?? toolName;
+    return {
+      source: 'native',
+      approvalId,
+      toolName,
+      target: parsed ? `${server} · ${parsed.tool}` : toolName,
+      prefix: '⚙ ',
+      crossing: { code: 'mcp', subject: server },
+      rule,
+    };
+  }
   if (toolName === 'bash') {
     const command = strField(input, 'command');
     const crossing = command ? analyzeBash(command) : null;

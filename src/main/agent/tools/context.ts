@@ -1,6 +1,6 @@
 import type { PermissionMode } from '@shared/permissions';
 import type { TrustRule } from '@shared/permissions/rules';
-import type { LanguageModel } from 'ai';
+import type { LanguageModel, Tool } from 'ai';
 import type { Db } from '../../db';
 import type { BackgroundShells } from '../sandbox/background-shells';
 import type { Sandbox } from '../sandbox/types';
@@ -24,6 +24,8 @@ export type ToolCtx = {
   db: Db;
   skills?: Skill[];
   bgShells?: BackgroundShells;
+  /** Tools from connected MCP servers, keyed by their qualified mcp__<server>__<tool> name. */
+  mcpTools?: Record<string, Tool>;
   permission?: {
     mode: PermissionMode;
     rules?: TrustRule[];

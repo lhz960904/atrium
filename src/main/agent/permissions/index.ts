@@ -1,7 +1,6 @@
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
 import type { CrossingCode } from '@shared/permissions/analyze';
 import { isAllowed, type TrustRule } from '@shared/permissions/rules';
-import type { ToolName } from '@shared/tools';
 import { createLogger } from '../../log';
 import type { ToolCtx } from '../tools/context';
 import { type Classification, classifyToolCall } from './classify';
@@ -17,6 +16,7 @@ const RISK: Record<CrossingCode, string> = {
   unparseable: 'could not be parsed and may hide its real behavior',
   wrapper: 'wraps another command, hiding what actually executes',
   fsEscape: 'writes to a path outside the workspace',
+  mcp: 'is a tool from an external MCP server',
 };
 
 /**
@@ -31,7 +31,7 @@ type StaticVerdict =
   | { kind: 'review'; crossing: Classification & { crosses: true } };
 
 function staticVerdict(
-  toolName: ToolName,
+  toolName: string,
   input: unknown,
   mode: PermissionMode,
   workspaceRoot: string,
@@ -52,7 +52,7 @@ function staticVerdict(
  * crossing as a prompt — the safe fallback when no reviewer is wired.
  */
 export function needsApprovalFor(
-  toolName: ToolName,
+  toolName: string,
   input: unknown,
   mode: PermissionMode,
   workspaceRoot: string,
@@ -91,7 +91,7 @@ type EmitContext = {
  * autoReview marker (via the run's stream writer in experimental_context) so
  * the trace shows the call was reviewed rather than slipped through ungated.
  */
-export function makeNeedsApproval(toolName: ToolName, ctx: ToolCtx) {
+export function makeNeedsApproval(toolName: string, ctx: ToolCtx) {
   return (
     input: unknown,
     options?: { toolCallId: string; experimental_context?: unknown },
@@ -112,7 +112,9 @@ export function makeNeedsApproval(toolName: ToolName, ctx: ToolCtx) {
     }
 
     const model = permission?.reviewerModel;
-    const subject = crossingSubject(input);
+    // MCP calls have no command/path in their input — fall back to the crossing's
+    // subject (the server name) so the reviewer/badge still has something to show.
+    const subject = crossingSubject(input) || verdict.crossing.subject || '';
     if (!model) {
       log.info(`${toolName} crossing → prompt (auto-review, no reviewer model)`);
       return true;
