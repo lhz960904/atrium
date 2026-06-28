@@ -10,7 +10,8 @@ type Editing = McpServerItem | 'new' | null;
 
 export function McpSection(): React.JSX.Element {
   const { t } = useTranslation();
-  const servers = trpc.mcp.list.useQuery();
+  // Poll while open so async connects (startup, post-auth) surface in the dots.
+  const servers = trpc.mcp.list.useQuery(undefined, { refetchInterval: 2500 });
   const utils = trpc.useUtils();
   const [editing, setEditing] = useState<Editing>(null);
 
@@ -18,6 +19,10 @@ export function McpSection(): React.JSX.Element {
     onSuccess: () => utils.mcp.list.invalidate(),
   });
   const del = trpc.mcp.delete.useMutation({ onSuccess: () => utils.mcp.list.invalidate() });
+  const authenticate = trpc.mcp.authenticate.useMutation({
+    onSuccess: () => utils.mcp.list.invalidate(),
+    onError: (e) => window.alert(e.message),
+  });
 
   if (servers.isLoading || !servers.data) {
     return <p className="text-fg-tertiary text-sm">{t('common.loading')}</p>;
@@ -53,6 +58,8 @@ export function McpSection(): React.JSX.Element {
                 onEdit={() => setEditing(s)}
                 onToggle={(enabled) => setEnabled.mutate({ id: s.id, enabled })}
                 onDelete={() => del.mutate({ id: s.id })}
+                onAuthenticate={() => authenticate.mutate({ id: s.id })}
+                authenticating={authenticate.isPending && authenticate.variables?.id === s.id}
               />
             ))}
           </div>
@@ -95,16 +102,28 @@ export function McpSection(): React.JSX.Element {
   );
 }
 
+const DOT: Record<string, string> = {
+  connected: 'bg-success',
+  'needs-auth': 'bg-danger',
+  error: 'bg-danger',
+  connecting: 'bg-fg-disabled',
+  disabled: 'bg-fg-disabled',
+};
+
 function Row({
   item,
   onEdit,
   onToggle,
   onDelete,
+  onAuthenticate,
+  authenticating,
 }: {
   item: McpServerItem;
   onEdit: () => void;
   onToggle: (enabled: boolean) => void;
   onDelete: () => void;
+  onAuthenticate: () => void;
+  authenticating: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const cfg = item.config ?? {};
@@ -115,6 +134,7 @@ function Row({
           .map(String)
           .join(' ')
       : String(cfg.url ?? '');
+  const state = !item.enabled ? 'disabled' : (item.status ?? 'connecting');
   return (
     <div className="group flex items-center gap-3 rounded-lg border border-border-default bg-surface px-4 py-3">
       <input
@@ -123,6 +143,10 @@ function Row({
         onChange={(e) => onToggle(e.target.checked)}
         title={t('settings.mcp.enabled')}
         className="shrink-0"
+      />
+      <span
+        title={t(`settings.mcp.status.${state}`)}
+        className={`size-2 shrink-0 rounded-full ${DOT[state]}`}
       />
       <Server className="size-4 shrink-0 text-fg-tertiary" />
       <button
@@ -145,6 +169,16 @@ function Row({
           </span>
         )}
       </button>
+      {item.enabled && item.status === 'needs-auth' && (
+        <button
+          type="button"
+          onClick={onAuthenticate}
+          disabled={authenticating}
+          className="shrink-0 rounded-md border border-border-default px-2.5 py-1 text-fg-secondary text-xs hover:bg-elevated disabled:opacity-50"
+        >
+          {authenticating ? t('settings.mcp.authenticating') : t('settings.mcp.authenticate')}
+        </button>
+      )}
       <button
         type="button"
         onClick={onEdit}
