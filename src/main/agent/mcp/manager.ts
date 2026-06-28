@@ -1,8 +1,11 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { Db } from '../../db';
 import { createLogger } from '../../log';
 import { buildCatalog, type McpToolEntry } from './catalog';
 import type { ResolvedMcpServer } from './config';
-import { McpConnection } from './connection';
+import { httpHeaders, McpConnection } from './connection';
+import { runInteractiveOAuth } from './oauth';
+import { loadEnabledServers, oauthStore, resolveServerById } from './store';
 
 const log = createLogger('mcp');
 
@@ -14,13 +17,19 @@ const log = createLogger('mcp');
  */
 export class McpManager {
   private readonly connections = new Map<string, McpConnection>();
+  private db: Db | null = null;
 
-  async init(servers: ResolvedMcpServer[]): Promise<void> {
-    await Promise.allSettled(servers.filter((s) => s.enabled).map((s) => this.connect(s)));
+  async init(db: Db): Promise<void> {
+    this.db = db;
+    await Promise.allSettled(loadEnabledServers(db).map((s) => this.connect(s)));
   }
 
-  async connect(server: ResolvedMcpServer): Promise<void> {
-    const conn = new McpConnection(server);
+  private async connect(server: ResolvedMcpServer): Promise<void> {
+    // HTTP/SSE servers get an OAuth store so the silent provider can use/refresh
+    // saved tokens; stdio servers never authenticate.
+    const store =
+      this.db && server.transport !== 'stdio' ? oauthStore(this.db, server.id) : undefined;
+    const conn = new McpConnection(server, store);
     try {
       await conn.connect();
       this.connections.set(server.id, conn);
@@ -37,10 +46,28 @@ export class McpManager {
     await conn.close();
   }
 
-  /** Reconnect a server after its config changed: drop the old connection, dial anew. */
-  async reload(server: ResolvedMcpServer): Promise<void> {
-    await this.disconnect(server.id);
-    await this.connect(server);
+  /** Reconnect a server by id after its config changed, or drop it if now disabled. */
+  async reload(id: string): Promise<void> {
+    await this.disconnect(id);
+    const server = this.db ? resolveServerById(this.db, id) : null;
+    if (server?.enabled) await this.connect(server);
+  }
+
+  /** Run the interactive OAuth flow for an http server, then reconnect with the tokens. */
+  async authenticate(id: string): Promise<void> {
+    if (!this.db) throw new Error('MCP manager not initialized');
+    const server = resolveServerById(this.db, id);
+    if (!server || server.transport === 'stdio') {
+      throw new Error('OAuth is only available for HTTP MCP servers');
+    }
+    const { shell } = require('electron') as typeof import('electron');
+    await runInteractiveOAuth(
+      server.url,
+      { headers: httpHeaders(server) },
+      oauthStore(this.db, id),
+      (url) => void shell.openExternal(url),
+    );
+    await this.reload(id);
   }
 
   /** Every tool across the connected servers, uniquely named and ready to adapt. */

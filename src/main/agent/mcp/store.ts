@@ -2,7 +2,9 @@ import { eq } from 'drizzle-orm';
 import type { Db } from '../../db';
 import { mcpServers } from '../../db/schema';
 import { createLogger } from '../../log';
+import { decryptCredentials, encryptCredentials } from '../../providers/credentials';
 import { type ResolvedMcpServer, resolveMcpServer } from './config';
+import type { McpOAuthState, McpOAuthStore } from './oauth';
 import { decryptSecrets } from './secrets';
 
 const log = createLogger('mcp');
@@ -25,4 +27,26 @@ export function loadEnabledServers(db: Db): ResolvedMcpServer[] {
 export function resolveServerById(db: Db, id: string): ResolvedMcpServer | null {
   const row = db.select().from(mcpServers).where(eq(mcpServers.id, id)).get();
   return row ? resolveMcpServer(row, decryptSecrets(row.credentialsEncrypted)) : null;
+}
+
+/** DB-backed, safeStorage-encrypted OAuth state for one server (kept out of the
+ *  credentials blob so config edits don't clobber the tokens). */
+export function oauthStore(db: Db, id: string): McpOAuthStore {
+  return {
+    load(): McpOAuthState {
+      const row = db
+        .select({ blob: mcpServers.oauthEncrypted })
+        .from(mcpServers)
+        .where(eq(mcpServers.id, id))
+        .get();
+      return row?.blob ? decryptCredentials<McpOAuthState>(row.blob) : {};
+    },
+    save(state: McpOAuthState): void {
+      const hasAny = Boolean(state.clientInformation || state.tokens);
+      db.update(mcpServers)
+        .set({ oauthEncrypted: hasAny ? encryptCredentials(state) : null, updatedAt: new Date() })
+        .where(eq(mcpServers.id, id))
+        .run();
+    },
+  };
 }

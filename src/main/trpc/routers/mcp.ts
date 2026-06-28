@@ -10,7 +10,6 @@ import {
 } from '../../agent/mcp/config';
 import { mcpManager } from '../../agent/mcp/manager';
 import { decryptSecrets, encryptSecrets } from '../../agent/mcp/secrets';
-import { resolveServerById } from '../../agent/mcp/store';
 import type { Db } from '../../db';
 import { mcpServers } from '../../db/schema';
 import { publicProcedure, router } from '../trpc';
@@ -68,7 +67,7 @@ export const mcpRouter = router({
         updatedAt: now,
       })
       .run();
-    syncServer(ctx.db, id);
+    syncServer(id);
     return { id };
   }),
 
@@ -88,7 +87,7 @@ export const mcpRouter = router({
       })
       .where(eq(mcpServers.id, id))
       .run();
-    syncServer(ctx.db, id);
+    syncServer(id);
   }),
 
   setEnabled: publicProcedure
@@ -99,7 +98,7 @@ export const mcpRouter = router({
         .set({ enabled: input.enabled, updatedAt: new Date() })
         .where(eq(mcpServers.id, input.id))
         .run();
-      syncServer(ctx.db, input.id);
+      syncServer(input.id);
     }),
 
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
@@ -137,11 +136,9 @@ function secretsBlob(secrets: McpSecrets): Buffer | null {
   return hasAny ? encryptSecrets(secrets) : null;
 }
 
-/** Apply a row change to the live manager: reconnect if enabled, else drop it. */
-function syncServer(db: Db, id: string): void {
-  const server = resolveServerById(db, id);
-  if (server?.enabled) void mcpManager.reload(server);
-  else void mcpManager.disconnect(id);
+/** Apply a row change to the live manager (reconnects, or drops it if now disabled). */
+function syncServer(id: string): void {
+  void mcpManager.reload(id);
 }
 
 function assertNameFree(db: Db, name: string, excludeId?: string): void {

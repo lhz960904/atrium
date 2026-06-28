@@ -7,7 +7,6 @@ import { app, BrowserWindow, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
 import { mcpManager } from './agent/mcp/manager';
-import { loadEnabledServers } from './agent/mcp/store';
 import { runDream, startDreamScheduler } from './agent/memory';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
 import { refreshSkills } from './agent/skills/registry';
@@ -116,7 +115,7 @@ app.whenReady().then(async () => {
 
   // Connect configured MCP servers in the background so their tools join the
   // toolset once ready; a slow or failing server never blocks startup.
-  void mcpManager.init(loadEnabledServers(db));
+  void mcpManager.init(db);
 
   // Fallback workspace root for projectless conversations; project-scoped
   // threads run in their project's directory instead, resolved per request.

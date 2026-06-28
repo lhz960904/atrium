@@ -124,6 +124,9 @@ export const mcpServers = sqliteTable('mcp_servers', {
   config: text({ mode: 'json' }),
   /** safeStorage-encrypted JSON; null when no credentials are stored. */
   credentialsEncrypted: blob('credentials_encrypted', { mode: 'buffer' }),
+  /** safeStorage-encrypted OAuth state (DCR client info + tokens); kept apart
+   *  from credentials so editing config can't clobber the tokens. */
+  oauthEncrypted: blob('oauth_encrypted', { mode: 'buffer' }),
   createdAt: timestamp(),
   updatedAt: timestamp(),
 });

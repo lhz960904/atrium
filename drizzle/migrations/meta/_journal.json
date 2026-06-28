@@ -64,6 +64,13 @@
       "when": 1782568731831,
       "tag": "0008_old_toad",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1782611071361,
+      "tag": "0009_opposite_black_knight",
+      "breakpoints": true
     }
   ]
 }

@@ -8,10 +8,11 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
 import { createLogger } from '../../log';
+import { CLIENT_INFO } from './client-info';
 import type { ResolvedMcpServer } from './config';
+import { McpOAuthProvider, type McpOAuthStore } from './oauth';
 
 const log = createLogger('mcp');
-const CLIENT_INFO = { name: 'atrium', version: '0.0.0' };
 const CONNECT_TIMEOUT_MS = 30_000;
 const DEFAULT_CALL_TIMEOUT_MS = 120_000;
 
@@ -20,7 +21,10 @@ export class McpConnection {
   private client: Client | null = null;
   private tools: Tool[] = [];
 
-  constructor(readonly server: ResolvedMcpServer) {}
+  constructor(
+    readonly server: ResolvedMcpServer,
+    private readonly oauthStore?: McpOAuthStore,
+  ) {}
 
   get id(): string {
     return this.server.id;
@@ -33,7 +37,7 @@ export class McpConnection {
   }
 
   async connect(): Promise<void> {
-    this.client = await openClient(this.server);
+    this.client = await openClient(this.server, this.oauthStore);
     await this.refreshTools();
   }
 
@@ -79,7 +83,7 @@ export class McpConnection {
  * Streamable HTTP and fall back to SSE for servers that only speak the legacy
  * transport. OAuth isn't wired yet — auth is via bearer/header (see httpHeaders).
  */
-async function openClient(server: ResolvedMcpServer): Promise<Client> {
+async function openClient(server: ResolvedMcpServer, oauthStore?: McpOAuthStore): Promise<Client> {
   if (server.transport === 'stdio') {
     return dial(
       new StdioClientTransport({
@@ -93,14 +97,20 @@ async function openClient(server: ResolvedMcpServer): Promise<Client> {
 
   const url = new URL(server.url);
   const requestInit: RequestInit = { headers: httpHeaders(server) };
+  // Silent provider (no openBrowser): connects with stored tokens, refreshes them
+  // when expired, and fails as Unauthorized if the server still needs the user —
+  // never opens a browser during a background connect.
+  const authProvider = oauthStore
+    ? new McpOAuthProvider(oauthStore, { redirectUrl: 'http://127.0.0.1/callback' })
+    : undefined;
   if (server.transport === 'sse') {
-    return dial(new SSEClientTransport(url, { requestInit }));
+    return dial(new SSEClientTransport(url, { requestInit, authProvider }));
   }
   try {
-    return await dial(new StreamableHTTPClientTransport(url, { requestInit }));
+    return await dial(new StreamableHTTPClientTransport(url, { requestInit, authProvider }));
   } catch (err) {
     log.info(`"${server.name}": Streamable HTTP failed, falling back to SSE`, err);
-    return dial(new SSEClientTransport(url, { requestInit }));
+    return dial(new SSEClientTransport(url, { requestInit, authProvider }));
   }
 }
 
@@ -117,7 +127,7 @@ async function dial(
  * then headers whose values come from named host env vars, then the server's
  * explicit headers (static config + decrypted secrets), which win on conflict.
  */
-function httpHeaders(
+export function httpHeaders(
   server: Extract<ResolvedMcpServer, { transport: 'http' | 'sse' }>,
 ): Record<string, string> {
   const headers: Record<string, string> = {};
