@@ -22,6 +22,7 @@ export type McpServerStatus = 'connected' | 'needs-auth' | 'error';
 export class McpManager {
   private readonly connections = new Map<string, McpConnection>();
   private readonly statuses = new Map<string, McpServerStatus>();
+  private readonly pendingAuth = new Map<string, AbortController>();
   private db: Db | null = null;
 
   async init(db: Db): Promise<void> {
@@ -54,6 +55,10 @@ export class McpManager {
   }
 
   async disconnect(serverId: string): Promise<void> {
+    // Cancel an in-flight auth so deleting/disabling a server doesn't leave the
+    // browser flow hanging until its timeout.
+    this.pendingAuth.get(serverId)?.abort();
+    this.pendingAuth.delete(serverId);
     this.statuses.delete(serverId);
     const conn = this.connections.get(serverId);
     if (!conn) return;
@@ -82,20 +87,27 @@ export class McpManager {
       throw new Error('OAuth is only available for HTTP MCP servers');
     }
     const { shell } = require('electron') as typeof import('electron');
+    const abort = new AbortController();
+    this.pendingAuth.set(id, abort);
     try {
       await runInteractiveOAuth(
         server.url,
         { headers: httpHeaders(server) },
         oauthStore(db, id),
         (url) => void shell.openExternal(url),
+        abort.signal,
       );
     } catch (err) {
-      // The server may have been deleted or disabled while the browser flow was
-      // open (or it timed out after the user walked away). If it's gone now the
-      // error is moot — swallow it; otherwise surface it to the UI.
-      if (resolveServerById(db, id)?.enabled) throw err;
-      log.info(`auth for "${server.name}" abandoned (server removed or disabled)`);
-      return;
+      // Deleting/disabling the server aborts this flow (disconnect signals it); that,
+      // or the server being gone now, makes the error moot — swallow it. Real failures
+      // (timeout, auth error) on a still-present server surface to the UI.
+      if (abort.signal.aborted || !resolveServerById(db, id)?.enabled) {
+        log.info(`auth for "${server.name}" abandoned`);
+        return;
+      }
+      throw err;
+    } finally {
+      this.pendingAuth.delete(id);
     }
     await this.reload(id);
   }

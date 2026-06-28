@@ -4,8 +4,8 @@ import type { AddressInfo } from 'node:net';
 export type CallbackServer = {
   /** The loopback redirect URI to register and hand to the authorization server. */
   redirectUrl: string;
-  /** Resolves with the `code` once the browser is redirected back; rejects on error/timeout. */
-  waitForCode(timeoutMs: number): Promise<string>;
+  /** Resolves with the `code` once the browser is redirected back; rejects on error/timeout/abort. */
+  waitForCode(timeoutMs: number, signal?: AbortSignal): Promise<string>;
   close(): void;
 };
 
@@ -41,13 +41,18 @@ export async function startCallbackServer(): Promise<CallbackServer> {
 
   return {
     redirectUrl: `http://127.0.0.1:${port}/callback`,
-    waitForCode: (timeoutMs) =>
-      Promise.race([
-        codePromise,
-        new Promise<string>((_, reject) =>
-          setTimeout(() => reject(new Error('authorization timed out')), timeoutMs),
-        ),
-      ]),
+    waitForCode: (timeoutMs, signal) => {
+      if (signal?.aborted) return Promise.reject(new Error('authorization cancelled'));
+      return new Promise<string>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('authorization timed out')), timeoutMs);
+        const onAbort = (): void => reject(new Error('authorization cancelled'));
+        signal?.addEventListener('abort', onAbort, { once: true });
+        codePromise.then(resolve, reject).finally(() => {
+          clearTimeout(timer);
+          signal?.removeEventListener('abort', onAbort);
+        });
+      });
+    },
     close: () => server.close(),
   };
 }

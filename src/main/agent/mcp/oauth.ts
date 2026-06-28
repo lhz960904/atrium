@@ -112,6 +112,7 @@ export async function runInteractiveOAuth(
   requestInit: RequestInit,
   store: McpOAuthStore,
   openBrowser: (url: string) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const callback = await startCallbackServer();
   try {
@@ -125,14 +126,14 @@ export async function runInteractiveOAuth(
     });
     const client = new Client(CLIENT_INFO, { capabilities: {} });
     try {
-      await client.connect(transport);
+      await client.connect(transport, { signal });
       await client.close();
       return; // already authorized (valid stored tokens)
     } catch (err) {
       if (!(err instanceof UnauthorizedError)) throw err;
     }
-    // The browser is open; finish the exchange with the returned code.
-    const code = await callback.waitForCode(AUTH_TIMEOUT_MS);
+    // The browser is open; wait for the redirect (or an abort) and finish the exchange.
+    const code = await callback.waitForCode(AUTH_TIMEOUT_MS, signal);
     await transport.finishAuth(code);
     await transport.close();
   } finally {
