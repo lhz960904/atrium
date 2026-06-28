@@ -112,6 +112,7 @@ export const zh = {
       unparseable: '命令无法解析，保险起见需确认',
       wrapper: '包装执行（{{cmd}}），无法静态判定真实命令',
       fsEscape: '写入 workspace 外的路径：{{path}}',
+      mcp: 'MCP 服务工具：{{cmd}}',
     },
   },
   clarify: {

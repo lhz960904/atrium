@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { isMcpToolName, parseToolName, qualifyToolName, slug } from './naming';
+import { isMcpToolName, parseMcpToolName } from '@shared/mcp';
+import { qualifyToolName, slug } from './naming';
 
 test('slug sanitizes to the provider function-name charset', () => {
   expect(slug('github')).toBe('github');
@@ -17,12 +18,12 @@ test('qualifyToolName builds the namespaced form and records it', () => {
 });
 
 test('parseToolName round-trips a simple qualified name', () => {
-  expect(parseToolName('mcp__github__create_issue')).toEqual({
+  expect(parseMcpToolName('mcp__github__create_issue')).toEqual({
     server: 'github',
     tool: 'create_issue',
   });
-  expect(parseToolName('read_file')).toBeNull();
-  expect(parseToolName('mcp__x')).toBeNull(); // missing tool segment
+  expect(parseMcpToolName('read_file')).toBeNull();
+  expect(parseMcpToolName('mcp__x')).toBeNull(); // missing tool segment
   expect(isMcpToolName('mcp__a__b')).toBe(true);
   expect(isMcpToolName('bash')).toBe(false);
 });
@@ -46,5 +47,5 @@ test('over-long names are truncated to <= 64 bytes and stay parseable', () => {
   const name = qualifyToolName('myserver', 'x'.repeat(200), taken);
   expect(name.length).toBeLessThanOrEqual(64);
   expect(isMcpToolName(name)).toBe(true);
-  expect(parseToolName(name)?.server).toBe('myserver');
+  expect(parseMcpToolName(name)?.server).toBe('myserver');
 });

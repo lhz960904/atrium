@@ -24,6 +24,7 @@ const REASON_KEY = {
   unparseable: 'approval.reason.unparseable',
   wrapper: 'approval.reason.wrapper',
   fsEscape: 'approval.reason.fsEscape',
+  mcp: 'approval.reason.mcp',
 } as const satisfies Record<CrossingCode, string>;
 
 type ApprovalCardProps = {

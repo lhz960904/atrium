@@ -112,6 +112,7 @@ export const en: typeof zh = {
       unparseable: 'Command can’t be parsed — confirming to be safe',
       wrapper: 'Wrapped execution ({{cmd}}) — can’t judge the real command statically',
       fsEscape: 'Writes outside the workspace: {{path}}',
+      mcp: 'MCP server tool: {{cmd}}',
     },
   },
   clarify: {

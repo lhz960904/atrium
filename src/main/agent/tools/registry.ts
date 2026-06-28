@@ -34,13 +34,22 @@ import type { ToolCtx } from './context';
  */
 /** Gate a tool behind the permission check — it pauses for approval when the
  *  call crosses the workspace boundary under the active mode. */
-function gate(name: ToolName, ctx: ToolCtx, t: Tool): Tool {
+function gate(name: string, ctx: ToolCtx, t: Tool): Tool {
   return { ...t, needsApproval: makeNeedsApproval(name, ctx) };
 }
 
+/** Gate every MCP tool — they always cross the boundary (see classifyToolCall). */
+function gateMcpTools(
+  mcpTools: Record<string, Tool> | undefined,
+  ctx: ToolCtx,
+): Record<string, Tool> {
+  const out: Record<string, Tool> = {};
+  for (const [name, t] of Object.entries(mcpTools ?? {})) out[name] = gate(name, ctx, t);
+  return out;
+}
+
 export function getTools(ctx: ToolCtx): Record<string, Tool> {
-  return {
-    ...ctx.mcpTools,
+  const builtins: Record<ToolName, Tool> = {
     read_file: readFileTool(ctx),
     write_file: gate('write_file', ctx, writeFileTool(ctx)),
     edit_file: gate('edit_file', ctx, editFileTool(ctx)),
@@ -64,4 +73,6 @@ export function getTools(ctx: ToolCtx): Record<string, Tool> {
     memory: memoryTool(ctx),
     profile: profileTool(),
   };
+  // MCP tools first so a built-in can never be shadowed by a server tool.
+  return { ...gateMcpTools(ctx.mcpTools, ctx), ...builtins };
 }
