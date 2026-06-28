@@ -6,8 +6,9 @@ import { Text } from '@tiptap/extension-text';
 import { Placeholder, UndoRedo } from '@tiptap/extensions';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Plus, Send, Square } from 'lucide-react';
-import { memo, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from '../../../i18n';
 import { ATTACHMENT_ACCEPT, classifyAttachment } from '../../../lib/attachments';
 import { useChatModel } from '../../../lib/use-chat-model';
 import { useSetting } from '../../../lib/use-setting';
@@ -61,7 +62,7 @@ export const Composer = memo(function Composer({
   toolbarLeft,
   toolbarStatus,
 }: ComposerProps): React.JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n: i18nHook } = useTranslation();
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [empty, setEmpty] = useState(initialText.trim().length === 0);
   const skill = useSlashMenu(commands ?? []);
@@ -75,6 +76,10 @@ export const Composer = memo(function Composer({
   sendKeyRef.current = sendKey;
   const editorRef = useRef<ReturnType<typeof useEditor>>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Placeholder is configured once at editor creation; read the prop + current
+  // language through a ref/singleton so the function stays live.
+  const placeholderRef = useRef(placeholder);
+  placeholderRef.current = placeholder;
 
   const editor = useEditor({
     extensions: [
@@ -83,7 +88,9 @@ export const Composer = memo(function Composer({
       Text,
       HardBreak,
       UndoRedo,
-      Placeholder.configure({ placeholder: placeholder ?? t('composer.placeholder') }),
+      Placeholder.configure({
+        placeholder: () => placeholderRef.current ?? i18n.t('composer.placeholder'),
+      }),
       ...skill.extensions,
     ],
     content: initialText,
@@ -113,6 +120,12 @@ export const Composer = memo(function Composer({
     onUpdate: ({ editor }) => setEmpty(editor.isEmpty),
   });
   editorRef.current = editor;
+
+  // The placeholder decoration is baked in at create-time; recompute it when the
+  // prop or UI language changes so it isn't frozen to the startup-race language.
+  useEffect(() => {
+    editor?.view.dispatch(editor.state.tr);
+  }, [editor, i18nHook.language, placeholder]);
 
   const handleSend = (): void => {
     if (disabled || !editor) return;
