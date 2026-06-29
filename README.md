@@ -1,54 +1,98 @@
+<div align="center">
+
+<img src="resources/icon.png" alt="Atrium" width="120" />
+
 # Atrium
 
-Personal AI workspace
+Atrium is a local-first desktop AI workspace. Connect to any model provider with your own
+API keys, run a complete agentic toolchain on-device, and keep every conversation,
+credential, and file under your control — no accounts, no intermediary servers.
 
-## Stack
+[English](./README.md) · [简体中文](./README.zh-CN.md) · [Download](https://github.com/lhz960904/atrium/releases/latest)
 
-- **Shell**: Electron 39 + electron-vite 5
-- **UI**: React 19 + TypeScript + Tailwind CSS v4
-- **State / IPC**: electron-trpc + tRPC 10
-- **Storage**: better-sqlite3 + Drizzle ORM + drizzle-kit (migration)
-- **Tooling**: Bun (pkg mgr) + Biome (lint/format)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/lhz960904/atrium?display_name=tag)](https://github.com/lhz960904/atrium/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/lhz960904/atrium/total)](https://github.com/lhz960904/atrium/releases)
 
-## Develop
+</div>
+
+## Demo
+
+<!-- DEMO PLACEHOLDER — replace with the recorded demo once captured:
+     • animated:  <img src="docs/demo.gif" alt="Atrium demo" width="860" />
+     • or video:  https://github.com/user-attachments/assets/<id>.mp4 -->
+
+<div align="center">
+  <em>A short demo will go here.</em>
+</div>
+
+## Features
+
+- **Multi-provider:** Anthropic, Google Gemini, any OpenAI-compatible endpoint, local models
+  via Ollama, and external CLI agents (Claude Code, Codex, Gemini CLI) — all with your own
+  keys, encrypted on-device.
+- **Task planning:** the agent breaks a request into a live to-do plan you can watch it work
+  through, step by step.
+- **MCP:** connect Model Context Protocol servers (stdio / HTTP / SSE) and use their tools
+  right inside a conversation.
+- **Cross-session memory:** durable, scoped memory the agent reads and writes, so context
+  carries across conversations.
+- **Skills:** package reusable procedures as progressive-loading `SKILL.md` files the agent
+  pulls in only when needed.
+- **Subagents:** delegate isolated subtasks to focused agents that report back without
+  cluttering the main thread.
+
+## Architecture
+
+The renderer talks to the main process two ways: tRPC over Electron IPC for CRUD and config,
+and an HTTP stream from a localhost server for chat. The AI agent loop, storage, and provider
+resolution all live in the main process.
+
+<div align="center">
+  <img src="docs/architecture.png" alt="Atrium architecture — layered overview" width="900" />
+</div>
+
+## Quick Start
+
+**Prerequisites:** [Bun](https://bun.sh/) and a C/C++ toolchain for the `better-sqlite3`
+native build (Xcode Command Line Tools on macOS, `build-essential` on Linux, the Visual
+Studio C++ workload on Windows).
 
 ```bash
-bun install                   # 装依赖；electron-builder 自动 rebuild native bindings
-bun run dev                   # 起 Electron + Vite HMR
-bun run check                 # biome + tsc，提交前过一遍
-bun run build                 # production 打包到 out/
+git clone https://github.com/lhz960904/atrium.git
+cd atrium
+bun install        # install deps; postinstall rebuilds native modules for Electron
+bun run dev        # launch Electron + Vite with HMR
 ```
 
-## DB schema
+On first launch, open **Settings → Providers**, enable a provider, and paste in your API key
+(it is encrypted with your OS keychain and stored locally).
 
-Schema 定义在 `src/main/db/schema.ts`。改 schema 后：
+Other common scripts:
 
 ```bash
-bun run db:generate           # 生成 drizzle/migrations/*.sql
-bun run db:push               # 直接把 schema sync 到 dev.db（开发期方便快速迭代）
-bun run db:studio             # 在浏览器里浏览 dev.db
+bun run check      # biome (lint + format) + tsc typecheck — run before every commit
+bun test           # unit tests
+bun run build      # typecheck + bundle into out/
+bun run build:mac  # package a .dmg (also build:win / build:linux)
+
+# Database schema lives in src/main/db/schema.ts:
+bun run db:generate   # emit a migration into drizzle/migrations/*.sql
+bun run db:push       # push schema straight to dev.db
+bun run db:studio     # browse dev.db in Drizzle Studio
 ```
 
-应用启动时自动 `migrate()` 同步到 `~/Library/Application Support/Atrium/atrium.db`（macOS）。
+## Issues & PRs
 
-实现细节：runtime 用 `better-sqlite3`（原生 binding，跟 Electron 同 ABI）；drizzle-kit CLI 走 `@libsql/client`（纯 JS，跑在 Node 下不需要 ABI 重编译）。SQL dialect 一致，互不干扰。
+Contributions are welcome.
 
-## 目录
+- **Found a bug or have an idea?** Open an
+  [issue](https://github.com/lhz960904/atrium/issues/new/choose).
+- **Sending a pull request?** Branch off `main`, make sure `bun run check` and `bun test`
+  pass, and follow [Conventional Commits](https://www.conventionalcommits.org/)
+  (e.g. `feat(chat): stream tool calls`). Never include API keys or secrets in a diff. See
+  [CLAUDE.md](./CLAUDE.md) for the project's engineering principles.
 
-```
-src/
-├── main/            # Electron 主进程
-│   ├── db/          # Drizzle schema + connection
-│   └── trpc/        # tRPC router
-├── preload/         # ipc 桥（electron-trpc bridge）
-├── renderer/        # React UI
-│   └── src/
-│       ├── assets/  # tokens.css + styles.css（Tailwind v4 入口）
-│       └── lib/     # tRPC client
-└── shared/          # 跨进程共享类型（按需）
-drizzle/migrations/  # 自动生成的 SQL migration
-```
+## License
 
-## 主题
-
-`<html data-theme="light|dark">` 切换。Tokens 在 `src/renderer/src/assets/tokens.css`；Tailwind v4 `@theme inline` 把 CSS 变量暴露为 utility（`bg-canvas` / `text-fg-primary` / `border-accent` …）。
+[MIT](./LICENSE) © lhz960904
