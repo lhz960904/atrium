@@ -4,7 +4,16 @@
   "private": true,
   "description": "Atrium — personal AI workspace",
   "main": "./out/main/index.js",
-  "author": "Haoze",
+  "author": "lhz960904",
+  "license": "MIT",
+  "homepage": "https://github.com/lhz960904/atrium#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lhz960904/atrium.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lhz960904/atrium/issues"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
