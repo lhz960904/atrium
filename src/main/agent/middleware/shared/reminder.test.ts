@@ -30,6 +30,19 @@ test('targets the first user message past leading assistant turns', () => {
   expect(textOf(out[1], 0)).toContain('R');
 });
 
+test("anchor 'last' targets the most recent user turn, leaving earlier ones untouched", () => {
+  const first = user('first');
+  const assistant: UIMessage = { id: 'a', role: 'assistant', parts: [{ type: 'text', text: 'a' }] };
+  const last = user('latest');
+  const out = injectSystemReminder([first, assistant, last], 'R', { anchor: 'last' });
+
+  expect(out[0]).toBe(first); // earlier user turn stays cacheable
+  expect(out[1]).toBe(assistant);
+  expect(out[2].parts).toHaveLength(2);
+  expect(textOf(out[2], 0)).toContain('R');
+  expect(textOf(out[2], 1)).toBe('latest');
+});
+
 test('non-destructive: original message and array untouched', () => {
   const orig = user('hello');
   const input = [orig];

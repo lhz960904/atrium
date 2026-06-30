@@ -3,8 +3,9 @@ import { convertToModelMessages, generateId, stepCountIs, streamText, type UIMes
 import { recordUsage, tokenCountsOf } from '../../db/usage';
 import { createLogger } from '../../log';
 import { compactionMiddleware, composeBeforeStep, type RunContext } from '../middleware';
+import { injectSystemReminder } from '../middleware/shared/reminder';
 import type { ModelPricing } from '../models/types';
-import { workspaceGuidance } from '../prompts';
+import { currentDateNote, workspaceGuidance } from '../prompts';
 import { todoPreserver } from '../tools/builtins/todo';
 import { filterToolsForSubagent, type SubagentDef } from './defs';
 
@@ -66,9 +67,10 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
 
   const tools = filterToolsForSubagent(parent.request.tools, agent);
   const system = `${agent.systemPrompt}\n\n${workspaceGuidance(parent.workspaceRoot)}`;
-  const messages: UIMessage[] = [
-    { id: generateId(), role: 'user', parts: [{ type: 'text', text: prompt }] },
-  ];
+  const messages: UIMessage[] = injectSystemReminder(
+    [{ id: generateId(), role: 'user', parts: [{ type: 'text', text: prompt }] }],
+    currentDateNote(new Date()),
+  );
 
   const subCtx: RunContext = {
     threadId: parent.threadId,

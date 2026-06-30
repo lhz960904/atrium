@@ -9,6 +9,26 @@ export function workspaceGuidance(workspaceRoot: string): string {
 File and shell tools default to this directory — address files with absolute paths (e.g. ${workspaceRoot}/notes.txt), and relative paths resolve against it. You can read files anywhere on the machine; writing outside the workspace asks the user for approval.`;
 }
 
+/**
+ * A day-granular "today" anchor. Without it, models reason from their training
+ * cutoff — e.g. searching for last year's data or assuming the wrong current year.
+ * Day granularity (no clock time) is all the model needs here and keeps the line
+ * short; dateMiddleware injects it per turn onto the latest user message (not the
+ * system prompt), so it stays off the cached prefix and refreshes across midnight.
+ * Formatted in the machine's local time zone, since "today" is the user's local day.
+ */
+export function currentDateNote(now: Date): string {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const date = new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone,
+  }).format(now);
+  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone }).format(now);
+  return `Today's date is ${date} (${weekday}, ${timeZone}). Your training cutoff is earlier, so treat today as ground truth for anything time-sensitive — don't assume the current year or carry a stale one into web searches, "latest"/"current" lookups, or date math.`;
+}
+
 function platformLabel(platform: NodeJS.Platform): string {
   switch (platform) {
     case 'darwin':
