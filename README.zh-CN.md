@@ -26,15 +26,15 @@ Atrium 是一款本地优先的桌面 AI Agent 助手。支持携带秘钥接入
 
 ## 功能特性
 
-- **多供应商支持：** Anthropic、Google Gemini、任意 OpenAI 兼容端点、通过 Ollama 运行的本地模型，以及外部 CLI agent（Claude Code、Codex、Gemini CLI）—— 全部使用你自己的密钥，并在本地加密。
+- **多供应商支持：** Anthropic、Google Gemini、任意 OpenAI 兼容端点、通过 Ollama 运行的本地模型，以及外部 CLI agent（Claude Code、Codex、Gemini CLI）- 全部使用你自己的密钥，并在本地加密。
 
-- **MCP：** 连接 Model Context Protocol 服务器（stdio / HTTP / SSE），在对话里直接使用它们的工具。
+- **MCP：** 连接 Model Context Protocol 服务器（stdio / HTTP / SSE），在对话里直接使用第三方服务提供的工具。支持从主流工具直接导入，支持 第三方服务 Oauth 授权。
 
-- **跨会话记忆：** 持久、分作用域的记忆，agent 可读可写，让上下文在多次对话间延续。
+- **Skills：** 把可复用的流程打包成技能包（SKILL.md 等）渐进式披露给 Agent。支持从 Claude Code、Codex、.Agents 多数据源读取已有技能，自动统计使用频率过滤无用 Skill 描述。
 
-- **Skills：** 把可复用的流程打包成渐进式加载的 `SKILL.md`，agent 只在需要时才拉取。
+- **Subagents：** 将大任务拆成子任务委派给专注的 Agent，在隔离的上下文中执行子任务并汇报结果，不污染主Agent 的上下文。支持创建和删除子Agent。
 
-- **Subagents：** 把隔离的子任务委派给专注的 agent，由它回报结果，不污染主线程。
+- **跨会话记忆：** 包含用户身份的录入（`get-acquainted` 技能），会话过程中自动写入记忆，可区分全局记忆、项目域记忆  持久。后台自动总结保证记忆的长期质量。
 
 ## 架构
 
@@ -42,8 +42,9 @@ Atrium 是一款本地优先的桌面 AI Agent 助手。支持携带秘钥接入
 拉取 HTTP 流。AI agent 循环、存储与提供商解析都位于主进程。
 
 <div align="center">
-  <img src="docs/architecture.png" alt="Atrium 架构分层总览" width="900" />
+  <img width="2288" height="2484" alt="image" src="https://github.com/user-attachments/assets/b9308391-f2b0-4e12-9a39-cd6369fec987" />
 </div>
+
 
 ## 快速开始
 
@@ -81,10 +82,7 @@ bun run db:studio     # 在 Drizzle Studio 里浏览 dev.db
 
 - **发现 bug 或有想法？** 开一个
   [issue](https://github.com/lhz960904/atrium/issues/new/choose)。
-- **要提 PR？** 从 `main` 切分支，确保 `bun run check` 与 `bun test` 通过，并遵循
-  [Conventional Commits](https://www.conventionalcommits.org/)（如
-  `feat(chat): stream tool calls`）。切勿在 diff 中包含任何 API Key 或密钥。项目的工程
-  原则见 [CLAUDE.md](./CLAUDE.md)。
+- **要提 PR？** 从 `main` 切分支，确保 `bun run check` 与 `bun test` 通过，项目的工程原则见 [CLAUDE.md](./CLAUDE.md)。
 
 ## 许可证
 
