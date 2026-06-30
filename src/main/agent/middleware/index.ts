@@ -4,6 +4,7 @@ export {
   compactionMiddleware,
   compactThread,
 } from './builtins/compaction';
+export { dateMiddleware } from './builtins/date';
 export { type InstructionsOptions, instructionsMiddleware } from './builtins/instructions';
 export { type MemoryOptions, memoryMiddleware } from './builtins/memory';
 export { metadataMiddleware } from './builtins/metadata';

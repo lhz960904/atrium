@@ -11,6 +11,7 @@ import { buildMcpTools } from '../agent/mcp/tool-adapter';
 import {
   compactionMiddleware,
   compactThread,
+  dateMiddleware,
   instructionsMiddleware,
   memoryMiddleware,
   metadataMiddleware,
@@ -255,6 +256,10 @@ export function startHttpServer(deps: {
         instructionsMiddleware(),
         // Last injector → its block lands on top: <user-profile> above the rest.
         profileMiddleware(),
+        // Anchors today on the current turn's user message (its own anchor, the
+        // last user turn), so it stays off the cached prefix the others share and
+        // refreshes every turn — keeping a cross-midnight conversation current.
+        dateMiddleware(),
         // Upsert, not insert-ignore: when a turn resumes after an
         // ask_clarification answer, the model extends the SAME assistant message
         // (reused id), and that continuation must overwrite the stored copy.

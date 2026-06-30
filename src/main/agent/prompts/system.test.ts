@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { buildSystemPrompt, workspaceGuidance } from './system';
+import { buildSystemPrompt, currentDateNote, workspaceGuidance } from './system';
 
 test('opens with the broad Atrium identity, not a coding-only or Mac-bound one', () => {
   const p = buildSystemPrompt('/tmp/ws');
@@ -37,6 +37,18 @@ test('injects the soul with a precedence note over the style guidance', () => {
   expect(p).toContain('takes precedence');
   // No empty soul tags when absent.
   expect(buildSystemPrompt('/tmp/ws')).not.toContain('<soul>');
+});
+
+test('the date is not baked into the system prompt (it rides a per-turn reminder instead)', () => {
+  expect(buildSystemPrompt('/tmp/ws')).not.toContain("Today's date is");
+});
+
+test('currentDateNote renders a day-granular anchor and tells the model to prefer today', () => {
+  const note = currentDateNote(new Date('2026-06-15T12:00:00Z'));
+  expect(note).toMatch(/Today's date is \d{4}-\d{2}-\d{2} \(\w+, .+\)\./);
+  // Noon UTC reads as 2026 in every time zone, so the year is assertable cross-machine.
+  expect(note).toContain('2026');
+  expect(note).toMatch(/training cutoff/i);
 });
 
 test('does not re-explain individual tools (their descriptions own that)', () => {

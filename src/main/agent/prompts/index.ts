@@ -1,1 +1,1 @@
-export { buildSystemPrompt, workspaceGuidance } from './system';
+export { buildSystemPrompt, currentDateNote, workspaceGuidance } from './system';
