@@ -15,6 +15,7 @@
       "!**/build",
       "!**/resources",
       "!**/design",
+      "!**/docs",
       "!**/drizzle/migrations",
       "!**/routeTree.gen.ts",
       "!**/*.css",
