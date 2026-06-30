@@ -4,9 +4,8 @@
 
 # Atrium
 
-Atrium is a local-first desktop AI workspace. Connect to any model provider with your own
-API keys, run a complete agentic toolchain on-device, and keep every conversation,
-credential, and file under your control — no accounts, no intermediary servers.
+Atrium is a local-first desktop AI agent assistant. Connect to any model provider with your
+own key, with all the AI-agent capabilities you'd expect today.
 
 [English](./README.md) · [简体中文](./README.zh-CN.md) · [Download](https://github.com/lhz960904/atrium/releases/latest)
 
@@ -31,16 +30,23 @@ credential, and file under your control — no accounts, no intermediary servers
 - **Multi-provider:** Anthropic, Google Gemini, any OpenAI-compatible endpoint, local models
   via Ollama, and external CLI agents (Claude Code, Codex, Gemini CLI) — all with your own
   keys, encrypted on-device.
-- **Task planning:** the agent breaks a request into a live to-do plan you can watch it work
-  through, step by step.
-- **MCP:** connect Model Context Protocol servers (stdio / HTTP / SSE) and use their tools
-  right inside a conversation.
-- **Cross-session memory:** durable, scoped memory the agent reads and writes, so context
-  carries across conversations.
-- **Skills:** package reusable procedures as progressive-loading `SKILL.md` files the agent
-  pulls in only when needed.
-- **Subagents:** delegate isolated subtasks to focused agents that report back without
-  cluttering the main thread.
+
+- **MCP:** connect Model Context Protocol servers (stdio / HTTP / SSE) and use tools from
+  third-party services right inside a conversation. Import directly from popular tools, with
+  OAuth authorization for third-party services.
+
+- **Skills:** package reusable procedures into skill bundles (`SKILL.md` and friends) that
+  are progressively disclosed to the agent. Read existing skills from multiple sources —
+  Claude Code, Codex, .agents — and automatically track usage frequency to filter out
+  unhelpful skill descriptions.
+
+- **Subagents:** split a large task into subtasks delegated to focused agents that run in
+  isolated context and report back, without polluting the main agent's context. Create and
+  delete subagents as needed.
+
+- **Cross-session memory:** onboards your identity (the `get-acquainted` skill) and writes
+  memory automatically as you talk, with distinct global and project-scoped memory that
+  persists. Background summarization keeps memory high-quality over the long term.
 
 ## Architecture
 
@@ -49,7 +55,7 @@ and an HTTP stream from a localhost server for chat. The AI agent loop, storage,
 resolution all live in the main process.
 
 <div align="center">
-  <img src="docs/architecture.png" alt="Atrium architecture — layered overview" width="900" />
+  <img width="2288" height="2484" alt="image" src="https://github.com/user-attachments/assets/b9308391-f2b0-4e12-9a39-cd6369fec987" />
 </div>
 
 ## Quick Start
@@ -89,9 +95,7 @@ Contributions are welcome.
 - **Found a bug or have an idea?** Open an
   [issue](https://github.com/lhz960904/atrium/issues/new/choose).
 - **Sending a pull request?** Branch off `main`, make sure `bun run check` and `bun test`
-  pass, and follow [Conventional Commits](https://www.conventionalcommits.org/)
-  (e.g. `feat(chat): stream tool calls`). Never include API keys or secrets in a diff. See
-  [CLAUDE.md](./CLAUDE.md) for the project's engineering principles.
+  pass. See [CLAUDE.md](./CLAUDE.md) for the project's engineering principles.
 
 ## License
 
