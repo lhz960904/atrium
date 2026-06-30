@@ -62,7 +62,11 @@ export type ToolCallInfo = { name: ToolName; input: unknown; toolCallId: string 
 /** beforeToolUse returns this to skip execution and use `result` instead. */
 export type ToolShortCircuit = { result: unknown };
 
-export type RunResultInfo = { message: UIMessage };
+export type RunResultInfo = {
+  message: UIMessage;
+  /** The turn ended because the user stopped it, not because the model finished. */
+  aborted?: boolean;
+};
 
 /** The stream part messageMetadata receives — streamText's fullStream element. */
 export type MetadataPart = TextStreamPart<ToolSet>;

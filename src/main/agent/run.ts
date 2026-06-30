@@ -87,8 +87,8 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
     // Surface the real failure to the client (default masks it). The renderer
     // reads useChat's `error` and shows it instead of silently stalling.
     onError: readableError,
-    onFinish: ({ responseMessage }) =>
-      runAfterRun(ctx, { message: responseMessage }, opts.middlewares),
+    onFinish: ({ responseMessage, isAborted }) =>
+      runAfterRun(ctx, { message: responseMessage, aborted: isAborted }, opts.middlewares),
     execute: async ({ writer }) => {
       ctx.emit = (event) => writer.write(event);
       await runBeforeRun(ctx, opts.middlewares);

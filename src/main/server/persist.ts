@@ -71,7 +71,12 @@ export function persistMessage(db: Db, threadId: string, msg: UIMessage): void {
  * answer (the AI SDK extends it under the same id rather than minting a new
  * one). Insert-and-ignore would silently drop the continuation.
  */
-export function upsertMessage(db: Db, threadId: string, msg: UIMessage): void {
+export function upsertMessage(
+  db: Db,
+  threadId: string,
+  msg: UIMessage,
+  opts?: { markRead?: boolean },
+): void {
   db.insert(messages)
     .values({
       id: msg.id,
@@ -85,7 +90,12 @@ export function upsertMessage(db: Db, threadId: string, msg: UIMessage): void {
       set: { parts: msg.parts, metadata: msg.metadata ?? null },
     })
     .run();
-  db.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
+  const now = new Date();
+  // markRead stamps lastReadAt = updatedAt so this write can't trip the sidebar's
+  // unread dot — used when the user stops a turn, since the partial message is
+  // persisted on a thread they're actively viewing.
+  const bump = opts?.markRead ? { updatedAt: now, lastReadAt: now } : { updatedAt: now };
+  db.update(threads).set(bump).where(eq(threads.id, threadId)).run();
 }
 
 /** The user's ACP launch overrides for a local-cli provider (blank = manifest default). */
