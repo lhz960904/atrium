@@ -1,4 +1,4 @@
-import { Scan, Workflow } from 'lucide-react';
+import { Scan, TriangleAlert, Workflow } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,10 +19,17 @@ let seq = 0;
  * wheel to zoom in (double-click resets). While the chart streams in it's
  * usually unparseable, so we fall back to its source.
  */
-export function MermaidDiagram({ chart }: { chart: string }): React.JSX.Element {
+export function MermaidDiagram({
+  chart,
+  streaming = false,
+}: {
+  chart: string;
+  streaming?: boolean;
+}): React.JSX.Element {
   const { t } = useTranslation();
   const dark = useThemeStore((s) => s.resolvedTheme === 'dark');
   const [svg, setSvg] = useState('');
+  const [error, setError] = useState('');
   const apiRef = useRef<ReactZoomPanPinchRef>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -33,11 +40,24 @@ export function MermaidDiagram({ chart }: { chart: string }): React.JSX.Element 
     (async () => {
       try {
         const mermaid = (await import('mermaid')).default;
-        mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default' });
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: dark ? 'dark' : 'default',
+          // A failed render otherwise injects mermaid's "bomb" error graphic into
+          // <body> and leaves it there — it stacks up below the window. Suppress it
+          // so render just throws; we surface a contained hint of our own instead.
+          suppressErrorRendering: true,
+        });
         const { svg } = await mermaid.render(id, chart);
-        if (!cancelled) setSvg(svg);
-      } catch {
-        if (!cancelled) setSvg('');
+        if (!cancelled) {
+          setSvg(svg);
+          setError('');
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setSvg('');
+          setError(e instanceof Error ? e.message : String(e));
+        }
       }
     })();
     return () => {
@@ -57,7 +77,13 @@ export function MermaidDiagram({ chart }: { chart: string }): React.JSX.Element 
     return () => cancelAnimationFrame(raf);
   }, [svg, fit]);
 
-  if (!svg) return <CodeBlock code={chart} lang="mermaid" />;
+  // A chart still streaming in is expected to be unparseable, so keep showing its
+  // source. Once the turn settles, a chart that still won't parse is genuinely
+  // broken — surface the syntax error where the diagram would have been.
+  if (!svg) {
+    if (error && !streaming) return <MermaidError chart={chart} message={error} />;
+    return <CodeBlock code={chart} lang="mermaid" />;
+  }
 
   return (
     <div className="my-3 overflow-hidden rounded-lg border border-border-default">
@@ -83,8 +109,12 @@ export function MermaidDiagram({ chart }: { chart: string }): React.JSX.Element 
         minScale={0.1}
         maxScale={8}
         limitToBounds={false}
-        // Smaller step = gentler, smoother wheel zoom (0.08 felt too jumpy).
-        wheel={{ step: 0.015 }}
+        // Zoom is trackpad-pinch only. `wheelDisabled` drops plain wheel events
+        // (ctrlKey=false — mouse wheel / two-finger scroll) so the cursor passing
+        // over a diagram scrolls the page instead of getting trapped zooming it;
+        // a pinch (ctrlKey=true) still zooms. Smaller step keeps that pinch gentle
+        // (0.08 felt too jumpy).
+        wheel={{ step: 0.015, wheelDisabled: true }}
         doubleClick={{ disabled: true }}
       >
         <TransformComponent
@@ -95,6 +125,34 @@ export function MermaidDiagram({ chart }: { chart: string }): React.JSX.Element 
           <div ref={contentRef} dangerouslySetInnerHTML={{ __html: svg }} />
         </TransformComponent>
       </TransformWrapper>
+    </div>
+  );
+}
+
+/**
+ * Shown when a settled ```mermaid block won't parse: mermaid's own error message
+ * in a danger-tinted strip, with the original source below so the user can still
+ * read and copy it. Everything stays inside the card — nothing escapes to <body>.
+ */
+function MermaidError({ chart, message }: { chart: string; message: string }): React.JSX.Element {
+  const { t } = useTranslation();
+  return (
+    <div className="my-3 overflow-hidden rounded-lg border border-border-default">
+      <div className="flex items-center justify-between bg-surface px-3 py-1.5 text-xs">
+        <span className="flex items-center gap-1.5 text-danger">
+          <TriangleAlert className="size-3.5" />
+          {t('chat.mermaidSyntaxError')}
+        </span>
+        <CopyButton text={chart} />
+      </div>
+      <div className="space-y-2 bg-code-bg p-3">
+        <pre className="overflow-x-auto rounded-md border border-danger/30 bg-danger/10 p-2 font-mono text-danger text-xs">
+          {message}
+        </pre>
+        <pre className="overflow-x-auto font-mono text-fg-secondary text-sm leading-relaxed">
+          {chart}
+        </pre>
+      </div>
     </div>
   );
 }

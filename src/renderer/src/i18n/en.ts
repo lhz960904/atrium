@@ -159,6 +159,7 @@ export const en: typeof zh = {
     rename: 'Rename',
     archive: 'Archive',
     archived: 'Archived',
+    mermaidSyntaxError: 'Mermaid syntax error',
   },
   tool: {
     verb: {

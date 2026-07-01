@@ -159,6 +159,7 @@ export const zh = {
     rename: '重命名',
     archive: '归档',
     archived: '已归档',
+    mermaidSyntaxError: 'Mermaid 语法错误',
   },
   tool: {
     verb: {

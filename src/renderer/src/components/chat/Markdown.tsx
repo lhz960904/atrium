@@ -1,4 +1,5 @@
 import 'katex/dist/katex.min.css';
+import { useMemo } from 'react';
 import remarkMath from 'remark-math';
 import { type AnimateOptions, type Components, defaultRemarkPlugins, Streamdown } from 'streamdown';
 import { CodeBlock } from './CodeBlock';
@@ -19,43 +20,47 @@ const remarkPlugins = [...Object.values(defaultRemarkPlugins), remarkMath];
  * We override the tag renderers (react-markdown style) to drop Streamdown's
  * default code/table chrome and style everything with our own tokens.
  */
-const components: Components = {
-  // Multi-line code is a block (highlighted when a language is given, plain
-  // otherwise); a single short snippet is an inline chip with a backing color.
-  code: ({ className, children }) => {
-    const cls = className ?? '';
-    const text = String(children).replace(/\n$/, '');
-    const lang = /language-(\w+)/.exec(cls)?.[1];
-    // Math, either way it arrives: remark-math's tagged expression, or a model
-    // that fenced it in ```latex / ```math / ```tex. MathFence handles both.
-    if (lang === 'math' || lang === 'latex' || lang === 'tex') {
-      return <MathFence source={text} className={cls} />;
-    }
-    if (lang === 'mermaid') {
-      return <MermaidDiagram chart={text} />;
-    }
-    if (lang || text.includes('\n')) {
-      return <CodeBlock code={text} lang={lang ?? 'text'} />;
-    }
-    return (
-      <code className="rounded bg-code-bg px-1 py-0.5 font-mono text-[0.85em] text-fg-primary">
+// `streaming` reaches the code renderer so Mermaid can tell an unfinished chart
+// (keep showing source) from a settled one that won't parse (show the error).
+function buildComponents(streaming: boolean): Components {
+  return {
+    // Multi-line code is a block (highlighted when a language is given, plain
+    // otherwise); a single short snippet is an inline chip with a backing color.
+    code: ({ className, children }) => {
+      const cls = className ?? '';
+      const text = String(children).replace(/\n$/, '');
+      const lang = /language-(\w+)/.exec(cls)?.[1];
+      // Math, either way it arrives: remark-math's tagged expression, or a model
+      // that fenced it in ```latex / ```math / ```tex. MathFence handles both.
+      if (lang === 'math' || lang === 'latex' || lang === 'tex') {
+        return <MathFence source={text} className={cls} />;
+      }
+      if (lang === 'mermaid') {
+        return <MermaidDiagram chart={text} streaming={streaming} />;
+      }
+      if (lang || text.includes('\n')) {
+        return <CodeBlock code={text} lang={lang ?? 'text'} />;
+      }
+      return (
+        <code className="rounded bg-code-bg px-1 py-0.5 font-mono text-[0.85em] text-fg-primary">
+          {children}
+        </code>
+      );
+    },
+    // The default wraps code in a bordered container with a header; pass through
+    // so only our CodeBlock's own <pre> remains.
+    pre: ({ children }) => <>{children}</>,
+    table: ({ children }) => <TableBlock>{children}</TableBlock>,
+    th: ({ children }) => (
+      <th className="whitespace-nowrap border-border-default border-b bg-surface px-3 py-2 text-left font-medium text-fg-primary">
         {children}
-      </code>
-    );
-  },
-  // The default wraps code in a bordered container with a header; pass through
-  // so only our CodeBlock's own <pre> remains.
-  pre: ({ children }) => <>{children}</>,
-  table: ({ children }) => <TableBlock>{children}</TableBlock>,
-  th: ({ children }) => (
-    <th className="whitespace-nowrap border-border-default border-b bg-surface px-3 py-2 text-left font-medium text-fg-primary">
-      {children}
-    </th>
-  ),
-  td: ({ children }) => (
-    <td className="border-border-default border-b px-3 py-2 text-fg-secondary">{children}</td>
-  ),
-};
+      </th>
+    ),
+    td: ({ children }) => (
+      <td className="border-border-default border-b px-3 py-2 text-fg-secondary">{children}</td>
+    ),
+  };
+}
 
 // While a turn streams, new tokens fade in (lightly staggered) so the batched
 // throttle updates reveal as a smooth flow instead of popping in chunks; the GPU
@@ -75,6 +80,7 @@ export function Markdown({
   children: string;
   streaming?: boolean;
 }): React.JSX.Element {
+  const components = useMemo(() => buildComponents(streaming), [streaming]);
   return (
     <Streamdown
       className="atrium-md leading-relaxed"
