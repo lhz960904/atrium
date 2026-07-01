@@ -146,7 +146,7 @@ export function useSlashMenu(commands: SlashCommand[]): {
     setActive(i);
   }, []);
 
-  // Arrow/Enter while open; reads refs so this once-captured handler stays fresh.
+  // Arrow/Enter/Tab while open; reads refs so this once-captured handler stays fresh.
   const onKeyDown = useCallback(
     (event: KeyboardEvent): boolean => {
       const open = viewRef.current;
@@ -159,7 +159,10 @@ export function useSlashMenu(commands: SlashCommand[]): {
         setActiveIndex(Math.max(activeRef.current - 1, 0));
         return true;
       }
-      if (event.key === 'Enter') {
+      // Tab accepts the active item like Enter: the menu is a completion popup, so
+      // Tab should confirm the selection, not tab focus off the composer. Returning
+      // true makes ProseMirror preventDefault, which suppresses the focus move.
+      if (event.key === 'Enter' || (event.key === 'Tab' && !event.shiftKey)) {
         const entry = open.items[activeRef.current];
         if (entry) open.command(entry);
         return true;
