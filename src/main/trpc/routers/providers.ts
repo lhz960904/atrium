@@ -116,7 +116,15 @@ export const providersRouter = router({
         .where(eq(providers.id, input.id))
         .get();
       if (!row?.blob) return null;
-      return decryptCredentials<{ key: string }>(row.blob).key;
+      try {
+        return decryptCredentials<{ key: string }>(row.blob).key;
+      } catch {
+        // The blob can't be decrypted — the safeStorage key was removed or
+        // rotated in the OS keychain, so the ciphertext is unrecoverable.
+        // Report it as "no readable credential" so the field falls back to an
+        // empty, editable input and the user can re-enter the key.
+        return null;
+      }
     }),
 
   clearCredentials: publicProcedure
