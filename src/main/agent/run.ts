@@ -4,6 +4,7 @@ import {
   createUIMessageStream,
   generateId,
   type LanguageModel,
+  smoothStream,
   stepCountIs,
   streamText,
   type Tool,
@@ -104,6 +105,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
         stopWhen: stepCountIs(100),
         prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),
         abortSignal: opts.abortSignal,
+        experimental_transform: smoothStream({ chunking: 'word', delayInMs: 12 }),
         // Hands the run's RunContext to tool execute (the task tool reads it to
         // spawn a subagent that reuses this run's model / sandbox / db).
         experimental_context: ctx,

@@ -62,15 +62,14 @@ function buildComponents(streaming: boolean): Components {
   };
 }
 
-// While a turn streams, new tokens fade in (lightly staggered) so the batched
-// throttle updates reveal as a smooth flow instead of popping in chunks; the GPU
-// runs the fade, so it doesn't add to React's per-tick work. `isAnimating` gates
-// it to the live message — settled messages render instantly, no re-fade.
+// While a turn streams, reveal newly mounted text at character granularity. A
+// stagger would mount later characters as invisible spans first, which reads as
+// blank gaps between paragraphs when chunks arrive in batches.
 const STREAM_ANIM: AnimateOptions = {
   animation: 'fadeIn',
-  sep: 'word',
-  duration: 220,
-  stagger: 20,
+  sep: 'char',
+  duration: 120,
+  stagger: 0,
 };
 
 export function Markdown({
