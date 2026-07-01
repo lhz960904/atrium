@@ -17,13 +17,7 @@ own key, with all the AI-agent capabilities you'd expect today.
 
 ## Demo
 
-<!-- DEMO PLACEHOLDER — replace with the recorded demo once captured:
-     • animated:  <img src="docs/demo.gif" alt="Atrium demo" width="860" />
-     • or video:  https://github.com/user-attachments/assets/<id>.mp4 -->
-
-<div align="center">
-  <em>A short demo will go here.</em>
-</div>
+https://github.com/user-attachments/assets/49af7cb9-f11c-4cce-8fd8-c45e3dcbbd8f
 
 ## Features
 

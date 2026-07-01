@@ -16,25 +16,19 @@ Atrium 是一款本地优先的桌面 AI Agent 助手。支持携带秘钥接入
 
 ## 演示
 
-<!-- 演示占位 —— 录制好后替换：
-     • 动图：  <img src="docs/demo.gif" alt="Atrium 演示" width="860" />
-     • 或视频：https://github.com/user-attachments/assets/<id>.mp4 -->
-
-<div align="center">
-  <em>这里将放一段简短演示。</em>
-</div>
+https://github.com/user-attachments/assets/49af7cb9-f11c-4cce-8fd8-c45e3dcbbd8f
 
 ## 功能特性
 
 - **多供应商支持：** Anthropic、Google Gemini、任意 OpenAI 兼容端点、通过 Ollama 运行的本地模型，以及外部 CLI agent（Claude Code、Codex、Gemini CLI）- 全部使用你自己的密钥，并在本地加密。
 
-- **MCP：** 连接 Model Context Protocol 服务器（stdio / HTTP / SSE），在对话里直接使用第三方服务提供的工具。支持从主流工具直接导入，支持 第三方服务 Oauth 授权。
+- **MCP：** 连接 Model Context Protocol 服务器（stdio / HTTP / SSE），在对话里直接使用第三方服务提供的工具。支持从主流工具直接导入，支持第三方服务 Oauth 授权。
 
 - **Skills：** 把可复用的流程打包成技能包（SKILL.md 等）渐进式披露给 Agent。支持从 Claude Code、Codex、.Agents 多数据源读取已有技能，自动统计使用频率过滤无用 Skill 描述。
 
 - **Subagents：** 将大任务拆成子任务委派给专注的 Agent，在隔离的上下文中执行子任务并汇报结果，不污染主Agent 的上下文。支持创建和删除子Agent。
 
-- **跨会话记忆：** 包含用户身份的录入（`get-acquainted` 技能），会话过程中自动写入记忆，可区分全局记忆、项目域记忆  持久。后台自动总结保证记忆的长期质量。
+- **跨会话记忆：** 包含用户身份的录入（`get-acquainted` 技能），会话过程中自动写入记忆，可区分全局记忆、项目域记忆 持久。后台自动总结保证记忆的长期质量。
 
 ## 架构
 
@@ -44,7 +38,6 @@ Atrium 是一款本地优先的桌面 AI Agent 助手。支持携带秘钥接入
 <div align="center">
   <img width="2288" height="2484" alt="image" src="https://github.com/user-attachments/assets/b9308391-f2b0-4e12-9a39-cd6369fec987" />
 </div>
-
 
 ## 快速开始
 
