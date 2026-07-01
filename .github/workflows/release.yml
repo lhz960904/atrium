@@ -1,33 +1,37 @@
 name: Release
 
-# Push a tag like v0.1.0 (matching package.json "version") to build installers on
-# all three OSes and upload them to a GitHub Release (created as a draft by
-# electron-builder — review it, then publish). Run manually via "Run workflow"
-# for a build-only dry run that doesn't publish.
+# release-please watches Conventional Commits on main and maintains a "release
+# PR" that bumps package.json + CHANGELOG.md. Merging that PR creates the tag +
+# GitHub Release; this same run then builds installers for every OS and uploads
+# them to that release. Run manually via "Run workflow" for a build-only dry run
+# that doesn't publish.
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
-  # Gate packaging on a green lint + typecheck + test run.
-  test:
+  release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
+      - uses: googleapis/release-please-action@v4
+        id: rp
         with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bun run check
-      - run: bun test
+          token: ${{ secrets.GITHUB_TOKEN }}
 
+  # Build + publish only when release-please just cut a release, or on a manual
+  # dry run (which builds without publishing). The release commit already passed
+  # CI on the release PR, so there's no separate test gate here.
   release:
-    needs: test
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -86,7 +90,7 @@ jobs:
         run: bun run build
 
       - name: Package and publish
-        run: bunx electron-builder --${{ matrix.platform }} ${{ matrix.archFlag }} --publish ${{ github.event_name == 'push' && 'always' || 'never' }}
+        run: bunx electron-builder --${{ matrix.platform }} ${{ matrix.archFlag }} --publish ${{ needs.release-please.outputs.release_created == 'true' && 'always' || 'never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS signing + notarization. These are only populated on the mac
