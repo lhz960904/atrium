@@ -31,21 +31,34 @@ asarUnpack:
   # the file resolves on disk rather than from inside the asar archive.
   - node_modules/jieba-wasm/**
 mac:
-  # No Apple Developer ID in CI, so the app is only ad-hoc signed. Hardened
-  # Runtime enforces Library Validation (same Team ID for all nested code),
-  # which an ad-hoc signature can't satisfy — on macOS 14+ that makes dyld
-  # reject Electron Framework at launch ("different Team IDs"). Disable it so
-  # the ad-hoc build launches; re-enable once we sign + notarize with a real ID.
-  hardenedRuntime: false
+  # Signed + notarized with a real Developer ID (Team 43PH2NJ5C4). Hardened
+  # Runtime is mandatory for notarization, and it makes dyld enforce Library
+  # Validation — every nested binary must share that Team ID, which a genuine
+  # signature satisfies. The entitlements below grant the JIT /
+  # unsigned-executable-memory / dyld-env exceptions Electron's V8 needs while
+  # Hardened Runtime is on. Notarization credentials come from the environment
+  # (APPLE_* / APPLE_KEYCHAIN_PROFILE); when none are present — Windows/Linux
+  # runners, or a fork without secrets — electron-builder skips notarization
+  # silently instead of failing.
+  #
+  # arm64 and x64 are each built on their own native CI runner (Apple Silicon
+  # vs Intel), which sidesteps cross-compiling the native modules
+  # (better-sqlite3, node-pty). dmg-only — no zip/auto-update target — so the
+  # two per-arch publish jobs never race on a shared latest-mac.yml.
+  target:
+    - dmg
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Atrium 需要访问相机以支持相关功能。
     - NSMicrophoneUsageDescription: Atrium 需要访问麦克风以支持语音输入。
     - NSDocumentsFolderUsageDescription: Atrium 需要访问"文稿"文件夹以读写工作区文件。
     - NSDownloadsFolderUsageDescription: Atrium 需要访问"下载"文件夹以保存生成的产物。
-  notarize: false
+  notarize: true
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}.${ext}
 win:
   target:
     - nsis

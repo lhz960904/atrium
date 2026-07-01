@@ -32,12 +32,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Build each macOS arch on its own native runner: macos-latest is
+          # Apple Silicon (arm64), macos-13 is Intel (x64). Native runners
+          # rebuild better-sqlite3 / node-pty for their own arch cleanly.
           - os: macos-latest
             platform: mac
+            archFlag: "--arm64"
+          - os: macos-13
+            platform: mac
+            archFlag: "--x64"
           - os: windows-latest
             platform: win
+            archFlag: ""
           - os: ubuntu-latest
             platform: linux
+            archFlag: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -75,8 +84,15 @@ jobs:
         run: bun run build
 
       - name: Package and publish
-        run: bunx electron-builder --${{ matrix.platform }} --publish ${{ github.event_name == 'push' && 'always' || 'never' }}
+        run: bunx electron-builder --${{ matrix.platform }} ${{ matrix.archFlag }} --publish ${{ github.event_name == 'push' && 'always' || 'never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # No Apple signing certs in CI — don't attempt to sign/notarize.
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          # macOS signing + notarization. These are only populated on the mac
+          # runner; Windows/Linux get empty strings, so electron-builder finds
+          # no cert (CSC_LINK) and no notarize creds and skips both cleanly.
+          # CSC_LINK is the base64 of the Developer ID Application .p12.
+          CSC_LINK: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
