@@ -8,7 +8,12 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import { Plus, Send, Square } from 'lucide-react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ATTACHMENT_ACCEPT, classifyAttachment } from '../../../lib/attachments';
+import {
+  ATTACHMENT_ACCEPT,
+  classifyAttachment,
+  filesFromTransfer,
+  pastedName,
+} from '../../../lib/attachments';
 import { useChatModel } from '../../../lib/use-chat-model';
 import { useSetting } from '../../../lib/use-setting';
 import { toast } from '../../../state/toast-store';
@@ -73,6 +78,9 @@ export const Composer = memo(function Composer({
   const sendRef = useRef<() => void>(() => {});
   const sendKeyRef = useRef<ComposerSendKey>(sendKey);
   sendKeyRef.current = sendKey;
+  // handlePaste is captured once with the editor, so route file ingestion
+  // through a ref that each render refreshes (mirrors sendRef).
+  const addFilesRef = useRef<(files: File[]) => void>(() => {});
   const editorRef = useRef<ReturnType<typeof useEditor>>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Resolved placeholder; t() recomputes this when the UI language changes. The
@@ -113,6 +121,16 @@ export const Composer = memo(function Composer({
         editorRef.current?.commands.setHardBreak();
         return true;
       },
+      handlePaste: (_view, event) => {
+        // Files on the clipboard (a pasted screenshot, a copied file) become
+        // attachments; a plain text/HTML paste carries none, so fall through to
+        // the editor's default paste.
+        const files = filesFromTransfer(event.clipboardData);
+        if (files.length === 0) return false;
+        event.preventDefault();
+        addFilesRef.current(files);
+        return true;
+      },
     },
     onUpdate: ({ editor }) => setEmpty(editor.isEmpty),
   });
@@ -137,17 +155,15 @@ export const Composer = memo(function Composer({
   };
   sendRef.current = handleSend;
 
-  // Read each picked file into a data URL up front, so the attachment is a
+  // Read each file into a data URL up front, so the attachment is a
   // self-contained copy (the original can move or be deleted) and maps straight
-  // to an AI SDK file part on send.
-  const onFilesPicked = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const files = Array.from(e.target.files ?? []);
-    e.target.value = ''; // let the same file be re-picked later
+  // to an AI SDK file part on send. Shared by the file picker and clipboard paste.
+  const addFiles = (files: File[]): void => {
     const dropped: string[] = [];
     for (const file of files) {
       const mediaType = classifyAttachment(file);
       if (mediaType === null) {
-        dropped.push(file.name);
+        dropped.push(file.name || t('common.attachment'));
         continue;
       }
       const reader = new FileReader();
@@ -162,7 +178,7 @@ export const Composer = memo(function Composer({
           ...prev,
           {
             id: crypto.randomUUID(),
-            name: file.name,
+            name: file.name || pastedName(mediaType),
             mediaType,
             url: `data:${mediaType};base64,${base64}`,
             size: file.size,
@@ -174,6 +190,13 @@ export const Composer = memo(function Composer({
     if (dropped.length > 0) {
       toast.warning(t('composer.skippedFiles', { files: dropped.join(t('common.listSep')) }));
     }
+  };
+  addFilesRef.current = addFiles;
+
+  const onFilesPicked = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = ''; // let the same file be re-picked later
+    addFiles(files);
   };
 
   const removeAttachment = (id: string): void => {

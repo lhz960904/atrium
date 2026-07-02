@@ -93,3 +93,39 @@ export function classifyAttachment(file: File): string | null {
   if (TEXT_EXT.has(ext) || file.type.startsWith('text/')) return 'text/plain';
   return null;
 }
+
+/**
+ * Pull File objects out of a paste's ClipboardData or a drop's DataTransfer.
+ * Prefers `.files` (populated for pasted/dropped files); falls back to the item
+ * list for sources that only surface a file item (some image pastes). Returns
+ * [] when the transfer carries no files — a plain text/HTML paste — so the caller
+ * can let the default paste proceed.
+ */
+export function filesFromTransfer(data: DataTransfer | null): File[] {
+  if (!data) return [];
+  if (data.files.length > 0) return Array.from(data.files);
+  const files: File[] = [];
+  for (const item of data.items) {
+    if (item.kind === 'file') {
+      const file = item.getAsFile();
+      if (file) files.push(file);
+    }
+  }
+  return files;
+}
+
+// A pasted screenshot arrives without a filename; give it one so the chip and
+// the sent file part aren't blank. Keyed by the classified media type.
+const PASTED_EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+};
+
+/** A filename for a transfer item that came without one (e.g. a pasted screenshot). */
+export function pastedName(mediaType: string): string {
+  return `pasted.${PASTED_EXT[mediaType] ?? 'bin'}`;
+}
