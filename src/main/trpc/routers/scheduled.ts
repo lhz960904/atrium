@@ -1,9 +1,9 @@
 import { PERMISSION_MODES } from '@shared/permissions';
-import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import type { UpdateScheduledTaskInput } from '../../agent/scheduled';
 import { scheduledManager } from '../../agent/scheduled';
 import { isValidCron } from '../../agent/scheduled/cron';
+import { badRequest } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 /** Cap on simultaneously-enabled tasks — a runaway-automation backstop. */
@@ -27,10 +27,6 @@ const createInput = z.object({
 });
 
 const updateInput = createInput.partial().extend({ id: z.string() });
-
-function badRequest(message: string): TRPCError {
-  return new TRPCError({ code: 'BAD_REQUEST', message });
-}
 
 /** A recurring task needs a valid 5-field cron. Requiring exactly 5 fields caps
  *  granularity at one minute, which is the effective minimum interval. */
