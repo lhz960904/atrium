@@ -66,6 +66,8 @@ export type ScheduledTaskView = ScheduledTask & {
 export class ScheduledTaskManager {
   private deps!: ScheduledManagerDeps;
   private readonly jobs = new Map<string, Cron>();
+  /** Task ids with a fire in progress — the overlap guard's source of truth. */
+  private readonly firing = new Set<string>();
 
   init(deps: ScheduledManagerDeps): void {
     this.deps = deps;
@@ -176,6 +178,18 @@ export class ScheduledTaskManager {
   /** Fire immediately, independent of the schedule (detail-panel "Run now"). */
   runNow(id: string): Promise<void> {
     return this.fire(id, { manual: true });
+  }
+
+  /** Whether a run is in flight for this task (or its bound thread is streaming).
+   *  resumable is required lazily so the manager's import graph (and its unit
+   *  tests) don't pull in the stream store's module-load GC timer. */
+  isRunning(id: string): boolean {
+    if (this.firing.has(id)) return true;
+    const threadId = this.get(id)?.threadId;
+    if (!threadId) return false;
+    const { getRunningThreadIds } =
+      require('../../server/resumable') as typeof import('../../server/resumable');
+    return getRunningThreadIds().includes(threadId);
   }
 
   // ── lifecycle ───────────────────────────────────────────────────────────
@@ -322,50 +336,61 @@ export class ScheduledTaskManager {
   private async fire(id: string, { manual }: { manual: boolean }): Promise<void> {
     const existing = this.get(id);
     if (!existing) return;
-    const task = this.ensureThread(existing);
-
-    const runId = randomUUID();
-    const startedAt = new Date(this.nowMs());
-    this.db
-      .insert(scheduledTaskRuns)
-      .values({ id: runId, taskId: id, status: 'running', messageId: null, startedAt })
-      .run();
-
-    let result: ScheduledRunResult;
+    // Overlap guard: never stack a second run on a task whose previous one is
+    // still going. Covers scheduled fires AND manual Run now — croner's own
+    // `protect` can't see the run because fire() is dispatched fire-and-forget.
+    if (this.firing.has(id)) {
+      log.info(`skip fire for ${id}: a run is already in progress`);
+      return;
+    }
+    this.firing.add(id);
     try {
-      result = await this.runner(task);
-    } catch (err) {
-      log.error(`scheduled task ${id} threw`, err);
-      result = { status: 'error', error: String(err) };
+      const task = this.ensureThread(existing);
+      const runId = randomUUID();
+      const startedAt = new Date(this.nowMs());
+      this.db
+        .insert(scheduledTaskRuns)
+        .values({ id: runId, taskId: id, status: 'running', messageId: null, startedAt })
+        .run();
+
+      let result: ScheduledRunResult;
+      try {
+        result = await this.runner(task);
+      } catch (err) {
+        log.error(`scheduled task ${id} threw`, err);
+        result = { status: 'error', error: String(err) };
+      }
+
+      this.db
+        .update(scheduledTaskRuns)
+        .set({
+          status: result.status,
+          messageId: result.messageId ?? null,
+          error: result.error ?? null,
+          finishedAt: new Date(this.nowMs()),
+        })
+        .where(eq(scheduledTaskRuns.id, runId))
+        .run();
+
+      // The only task-row state is `enabled`: a one-shot consumes itself, and a
+      // recurring task auto-pauses once it has failed enough times in a row (both
+      // derived from the run just recorded).
+      if (task.kind === 'once' && !manual) {
+        this.disable(id);
+      } else if (this.trailingFailures(id) >= FAILURE_THRESHOLD) {
+        this.disable(id);
+        log.warn(`auto-paused task ${id} after ${FAILURE_THRESHOLD} consecutive failures`);
+      }
+
+      const run = this.db
+        .select()
+        .from(scheduledTaskRuns)
+        .where(eq(scheduledTaskRuns.id, runId))
+        .get();
+      if (run) this.deps.onComplete?.(this.get(id) ?? task, run);
+    } finally {
+      this.firing.delete(id);
     }
-
-    this.db
-      .update(scheduledTaskRuns)
-      .set({
-        status: result.status,
-        messageId: result.messageId ?? null,
-        error: result.error ?? null,
-        finishedAt: new Date(this.nowMs()),
-      })
-      .where(eq(scheduledTaskRuns.id, runId))
-      .run();
-
-    // The only task-row state is `enabled`: a one-shot consumes itself, and a
-    // recurring task auto-pauses once it has failed enough times in a row (both
-    // derived from the run just recorded).
-    if (task.kind === 'once' && !manual) {
-      this.disable(id);
-    } else if (this.trailingFailures(id) >= FAILURE_THRESHOLD) {
-      this.disable(id);
-      log.warn(`auto-paused task ${id} after ${FAILURE_THRESHOLD} consecutive failures`);
-    }
-
-    const run = this.db
-      .select()
-      .from(scheduledTaskRuns)
-      .where(eq(scheduledTaskRuns.id, runId))
-      .get();
-    if (run) this.deps.onComplete?.(this.get(id) ?? task, run);
   }
 
   private disable(id: string): void {

@@ -82,6 +82,7 @@ export const en: typeof zh = {
     openThread: 'Open conversation',
     deleteConfirm: 'Delete this scheduled task? Its past conversation is kept.',
     startedToast: 'Scheduled task started',
+    alreadyRunningToast: 'This task is already running',
   },
   composer: {
     placeholder: 'Say something…',

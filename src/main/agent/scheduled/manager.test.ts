@@ -125,6 +125,21 @@ test('runNow records a run; last-run + status derive from it', async () => {
   expect(after.lastRunAt).toBeInstanceOf(Date);
 });
 
+test('does not stack a second run while one is already in progress', async () => {
+  let calls = 0;
+  const { mgr } = setup(async () => {
+    calls++;
+    return { status: 'ok' };
+  });
+  const task = mgr.create({ ...RECURRING });
+
+  // Two concurrent runs: the second must be skipped by the overlap guard.
+  await Promise.all([mgr.runNow(task.id), mgr.runNow(task.id)]);
+
+  expect(calls).toBe(1);
+  expect(mgr.listRuns(task.id)).toHaveLength(1);
+});
+
 test('auto-pauses after five consecutive failures (derived from runs)', async () => {
   const { mgr } = setup(async () => ({ status: 'error', error: 'boom' }));
   const task = mgr.create({ ...RECURRING });

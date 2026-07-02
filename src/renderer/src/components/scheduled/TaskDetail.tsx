@@ -78,9 +78,13 @@ export function TaskDetail({
   const projects = trpc.projects.list.useQuery();
 
   const runNow = trpc.scheduled.runNow.useMutation({
-    onSuccess: () => {
-      toast.success({ key: 'scheduled.startedToast' });
-      utils.scheduled.runs.invalidate({ id: task.id });
+    onSuccess: (data) => {
+      if (data.started) {
+        toast.success({ key: 'scheduled.startedToast' });
+        utils.scheduled.runs.invalidate({ id: task.id });
+      } else {
+        toast.info({ key: 'scheduled.alreadyRunningToast' });
+      }
     },
   });
   const toggle = trpc.scheduled.setEnabled.useMutation({

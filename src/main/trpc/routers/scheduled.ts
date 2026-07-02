@@ -96,6 +96,8 @@ export const scheduledRouter = router({
 
   runNow: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
     if (!scheduledManager.getView(input.id)) throw badRequest(`No scheduled task ${input.id}.`);
+    // Don't stack a run on top of one already going for this task.
+    if (scheduledManager.isRunning(input.id)) return { started: false };
     // Fire-and-forget: a run drives a full agent turn (minutes), so don't hold
     // the request open. The bound thread + completion notification surface it.
     void scheduledManager.runNow(input.id);

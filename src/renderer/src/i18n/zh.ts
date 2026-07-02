@@ -82,6 +82,7 @@ export const zh = {
     openThread: '打开会话',
     deleteConfirm: '删除这个定时任务？它过往的会话会保留。',
     startedToast: '定时任务已开始',
+    alreadyRunningToast: '该任务正在运行中',
   },
   composer: {
     placeholder: '说点什么…',
