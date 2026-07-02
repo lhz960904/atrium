@@ -6,6 +6,7 @@ import { modelsRouter } from './routers/models';
 import { profileRouter } from './routers/profile';
 import { projectsRouter } from './routers/projects';
 import { providersRouter } from './routers/providers';
+import { scheduledRouter } from './routers/scheduled';
 import { searchRouter } from './routers/search';
 import { settingsRouter } from './routers/settings';
 import { skillsRouter } from './routers/skills';
@@ -39,6 +40,7 @@ export const appRouter = router({
   projects: projectsRouter,
   search: searchRouter,
   providers: providersRouter,
+  scheduled: scheduledRouter,
   settings: settingsRouter,
   skills: skillsRouter,
   subagents: subagentsRouter,
