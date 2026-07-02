@@ -40,6 +40,7 @@ export const SUBAGENT_DENIED_TOOLS = new Set<string>([
   // A subagent has no business managing the user's scheduled automations.
   'schedule_create',
   'schedule_list',
+  'schedule_update',
   'schedule_cancel',
 ]);
 

@@ -210,6 +210,13 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     target: () => '',
     typeLabel: (_i, t) => t('tool.type.scheduled'),
   },
+  schedule_update: {
+    icon: CalendarClock,
+    verbKey: 'tool.verb.edit',
+    verbActiveKey: 'tool.verbActive.edit',
+    target: (i) => i.title ?? '',
+    typeLabel: (_i, t) => t('tool.type.scheduled'),
+  },
   schedule_cancel: {
     icon: CalendarX,
     verbKey: 'tool.verb.cancel',

@@ -26,6 +26,7 @@ export const TOOL_NAMES = [
   'profile',
   'schedule_create',
   'schedule_list',
+  'schedule_update',
   'schedule_cancel',
 ] as const;
 

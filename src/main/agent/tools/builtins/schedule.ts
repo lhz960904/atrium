@@ -1,5 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
+import type { UpdateScheduledTaskInput } from '../../scheduled';
 import { scheduledManager } from '../../scheduled';
 import { isRecurringCron } from '../../scheduled/cron';
 
@@ -86,6 +87,45 @@ export const scheduleListTool = () =>
           return `- ${t.id} · "${t.title}" · ${t.kind} ${when} (${t.timezone}) · ${t.enabled ? 'enabled' : 'disabled'}${next}`;
         })
         .join('\n');
+    },
+  });
+
+/** Update an existing scheduled task from a chat ("change it to 9am", "pause it"). */
+export const scheduleUpdateTool = () =>
+  tool({
+    description:
+      'Update an existing scheduled task — its schedule, prompt, title, or enabled state. Get the id from schedule_list first, and pass only the fields to change. Use cron for recurring or at (ISO datetime) for one-time; enabled:false pauses, true resumes.',
+    inputSchema: z.object({
+      id: z.string().min(1).describe('The scheduled task id (from schedule_list).'),
+      title: z.string().min(1).optional(),
+      prompt: z.string().min(1).optional(),
+      cron: z.string().optional().describe('New 5-field cron (switches to recurring).'),
+      at: z.string().optional().describe('New ISO 8601 datetime (switches to one-time).'),
+      enabled: z.boolean().optional().describe('false pauses the task, true resumes it.'),
+      timezone: z.string().optional(),
+    }),
+    execute: async ({ id, title, prompt, cron, at, enabled, timezone }) => {
+      if (!scheduledManager.getView(id)) throw new Error(`No scheduled task with id "${id}".`);
+      const patch: UpdateScheduledTaskInput = {};
+      if (title !== undefined) patch.title = title;
+      if (prompt !== undefined) patch.prompt = prompt;
+      if (enabled !== undefined) patch.enabled = enabled;
+      if (timezone !== undefined) patch.timezone = timezone;
+      if (cron !== undefined) {
+        if (!isRecurringCron(cron)) throw new Error(`Invalid 5-field cron: "${cron}".`);
+        patch.kind = 'recurring';
+        patch.cronExpr = cron.trim();
+        patch.runAt = null;
+      } else if (at !== undefined) {
+        const runAt = new Date(at);
+        if (Number.isNaN(runAt.getTime())) throw new Error(`Invalid datetime: "${at}".`);
+        if (runAt.getTime() <= Date.now()) throw new Error('The run time must be in the future.');
+        patch.kind = 'once';
+        patch.runAt = runAt;
+        patch.cronExpr = null;
+      }
+      const view = scheduledManager.update(id, patch);
+      return `Updated scheduled task "${view.title}" (id ${id}).`;
     },
   });
 
