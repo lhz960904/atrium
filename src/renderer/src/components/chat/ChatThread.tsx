@@ -42,6 +42,8 @@ type ChatThreadProps = {
   /** `/` commands for the composer (e.g. compact). */
   commands: SlashCommand[];
   onSend: (text: string, attachments: Attachment[]) => void;
+  /** Rewrite a user message and re-run from it, discarding everything after. */
+  onEditMessage: (id: string, text: string) => void;
   /** Approve / trust-always / deny a pending tool call (resumes or aborts it). */
   onApprove: (approvalId: string) => void;
   onAlways: (approvalId: string) => void;
@@ -105,6 +107,7 @@ export function ChatThread({
   approvals,
   commands,
   onSend,
+  onEditMessage,
   onApprove,
   onAlways,
   onDeny,
@@ -122,6 +125,9 @@ export function ChatThread({
   const pendingClarify = pendingClarifyId(messages);
   const clarifyPending = pendingClarify !== null;
   const approvalPending = approvals.length > 0;
+  // The composer is held for all of these; editing a past message re-runs a
+  // turn, so it's gated on the same idle window.
+  const busy = live || compacting || clarifyPending || approvalPending;
   const lastId = messages.at(-1)?.id;
   // The head of this thread's auto-review notice queue; each toast self-dismisses.
   const autoReviewToast = useAutoReviewStore((s) => s.toasts[threadId]?.[0]);
@@ -162,7 +168,13 @@ export function ChatThread({
                 return <CompactionDivider key={msg.id} summary={messageText(msg.parts)} />;
               }
               return msg.role === 'user' ? (
-                <UserMessage key={msg.id} parts={msg.parts} />
+                <UserMessage
+                  key={msg.id}
+                  id={msg.id}
+                  parts={msg.parts}
+                  canEdit={!busy}
+                  onEdit={onEditMessage}
+                />
               ) : (
                 <AssistantMessage
                   key={msg.id}
@@ -219,7 +231,7 @@ export function ChatThread({
             />
           )}
           <Composer
-            disabled={live || compacting || clarifyPending || approvalPending}
+            disabled={busy}
             streaming={live}
             placeholder={
               clarifyPending

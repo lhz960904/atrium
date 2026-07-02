@@ -209,6 +209,32 @@ function ChatRunner({
     },
     [model, sendMessage],
   );
+
+  // Read the live message list off a ref so onEditMessage stays referentially
+  // stable (it can't depend on `messages`, which changes every stream chunk) —
+  // that keeps UserMessage's memo intact through a streaming turn.
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const deleteMessages = trpc.messages.deleteMany.useMutation();
+  const onEditMessage = useCallback(
+    async (messageId: string, text: string): Promise<void> => {
+      if (!model) return;
+      const current = messagesRef.current;
+      const index = current.findIndex((m) => m.id === messageId);
+      if (index === -1) return;
+      // The edited message keeps its attachments; only its text is rewritten.
+      const files = current[index].parts.filter((p) => p.type === 'file');
+      const removeIds = current.slice(index).map((m) => m.id);
+      // Truncate the DB tail before re-sending: the server rebuilds history from
+      // the DB (the client sends only the latest message), so the edited message
+      // and everything after it must be gone first, or the re-run would replay
+      // the stale branch.
+      await deleteMessages.mutateAsync({ threadId, ids: removeIds });
+      setMessages((prev) => prev.slice(0, index));
+      sendMessage({ text, ...(files.length > 0 && { files }) });
+    },
+    [model, threadId, deleteMessages, setMessages, sendMessage],
+  );
   const onClarify = useCallback(
     (toolCallId: string, result: ClarifyResult) =>
       addToolOutput({ tool: 'ask_clarification', toolCallId, output: result }),
@@ -227,6 +253,7 @@ function ChatRunner({
       approvals={approvals}
       commands={commands}
       onSend={onSend}
+      onEditMessage={onEditMessage}
       onApprove={onApprove}
       onAlways={onAlways}
       onDeny={onDeny}
