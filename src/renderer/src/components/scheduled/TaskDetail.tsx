@@ -195,7 +195,7 @@ export function TaskDetail({
           }}
           rows={4}
           aria-label={t('scheduled.promptLabel')}
-          className="mt-2 w-full resize-y rounded-md border border-border-default bg-surface px-3 py-2 text-fg-secondary text-sm leading-relaxed outline-0 focus:border-accent"
+          className="-mx-2 mt-1 w-[calc(100%+1rem)] resize-y rounded-md bg-transparent px-2 py-1.5 text-fg-secondary text-sm leading-relaxed outline-0 hover:bg-surface focus:bg-surface"
         />
 
         <Block title={t('scheduled.status')}>
@@ -313,13 +313,9 @@ function Block({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <section className="mt-6">
-      <h3 className="mb-1 font-medium text-fg-tertiary text-xs uppercase tracking-wider">
-        {title}
-      </h3>
-      <div className="divide-y divide-border-default border-border-default border-t">
-        {children}
-      </div>
+    <section className="mt-7">
+      <h3 className="mb-1.5 font-semibold text-fg-primary text-sm">{title}</h3>
+      <div>{children}</div>
     </section>
   );
 }
