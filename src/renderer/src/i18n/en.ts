@@ -57,6 +57,8 @@ export const en: typeof zh = {
     empty: 'No scheduled tasks yet. Ask in chat, e.g. "every weekday at 8am, summarize AI news".',
     selectHint: 'Select a task to see its details',
     onceAt: 'Once · {{when}}',
+    nextShort: 'next {{when}}',
+    edit: 'Edit',
     status: 'Status',
     statusActive: 'Active',
     statusPaused: 'Paused',

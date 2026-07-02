@@ -22,64 +22,72 @@ function ScheduledView(): React.JSX.Element {
   const tasks = list.data ?? [];
   const q = query.trim().toLowerCase();
   const filtered = q ? tasks.filter((tk) => tk.title.toLowerCase().includes(q)) : tasks;
-  const current = filtered.find((tk) => tk.id === selectedId) ?? filtered[0] ?? null;
+  // The detail is a drawer, opened only on selection — the list shows by default.
+  const current = selectedId ? (tasks.find((tk) => tk.id === selectedId) ?? null) : null;
+  const close = (): void => setSelectedId(null);
 
   return (
-    <div className="grid h-full grid-cols-[320px_1fr] overflow-hidden">
-      <aside className="flex min-h-0 flex-col border-border-default border-r bg-surface">
+    <div className="relative h-full overflow-hidden">
+      <div className="mx-auto flex h-full max-w-[760px] flex-col px-6">
         <div className="app-drag h-9 shrink-0" />
-        <header className="shrink-0 px-4 pb-3">
+        <header className="shrink-0 pb-3">
           <h1 className="font-semibold text-2xl text-fg-primary tracking-tight">
             {t('scheduled.title')}
           </h1>
-          <p className="mt-1 text-fg-tertiary text-xs">{t('scheduled.subtitle')}</p>
-          <div className="relative mt-3">
+          <p className="mt-1 text-fg-tertiary text-sm">{t('scheduled.subtitle')}</p>
+          <div className="relative mt-4">
             <Search className="-translate-y-1/2 absolute top-1/2 left-2.5 size-4 text-fg-tertiary" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t('scheduled.searchPlaceholder')}
-              className="w-full rounded-md border border-border-default bg-canvas py-1.5 pr-2 pl-8 text-fg-primary text-sm placeholder:text-fg-disabled focus:border-accent focus:outline-none"
+              className="w-full rounded-md border border-border-default bg-surface py-1.5 pr-2 pl-8 text-fg-primary text-sm placeholder:text-fg-disabled focus:border-accent focus:outline-none"
             />
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        <div className="min-h-0 flex-1 overflow-y-auto pb-6">
           {tasks.length === 0 ? (
-            <p className="px-3 py-8 text-center text-fg-tertiary text-sm">{t('scheduled.empty')}</p>
+            <p className="px-3 py-10 text-center text-fg-tertiary text-sm">
+              {t('scheduled.empty')}
+            </p>
           ) : (
             <>
               <div className="px-3 pt-2 pb-1 font-medium text-[10.5px] text-fg-tertiary uppercase tracking-wider">
                 {t('scheduled.current')}
               </div>
               {filtered.map((tk) => (
-                <TaskRow
-                  key={tk.id}
-                  task={tk}
-                  active={current?.id === tk.id}
-                  lang={lang}
-                  onSelect={() => setSelectedId(tk.id)}
-                />
+                <TaskRow key={tk.id} task={tk} lang={lang} onOpen={() => setSelectedId(tk.id)} />
               ))}
             </>
           )}
         </div>
-      </aside>
+      </div>
 
-      <section className="min-w-0">
-        {current ? (
+      {/* Detail drawer: dim the list and slide in from the right on selection. */}
+      <button
+        type="button"
+        aria-label={t('common.close')}
+        onClick={close}
+        className={`absolute inset-0 bg-black/20 transition-opacity duration-200 ${
+          current ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      />
+      <aside
+        className={`absolute inset-y-0 right-0 w-[460px] max-w-[85%] border-border-default border-l bg-canvas shadow-2xl transition-transform duration-200 ${
+          current ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {current && (
           <TaskDetail
             key={current.id}
             task={current}
             lang={lang}
-            onDeleted={() => setSelectedId(null)}
+            onClose={close}
+            onDeleted={close}
           />
-        ) : (
-          <div className="app-drag flex h-full items-center justify-center text-fg-tertiary text-sm">
-            {t('scheduled.selectHint')}
-          </div>
         )}
-      </section>
+      </aside>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router';
-import { CheckCircle2, MessageSquareText, Pause, Play, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, MessageSquareText, Pause, Play, Trash2, X, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { describeCron, type ScheduledRun, type ScheduledTask } from '../../lib/schedule-format';
 import { formatDateTime, timeAgo } from '../../lib/time';
@@ -43,10 +43,13 @@ function RunRow({
       type="button"
       onClick={onOpen}
       disabled={!onOpen}
+      title={run.error ?? undefined}
       className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left enabled:hover:bg-elevated disabled:cursor-default"
     >
       <Icon className={`size-4 shrink-0 ${color}`} />
-      <span className="min-w-0 flex-1 truncate text-fg-secondary text-sm">{title}</span>
+      <span className="min-w-0 flex-1 truncate text-fg-secondary text-sm">
+        {run.status === 'error' && run.error ? run.error : title}
+      </span>
       <span className="shrink-0 text-fg-disabled text-xs">{timeAgo(run.startedAt)}</span>
     </button>
   );
@@ -60,10 +63,12 @@ function RunRow({
 export function TaskDetail({
   task,
   lang,
+  onClose,
   onDeleted,
 }: {
   task: ScheduledTask;
   lang: 'en' | 'zh';
+  onClose: () => void;
   onDeleted: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
@@ -104,9 +109,14 @@ export function TaskDetail({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Pinned header doubles as the window-drag strip; the actions opt out. */}
-      <header className="app-drag flex shrink-0 items-start justify-between gap-4 px-8 pt-9 pb-1">
-        <h2 className="min-w-0 font-semibold text-fg-primary text-xl leading-snug">{task.title}</h2>
+      {/* Pinned header doubles as the window-drag strip; the controls opt out. */}
+      <header className="app-drag flex shrink-0 items-start gap-3 px-6 pt-9 pb-1">
+        <IconBtn title={t('common.close')} onClick={onClose}>
+          <X className="size-4" />
+        </IconBtn>
+        <h2 className="mt-0.5 min-w-0 flex-1 font-semibold text-fg-primary text-lg leading-snug">
+          {task.title}
+        </h2>
         <div className="app-no-drag flex shrink-0 items-center gap-1">
           <button
             type="button"
@@ -140,7 +150,7 @@ export function TaskDetail({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10">
         <p className="mt-2 whitespace-pre-wrap text-fg-secondary text-sm leading-relaxed">
           {task.prompt}
         </p>
@@ -197,7 +207,7 @@ function IconBtn({
       title={title}
       aria-label={title}
       onClick={onClick}
-      className={`rounded-md p-1.5 text-fg-tertiary hover:bg-surface-strong ${
+      className={`app-no-drag rounded-md p-1.5 text-fg-tertiary hover:bg-surface-strong ${
         danger ? 'hover:text-danger' : 'hover:text-fg-primary'
       }`}
     >

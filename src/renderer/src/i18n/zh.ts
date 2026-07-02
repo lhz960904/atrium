@@ -57,6 +57,8 @@ export const zh = {
     empty: '还没有定时任务。在对话里说，例如「每个工作日早上 8 点，总结 AI 新闻」。',
     selectHint: '选择一个任务查看详情',
     onceAt: '一次性 · {{when}}',
+    nextShort: '下次 {{when}}',
+    edit: '编辑',
     status: '状态',
     statusActive: '进行中',
     statusPaused: '已暂停',
