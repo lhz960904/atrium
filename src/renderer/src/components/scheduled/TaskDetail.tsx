@@ -193,9 +193,11 @@ export function TaskDetail({
             if (v && v !== task.prompt) save({ prompt: v });
             else setPrompt(task.prompt);
           }}
-          rows={4}
+          rows={2}
           aria-label={t('scheduled.promptLabel')}
-          className="-mx-2 mt-1 w-[calc(100%+1rem)] resize-y rounded-md bg-transparent px-2 py-1.5 text-fg-secondary text-sm leading-relaxed outline-0 hover:bg-surface focus:bg-surface"
+          // field-sizing:content auto-grows the textarea to fit (Chromium 123+),
+          // so it reads like editing text in place; resize-none drops the handle.
+          className="-mx-2 mt-1 max-h-[45vh] w-[calc(100%+1rem)] resize-none overflow-y-auto rounded-md bg-transparent px-2 py-1.5 text-fg-secondary text-sm leading-relaxed outline-0 [field-sizing:content] hover:bg-surface focus:bg-surface"
         />
 
         <Block title={t('scheduled.status')}>
