@@ -42,45 +42,46 @@ export function ScheduleEditor({
   const preview = cron.trim() ? describeCron(cron.trim(), lang) : '';
 
   return (
-    <div className="flex flex-col gap-2">
-      <Select
-        value={kind}
-        onChange={(v) => {
-          setKind(v);
-          if (v === 'recurring') emitRecurring(cron);
-          else if (runAt) emitOnce(runAt);
-        }}
-        options={[
-          { value: 'recurring', label: t('scheduled.kindRecurring') },
-          { value: 'once', label: t('scheduled.kindOnce') },
-        ]}
-        aria-label={t('scheduled.repeats')}
-      />
-
-      {kind === 'recurring' ? (
-        <>
-          <input
-            type="text"
-            value={cron}
-            spellCheck={false}
-            placeholder="0 9 * * *"
-            onChange={(e) => setCron(e.target.value)}
-            onBlur={() => emitRecurring(cron)}
-            aria-label={t('scheduled.cronLabel')}
-            className={`${inputClass} font-mono`}
-          />
-          <p className="min-h-4 text-fg-tertiary text-xs">{preview}</p>
-        </>
-      ) : (
-        <DateTimePicker
-          value={runAt}
-          lang={lang}
-          onChange={(d) => {
-            setRunAt(d);
-            emitOnce(d);
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <Select
+          value={kind}
+          onChange={(v) => {
+            setKind(v);
+            if (v === 'recurring') emitRecurring(cron);
+            else if (runAt) emitOnce(runAt);
           }}
+          options={[
+            { value: 'recurring', label: t('scheduled.kindRecurring') },
+            { value: 'once', label: t('scheduled.kindOnce') },
+          ]}
+          aria-label={t('scheduled.repeats')}
         />
-      )}
+        <div className="min-w-0 flex-1">
+          {kind === 'recurring' ? (
+            <input
+              type="text"
+              value={cron}
+              spellCheck={false}
+              placeholder="0 9 * * *"
+              onChange={(e) => setCron(e.target.value)}
+              onBlur={() => emitRecurring(cron)}
+              aria-label={t('scheduled.cronLabel')}
+              className={`${inputClass} font-mono`}
+            />
+          ) : (
+            <DateTimePicker
+              value={runAt}
+              lang={lang}
+              onChange={(d) => {
+                setRunAt(d);
+                emitOnce(d);
+              }}
+            />
+          )}
+        </div>
+      </div>
+      {kind === 'recurring' && preview && <p className="text-fg-tertiary text-xs">{preview}</p>}
     </div>
   );
 }

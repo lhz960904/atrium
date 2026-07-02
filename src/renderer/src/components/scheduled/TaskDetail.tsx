@@ -15,7 +15,7 @@ const SEP = '\u001f';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="flex items-center justify-between gap-4 py-2">
+    <div className="flex min-h-8 items-center justify-between gap-4 py-1">
       <span className="shrink-0 text-fg-tertiary text-sm">{label}</span>
       {children}
     </div>
@@ -197,7 +197,7 @@ export function TaskDetail({
           aria-label={t('scheduled.promptLabel')}
           // field-sizing:content auto-grows the textarea to fit (Chromium 123+),
           // so it reads like editing text in place; resize-none drops the handle.
-          className="-mx-2 mt-1 max-h-[45vh] w-[calc(100%+1rem)] resize-none overflow-y-auto rounded-md bg-transparent px-2 py-1.5 text-fg-secondary text-sm leading-relaxed outline-0 [field-sizing:content] hover:bg-surface focus:bg-surface"
+          className="-mx-2 mt-4 max-h-[45vh] w-[calc(100%+1rem)] resize-none overflow-y-auto rounded-md bg-transparent px-2 py-1.5 text-fg-secondary text-sm leading-relaxed outline-0 [field-sizing:content] hover:bg-surface focus:bg-surface"
         />
 
         <Block title={t('scheduled.status')}>
@@ -315,8 +315,8 @@ function Block({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <section className="mt-7">
-      <h3 className="mb-1.5 font-semibold text-fg-primary text-sm">{title}</h3>
+    <section className="mt-5">
+      <h3 className="mb-1 font-semibold text-fg-primary text-sm">{title}</h3>
       <div>{children}</div>
     </section>
   );

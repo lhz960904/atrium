@@ -8,7 +8,7 @@ import type { ScheduledTask } from '../../lib/schedule-format';
 import { trpc } from '../../lib/trpc';
 
 /** Width of the detail panel that slides in from the right. */
-const DETAIL_WIDTH = 460;
+const DETAIL_WIDTH = 540;
 
 function ScheduledView(): React.JSX.Element {
   const { t, i18n } = useTranslation();
