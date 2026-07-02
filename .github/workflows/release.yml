@@ -3,12 +3,18 @@ name: Release
 # release-please watches Conventional Commits on main and maintains a "release
 # PR" that bumps package.json + CHANGELOG.md. Merging that PR creates the tag +
 # GitHub Release; this same run then builds installers for every OS and uploads
-# them to that release. Run manually via "Run workflow" for a build-only dry run
-# that doesn't publish.
+# them to that release. Run manually via "Run workflow" for a build-only dry run;
+# tick "publish" to instead re-build the current package.json version and upload
+# its installers to the matching existing release (backfilling assets).
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Upload built installers to the release matching package.json's version"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -90,7 +96,7 @@ jobs:
         run: bun run build
 
       - name: Package and publish
-        run: bunx electron-builder --${{ matrix.platform }} ${{ matrix.archFlag }} --publish ${{ needs.release-please.outputs.release_created == 'true' && 'always' || 'never' }}
+        run: bunx electron-builder --${{ matrix.platform }} ${{ matrix.archFlag }} --publish ${{ (needs.release-please.outputs.release_created == 'true' || inputs.publish) && 'always' || 'never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS signing + notarization. These are only populated on the mac

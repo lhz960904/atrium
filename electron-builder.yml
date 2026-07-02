@@ -4,6 +4,7 @@ publish:
   provider: github
   owner: lhz960904
   repo: atrium
+  releaseType: release
 directories:
   buildResources: build
 files:
