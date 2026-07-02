@@ -45,3 +45,9 @@ test('classifyAttachment resolves a nameless pasted image via file.type', () => 
   // File.name is a string, so a plain stand-in models that faithfully.
   expect(classifyAttachment({ name: '', type: 'image/png' } as File)).toBe('image/png');
 });
+
+test('classifyAttachment reads JSON app formats (.excalidraw) as text', () => {
+  // The OS types these as empty, so the extension allowlist has to carry them.
+  expect(classifyAttachment(file('architecture.excalidraw', ''))).toBe('text/plain');
+  expect(classifyAttachment(file('icons.excalidrawlib', ''))).toBe('text/plain');
+});

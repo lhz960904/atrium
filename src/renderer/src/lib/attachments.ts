@@ -22,6 +22,10 @@ const TEXT_EXT = new Set([
   'svg',
   'json',
   'jsonc',
+  // Excalidraw scenes/libraries are JSON documents — useful to the model as
+  // their source, so accept them like any other JSON.
+  'excalidraw',
+  'excalidrawlib',
   'csv',
   'tsv',
   'xml',
