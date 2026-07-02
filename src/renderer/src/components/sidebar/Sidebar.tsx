@@ -2,6 +2,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { CalendarClock, FolderPlus, Search, Settings, SquarePen } from 'lucide-react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { dropThreadChat } from '../../lib/chat-store';
 import { trpc } from '../../lib/trpc';
 import { useCommandPalette } from '../../state/command-palette-store';
 import { useSidebarStore } from '../../state/sidebar-store';
@@ -45,17 +46,27 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
       return next;
     });
 
-  // A background run has no client mounted to refresh the list when it finishes,
-  // so its unread dot would lag until a manual refresh. Watch the polled running
-  // set: when a thread drops out of it, it just completed — refetch the list so
-  // its bumped updatedAt (vs lastReadAt) surfaces the dot.
+  // A background run (a scheduled task) has no client mounted to refresh views
+  // when it starts or finishes. Watch the polled running set: for every thread
+  // whose running state flips, drop its cached Chat and invalidate its messages
+  // query so the next open re-seeds fresh (with the run's appended turn) and
+  // resumes the live stream — otherwise the stale in-memory Chat shows nothing
+  // until a full reload. Also refetch the list so the unread dot surfaces.
   const prevRunning = useRef<Set<string>>(new Set());
   useEffect(() => {
     const current = new Set(running);
-    let finished = false;
-    for (const id of prevRunning.current) if (!current.has(id)) finished = true;
+    const prev = prevRunning.current;
+    const flipped = [
+      ...[...current].filter((id) => !prev.has(id)),
+      ...[...prev].filter((id) => !current.has(id)),
+    ];
     prevRunning.current = current;
-    if (finished) utils.threads.list.invalidate();
+    if (flipped.length === 0) return;
+    for (const id of flipped) {
+      dropThreadChat(id);
+      utils.threads.get.invalidate({ id });
+    }
+    utils.threads.list.invalidate();
   }, [running, utils]);
 
   const allThreads = threads ?? [];
