@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Select } from '../../components/Select';
 import { describeCron, type ScheduledTask } from '../../lib/schedule-format';
+import { DateTimePicker } from './DateTimePicker';
 
 /** The schedule fields update() accepts (runAt as epoch millis, per the router). */
 export type SchedulePatch = {
@@ -13,11 +14,6 @@ export type SchedulePatch = {
 /** Quick-fills for the cron field — most users won't hand-write cron; the AI
  *  (schedule_update) is the friendlier path, this covers the common cases. */
 const PRESETS = ['0 9 * * *', '0 9 * * 1-5', '0 * * * *', '0 9 1 * *'] as const;
-
-const pad = (n: number): string => String(n).padStart(2, '0');
-function toDatetimeLocal(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 const inputClass =
   'w-full rounded-md border border-border-default bg-surface px-2.5 py-1.5 text-fg-primary text-sm outline-0 focus:border-accent';
@@ -40,12 +36,12 @@ export function ScheduleEditor({
   const { t } = useTranslation();
   const [kind, setKind] = useState<'recurring' | 'once'>(task.kind);
   const [cron, setCron] = useState(task.cronExpr ?? '0 9 * * *');
-  const [runAt, setRunAt] = useState(task.runAt ? toDatetimeLocal(new Date(task.runAt)) : '');
+  const [runAt, setRunAt] = useState<Date | null>(task.runAt ? new Date(task.runAt) : null);
 
   const emitRecurring = (c: string): void =>
     onChange({ kind: 'recurring', cronExpr: c.trim() || null, runAt: null });
-  const emitOnce = (v: string): void =>
-    onChange({ kind: 'once', cronExpr: null, runAt: v ? new Date(v).getTime() : null });
+  const emitOnce = (d: Date | null): void =>
+    onChange({ kind: 'once', cronExpr: null, runAt: d ? d.getTime() : null });
 
   const preview = cron.trim() ? describeCron(cron.trim(), lang) : '';
 
@@ -95,15 +91,13 @@ export function ScheduleEditor({
           </div>
         </>
       ) : (
-        <input
-          type="datetime-local"
+        <DateTimePicker
           value={runAt}
-          onChange={(e) => {
-            setRunAt(e.target.value);
-            emitOnce(e.target.value);
+          lang={lang}
+          onChange={(d) => {
+            setRunAt(d);
+            emitOnce(d);
           }}
-          aria-label={t('scheduled.kindOnce')}
-          className={inputClass}
         />
       )}
     </div>

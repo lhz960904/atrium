@@ -64,6 +64,8 @@ export const en: typeof zh = {
     kindRecurring: 'Recurring',
     kindOnce: 'One-time',
     cronLabel: 'Cron expression',
+    pickDateTime: 'Pick a date & time',
+    atTime: 'at',
     status: 'Status',
     statusActive: 'Active',
     statusPaused: 'Paused',

@@ -64,6 +64,8 @@ export const zh = {
     kindRecurring: '循环',
     kindOnce: '一次性',
     cronLabel: 'Cron 表达式',
+    pickDateTime: '选择日期和时间',
+    atTime: '时间',
     status: '状态',
     statusActive: '进行中',
     statusPaused: '已暂停',
