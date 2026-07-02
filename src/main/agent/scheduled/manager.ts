@@ -115,24 +115,12 @@ export class ScheduledTaskManager {
   create(input: CreateScheduledTaskInput): ScheduledTaskView {
     const id = randomUUID();
     const now = new Date(this.nowMs());
-    // The bound thread carries a back-reference so the sidebar can tell a
-    // task's conversation apart from ordinary chats.
-    const threadId = randomUUID();
-    this.db
-      .insert(threads)
-      .values({
-        id: threadId,
-        title: input.title,
-        projectId: input.projectId ?? null,
-        metadata: { scheduledTaskId: id },
-      })
-      .run();
-
+    // The bound thread is created lazily on the first fire (see ensureThread), so
+    // a task that never runs leaves no empty conversation in the sidebar.
     this.db
       .insert(scheduledTasks)
       .values({
         id,
-        threadId,
         title: input.title,
         prompt: input.prompt,
         kind: input.kind,
@@ -309,9 +297,32 @@ export class ScheduledTaskManager {
     }
   }
 
+  /** Create the task's bound thread on first fire and record it on the task. The
+   *  thread carries a back-reference so the sidebar can tell it from a plain chat. */
+  private ensureThread(task: ScheduledTask): ScheduledTask {
+    if (task.threadId) return task;
+    const threadId = randomUUID();
+    this.db
+      .insert(threads)
+      .values({
+        id: threadId,
+        title: task.title,
+        projectId: task.projectId ?? null,
+        metadata: { scheduledTaskId: task.id },
+      })
+      .run();
+    this.db
+      .update(scheduledTasks)
+      .set({ threadId, updatedAt: new Date(this.nowMs()) })
+      .where(eq(scheduledTasks.id, task.id))
+      .run();
+    return this.get(task.id) ?? task;
+  }
+
   private async fire(id: string, { manual }: { manual: boolean }): Promise<void> {
-    const task = this.get(id);
-    if (!task) return;
+    const existing = this.get(id);
+    if (!existing) return;
+    const task = this.ensureThread(existing);
 
     const runId = randomUUID();
     const startedAt = new Date(this.nowMs());

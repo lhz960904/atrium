@@ -15,7 +15,7 @@ import { closeDb, openDb } from './db';
 import { initLogging } from './log';
 import { setupMenuBar } from './menu-bar';
 import { notifyScheduledRun } from './notifications';
-import { resolveModel } from './providers/resolve';
+import { firstEnabledModel, resolveModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
 import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
@@ -183,8 +183,11 @@ app.whenReady().then(async () => {
     db,
     endpoint: { port: chatEndpoint.port, token: chatEndpoint.token },
     defaultModel: () => {
+      // The renderer only persists general.selectedModel on an explicit pick, so
+      // it can be null even when the user has a working model — fall back to the
+      // first enabled one so a headless run isn't blocked on "no model".
       try {
-        return getSettings('general.selectedModel');
+        return getSettings('general.selectedModel') ?? firstEnabledModel(db);
       } catch {
         return null;
       }

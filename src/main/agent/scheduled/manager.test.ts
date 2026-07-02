@@ -76,24 +76,36 @@ const RECURRING = {
   timezone: 'UTC',
 } as const;
 
-test('create builds a bound thread, stamps its metadata, and derives next run', () => {
-  const { mgr, db } = setup();
+test('create leaves the thread lazy; derives next run and empty state', () => {
+  const { mgr } = setup();
   const task = mgr.create({ ...RECURRING });
 
-  expect(task.threadId).toBeTruthy();
-  const thread = db
-    .select()
-    .from(threads)
-    .where(eq(threads.id, task.threadId as string))
-    .get();
-  expect(thread).toBeTruthy();
-  expect((thread?.metadata as { scheduledTaskId?: string })?.scheduledTaskId).toBe(task.id);
+  // No conversation until the task first runs.
+  expect(task.threadId).toBeNull();
   expect(task.permissionMode).toBe('full-access');
   expect(task.nextRunAt).toBeInstanceOf(Date);
   expect((task.nextRunAt as Date).getTime()).toBeGreaterThan(START);
   // Fresh task: no runs yet → derived state is empty.
   expect(task.lastRunAt).toBeNull();
   expect(task.consecutiveFailures).toBe(0);
+});
+
+test('the bound thread is created on first fire and back-references the task', async () => {
+  const { mgr, db } = setup();
+  const task = mgr.create({ ...RECURRING });
+  expect(task.threadId).toBeNull();
+
+  await mgr.runNow(task.id);
+
+  const after = view(mgr, task.id);
+  expect(after.threadId).toBeTruthy();
+  const thread = db
+    .select()
+    .from(threads)
+    .where(eq(threads.id, after.threadId as string))
+    .get();
+  expect(thread).toBeTruthy();
+  expect((thread?.metadata as { scheduledTaskId?: string })?.scheduledTaskId).toBe(task.id);
 });
 
 test('runNow records a run; last-run + status derive from it', async () => {
