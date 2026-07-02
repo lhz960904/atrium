@@ -11,10 +11,6 @@ export type SchedulePatch = {
   runAt: number | null;
 };
 
-/** Quick-fills for the cron field — most users won't hand-write cron; the AI
- *  (schedule_update) is the friendlier path, this covers the common cases. */
-const PRESETS = ['0 9 * * *', '0 9 * * 1-5', '0 * * * *', '0 9 1 * *'] as const;
-
 const inputClass =
   'w-full rounded-md border border-border-default bg-surface px-2.5 py-1.5 text-fg-primary text-sm outline-0 focus:border-accent';
 
@@ -74,21 +70,6 @@ export function ScheduleEditor({
             className={`${inputClass} font-mono`}
           />
           <p className="min-h-4 text-fg-tertiary text-xs">{preview}</p>
-          <div className="flex flex-wrap gap-1.5">
-            {PRESETS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => {
-                  setCron(p);
-                  emitRecurring(p);
-                }}
-                className="rounded-md border border-border-default px-2 py-1 text-fg-secondary text-xs hover:border-accent hover:text-fg-primary"
-              >
-                {describeCron(p, lang)}
-              </button>
-            ))}
-          </div>
         </>
       ) : (
         <DateTimePicker
