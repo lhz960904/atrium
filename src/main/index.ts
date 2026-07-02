@@ -14,6 +14,7 @@ import { refreshSkills } from './agent/skills/registry';
 import { closeDb, openDb } from './db';
 import { initLogging } from './log';
 import { setupMenuBar } from './menu-bar';
+import { notifyScheduledRun } from './notifications';
 import { resolveModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
 import { getSettings, openSettings } from './settings/conf';
@@ -147,21 +148,6 @@ app.whenReady().then(async () => {
   const chatEndpoint = await startHttpServer({ db, token: randomUUID(), projectlessRoot });
   serverEndpoint = chatEndpoint;
 
-  // Scheduled tasks drive the same chat server headlessly, so start them only
-  // once it's listening. Each task runs with its own model (falling back to the
-  // globally selected one), passed to /api/chat as a request parameter.
-  startScheduledTasks({
-    db,
-    endpoint: { port: chatEndpoint.port, token: chatEndpoint.token },
-    defaultModel: () => {
-      try {
-        return getSettings('general.selectedModel');
-      } catch {
-        return null;
-      }
-    },
-  });
-
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
@@ -188,6 +174,33 @@ app.whenReady().then(async () => {
       createContext: async () => ({ db, chatEndpoint }),
     });
   };
+
+  // Scheduled tasks drive the same chat server headlessly, so start them only
+  // once it's listening. Each task runs with its own model (falling back to the
+  // globally selected one), passed to /api/chat as a request parameter. A
+  // finished run raises a notification whose click reveals the bound thread.
+  startScheduledTasks({
+    db,
+    endpoint: { port: chatEndpoint.port, token: chatEndpoint.token },
+    defaultModel: () => {
+      try {
+        return getSettings('general.selectedModel');
+      } catch {
+        return null;
+      }
+    },
+    onComplete: (task, run) => {
+      notifyScheduledRun({
+        title: task.title,
+        threadId: task.threadId,
+        status: run.status,
+        onOpen: (threadId) => {
+          showWindow();
+          mainWindow?.webContents.send('scheduled:open-thread', threadId);
+        },
+      });
+    },
+  });
 
   setupMenuBar({
     showWindow,
