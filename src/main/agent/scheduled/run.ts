@@ -72,10 +72,15 @@ export async function runScheduledTask(
   }
 
   const priorAssistant = latestAssistantId(deps.db, task.threadId);
+  // Each fire appends to the task's bound thread, so the model sees prior runs
+  // and may decide the work is "already done" and skip it. Frame the turn as a
+  // fresh automated trigger so it re-executes; earlier turns are context only.
+  // (A lightweight precursor to the per-task memory idea — see design V2.)
+  const preamble = `[Scheduled task "${task.title}" — automated run at ${new Date().toLocaleString()}. Carry it out now. Earlier messages in this conversation are previous runs, for context only; don't skip just because it was done before.]`;
   const message: UIMessage = {
     id: generateId(),
     role: 'user',
-    parts: [{ type: 'text', text: task.prompt }],
+    parts: [{ type: 'text', text: `${preamble}\n\n${task.prompt}` }],
   };
 
   const release = blockSuspension();
