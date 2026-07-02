@@ -108,29 +108,54 @@ app.whenReady().then(async () => {
   // we set ours explicitly; packaged macOS builds already carry build/icon.icns.
   if (process.platform === 'darwin') app.dock?.setIcon(icon);
   initLogging();
-  // Load the user's real login-shell environment before anything spawns (MCP stdio
-  // servers, shells), so PATH and their exported vars match what the terminal has.
-  loadShellEnv();
 
   const db = openDb();
   openSettings();
-
-  // Warm model metadata from the disk cache (falls back to the bundled
-  // snapshot), then let it refresh from the litellm catalog in the background.
-  populateModelCatalog();
-  startModelCatalogRefresh();
-
-  // Connect configured MCP servers in the background so their tools join the
-  // toolset once ready; a slow or failing server never blocks startup.
-  void mcpManager.init(db);
 
   // Fallback workspace root for projectless conversations; project-scoped
   // threads run in their project's directory instead, resolved per request.
   const projectlessRoot = join(homedir(), 'Documents', 'Atrium');
   mkdirSync(projectlessRoot, { recursive: true });
 
-  // Discover skills before serving so the first turn already sees the index.
-  await refreshSkills();
+  // Bring the chat server up first — it's a fast port bind — so the IPC handler
+  // attaches before the window paints and the renderer's first tRPC calls never
+  // race a missing handler.
+  const chatEndpoint = await startHttpServer({ db, token: randomUUID(), projectlessRoot });
+  serverEndpoint = chatEndpoint;
+
+  app.on('browser-window-created', (_, window) => {
+    optimizer.watchWindowShortcuts(window);
+  });
+
+  // Paint the window now. Everything slow or spawn-related below runs off the
+  // critical path, so first paint no longer waits on the login shell (seconds
+  // behind a heavy rc) or the skills scan.
+  const win = createWindow();
+  createIPCHandler({
+    router: appRouter,
+    windows: [win],
+    createContext: async () => ({ db, chatEndpoint }),
+  });
+
+  // Resolve the user's login-shell environment in the background so PATH and
+  // their exported vars match the terminal. It can take seconds behind a slow
+  // rc, so nothing awaits it except the subprocess-spawning init below.
+  const shellEnvReady = loadShellEnv();
+
+  // Warm model metadata from the disk cache (falls back to the bundled
+  // snapshot), then let it refresh from the litellm catalog in the background.
+  populateModelCatalog();
+  startModelCatalogRefresh();
+
+  // Connect configured MCP servers once the shell env is merged — stdio servers
+  // read PATH from process.env at spawn, so they must not start before it. A
+  // slow or failing server never blocks startup.
+  void shellEnvReady.then(() => mcpManager.init(db));
+
+  // Discover skills in the background, off the critical path. The scheduler
+  // (below) waits on this so a boot-time catch-up run still sees the full index;
+  // interactive turns already outlast the scan.
+  const skillsReady = refreshSkills();
 
   // Background memory consolidation (dream) — runs off the conversation path,
   // gated so it only fires for memory that has actually accumulated.
@@ -144,20 +169,6 @@ app.whenReady().then(async () => {
         return null;
       }
     },
-  });
-
-  const chatEndpoint = await startHttpServer({ db, token: randomUUID(), projectlessRoot });
-  serverEndpoint = chatEndpoint;
-
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window);
-  });
-
-  const win = createWindow();
-  createIPCHandler({
-    router: appRouter,
-    windows: [win],
-    createContext: async () => ({ db, chatEndpoint }),
   });
 
   // Show (or, after a full quit cycle / non-macOS, rebuild) the main window.
@@ -176,36 +187,39 @@ app.whenReady().then(async () => {
     });
   };
 
-  // Scheduled tasks drive the same chat server headlessly, so start them only
-  // once it's listening. Each task runs with its own model (falling back to the
-  // globally selected one), passed to /api/chat as a request parameter. A
-  // finished run raises a notification whose click reveals the bound thread.
-  startScheduledTasks({
-    db,
-    endpoint: { port: chatEndpoint.port, token: chatEndpoint.token },
-    runningThreadIds: getRunningThreadIds,
-    defaultModel: () => {
-      // The renderer only persists general.selectedModel on an explicit pick, so
-      // it can be null even when the user has a working model — fall back to the
-      // first enabled one so a headless run isn't blocked on "no model".
-      try {
-        return getSettings('general.selectedModel') ?? firstEnabledModel(db);
-      } catch {
-        return null;
-      }
-    },
-    onComplete: (task, run) => {
-      notifyScheduledRun({
-        title: task.title,
-        threadId: task.threadId,
-        status: run.status,
-        onOpen: (threadId) => {
-          showWindow();
-          mainWindow?.webContents.send('scheduled:open-thread', threadId);
-        },
-      });
-    },
-  });
+  // Scheduled tasks drive the same chat server headlessly. Start them once skills
+  // are discovered — the chat server is already listening, and gating on the scan
+  // keeps a boot-time catch-up run from firing before the skill index exists. Run
+  // even if discovery rejects (a failed scan must not strand the scheduler).
+  const startScheduler = (): void => {
+    startScheduledTasks({
+      db,
+      endpoint: { port: chatEndpoint.port, token: chatEndpoint.token },
+      runningThreadIds: getRunningThreadIds,
+      defaultModel: () => {
+        // The renderer only persists general.selectedModel on an explicit pick, so
+        // it can be null even when the user has a working model — fall back to the
+        // first enabled one so a headless run isn't blocked on "no model".
+        try {
+          return getSettings('general.selectedModel') ?? firstEnabledModel(db);
+        } catch {
+          return null;
+        }
+      },
+      onComplete: (task, run) => {
+        notifyScheduledRun({
+          title: task.title,
+          threadId: task.threadId,
+          status: run.status,
+          onOpen: (threadId) => {
+            showWindow();
+            mainWindow?.webContents.send('scheduled:open-thread', threadId);
+          },
+        });
+      },
+    });
+  };
+  void skillsReady.then(startScheduler, startScheduler);
 
   setupMenuBar({
     showWindow,
