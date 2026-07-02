@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.0](https://github.com/lhz960904/atrium/compare/v0.1.0...v0.2.0) (2026-07-02)
+
+
+### Features
+
+* **chat:** collapse long user messages behind a show-more toggle ([#24](https://github.com/lhz960904/atrium/issues/24)) ([f97fcc2](https://github.com/lhz960904/atrium/commit/f97fcc220772ab8fb2fbfdc4dc52e78ce99cfe3d))
+* **chat:** edit and re-run a user message ([#26](https://github.com/lhz960904/atrium/issues/26)) ([1f96066](https://github.com/lhz960904/atrium/commit/1f96066c42d2ddbb075794c9b7db3fb839caef7b))
+* **composer:** paste images and files as attachments ([#25](https://github.com/lhz960904/atrium/issues/25)) ([f591b5e](https://github.com/lhz960904/atrium/commit/f591b5ea6482db69456819cb66fd5dca3d40a5ea))
+* **scheduled:** scheduled tasks (cron automations) ([#22](https://github.com/lhz960904/atrium/issues/22)) ([2214c1b](https://github.com/lhz960904/atrium/commit/2214c1baaebbf84366cc487416113b41675eb01f))
+
+
+### Bug Fixes
+
+* **providers:** return null when stored credentials can't be decrypted ([692530e](https://github.com/lhz960904/atrium/commit/692530ec346a818e4cf6919df6f1e80b0eab28b4))
+
+
+### Performance Improvements
+
+* **startup:** move login-shell env and skill scan off first paint ([#23](https://github.com/lhz960904/atrium/issues/23)) ([75a87f9](https://github.com/lhz960904/atrium/commit/75a87f9f5637117cf331483d59858527162703a2))
+
 ## [0.1.0](https://github.com/lhz960904/atrium/compare/v0.0.13...v0.1.0) (2026-07-01)
 
 First publicly distributable release: macOS builds are now signed with a Developer ID certificate and notarized by Apple, so they open without Gatekeeper warnings on both Apple Silicon and Intel.
