@@ -202,6 +202,8 @@ export const en: typeof zh = {
     archive: 'Archive',
     archived: 'Archived',
     mermaidSyntaxError: 'Mermaid syntax error',
+    showMore: 'Show more',
+    showLess: 'Show less',
   },
   tool: {
     verb: {

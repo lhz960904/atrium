@@ -202,6 +202,8 @@ export const zh = {
     archive: '归档',
     archived: '已归档',
     mermaidSyntaxError: 'Mermaid 语法错误',
+    showMore: '展开',
+    showLess: '收起',
   },
   tool: {
     verb: {
