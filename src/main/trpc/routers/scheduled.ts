@@ -2,7 +2,7 @@ import { PERMISSION_MODES } from '@shared/permissions';
 import { z } from 'zod';
 import type { UpdateScheduledTaskInput } from '../../agent/scheduled';
 import { scheduledManager } from '../../agent/scheduled';
-import { isValidCron } from '../../agent/scheduled/cron';
+import { isRecurringCron } from '../../agent/scheduled/cron';
 import { badRequest } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
@@ -33,8 +33,7 @@ const updateInput = createInput.partial().extend({ id: z.string() });
 function checkCron(cron: string | null | undefined): string {
   const c = cron?.trim();
   if (!c) throw badRequest('A recurring task needs a cron expression.');
-  if (c.split(/\s+/).length !== 5) throw badRequest('Use a 5-field cron expression.');
-  if (!isValidCron(c)) throw badRequest(`Invalid cron expression: ${c}`);
+  if (!isRecurringCron(c)) throw badRequest(`Use a valid 5-field cron expression: ${c}`);
   return c;
 }
 

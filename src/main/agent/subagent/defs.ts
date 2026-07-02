@@ -33,7 +33,15 @@ export type SubagentDef = {
  * there's no user to answer them). A Set<string> so a future tool can be denied
  * before it's added to ToolName.
  */
-export const SUBAGENT_DENIED_TOOLS = new Set<string>(['task', 'skill', 'ask_clarification']);
+export const SUBAGENT_DENIED_TOOLS = new Set<string>([
+  'task',
+  'skill',
+  'ask_clarification',
+  // A subagent has no business managing the user's scheduled automations.
+  'schedule_create',
+  'schedule_list',
+  'schedule_cancel',
+]);
 
 /** Narrow the parent's tools to what a subagent def permits. */
 export function filterToolsForSubagent(

@@ -19,6 +19,14 @@ export function isValidCron(expr: string): boolean {
   }
 }
 
+/** A valid cron restricted to 5 fields — minute granularity is the recurring
+ *  floor (also the effective minimum interval). Shared by the tRPC router and
+ *  the agent tool so both accept exactly the same recurring patterns. */
+export function isRecurringCron(expr: string): boolean {
+  const c = expr.trim();
+  return c.split(/\s+/).length === 5 && isValidCron(c);
+}
+
 /** The task's next fire time at/after `from`, or null when nothing is left to run. */
 export function computeNextRun(
   task: Pick<ScheduledTask, 'kind' | 'cronExpr' | 'runAt' | 'timezone'>,

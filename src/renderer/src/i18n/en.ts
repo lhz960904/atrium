@@ -179,6 +179,8 @@ export const en: typeof zh = {
       genImage: 'Generated image',
       memory: 'Memory',
       profile: 'Identity',
+      schedule: 'Scheduled',
+      cancel: 'Cancelled',
     },
     verbActive: {
       read: 'Reading',
@@ -197,6 +199,8 @@ export const en: typeof zh = {
       genImage: 'Generating image',
       memory: 'Memory',
       profile: 'Identity',
+      schedule: 'Scheduling',
+      cancel: 'Cancelling',
     },
     type: {
       file: 'File · {{path}}',
@@ -213,6 +217,7 @@ export const en: typeof zh = {
       memory: 'Memory',
       profile: 'Identity',
       agent: 'Agent · {{name}}',
+      scheduled: 'Scheduled task',
     },
     memory: {
       view: 'View',

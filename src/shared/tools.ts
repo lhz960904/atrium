@@ -24,6 +24,9 @@ export const TOOL_NAMES = [
   'image_gen',
   'memory',
   'profile',
+  'schedule_create',
+  'schedule_list',
+  'schedule_cancel',
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];

@@ -179,6 +179,8 @@ export const zh = {
       genImage: '已生成图片',
       memory: '记忆',
       profile: '身份',
+      schedule: '已排期',
+      cancel: '已取消',
     },
     verbActive: {
       read: '读取中',
@@ -197,6 +199,8 @@ export const zh = {
       genImage: '生成图片中',
       memory: '记忆',
       profile: '身份',
+      schedule: '排期中',
+      cancel: '取消中',
     },
     type: {
       file: '文件 · {{path}}',
@@ -213,6 +217,7 @@ export const zh = {
       memory: '记忆',
       profile: '身份',
       agent: 'Agent · {{name}}',
+      scheduled: '定时任务',
     },
     memory: {
       view: '查看',

@@ -1,11 +1,20 @@
 import { expect, test } from 'bun:test';
-import { computeNextRun, cronPattern, isValidCron } from './cron';
+import { computeNextRun, cronPattern, isRecurringCron, isValidCron } from './cron';
 
 test('isValidCron accepts a 5-field pattern and rejects garbage', () => {
   expect(isValidCron('0 9 * * *')).toBe(true);
   expect(isValidCron('0 8 * * 1-5')).toBe(true);
   expect(isValidCron('not a cron')).toBe(false);
   expect(isValidCron('')).toBe(false);
+});
+
+test('isRecurringCron requires exactly 5 valid fields (minute floor)', () => {
+  expect(isRecurringCron('0 8 * * 1-5')).toBe(true);
+  expect(isRecurringCron('  0 8 * * 1-5  ')).toBe(true);
+  // 6-field (with seconds) would allow sub-minute firing → rejected.
+  expect(isRecurringCron('*/30 * * * * *')).toBe(false);
+  expect(isRecurringCron('0 8 * *')).toBe(false);
+  expect(isRecurringCron('nonsense')).toBe(false);
 });
 
 test('computeNextRun: recurring resolves the next occurrence in the given timezone', () => {
