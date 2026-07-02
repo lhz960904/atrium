@@ -36,7 +36,7 @@ https://github.com/user-attachments/assets/49af7cb9-f11c-4cce-8fd8-c45e3dcbbd8f
 拉取 HTTP 流。AI agent 循环、存储与提供商解析都位于主进程。
 
 <div align="center">
-  <img width="2288" height="2484" alt="image" src="https://github.com/user-attachments/assets/b9308391-f2b0-4e12-9a39-cd6369fec987" />
+  <img width="2288" height="2484" alt="image" src="https://github.com/user-attachments/assets/111fa76c-c6d9-4b5a-a683-415b89dddd53" />
 </div>
 
 ## 快速开始

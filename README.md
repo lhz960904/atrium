@@ -49,7 +49,7 @@ and an HTTP stream from a localhost server for chat. The AI agent loop, storage,
 resolution all live in the main process.
 
 <div align="center">
-  <img width="2288" height="2484" alt="image" src="https://github.com/user-attachments/assets/b9308391-f2b0-4e12-9a39-cd6369fec987" />
+  <img width="2288" height="2484" alt="image" src="https://github.com/user-attachments/assets/111fa76c-c6d9-4b5a-a683-415b89dddd53" />
 </div>
 
 ## Quick Start
