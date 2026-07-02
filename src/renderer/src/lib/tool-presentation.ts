@@ -3,6 +3,8 @@ import type { ParseKeys, TFunction } from 'i18next';
 import {
   Bot,
   Brain,
+  CalendarClock,
+  CalendarX,
   FilePen,
   FilePenLine,
   FileSearch,
@@ -41,6 +43,8 @@ export type ToolInput = {
   prompt?: string;
   shell_id?: string;
   pattern?: string;
+  title?: string;
+  id?: string;
 };
 
 const hostname = (u?: string): string => {
@@ -191,6 +195,34 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     verbActiveKey: 'tool.verbActive.profile',
     target: (i, t) => t(i.command === 'write' ? 'tool.profile.write' : 'tool.profile.view'),
     typeLabel: (_i, t) => t('tool.type.profile'),
+  },
+  schedule_create: {
+    icon: CalendarClock,
+    verbKey: 'tool.verb.schedule',
+    verbActiveKey: 'tool.verbActive.schedule',
+    target: (i) => i.title ?? '',
+    typeLabel: (_i, t) => t('tool.type.scheduled'),
+  },
+  schedule_list: {
+    icon: CalendarClock,
+    verbKey: 'tool.verb.list',
+    verbActiveKey: 'tool.verbActive.list',
+    target: () => '',
+    typeLabel: (_i, t) => t('tool.type.scheduled'),
+  },
+  schedule_update: {
+    icon: CalendarClock,
+    verbKey: 'tool.verb.edit',
+    verbActiveKey: 'tool.verbActive.edit',
+    target: (i) => i.title ?? '',
+    typeLabel: (_i, t) => t('tool.type.scheduled'),
+  },
+  schedule_cancel: {
+    icon: CalendarX,
+    verbKey: 'tool.verb.cancel',
+    verbActiveKey: 'tool.verbActive.cancel',
+    target: (i) => i.title ?? '',
+    typeLabel: (_i, t) => t('tool.type.scheduled'),
   },
 };
 

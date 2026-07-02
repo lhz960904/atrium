@@ -1,8 +1,10 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import type { SelectedModel } from '@shared/settings';
 import type { ImageModel, LanguageModel } from 'ai';
 import { eq } from 'drizzle-orm';
+import { isImageModel } from '../agent/models/catalog';
 import type { Db } from '../db';
 import { providers } from '../db/schema';
 import { decryptCredentials } from './credentials';
@@ -118,4 +120,25 @@ export function resolveImageModel(db: Db, providerId: string, modelId: string): 
     case 'anthropic':
       throw new Error(`Provider "${providerId}" does not support image generation.`);
   }
+}
+
+/**
+ * A sensible fallback chat model when nothing is explicitly selected: the first
+ * enabled provider's first enabled non-image model, in provider order. Lets
+ * headless features (scheduled tasks) run even before the renderer has persisted
+ * a model choice. Returns null when nothing usable is enabled.
+ */
+export function firstEnabledModel(db: Db): SelectedModel | null {
+  const rows = db
+    .select({ id: providers.id, config: providers.config })
+    .from(providers)
+    .where(eq(providers.enabled, true))
+    .all();
+  for (const row of rows) {
+    const enabled = (row.config as { enabledModels?: string[] } | null)?.enabledModels ?? [];
+    for (const modelId of enabled) {
+      if (!isImageModel(modelId)) return { providerId: row.id, modelId };
+    }
+  }
+  return null;
 }

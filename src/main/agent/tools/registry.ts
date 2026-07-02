@@ -16,6 +16,12 @@ import { listDirTool } from './builtins/list-dir';
 import { memoryTool } from './builtins/memory';
 import { profileTool } from './builtins/profile';
 import { readFileTool } from './builtins/read-file';
+import {
+  scheduleCancelTool,
+  scheduleCreateTool,
+  scheduleListTool,
+  scheduleUpdateTool,
+} from './builtins/schedule';
 import { skillTool } from './builtins/skill';
 import { taskTool } from './builtins/task';
 import { todoWriteTool } from './builtins/todo-write';
@@ -72,6 +78,10 @@ export function getTools(ctx: ToolCtx): Record<string, Tool> {
     image_gen: imageGenTool({ models: listEnabledImageModels(ctx.db) }),
     memory: memoryTool(ctx),
     profile: profileTool(),
+    schedule_create: scheduleCreateTool(),
+    schedule_list: scheduleListTool(),
+    schedule_update: scheduleUpdateTool(),
+    schedule_cancel: scheduleCancelTool(),
   };
   // MCP tools first so a built-in can never be shadowed by a server tool.
   return { ...gateMcpTools(ctx.mcpTools, ctx), ...builtins };

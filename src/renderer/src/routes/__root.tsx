@@ -20,6 +20,13 @@ function Root(): React.JSX.Element {
     });
   }, [navigate]);
 
+  // Clicking a scheduled-run notification reveals the task's bound conversation.
+  useEffect(() => {
+    return window.electron?.ipcRenderer.on('scheduled:open-thread', (_event, threadId: string) => {
+      void navigate({ to: '/chat/$threadId', params: { threadId } });
+    });
+  }, [navigate]);
+
   // Once per launch, after startup connects settle, nudge the user if any MCP
   // server needs auth or failed — like Claude Code's "needs authorization" prompt.
   const attention = trpc.mcp.attention.useQuery(undefined, { refetchInterval: 4000 });

@@ -13,6 +13,7 @@ import {
 import { PROVIDER_MANIFEST, type ProviderManifest } from '../../providers/manifest';
 import { fetchModelIds } from '../../providers/model-fetcher';
 import { type PullState, pullManager } from '../../providers/pull-manager';
+import { badRequest, internalError, preconditionFailed } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 /** A user-friendly view of a provider that merges manifest + DB row. */
@@ -146,7 +147,7 @@ export const providersRouter = router({
     .query(async ({ ctx, input }): Promise<LocalServiceStatus> => {
       const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
       if (!manifest || manifest.kind !== 'local-service') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown local service id.' });
+        throw badRequest('Unknown local service id.');
       }
       const row = ctx.db
         .select({ config: providers.config })
@@ -165,7 +166,7 @@ export const providersRouter = router({
     .mutation(({ ctx, input }): { started: boolean } => {
       const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
       if (!manifest || manifest.kind !== 'local-service') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown local service id.' });
+        throw badRequest('Unknown local service id.');
       }
       const row = ctx.db
         .select({ config: providers.config })
@@ -183,7 +184,7 @@ export const providersRouter = router({
     .query(({ input }): PullState[] => {
       const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
       if (!manifest || manifest.kind !== 'local-service') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown local service id.' });
+        throw badRequest('Unknown local service id.');
       }
       return pullManager.list();
     }),
@@ -199,7 +200,7 @@ export const providersRouter = router({
     .query(async ({ input }): Promise<Record<string, ModelProbe>> => {
       const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
       if (!manifest || manifest.kind !== 'local-service') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown local service id.' });
+        throw badRequest('Unknown local service id.');
       }
       const entries = await Promise.all(
         input.models.map(async (m): Promise<[string, ModelProbe]> => {
@@ -225,7 +226,7 @@ export const providersRouter = router({
     .mutation(async ({ ctx, input }): Promise<string[]> => {
       const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
       if (!manifest || manifest.kind === 'local-cli') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Provider has no model listing.' });
+        throw badRequest('Provider has no model listing.');
       }
 
       const row = ctx.db
@@ -242,17 +243,14 @@ export const providersRouter = router({
           modelIds = await fetchOllamaModels(baseUrl);
         } else {
           if (!row?.blob) {
-            throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Add an API key first.' });
+            throw preconditionFailed('Add an API key first.');
           }
           const apiKey = decryptCredentials<{ key: string }>(row.blob).key;
           modelIds = await fetchModelIds({ protocol: manifest.protocol, baseUrl, apiKey });
         }
       } catch (err) {
         if (err instanceof TRPCError) throw err;
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: err instanceof Error ? err.message : 'Fetch failed.',
-        });
+        throw internalError(err instanceof Error ? err.message : 'Fetch failed.');
       }
 
       const mergedConfig = { ...config, fetchedModels: modelIds };

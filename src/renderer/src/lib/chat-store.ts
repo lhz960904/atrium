@@ -69,6 +69,17 @@ function evictIdle(keep: string): void {
   }
 }
 
+/**
+ * Drop a thread's cached Chat so its next open re-seeds from the DB (+ resume).
+ * Used when a background run (a scheduled task) mutated the thread out-of-band,
+ * which the in-memory Chat can't know about. No-op while the Chat is streaming
+ * in this client — evicting a live consumer would cancel its stream.
+ */
+export function dropThreadChat(threadId: string): void {
+  const chat = chats.get(threadId);
+  if (chat && !isBusy(chat)) chats.delete(threadId);
+}
+
 export function getThreadChat(
   threadId: string,
   seed: { messages: AtriumUIMessage[]; baseUrl: string; token: string },

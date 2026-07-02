@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import {
@@ -12,6 +11,7 @@ import { type McpServerStatus, mcpManager } from '../../agent/mcp/manager';
 import { decryptSecrets, encryptSecrets } from '../../agent/mcp/secrets';
 import type { Db } from '../../db';
 import { mcpServers } from '../../db/schema';
+import { badRequest, conflict } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 /** Settings-list view of a server — never the encrypted blob, only whether one exists. */
@@ -149,10 +149,7 @@ function validateConfig(transport: McpTransport, config: unknown) {
   try {
     return parseConfig(transport, config);
   } catch (err) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: err instanceof Error ? err.message : 'Invalid MCP server config.',
-    });
+    throw badRequest(err instanceof Error ? err.message : 'Invalid MCP server config.');
   }
 }
 
@@ -176,9 +173,6 @@ function assertNameFree(db: Db, name: string, excludeId?: string): void {
     .where(eq(mcpServers.name, name))
     .get();
   if (existing && existing.id !== excludeId) {
-    throw new TRPCError({
-      code: 'CONFLICT',
-      message: `An MCP server named '${name}' already exists.`,
-    });
+    throw conflict(`An MCP server named '${name}' already exists.`);
   }
 }

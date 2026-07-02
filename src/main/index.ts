@@ -9,12 +9,15 @@ import icon from '../../resources/icon.png?asset';
 import { mcpManager } from './agent/mcp/manager';
 import { runDream, startDreamScheduler } from './agent/memory';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
+import { scheduledManager, startScheduledTasks } from './agent/scheduled';
 import { refreshSkills } from './agent/skills/registry';
 import { closeDb, openDb } from './db';
 import { initLogging } from './log';
 import { setupMenuBar } from './menu-bar';
-import { resolveModel } from './providers/resolve';
+import { notifyScheduledRun } from './notifications';
+import { firstEnabledModel, resolveModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
+import { getRunningThreadIds } from './server/resumable';
 import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { loadShellEnv } from './shell-path';
@@ -173,6 +176,37 @@ app.whenReady().then(async () => {
     });
   };
 
+  // Scheduled tasks drive the same chat server headlessly, so start them only
+  // once it's listening. Each task runs with its own model (falling back to the
+  // globally selected one), passed to /api/chat as a request parameter. A
+  // finished run raises a notification whose click reveals the bound thread.
+  startScheduledTasks({
+    db,
+    endpoint: { port: chatEndpoint.port, token: chatEndpoint.token },
+    runningThreadIds: getRunningThreadIds,
+    defaultModel: () => {
+      // The renderer only persists general.selectedModel on an explicit pick, so
+      // it can be null even when the user has a working model — fall back to the
+      // first enabled one so a headless run isn't blocked on "no model".
+      try {
+        return getSettings('general.selectedModel') ?? firstEnabledModel(db);
+      } catch {
+        return null;
+      }
+    },
+    onComplete: (task, run) => {
+      notifyScheduledRun({
+        title: task.title,
+        threadId: task.threadId,
+        status: run.status,
+        onOpen: (threadId) => {
+          showWindow();
+          mainWindow?.webContents.send('scheduled:open-thread', threadId);
+        },
+      });
+    },
+  });
+
   setupMenuBar({
     showWindow,
     newChat: () => {
@@ -193,6 +227,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true;
   serverEndpoint?.dispose();
+  scheduledManager.dispose();
   void mcpManager.dispose();
   closeDb();
 });

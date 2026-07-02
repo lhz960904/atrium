@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { TOOL_NAMES } from '@shared/tools';
-import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { BUILTIN_SUBAGENTS, SUBAGENT_DENIED_TOOLS } from '../../agent/subagent/defs';
 import { subagents } from '../../db/schema';
+import { conflict } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 /** Unified row for the settings list: built-ins (read-only) + custom (editable). */
@@ -96,7 +96,7 @@ export const subagentsRouter = router({
 /** Reject a name that collides with a built-in or another custom subagent. */
 function assertNameFree(db: import('../../db').Db, name: string, excludeId?: string): void {
   if (BUILTIN_SUBAGENTS[name]) {
-    throw new TRPCError({ code: 'CONFLICT', message: `'${name}' is a built-in subagent name.` });
+    throw conflict(`'${name}' is a built-in subagent name.`);
   }
   const existing = db
     .select({ id: subagents.id })
@@ -104,9 +104,6 @@ function assertNameFree(db: import('../../db').Db, name: string, excludeId?: str
     .where(eq(subagents.name, name))
     .get();
   if (existing && existing.id !== excludeId) {
-    throw new TRPCError({
-      code: 'CONFLICT',
-      message: `A subagent named '${name}' already exists.`,
-    });
+    throw conflict(`A subagent named '${name}' already exists.`);
   }
 }

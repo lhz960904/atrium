@@ -1,3 +1,4 @@
+import { PERMISSION_MODES } from '@shared/permissions';
 import { sql } from 'drizzle-orm';
 import { blob, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
@@ -164,6 +165,73 @@ export const usage = sqliteTable(
   ],
 );
 
+/**
+ * A user's scheduled task — the *definition* only. A `once` task carries `runAt`
+ * and disables itself after firing; a `recurring` task carries a 5-field
+ * `cronExpr`. `providerId`/`modelId` null = inherit the globally selected model.
+ * Times fire in `timezone` (IANA). The in-memory croner jobs are rebuilt from
+ * these rows on every boot, so a restart never loses a task.
+ *
+ * Deliberately holds no run state: next-run is computed from the cron expression,
+ * and last-run / status / consecutive-failures are derived from `scheduledTaskRuns`
+ * (the single source of truth) — nothing here can drift from the run history.
+ * `enabled` is the one piece of non-derivable state (the user's toggle, and the
+ * flag auto-pause / one-shot consumption flip off).
+ *
+ * Each task binds to one `threadId` (created with the task): every firing appends
+ * a turn to that same conversation rather than spawning a fresh thread, so the
+ * task reads as an ongoing dialogue. No foreign key — deleting the bound thread
+ * leaves the task pointing at a gone conversation, which the UI renders as such.
+ */
+export const scheduledTasks = sqliteTable('scheduled_tasks', {
+  id: text().primaryKey(),
+  title: text().notNull(),
+  prompt: text().notNull(),
+  threadId: text('thread_id'),
+  kind: text({ enum: ['recurring', 'once'] }).notNull(),
+  cronExpr: text('cron_expr'),
+  runAt: integer('run_at', { mode: 'timestamp_ms' }),
+  timezone: text().notNull(),
+  enabled: integer({ mode: 'boolean' }).notNull().default(true),
+  /** Workspace root for the run's thread; null = the projectless fallback. */
+  projectId: text('project_id'),
+  providerId: text('provider_id'),
+  modelId: text('model_id'),
+  permissionMode: text('permission_mode', { enum: PERMISSION_MODES })
+    .notNull()
+    .default('full-access'),
+  /** What to do with an occurrence missed while the app was closed: fire once
+   *  when we next boot/wake, or skip it and wait for the next occurrence. */
+  catchUpPolicy: text('catch_up_policy', { enum: ['fire_once', 'skip'] })
+    .notNull()
+    .default('fire_once'),
+  createdAt: timestamp(),
+  updatedAt: timestamp(),
+});
+
+/**
+ * One row per scheduled-task firing — the run history shown in the task detail
+ * panel. The conversation lives on the task (`scheduledTasks.threadId`); a run
+ * records only which assistant message it produced (`messageId`, best-effort,
+ * null when the run failed before one existed) so "Previous runs" can jump to
+ * that turn inside the bound thread.
+ */
+export const scheduledTaskRuns = sqliteTable(
+  'scheduled_task_runs',
+  {
+    id: text().primaryKey(),
+    taskId: text('task_id')
+      .notNull()
+      .references(() => scheduledTasks.id, { onDelete: 'cascade' }),
+    messageId: text('message_id'),
+    status: text({ enum: ['running', 'ok', 'error', 'skipped'] }).notNull(),
+    error: text(),
+    startedAt: timestamp(),
+    finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [index('scheduled_task_runs_task_idx').on(table.taskId, table.startedAt)],
+);
+
 export type Thread = typeof threads.$inferSelect;
 export type NewThread = typeof threads.$inferInsert;
 export type Project = typeof projects.$inferSelect;
@@ -180,3 +248,7 @@ export type McpServerRow = typeof mcpServers.$inferSelect;
 export type NewMcpServerRow = typeof mcpServers.$inferInsert;
 export type Usage = typeof usage.$inferSelect;
 export type NewUsage = typeof usage.$inferInsert;
+export type ScheduledTask = typeof scheduledTasks.$inferSelect;
+export type NewScheduledTask = typeof scheduledTasks.$inferInsert;
+export type ScheduledTaskRun = typeof scheduledTaskRuns.$inferSelect;
+export type NewScheduledTaskRun = typeof scheduledTaskRuns.$inferInsert;
