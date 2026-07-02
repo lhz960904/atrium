@@ -1,5 +1,5 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import { FolderPlus, Search, Settings, SquarePen } from 'lucide-react';
+import { CalendarClock, FolderPlus, Search, Settings, SquarePen } from 'lucide-react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../lib/trpc';
@@ -104,6 +104,17 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
           label={t('sidebar.search')}
           onClick={() => openPalette(true)}
         />
+        <Link
+          to="/scheduled"
+          className="group flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
+          activeProps={{
+            className:
+              'group flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-sm bg-elevated text-fg-primary [&_svg]:text-accent',
+          }}
+        >
+          <CalendarClock className="size-[15px] shrink-0" />
+          <span className="flex-1 text-left">{t('scheduled.title')}</span>
+        </Link>
       </nav>
 
       <div className="flex-1 overflow-y-auto px-3 py-2">

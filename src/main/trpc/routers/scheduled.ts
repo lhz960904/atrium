@@ -94,7 +94,11 @@ export const scheduledRouter = router({
     .input(z.object({ id: z.string() }))
     .mutation(({ input }) => scheduledManager.remove(input.id)),
 
-  runNow: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(({ input }) => scheduledManager.runNow(input.id)),
+  runNow: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
+    if (!scheduledManager.getView(input.id)) throw badRequest(`No scheduled task ${input.id}.`);
+    // Fire-and-forget: a run drives a full agent turn (minutes), so don't hold
+    // the request open. The bound thread + completion notification surface it.
+    void scheduledManager.runNow(input.id);
+    return { started: true };
+  }),
 });
