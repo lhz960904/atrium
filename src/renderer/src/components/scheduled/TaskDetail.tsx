@@ -1,23 +1,23 @@
 import { useNavigate } from '@tanstack/react-router';
 import { CheckCircle2, MessageSquareText, Pause, Play, Trash2, X, XCircle } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { describeCron, type ScheduledRun, type ScheduledTask } from '../../lib/schedule-format';
+import { Select } from '../../components/Select';
+import type { ScheduledRun, ScheduledTask } from '../../lib/schedule-format';
 import { formatDateTime, timeAgo } from '../../lib/time';
 import { trpc } from '../../lib/trpc';
+import { deriveGroups } from '../../lib/use-chat-model';
 import { toast } from '../../state/toast-store';
+import { ScheduleEditor, type SchedulePatch } from './ScheduleEditor';
 
-/** A label/value row in the Status and Details blocks. */
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
+/** Distinct providerId/modelId can't collide in one option value. */
+const SEP = '\u001f';
+
+function Row({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
   return (
     <div className="flex items-center justify-between gap-4 py-2">
-      <span className="text-fg-tertiary text-sm">{label}</span>
-      <span className="min-w-0 truncate text-fg-secondary text-sm">{children}</span>
+      <span className="shrink-0 text-fg-tertiary text-sm">{label}</span>
+      {children}
     </div>
   );
 }
@@ -56,9 +56,10 @@ function RunRow({
 }
 
 /**
- * The right-hand detail panel: prompt, status, schedule details, and run
- * history, plus the Run now / pause / delete / open-conversation actions. Its
- * mutations live here (not the parent list) since they act on this one task.
+ * The right-hand detail panel: editable title / prompt / schedule / project /
+ * model (autosaved), read-only status + run history, and the Run now / pause /
+ * delete / open-conversation actions. Its mutations live here since they act on
+ * this one task.
  */
 export function TaskDetail({
   task,
@@ -76,12 +77,16 @@ export function TaskDetail({
   const utils = trpc.useUtils();
   const runs = trpc.scheduled.runs.useQuery({ id: task.id });
   const projects = trpc.projects.list.useQuery();
+  const providers = trpc.providers.list.useQuery();
 
+  const refreshRuns = (): void => {
+    utils.scheduled.runs.invalidate({ id: task.id });
+  };
   const runNow = trpc.scheduled.runNow.useMutation({
     onSuccess: (data) => {
       if (data.started) {
         toast.success({ key: 'scheduled.startedToast' });
-        utils.scheduled.runs.invalidate({ id: task.id });
+        refreshRuns();
       } else {
         toast.info({ key: 'scheduled.alreadyRunningToast' });
       }
@@ -96,31 +101,56 @@ export function TaskDetail({
       onDeleted();
     },
   });
+  const update = trpc.scheduled.update.useMutation({
+    onSuccess: () => utils.scheduled.list.invalidate(),
+    onError: (e) => toast.error(e.message),
+  });
+  const save = (patch: Record<string, unknown>): void => {
+    update.mutate({ id: task.id, ...patch });
+  };
+
+  // Local edit state for the free-text fields; committed on blur.
+  const [title, setTitle] = useState(task.title);
+  const [prompt, setPrompt] = useState(task.prompt);
 
   const openThread = task.threadId
     ? () => navigate({ to: '/chat/$threadId', params: { threadId: task.threadId as string } })
     : undefined;
 
-  const schedule =
-    task.kind === 'recurring' && task.cronExpr
-      ? describeCron(task.cronExpr, lang)
-      : task.runAt
-        ? formatDateTime(task.runAt, lang)
-        : '—';
-  const projectName = task.projectId
-    ? (projects.data?.find((p) => p.id === task.projectId)?.name ?? task.projectId)
-    : t('scheduled.noProject');
+  const projectOptions = [
+    { value: 'none', label: t('scheduled.noProject') },
+    ...(projects.data ?? []).map((p) => ({ value: p.id, label: p.name })),
+  ];
+  const modelOptions = [
+    { value: 'default', label: t('scheduled.defaultModel') },
+    ...deriveGroups(providers.data ?? []).flatMap((g) =>
+      g.models.map((m) => ({
+        value: `${g.providerId}${SEP}${m}`,
+        label: g.external ? g.providerName : m,
+      })),
+    ),
+  ];
+  const modelValue =
+    task.providerId && task.modelId ? `${task.providerId}${SEP}${task.modelId}` : 'default';
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Pinned header doubles as the window-drag strip; the controls opt out. */}
-      <header className="app-drag flex shrink-0 items-start gap-3 px-6 pt-9 pb-1">
+      <header className="app-drag flex shrink-0 items-start gap-2 px-6 pt-9 pb-1">
         <IconBtn title={t('common.close')} onClick={onClose}>
           <X className="size-4" />
         </IconBtn>
-        <h2 className="mt-0.5 min-w-0 flex-1 font-semibold text-fg-primary text-lg leading-snug">
-          {task.title}
-        </h2>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => {
+            const v = title.trim();
+            if (v && v !== task.title) save({ title: v });
+            else setTitle(task.title);
+          }}
+          aria-label={t('scheduled.titleLabel')}
+          className="app-no-drag mt-0.5 min-w-0 flex-1 rounded bg-transparent font-semibold text-fg-primary text-lg leading-snug outline-0 focus:bg-surface"
+        />
         <div className="app-no-drag flex shrink-0 items-center gap-1">
           <button
             type="button"
@@ -155,27 +185,67 @@ export function TaskDetail({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-10">
-        <p className="mt-2 whitespace-pre-wrap text-fg-secondary text-sm leading-relaxed">
-          {task.prompt}
-        </p>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          onBlur={() => {
+            const v = prompt.trim();
+            if (v && v !== task.prompt) save({ prompt: v });
+            else setPrompt(task.prompt);
+          }}
+          rows={4}
+          aria-label={t('scheduled.promptLabel')}
+          className="mt-2 w-full resize-y rounded-md border border-border-default bg-surface px-3 py-2 text-fg-secondary text-sm leading-relaxed outline-0 focus:border-accent"
+        />
 
         <Block title={t('scheduled.status')}>
-          <Field label={t('scheduled.status')}>
+          <Row label={t('scheduled.status')}>
             <StatusBadge enabled={task.enabled} t={t} />
-          </Field>
-          <Field label={t('scheduled.nextRun')}>
-            {task.nextRunAt ? formatDateTime(task.nextRunAt, lang) : '—'}
-          </Field>
-          <Field label={t('scheduled.lastRan')}>
-            {task.lastRunAt ? formatDateTime(task.lastRunAt, lang) : t('scheduled.never')}
-          </Field>
+          </Row>
+          <Row label={t('scheduled.nextRun')}>
+            <span className="text-fg-secondary text-sm">
+              {task.nextRunAt ? formatDateTime(task.nextRunAt, lang) : '—'}
+            </span>
+          </Row>
+          <Row label={t('scheduled.lastRan')}>
+            <span className="text-fg-secondary text-sm">
+              {task.lastRunAt ? formatDateTime(task.lastRunAt, lang) : t('scheduled.never')}
+            </span>
+          </Row>
         </Block>
 
         <Block title={t('scheduled.details')}>
-          <Field label={t('scheduled.runsIn')}>{t('scheduled.local')}</Field>
-          <Field label={t('scheduled.project')}>{projectName}</Field>
-          <Field label={t('scheduled.repeats')}>{schedule}</Field>
-          <Field label={t('scheduled.model')}>{task.modelId ?? t('scheduled.defaultModel')}</Field>
+          <Row label={t('scheduled.runsIn')}>
+            <span className="text-fg-secondary text-sm">{t('scheduled.local')}</span>
+          </Row>
+          <Row label={t('scheduled.project')}>
+            <Select
+              value={task.projectId ?? 'none'}
+              onChange={(v) => save({ projectId: v === 'none' ? null : v })}
+              options={projectOptions}
+              aria-label={t('scheduled.project')}
+            />
+          </Row>
+          <Row label={t('scheduled.model')}>
+            <Select
+              value={modelValue}
+              onChange={(v) => {
+                if (v === 'default') save({ providerId: null, modelId: null });
+                else {
+                  const [providerId, modelId] = v.split(SEP);
+                  save({ providerId, modelId });
+                }
+              }}
+              options={modelOptions}
+              aria-label={t('scheduled.model')}
+            />
+          </Row>
+        </Block>
+
+        <Block title={t('scheduled.repeats')}>
+          <div className="pt-2">
+            <ScheduleEditor task={task} lang={lang} onChange={(p: SchedulePatch) => save(p)} />
+          </div>
         </Block>
 
         <Block title={t('scheduled.previousRuns')}>
@@ -228,7 +298,7 @@ function StatusBadge({
   t: ReturnType<typeof useTranslation>['t'];
 }): React.JSX.Element {
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex items-center gap-1.5 text-fg-secondary text-sm">
       <span className={`size-2 rounded-full ${enabled ? 'bg-success' : 'bg-fg-disabled'}`} />
       {enabled ? t('scheduled.statusActive') : t('scheduled.statusPaused')}
     </span>
