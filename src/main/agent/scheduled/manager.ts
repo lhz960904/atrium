@@ -21,6 +21,9 @@ export type ScheduledManagerDeps = {
   defaultModel: () => SelectedModel | null;
   /** Fired after each run settles, for the notification layer. */
   onComplete?: (task: ScheduledTask, run: ScheduledTaskRun) => void;
+  /** Ids of threads currently generating — injected (not imported) so the manager
+   *  stays decoupled from the resumable-stream store. Defaults to none. */
+  runningThreadIds?: () => string[];
   /** Injectable runner (tests); defaults to the real headless runner. */
   run?: (task: ScheduledTask) => Promise<ScheduledRunResult>;
   /** Injectable clock (tests). */
@@ -180,16 +183,12 @@ export class ScheduledTaskManager {
     return this.fire(id, { manual: true });
   }
 
-  /** Whether a run is in flight for this task (or its bound thread is streaming).
-   *  resumable is required lazily so the manager's import graph (and its unit
-   *  tests) don't pull in the stream store's module-load GC timer. */
+  /** Whether a run is in flight for this task (or its bound thread is streaming). */
   isRunning(id: string): boolean {
     if (this.firing.has(id)) return true;
     const threadId = this.get(id)?.threadId;
     if (!threadId) return false;
-    const { getRunningThreadIds } =
-      require('../../server/resumable') as typeof import('../../server/resumable');
-    return getRunningThreadIds().includes(threadId);
+    return this.deps.runningThreadIds?.().includes(threadId) ?? false;
   }
 
   // ── lifecycle ───────────────────────────────────────────────────────────

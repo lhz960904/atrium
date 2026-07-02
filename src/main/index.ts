@@ -17,6 +17,7 @@ import { setupMenuBar } from './menu-bar';
 import { notifyScheduledRun } from './notifications';
 import { firstEnabledModel, resolveModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
+import { getRunningThreadIds } from './server/resumable';
 import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { loadShellEnv } from './shell-path';
@@ -182,6 +183,7 @@ app.whenReady().then(async () => {
   startScheduledTasks({
     db,
     endpoint: { port: chatEndpoint.port, token: chatEndpoint.token },
+    runningThreadIds: getRunningThreadIds,
     defaultModel: () => {
       // The renderer only persists general.selectedModel on an explicit pick, so
       // it can be null even when the user has a working model — fall back to the
