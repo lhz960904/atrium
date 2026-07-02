@@ -26,7 +26,13 @@ export function currentDateNote(now: Date): string {
     timeZone,
   }).format(now);
   const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone }).format(now);
-  return `Today's date is ${date} (${weekday}, ${timeZone}). Your training cutoff is earlier, so treat today as ground truth for anything time-sensitive — don't assume the current year or carry a stale one into web searches, "latest"/"current" lookups, or date math.`;
+  const time = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone,
+  }).format(now);
+  return `The current date and time is ${date} ${time} (${weekday}, ${timeZone}). Your training cutoff is earlier, so treat this as ground truth for anything time-sensitive — don't assume the current year or carry a stale one into web searches, "latest"/"current" lookups, or date math. When scheduling relative times ("in 30 minutes", "in 2 hours"), compute the absolute time from this.`;
 }
 
 function platformLabel(platform: NodeJS.Platform): string {

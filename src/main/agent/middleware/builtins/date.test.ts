@@ -18,14 +18,14 @@ function ctxWith(messages: UIMessage[]): RunContext {
 // machine's local zone, so building the Date in that same zone makes the asserted
 // calendar date deterministic on any machine.
 
-test('injects a day-granular date reminder onto the latest user turn', async () => {
+test('injects a date+time reminder onto the latest user turn', async () => {
   const ctx = ctxWith([user('u1', 'yesterday'), user('u2', 'today')]);
   await dateMiddleware(() => new Date(2026, 5, 30, 12, 0, 0)).beforeRun?.(ctx);
 
   const [first, last] = ctx.request.messages;
   expect(first.parts).toHaveLength(1); // earlier turn untouched → stays cacheable
   expect(textOf(last, 0)).toContain('<system-reminder>');
-  expect(textOf(last, 0)).toContain("Today's date is 2026-06-30");
+  expect(textOf(last, 0)).toContain('The current date and time is 2026-06-30 12:00');
   expect(textOf(last, 1)).toBe('today');
 });
 

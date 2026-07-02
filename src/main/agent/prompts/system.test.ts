@@ -43,9 +43,10 @@ test('the date is not baked into the system prompt (it rides a per-turn reminder
   expect(buildSystemPrompt('/tmp/ws')).not.toContain("Today's date is");
 });
 
-test('currentDateNote renders a day-granular anchor and tells the model to prefer today', () => {
+test('currentDateNote renders a date+time anchor and tells the model to prefer now', () => {
   const note = currentDateNote(new Date('2026-06-15T12:00:00Z'));
-  expect(note).toMatch(/Today's date is \d{4}-\d{2}-\d{2} \(\w+, .+\)\./);
+  // Time varies by the test machine's zone, so assert the shape, not a value.
+  expect(note).toMatch(/The current date and time is \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(\w+, .+\)\./);
   // Noon UTC reads as 2026 in every time zone, so the year is assertable cross-machine.
   expect(note).toContain('2026');
   expect(note).toMatch(/training cutoff/i);

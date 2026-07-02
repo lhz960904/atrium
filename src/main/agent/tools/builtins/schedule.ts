@@ -7,21 +7,28 @@ const systemTimeZone = (): string => Intl.DateTimeFormat().resolvedOptions().tim
 
 const CREATE_DESCRIPTION = `Schedule a prompt to run automatically — on a recurring cron schedule, or once at a future time. Use when the user wants a reminder, a recurring briefing/monitor, or anything run on a schedule ("every weekday at 8am summarize AI news", "remind me in 30 minutes", "check X every hour").
 
-The scheduled prompt runs later in its OWN conversation with no memory of this chat, so write "prompt" as a fully self-contained instruction. Each run appends to that task's conversation and raises a desktop notification.
+The task fires later in its OWN conversation with no memory of this chat, so write the fields for that moment:
+- title: short and imperative, verb first; do NOT include the date or time.
+- prompt: the task written as a self-contained message from the user to you; do NOT include any scheduling info (the schedule fields own that).
 
-Provide exactly one of: cron (recurring), at (one-time absolute), or in_minutes (one-time relative). Times are the user's local time.`;
+Provide exactly one of cron (recurring) or at (one-time). Times are the user's local time — resolve relative requests ("in 30 minutes", "tonight") into an absolute "at" using the current time from context. Lean toward NOT proactively suggesting tasks; schedule only when asked.`;
 
 /** Create a scheduled task from a chat ("every weekday 8am…" → cron). */
 export const scheduleCreateTool = () =>
   tool({
     description: CREATE_DESCRIPTION,
     inputSchema: z.object({
-      title: z.string().min(1).describe('Short title shown in the Scheduled list.'),
+      title: z
+        .string()
+        .min(1)
+        .describe(
+          'Short imperative title (verb first), no date/time. Shown in the Scheduled list.',
+        ),
       prompt: z
         .string()
         .min(1)
         .describe(
-          'Self-contained instruction run on each fire; it cannot see the current conversation.',
+          'The task as a self-contained message from the user to you, with no scheduling info; it cannot see this conversation.',
         ),
       cron: z
         .string()
@@ -31,22 +38,16 @@ export const scheduleCreateTool = () =>
         .string()
         .optional()
         .describe(
-          'ISO 8601 local datetime for a one-time run, e.g. "2026-07-03T15:00" (for "at 3pm", "tomorrow 9am").',
+          'ISO 8601 local datetime for a one-time run, e.g. "2026-07-03T15:00". Compute relative times ("in 30 min") from the current time.',
         ),
-      in_minutes: z
-        .number()
-        .int()
-        .positive()
-        .optional()
-        .describe('Minutes from now for a one-time run (for "in 10 minutes", "in 2 hours" = 120).'),
       timezone: z
         .string()
         .optional()
         .describe('IANA timezone, e.g. "Asia/Shanghai". Defaults to the system timezone.'),
     }),
-    execute: async ({ title, prompt, cron, at, in_minutes, timezone }) => {
-      if ([cron, at, in_minutes].filter((v) => v != null).length !== 1) {
-        throw new Error('Provide exactly one of cron, at, or in_minutes.');
+    execute: async ({ title, prompt, cron, at, timezone }) => {
+      if ((cron == null) === (at == null)) {
+        throw new Error('Provide exactly one of cron (recurring) or at (one-time).');
       }
       const tz = timezone?.trim() || systemTimeZone();
       if (cron != null) {
@@ -61,8 +62,7 @@ export const scheduleCreateTool = () =>
         const next = scheduledManager.getView(task.id)?.nextRunAt;
         return `Created recurring task "${title}" (id ${task.id})${next ? `, next run ${next.toISOString()}` : ''}. Manage it in Scheduled.`;
       }
-      const runAt =
-        in_minutes != null ? new Date(Date.now() + in_minutes * 60_000) : new Date(at as string);
+      const runAt = new Date(at as string);
       if (Number.isNaN(runAt.getTime())) throw new Error(`Invalid datetime: "${at}".`);
       if (runAt.getTime() <= Date.now()) throw new Error('The run time must be in the future.');
       const task = scheduledManager.create({ title, prompt, kind: 'once', runAt, timezone: tz });
