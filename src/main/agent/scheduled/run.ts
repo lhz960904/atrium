@@ -1,9 +1,9 @@
 import type { SelectedModel } from '@shared/settings';
 import { generateId, type UIMessage } from 'ai';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../db';
 import type { ScheduledTask } from '../../db/schema';
-import { messages } from '../../db/schema';
+import { messages, scheduledTaskRuns } from '../../db/schema';
 import { createLogger } from '../../log';
 
 const log = createLogger('scheduled');
@@ -32,6 +32,18 @@ function blockSuspension(): () => void {
   } catch {
     return () => {};
   }
+}
+
+/** Start time of the task's most recent *completed* run (excludes the current
+ *  in-flight one, which has no finishedAt yet). Undefined on the first run. */
+function lastCompletedRunAt(db: Db, taskId: string): Date | undefined {
+  return db
+    .select({ startedAt: scheduledTaskRuns.startedAt })
+    .from(scheduledTaskRuns)
+    .where(and(eq(scheduledTaskRuns.taskId, taskId), isNotNull(scheduledTaskRuns.finishedAt)))
+    .orderBy(desc(scheduledTaskRuns.startedAt))
+    .limit(1)
+    .get()?.startedAt;
 }
 
 /** Id of the newest assistant message in a thread, or undefined. */
@@ -72,15 +84,21 @@ export async function runScheduledTask(
   }
 
   const priorAssistant = latestAssistantId(deps.db, task.threadId);
-  // Each fire appends to the task's bound thread, so the model sees prior runs
-  // and may decide the work is "already done" and skip it. Frame the turn as a
-  // fresh automated trigger so it re-executes; earlier turns are context only.
-  // (A lightweight precursor to the per-task memory idea — see design V2.)
-  const preamble = `[Scheduled task "${task.title}" — automated run at ${new Date().toLocaleString()}. Carry it out now. Earlier messages in this conversation are previous runs, for context only; don't skip just because it was done before.]`;
+  // A Codex-style key:value preamble frames the turn as an automation run. The
+  // Instruction line is our own: each fire appends to the bound thread, so the
+  // model sees prior runs and would otherwise reply "already done" and skip.
+  // (Automation memory — a per-task memory file — is deferred to V2.)
+  const lastRun = lastCompletedRunAt(deps.db, task.id);
+  const header = [
+    `Automation: ${task.title}`,
+    `Automation ID: ${task.id}`,
+    `Last run: ${lastRun ? `${lastRun.toISOString()} (${lastRun.getTime()})` : 'never'}`,
+    'Instruction: This is a fresh automated run — carry out the task now. Earlier messages in this conversation are previous runs, for context only; do not skip because it was done before.',
+  ].join('\n');
   const message: UIMessage = {
     id: generateId(),
     role: 'user',
-    parts: [{ type: 'text', text: `${preamble}\n\n${task.prompt}` }],
+    parts: [{ type: 'text', text: `${header}\n\n${task.prompt}` }],
   };
 
   const release = blockSuspension();
