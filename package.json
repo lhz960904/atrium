@@ -98,6 +98,7 @@
     "ai": "^6",
     "assistant-stream": "^0.3.18",
     "cmdk": "^1.1.1",
+    "croner": "^10",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "electron": "^39.2.6",

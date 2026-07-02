@@ -9,6 +9,7 @@ import icon from '../../resources/icon.png?asset';
 import { mcpManager } from './agent/mcp/manager';
 import { runDream, startDreamScheduler } from './agent/memory';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
+import { scheduledManager, startScheduledTasks } from './agent/scheduled';
 import { refreshSkills } from './agent/skills/registry';
 import { closeDb, openDb } from './db';
 import { initLogging } from './log';
@@ -146,6 +147,21 @@ app.whenReady().then(async () => {
   const chatEndpoint = await startHttpServer({ db, token: randomUUID(), projectlessRoot });
   serverEndpoint = chatEndpoint;
 
+  // Scheduled tasks drive the same chat server headlessly, so start them only
+  // once it's listening. Each task runs with its own model (falling back to the
+  // globally selected one), passed to /api/chat as a request parameter.
+  startScheduledTasks({
+    db,
+    endpoint: { port: chatEndpoint.port, token: chatEndpoint.token },
+    defaultModel: () => {
+      try {
+        return getSettings('general.selectedModel');
+      } catch {
+        return null;
+      }
+    },
+  });
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
@@ -193,6 +209,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true;
   serverEndpoint?.dispose();
+  scheduledManager.dispose();
   void mcpManager.dispose();
   closeDb();
 });
