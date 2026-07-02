@@ -1,9 +1,19 @@
 import type { AtriumUIMessage } from '@shared/chat';
-import { FileText, Package } from 'lucide-react';
-import { memo } from 'react';
+import { ChevronDown, FileText, Package } from 'lucide-react';
+import { memo, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { openAttachment } from '../../state/attachment-viewer-store';
 import { CopyButton } from './CopyButton';
+
+// Long messages (pasted logs, files) collapse to this many lines behind a
+// "Show more" toggle so one message can't dominate the scroll.
+const COLLAPSED_LINES = 10;
+const COLLAPSED_STYLE: React.CSSProperties = {
+  display: '-webkit-box',
+  WebkitBoxOrient: 'vertical',
+  WebkitLineClamp: COLLAPSED_LINES,
+  overflow: 'hidden',
+};
 
 /**
  * Mentions serialize into the message text as <skill-use>name</skill-use> tags —
@@ -47,6 +57,24 @@ export const UserMessage = memo(function UserMessage({
     .join('')
     .replace(REPLY_LANGUAGE, '');
   const files = parts.filter((p) => p.type === 'file');
+
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [collapsed, setCollapsed] = useState(true);
+  const [overflowing, setOverflowing] = useState(false);
+  // Measure only while clamped — the clamped box's scrollHeight exceeds its
+  // clientHeight exactly when content is truncated. Re-run on width changes
+  // (wrapping shifts line count), never while expanded (where the two heights
+  // match and would falsely read "fits").
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el || !collapsed) return;
+    const measure = (): void => setOverflowing(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [collapsed]);
+
   return (
     <div className="group mb-5 flex flex-col items-end gap-1.5">
       {files.length > 0 && (
@@ -91,8 +119,26 @@ export const UserMessage = memo(function UserMessage({
         </div>
       )}
       {text.length > 0 && (
-        <div className="max-w-[75%] whitespace-pre-wrap rounded-2xl bg-user-bubble-bg px-4 py-2.5 text-base text-user-bubble-fg leading-snug">
-          {renderWithMentions(text)}
+        <div className="max-w-[75%] rounded-2xl bg-user-bubble-bg px-4 py-2.5 text-base text-user-bubble-fg leading-snug">
+          <div
+            ref={bodyRef}
+            className="whitespace-pre-wrap"
+            style={collapsed ? COLLAPSED_STYLE : undefined}
+          >
+            {renderWithMentions(text)}
+          </div>
+          {overflowing && (
+            <button
+              type="button"
+              onClick={() => setCollapsed((c) => !c)}
+              className="mt-1.5 flex items-center gap-0.5 text-fg-tertiary text-sm transition-colors hover:text-fg-secondary"
+            >
+              {collapsed ? t('chat.showMore') : t('chat.showLess')}
+              <ChevronDown
+                className={`size-4 transition-transform ${collapsed ? '' : 'rotate-180'}`}
+              />
+            </button>
+          )}
         </div>
       )}
       {text.length > 0 && (
