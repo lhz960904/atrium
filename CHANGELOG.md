@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/lhz960904/atrium/compare/v0.2.1...v0.3.0) (2026-07-03)
+
+
+### Features
+
+* **updater:** in-app auto-update via electron-updater ([#28](https://github.com/lhz960904/atrium/issues/28)) ([9e670a6](https://github.com/lhz960904/atrium/commit/9e670a6262122df71c263c071eefd0fc90084543))
+
 ## [0.2.1](https://github.com/lhz960904/atrium/compare/v0.2.0...v0.2.1) (2026-07-02)
 
 
