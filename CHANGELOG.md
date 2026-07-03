@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/lhz960904/atrium/compare/v0.2.0...v0.2.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* **release:** upload installers to the published github release ([d0dbca0](https://github.com/lhz960904/atrium/commit/d0dbca062e86d8bf664140e2e617633b50fc57e9))
+
 ## [0.2.0](https://github.com/lhz960904/atrium/compare/v0.1.0...v0.2.0) (2026-07-02)
 
 
