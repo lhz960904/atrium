@@ -4,6 +4,7 @@ import remarkMath from 'remark-math';
 import { type AnimateOptions, type Components, defaultRemarkPlugins, Streamdown } from 'streamdown';
 import { CodeBlock } from './CodeBlock';
 import { MathFence } from './KatexMath';
+import { LinkChip } from './LinkChip';
 import { MermaidDiagram } from './MermaidDiagram';
 import { TableBlock } from './TableBlock';
 
@@ -50,6 +51,8 @@ function buildComponents(streaming: boolean): Components {
     // The default wraps code in a bordered container with a header; pass through
     // so only our CodeBlock's own <pre> remains.
     pre: ({ children }) => <>{children}</>,
+    // Links render as favicon + label chips instead of raw URLs (Codex-style).
+    a: ({ href, children }) => <LinkChip href={href}>{children}</LinkChip>,
     table: ({ children }) => <TableBlock>{children}</TableBlock>,
     th: ({ children }) => (
       <th className="whitespace-nowrap border-border-default border-b bg-surface px-3 py-2 text-left font-medium text-fg-primary">

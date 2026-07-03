@@ -12,6 +12,7 @@ import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/c
 import { scheduledManager, startScheduledTasks } from './agent/scheduled';
 import { refreshSkills } from './agent/skills/registry';
 import { closeDb, openDb } from './db';
+import { registerFaviconScheme, serveFavicons } from './favicons';
 import { initLogging } from './log';
 import { setupMenuBar } from './menu-bar';
 import { notifyScheduledRun } from './notifications';
@@ -29,6 +30,9 @@ import { updaterManager } from './updater';
 // (Cmd+Q / before-quit) bypass the hide-on-close interception below.
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
+
+// Privileged scheme registration has to happen before the app is ready.
+registerFaviconScheme();
 
 function createWindow(): BrowserWindow {
   const initial = getInitialWindowState();
@@ -109,6 +113,7 @@ app.whenReady().then(async () => {
   // we set ours explicitly; packaged macOS builds already carry build/icon.icns.
   if (process.platform === 'darwin') app.dock?.setIcon(icon);
   initLogging();
+  serveFavicons();
 
   const db = openDb();
   openSettings();
