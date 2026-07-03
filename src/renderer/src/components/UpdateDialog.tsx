@@ -95,6 +95,7 @@ export function UpdateDialog(): React.JSX.Element {
   const state = useUpdateStore((s) => s.state);
   const dialogOpen = useUpdateStore((s) => s.dialogOpen);
   const closeDialog = useUpdateStore((s) => s.closeDialog);
+  const check = trpc.update.check.useMutation();
   const download = trpc.update.download.useMutation();
   const install = trpc.update.install.useMutation();
 
@@ -200,7 +201,7 @@ export function UpdateDialog(): React.JSX.Element {
                 <button type="button" className={ghostBtn} onClick={closeDialog}>
                   {t('common.close')}
                 </button>
-                <button type="button" className={accentBtn} onClick={() => download.mutate()}>
+                <button type="button" className={accentBtn} onClick={() => check.mutate()}>
                   {t('update.retry')}
                 </button>
               </>

@@ -34,11 +34,18 @@ class UpdaterManager {
     lastCheckedAt: null,
   };
   private getWindow: () => BrowserWindow | null = () => null;
+  private onBeforeInstall: () => void = () => {};
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private wired = false;
 
-  init(getWindow: () => BrowserWindow | null): void {
-    this.getWindow = getWindow;
+  init(opts: {
+    getWindow: () => BrowserWindow | null;
+    /** Called right before quitAndInstall so the app stops intercepting the
+     *  window close — otherwise the hide-on-close handler blocks the relaunch. */
+    onBeforeInstall: () => void;
+  }): void {
+    this.getWindow = opts.getWindow;
+    this.onBeforeInstall = opts.onBeforeInstall;
     if (this.wired) return;
     this.wired = true;
 
@@ -116,6 +123,10 @@ class UpdaterManager {
   /** Quit and swap in the downloaded update; only valid after 'downloaded'. */
   install(): void {
     if (this.state.stage !== 'downloaded') return;
+    // quitAndInstall closes every window before it quits+relaunches; let the app
+    // know so its hide-on-close handler doesn't preventDefault and stall Squirrel
+    // (which then reports "The command is disabled and cannot be executed").
+    this.onBeforeInstall();
     // isSilent=false so the OS installer UI can surface any prompt; isForceRunAfter
     // relaunches straight into the new version instead of leaving the app closed.
     autoUpdater.quitAndInstall(false, true);
