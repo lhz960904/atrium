@@ -24,7 +24,6 @@ export const en: typeof zh = {
   update: {
     entry: 'Update',
     title: 'Software Update',
-    subtitle: 'A new version is available',
     whatsNew: "WHAT'S NEW",
     download: 'Download',
     downloading: 'Downloading…',

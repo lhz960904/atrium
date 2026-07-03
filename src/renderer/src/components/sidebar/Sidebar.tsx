@@ -181,24 +181,30 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 border-border-default border-t px-3 py-2">
+      <div className="shrink-0 border-border-default border-t px-3 py-2">
         <Link
           to="/settings/$section"
           params={{ section: 'general' }}
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
+          className="flex items-center gap-3 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
         >
           <Settings className="size-[15px] shrink-0" />
-          <span className="truncate">{t('sidebar.settings')}</span>
+          <span className="min-w-0 flex-1 truncate">{t('sidebar.settings')}</span>
+          {showUpdate && (
+            <button
+              type="button"
+              // The badge lives inside the Settings link; stop the click so it
+              // opens the update dialog instead of navigating to Settings.
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openUpdateDialog();
+              }}
+              className="shrink-0 rounded-full bg-accent/10 px-2 py-0.5 font-medium text-accent text-xs hover:bg-accent/20"
+            >
+              {t('update.entry')}
+            </button>
+          )}
         </Link>
-        {showUpdate && (
-          <button
-            type="button"
-            onClick={openUpdateDialog}
-            className="shrink-0 rounded-full bg-accent/10 px-2.5 py-1 font-medium text-accent text-xs hover:bg-accent/20"
-          >
-            {t('update.entry')}
-          </button>
-        )}
       </div>
     </aside>
   );

@@ -25,7 +25,6 @@ export const zh = {
   update: {
     entry: '更新',
     title: '软件更新',
-    subtitle: '发现新版本',
     whatsNew: '更新内容',
     download: '下载',
     downloading: '下载中…',

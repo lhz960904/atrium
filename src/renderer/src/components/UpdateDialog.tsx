@@ -40,16 +40,14 @@ export function UpdateDialog(): React.JSX.Element {
     <Dialog.Root open={dialogOpen} onOpenChange={(o) => !o && closeDialog()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[var(--z-modal)] bg-black/40 backdrop-blur-sm" />
-        <Dialog.Content className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-[var(--z-modal)] flex w-[min(440px,92vw)] flex-col overflow-hidden rounded-xl border border-border-default bg-elevated shadow-xl outline-none">
+        <Dialog.Content
+          aria-describedby={undefined}
+          className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-[var(--z-modal)] flex w-[min(440px,92vw)] flex-col overflow-hidden rounded-xl border border-border-default bg-elevated shadow-xl outline-none"
+        >
           <div className="flex flex-col gap-4 p-6">
-            <div className="flex flex-col gap-1">
-              <Dialog.Title className="font-semibold text-fg-primary text-lg">
-                {t('update.title')}
-              </Dialog.Title>
-              <Dialog.Description className="text-accent text-sm">
-                {t('update.subtitle')}
-              </Dialog.Description>
-            </div>
+            <Dialog.Title className="font-semibold text-fg-primary text-lg">
+              {t('update.title')}
+            </Dialog.Title>
 
             <div className="flex items-center gap-2 font-mono text-sm">
               <span className="text-fg-tertiary">{currentVersion}</span>
