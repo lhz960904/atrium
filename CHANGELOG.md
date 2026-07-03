@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/lhz960904/atrium/compare/v0.4.1...v0.4.2) (2026-07-03)
+
+
+### Bug Fixes
+
+* scheduled clock badge, running-run spinner, and absolute run time ([#35](https://github.com/lhz960904/atrium/issues/35)) ([14b9ad2](https://github.com/lhz960904/atrium/commit/14b9ad22d413b6d404e9148e3b429336d5b12d84))
+
 ## [0.4.1](https://github.com/lhz960904/atrium/compare/v0.4.0...v0.4.1) (2026-07-03)
 
 
