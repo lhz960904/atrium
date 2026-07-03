@@ -1,9 +1,10 @@
 import { Link } from '@tanstack/react-router';
-import { Archive, Pin, PinOff } from 'lucide-react';
+import { Archive, Clock, Pin, PinOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { timeAgo } from '../../lib/time';
 import { trpc } from '../../lib/trpc';
 import { toast } from '../../state/toast-store';
+import { Tooltip } from '../Tooltip';
 import { RowAction } from './primitives';
 import type { ThreadItem } from './types';
 
@@ -15,9 +16,11 @@ const chatRowActive =
 export function ThreadRow({
   thread,
   running,
+  hasSchedule,
 }: {
   thread: ThreadItem;
   running: boolean;
+  hasSchedule: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const utils = trpc.useUtils();
@@ -66,6 +69,13 @@ export function ThreadRow({
             )}
           </span>
           <span className="absolute right-0 hidden items-center gap-0.5 group-hover:flex">
+            {hasSchedule && (
+              <Tooltip content={t('sidebar.scheduled')}>
+                <span className="flex items-center p-0.5 text-fg-tertiary">
+                  <Clock className="size-[13px]" />
+                </span>
+              </Tooltip>
+            )}
             <RowAction
               title={thread.pinned ? t('sidebar.unpin') : t('sidebar.pin')}
               icon={

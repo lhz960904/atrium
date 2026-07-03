@@ -28,6 +28,12 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
   // the interval is cheap (unlike polling message content).
   const { data: running } = trpc.threads.running.useQuery(undefined, { refetchInterval: 2000 });
   const runningSet = new Set(running);
+  // Threads bound to a scheduled task get a hover clock badge. The binding lives
+  // on the task (scheduledTasks.threadId), so derive the set from the task list.
+  const { data: scheduled } = trpc.scheduled.list.useQuery();
+  const scheduledThreadIds = new Set(
+    (scheduled ?? []).map((task) => task.threadId).filter(Boolean),
+  );
 
   // Adding a project is a sidebar-level action (the Projects header button), not
   // tied to any one row, so it lives here; per-project actions live in ProjectMenu.
@@ -87,7 +93,12 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
   const hasPinned = pinnedThreads.length > 0 || pinnedProjects.length > 0;
 
   const renderThread = (thread: ThreadItem): React.JSX.Element => (
-    <ThreadRow key={thread.id} thread={thread} running={runningSet.has(thread.id)} />
+    <ThreadRow
+      key={thread.id}
+      thread={thread}
+      running={runningSet.has(thread.id)}
+      hasSchedule={scheduledThreadIds.has(thread.id)}
+    />
   );
   const renderProject = (project: ProjectItem): React.JSX.Element => (
     <ProjectRow

@@ -38,6 +38,7 @@ export const zh = {
   sidebar: {
     running: '运行中',
     unread: '未读',
+    scheduled: '已绑定定时任务',
     search: '搜索',
     pinned: '置顶',
     chats: '对话',
