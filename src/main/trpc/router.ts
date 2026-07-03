@@ -13,6 +13,7 @@ import { skillsRouter } from './routers/skills';
 import { subagentsRouter } from './routers/subagents';
 import { systemRouter } from './routers/system';
 import { threadsRouter } from './routers/threads';
+import { updateRouter } from './routers/update';
 import { usageRouter } from './routers/usage';
 import { publicProcedure, router } from './trpc';
 
@@ -45,6 +46,7 @@ export const appRouter = router({
   skills: skillsRouter,
   subagents: subagentsRouter,
   system: systemRouter,
+  update: updateRouter,
   usage: usageRouter,
 });
 
