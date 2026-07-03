@@ -37,6 +37,7 @@ export const en: typeof zh = {
   sidebar: {
     running: 'Running',
     unread: 'Unread',
+    scheduled: 'Has a scheduled task',
     search: 'Search',
     pinned: 'Pinned',
     chats: 'Chats',
