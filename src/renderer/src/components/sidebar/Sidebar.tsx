@@ -3,7 +3,6 @@ import {
   ArrowUpCircle,
   CalendarClock,
   FolderPlus,
-  Loader2,
   Search,
   Settings,
   SquarePen,
@@ -189,31 +188,25 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
         )}
       </div>
 
-      <div className="shrink-0 border-t border-border-default px-3 py-2">
+      <div className="flex shrink-0 items-center gap-1 border-border-default border-t px-3 py-2">
+        <Link
+          to="/settings/$section"
+          params={{ section: 'general' }}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
+        >
+          <Settings className="size-[15px] shrink-0" />
+          <span className="truncate">{t('sidebar.settings')}</span>
+        </Link>
         {showUpdate && (
           <button
             type="button"
             onClick={openUpdateDialog}
-            className="mb-0.5 flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-accent text-sm hover:bg-accent/10"
+            className="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-accent text-sm hover:bg-accent/10"
           >
             <ArrowUpCircle className="size-[15px] shrink-0" />
-            <span className="flex-1 text-left">{t('update.entry')}</span>
-            {updateStage === 'downloading' && (
-              <Loader2 className="size-3.5 shrink-0 animate-spin" />
-            )}
-            {updateStage === 'downloaded' && (
-              <span className="size-2 shrink-0 rounded-full bg-accent" />
-            )}
+            <span>{t('update.entry')}</span>
           </button>
         )}
-        <Link
-          to="/settings/$section"
-          params={{ section: 'general' }}
-          className="flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-surface-strong hover:text-fg-primary"
-        >
-          <Settings className="size-[15px] shrink-0" />
-          <span>{t('sidebar.settings')}</span>
-        </Link>
       </div>
     </aside>
   );
