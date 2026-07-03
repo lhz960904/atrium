@@ -108,6 +108,51 @@ test('the bound thread is created on first fire and back-references the task', a
   expect((thread?.metadata as { scheduledTaskId?: string })?.scheduledTaskId).toBe(task.id);
 });
 
+test('a task with a live bound thread keeps the same thread across runs', async () => {
+  const { mgr } = setup(async () => ({ status: 'ok' }));
+  const task = mgr.create({ ...RECURRING });
+  await mgr.runNow(task.id);
+  const first = view(mgr, task.id).threadId;
+  await mgr.runNow(task.id);
+  expect(view(mgr, task.id).threadId).toBe(first);
+});
+
+test('a run whose bound thread was archived rotates to a fresh thread, leaving the old one', async () => {
+  const { mgr, db } = setup(async () => ({ status: 'ok' }));
+  const task = mgr.create({ ...RECURRING });
+  await mgr.runNow(task.id);
+  const first = view(mgr, task.id).threadId as string;
+
+  // The user archives the bound conversation (done with it).
+  db.update(threads)
+    .set({ archivedAt: new Date(START) })
+    .where(eq(threads.id, first))
+    .run();
+
+  await mgr.runNow(task.id);
+  const second = view(mgr, task.id).threadId;
+  expect(second).toBeTruthy();
+  expect(second).not.toBe(first);
+  // The archived thread is left intact, still recoverable.
+  expect(db.select().from(threads).where(eq(threads.id, first)).get()?.archivedAt).toBeInstanceOf(
+    Date,
+  );
+});
+
+test('a run whose bound thread was deleted rebinds to a fresh thread instead of erroring', async () => {
+  const { mgr, db } = setup(async () => ({ status: 'ok' }));
+  const task = mgr.create({ ...RECURRING });
+  await mgr.runNow(task.id);
+  const first = view(mgr, task.id).threadId as string;
+
+  db.delete(threads).where(eq(threads.id, first)).run();
+
+  await mgr.runNow(task.id);
+  const second = view(mgr, task.id).threadId;
+  expect(second).toBeTruthy();
+  expect(second).not.toBe(first);
+});
+
 test('runNow records a run; last-run + status derive from it', async () => {
   const { mgr } = setup(async () => ({ status: 'ok', messageId: 'msg-1' }));
   const task = mgr.create({ ...RECURRING });
