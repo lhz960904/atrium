@@ -1,10 +1,19 @@
 import { useNavigate } from '@tanstack/react-router';
-import { CheckCircle2, MessageSquareText, Pause, Play, Trash2, X, XCircle } from 'lucide-react';
+import {
+  CheckCircle2,
+  LoaderCircle,
+  MessageSquareText,
+  Pause,
+  Play,
+  Trash2,
+  X,
+  XCircle,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Select } from '../../components/Select';
 import type { ScheduledRun, ScheduledTask } from '../../lib/schedule-format';
-import { formatDateTime, timeAgo } from '../../lib/time';
+import { formatDateTime } from '../../lib/time';
 import { trpc } from '../../lib/trpc';
 import { deriveGroups } from '../../lib/use-chat-model';
 import { toast } from '../../state/toast-store';
@@ -22,22 +31,26 @@ function Row({ label, children }: { label: string; children: React.ReactNode }):
   );
 }
 
+// A run in progress spins; the rest are terminal outcomes with a static glyph.
+const RUN_STATUS = {
+  running: { Icon: LoaderCircle, color: 'text-accent', spin: true },
+  ok: { Icon: CheckCircle2, color: 'text-success', spin: false },
+  error: { Icon: XCircle, color: 'text-danger', spin: false },
+  skipped: { Icon: Play, color: 'text-fg-tertiary', spin: false },
+} as const;
+
 function RunRow({
   run,
   title,
+  lang,
   onOpen,
 }: {
   run: ScheduledRun;
   title: string;
+  lang: 'en' | 'zh';
   onOpen: (() => void) | undefined;
 }): React.JSX.Element {
-  const Icon = run.status === 'error' ? XCircle : run.status === 'ok' ? CheckCircle2 : Play;
-  const color =
-    run.status === 'error'
-      ? 'text-danger'
-      : run.status === 'ok'
-        ? 'text-success'
-        : 'text-fg-tertiary';
+  const { Icon, color, spin } = RUN_STATUS[run.status];
   return (
     <button
       type="button"
@@ -46,11 +59,13 @@ function RunRow({
       title={run.error ?? undefined}
       className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left enabled:hover:bg-elevated disabled:cursor-default"
     >
-      <Icon className={`size-4 shrink-0 ${color}`} />
+      <Icon className={`size-4 shrink-0 ${color} ${spin ? 'animate-spin' : ''}`} />
       <span className="min-w-0 flex-1 truncate text-fg-secondary text-sm">
         {run.status === 'error' && run.error ? run.error : title}
       </span>
-      <span className="shrink-0 text-fg-disabled text-xs">{timeAgo(run.startedAt)}</span>
+      <span className="shrink-0 text-fg-disabled text-xs">
+        {formatDateTime(run.startedAt, lang)}
+      </span>
     </button>
   );
 }
@@ -75,7 +90,12 @@ export function TaskDetail({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const utils = trpc.useUtils();
-  const runs = trpc.scheduled.runs.useQuery({ id: task.id });
+  // While a run is in flight its row shows a spinner; poll so it flips to the
+  // terminal ok/error glyph on finish (a background firing won't invalidate this).
+  const runs = trpc.scheduled.runs.useQuery(
+    { id: task.id },
+    { refetchInterval: (data) => (data?.some((r) => r.status === 'running') ? 2000 : false) },
+  );
   const projects = trpc.projects.list.useQuery();
   const providers = trpc.providers.list.useQuery();
 
@@ -254,7 +274,7 @@ export function TaskDetail({
           {runs.data && runs.data.length > 0 ? (
             <div className="flex flex-col">
               {runs.data.map((run) => (
-                <RunRow key={run.id} run={run} title={task.title} onOpen={openThread} />
+                <RunRow key={run.id} run={run} title={task.title} lang={lang} onOpen={openThread} />
               ))}
             </div>
           ) : (
