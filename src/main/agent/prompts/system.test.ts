@@ -60,6 +60,11 @@ test('does not re-explain individual tools (their descriptions own that)', () =>
   expect(p).not.toContain('image_gen');
 });
 
+test('tells the model to cite web sources as titled markdown links, not bare URLs', () => {
+  const p = buildSystemPrompt('/tmp/ws');
+  expect(p).toContain('[title](url)');
+});
+
 test('carries the durable scaffold sections', () => {
   const p = buildSystemPrompt('/tmp/ws');
   for (const heading of [
