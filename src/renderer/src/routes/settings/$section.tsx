@@ -1,8 +1,9 @@
 import type { ComposerSendKey } from '@shared/settings';
+import type { UpdaterStage } from '@shared/update';
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import type { ParseKeys } from 'i18next';
-import { Check, Monitor, Moon, Sun } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { ArrowUpRight, Check, MessageSquare, Monitor, Moon, Sun } from 'lucide-react';
+import { Trans, useTranslation } from 'react-i18next';
 import { Select } from '../../components/Select';
 import { ArchivedSection } from '../../components/settings/archived/ArchivedSection';
 import { IdentitySection } from '../../components/settings/identity/IdentitySection';
@@ -19,6 +20,7 @@ import { trpc } from '../../lib/trpc';
 import { type LanguagePref, useLanguage } from '../../lib/use-language';
 import { useSetting } from '../../lib/use-setting';
 import { type Theme, useThemeStore } from '../../state/theme-store';
+import { useUpdateStore } from '../../state/update-store';
 
 export const Route = createFileRoute('/settings/$section')({
   component: SectionView,
@@ -65,7 +67,7 @@ const SECTIONS: Record<string, SectionMeta> = {
   connections: { titleKey: 'settings.sections.connectionsTitle', Component: PlaceholderSection },
   worktrees: { titleKey: 'settings.sections.worktreesTitle', Component: PlaceholderSection },
   archived: { titleKey: 'settings.sections.archivedTitle', Component: ArchivedSection },
-  about: { titleKey: 'settings.sections.aboutTitle', Component: PlaceholderSection },
+  about: { titleKey: 'settings.sections.aboutTitle', Component: AboutSection },
 };
 
 function SectionView(): React.JSX.Element {
@@ -274,6 +276,146 @@ function AppearanceSection(): React.JSX.Element {
       </div>
       <p className="mt-4 text-fg-tertiary text-xs">{t('settings.appearance.note')}</p>
     </section>
+  );
+}
+
+const AUTHOR_URL = 'https://github.com/lhz960904';
+const ISSUES_URL = 'https://github.com/lhz960904/atrium/issues/new';
+
+/** Semantic colour for the update-status dot. */
+const STATUS_DOT: Record<UpdaterStage, string> = {
+  idle: 'bg-success',
+  checking: 'bg-accent-alt',
+  available: 'bg-accent',
+  downloading: 'bg-accent',
+  downloaded: 'bg-accent',
+  error: 'bg-danger',
+};
+
+/** Locale-aware "3 minutes ago" for the last-checked line; `never` when unset. */
+function formatChecked(ts: number | null, lang: string, never: string): string {
+  if (!ts) return never;
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' });
+  const sec = Math.round((ts - Date.now()) / 1000);
+  const abs = Math.abs(sec);
+  if (abs < 60) return rtf.format(sec, 'second');
+  if (abs < 3600) return rtf.format(Math.round(sec / 60), 'minute');
+  if (abs < 86_400) return rtf.format(Math.round(sec / 3600), 'hour');
+  return rtf.format(Math.round(sec / 86_400), 'day');
+}
+
+function AboutSection(): React.JSX.Element {
+  const { t, i18n } = useTranslation();
+  const state = useUpdateStore((s) => s.state);
+  const openDialog = useUpdateStore((s) => s.openDialog);
+  const check = trpc.update.check.useMutation();
+
+  const hasUpdate =
+    state.stage === 'available' || state.stage === 'downloading' || state.stage === 'downloaded';
+  const checking = state.stage === 'checking';
+
+  const status = ((): string => {
+    switch (state.stage) {
+      case 'checking':
+        return t('settings.about.checking');
+      case 'available':
+        return t('settings.about.available', { version: state.info?.version ?? '' });
+      case 'downloading':
+        return t('settings.about.downloadingStatus', {
+          percent: Math.round(state.progress?.percent ?? 0),
+        });
+      case 'downloaded':
+        return t('settings.about.readyStatus', { version: state.info?.version ?? '' });
+      case 'error':
+        return t('settings.about.checkFailed');
+      default:
+        return t('settings.about.upToDate');
+    }
+  })();
+
+  const lastChecked = formatChecked(state.lastCheckedAt, i18n.language, t('settings.about.never'));
+
+  const updateBtn =
+    'shrink-0 rounded-lg bg-accent px-3.5 py-2 font-medium text-fg-on-accent text-sm shadow-xs hover:bg-accent-hover disabled:opacity-60';
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Product panel: identity up top, a divided update band below. */}
+      <div className="overflow-hidden rounded-2xl border border-border-default bg-surface shadow-xs">
+        <div className="px-7 pt-7 pb-6">
+          <div className="flex items-center gap-2.5">
+            <h1 className="font-semibold text-fg-primary text-lg tracking-tight">Atrium</h1>
+            <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent text-xs tabular-nums">
+              {state.currentVersion}
+            </span>
+          </div>
+          <p className="mt-2 text-fg-secondary text-sm leading-relaxed">
+            {t('settings.about.description')}
+          </p>
+          <p className="mt-2 text-fg-tertiary text-xs">
+            <Trans
+              i18nKey="settings.about.craftedBy"
+              components={{
+                author: (
+                  // biome-ignore lint/a11y/useAnchorContent: Trans injects the link text
+                  <a
+                    href={AUTHOR_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-accent hover:underline"
+                  />
+                ),
+              }}
+            />
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 border-border-default border-t px-7 py-4">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <span
+              className={`mt-1.5 size-2 shrink-0 rounded-full ${STATUS_DOT[state.stage]} ${checking ? 'animate-pulse' : ''}`}
+            />
+            <div className="min-w-0">
+              <div className="text-fg-primary text-sm">{status}</div>
+              <div className="mt-0.5 text-fg-tertiary text-xs">
+                {t('settings.about.lastChecked')} · {lastChecked}
+              </div>
+            </div>
+          </div>
+          {hasUpdate ? (
+            <button type="button" onClick={openDialog} className={updateBtn}>
+              {t('update.entry')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => check.mutate()}
+              disabled={checking}
+              className={updateBtn}
+            >
+              {checking ? t('settings.about.checking') : t('settings.about.checkNow')}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Feedback: the whole card opens GitHub issues. */}
+      <a
+        href={ISSUES_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="group flex items-center gap-3.5 rounded-2xl border border-border-default bg-surface px-5 py-4 shadow-xs transition-colors hover:border-border-strong"
+      >
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+          <MessageSquare className="size-[18px]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-fg-primary text-sm">{t('settings.about.feedback')}</div>
+          <div className="mt-0.5 text-fg-tertiary text-xs">{t('settings.about.feedbackDesc')}</div>
+        </div>
+        <ArrowUpRight className="size-4 shrink-0 text-fg-tertiary transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-fg-secondary" />
+      </a>
+    </div>
   );
 }
 

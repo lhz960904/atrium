@@ -391,6 +391,22 @@ export const zh = {
       systemDesc: '跟随系统外观',
       note: '切换会立即生效。System 模式会跟随 macOS 外观偏好自动变换。',
     },
+    about: {
+      description:
+        'Atrium 是一款本地优先的桌面 AI Agent 助手。支持携带密钥接入任意模型提供商，涵盖目前市面常见的 AI Agent 功能。',
+      craftedBy: '由 <author>lhz960904</author> 打造',
+      lastChecked: '上次检查',
+      never: '从未',
+      checkNow: '检查更新',
+      checking: '检查中…',
+      upToDate: '已是最新版本。',
+      available: '发现新版本 {{version}}',
+      downloadingStatus: '下载中 {{percent}}%',
+      readyStatus: '{{version}} 已下载，可安装',
+      checkFailed: '检查更新失败',
+      feedback: '发送反馈',
+      feedbackDesc: '在 GitHub 上反馈问题或提出新功能。',
+    },
     language: {
       title: '语言',
       zh: '中文',
