@@ -139,9 +139,16 @@ app.whenReady().then(async () => {
   });
 
   // Broadcast updater state into whichever main window is live (it survives
-  // hide/close, and getWindow() re-resolves after a rebuild). Then start the
-  // post-launch check + periodic poll off the critical path.
-  updaterManager.init(() => mainWindow);
+  // hide/close, and getWindow() re-resolves after a rebuild). onBeforeInstall
+  // flips isQuitting so the hide-on-close handler lets the window close during
+  // the update relaunch instead of hiding it. Then start the post-launch check +
+  // periodic poll off the critical path.
+  updaterManager.init({
+    getWindow: () => mainWindow,
+    onBeforeInstall: () => {
+      isQuitting = true;
+    },
+  });
   updaterManager.startAutoCheck();
 
   // Resolve the user's login-shell environment in the background so PATH and

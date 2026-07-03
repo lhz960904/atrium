@@ -1,5 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { ArrowRight, CheckCircle2, Download, Loader2, RotateCw } from 'lucide-react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../lib/trpc';
 import { useUpdateStore } from '../state/update-store';
@@ -14,6 +15,74 @@ function fmtEta(seconds: number): string {
   return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
+/** Drop release-please's trailing "(#30) (faeb8e2)" PR/commit refs — noise here. */
+function cleanItem(text: string): string {
+  return text
+    .replace(/\s*\(#\d+\)/g, '')
+    .replace(/\s*\([0-9a-f]{7,40}\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * electron-updater's GitHub provider returns release notes as HTML (from the
+ * releases atom feed), so parse it into clean, structured content rather than
+ * dumping raw tags: drop the redundant version header (the dialog already shows
+ * the version compare), keep section headings, and turn the change list into
+ * plain bullets without the PR/commit link noise. Falls back to plain text.
+ */
+function buildReleaseNotes(html: string): React.JSX.Element | null {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const blocks: React.JSX.Element[] = [];
+  let key = 0;
+
+  for (const el of Array.from(doc.body.children)) {
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'h1' || tag === 'h2') continue; // version header — redundant
+    if (tag === 'h3' || tag === 'h4') {
+      const text = el.textContent?.trim();
+      if (text)
+        blocks.push(
+          <div
+            key={key++}
+            className="font-medium text-[11px] text-fg-tertiary uppercase tracking-wide"
+          >
+            {text}
+          </div>,
+        );
+    } else if (tag === 'ul' || tag === 'ol') {
+      const items = Array.from(el.querySelectorAll('li'))
+        .map((li) => cleanItem(li.textContent ?? ''))
+        .filter(Boolean);
+      if (items.length)
+        blocks.push(
+          <ul key={key++} className="flex flex-col gap-1">
+            {items.map((it) => (
+              <li key={it} className="flex gap-2">
+                <span className="text-fg-disabled">•</span>
+                <span>{it}</span>
+              </li>
+            ))}
+          </ul>,
+        );
+    } else {
+      const text = el.textContent?.trim();
+      if (text) blocks.push(<p key={key++}>{text}</p>);
+    }
+  }
+
+  if (blocks.length === 0) {
+    // Plain-text notes (no block markup).
+    const text = doc.body.textContent?.trim();
+    return text ? <div className="whitespace-pre-wrap">{text}</div> : null;
+  }
+  return <div className="flex flex-col gap-2.5">{blocks}</div>;
+}
+
+function ReleaseNotes({ html }: { html: string }): React.JSX.Element | null {
+  return useMemo(() => buildReleaseNotes(html), [html]);
+}
+
 /**
  * The Software Update modal, driven entirely by the update store. It opens from
  * the sidebar entry (never on its own) and reflects the current stage: version
@@ -26,6 +95,7 @@ export function UpdateDialog(): React.JSX.Element {
   const state = useUpdateStore((s) => s.state);
   const dialogOpen = useUpdateStore((s) => s.dialogOpen);
   const closeDialog = useUpdateStore((s) => s.closeDialog);
+  const check = trpc.update.check.useMutation();
   const download = trpc.update.download.useMutation();
   const install = trpc.update.install.useMutation();
 
@@ -60,8 +130,8 @@ export function UpdateDialog(): React.JSX.Element {
                 <span className="font-medium text-fg-tertiary text-xs uppercase tracking-wide">
                   {t('update.whatsNew')}
                 </span>
-                <div className="max-h-32 overflow-y-auto whitespace-pre-wrap text-fg-secondary text-sm leading-relaxed">
-                  {info.releaseNotes}
+                <div className="max-h-40 overflow-y-auto text-fg-secondary text-sm leading-relaxed">
+                  <ReleaseNotes html={info.releaseNotes} />
                 </div>
               </div>
             )}
@@ -131,7 +201,7 @@ export function UpdateDialog(): React.JSX.Element {
                 <button type="button" className={ghostBtn} onClick={closeDialog}>
                   {t('common.close')}
                 </button>
-                <button type="button" className={accentBtn} onClick={() => download.mutate()}>
+                <button type="button" className={accentBtn} onClick={() => check.mutate()}>
                   {t('update.retry')}
                 </button>
               </>
