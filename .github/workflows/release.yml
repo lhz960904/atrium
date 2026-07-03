@@ -44,9 +44,11 @@ jobs:
           - os: macos-15
             platform: mac
             archFlag: "--arm64"
+            arch: arm64
           - os: macos-15-intel
             platform: mac
             archFlag: "--x64"
+            arch: x64
           - os: windows-latest
             platform: win
             archFlag: ""
@@ -102,3 +104,46 @@ jobs:
           APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
+
+      # Each mac runner writes a single-arch latest-mac.yml; stash both so
+      # merge-mac-yml can combine them. electron-builder's --publish uploads one
+      # too, but the two runners race and only the last survives — the merge job
+      # overwrites it with a manifest that lists both arches.
+      - name: Stash mac update manifest
+        if: matrix.platform == 'mac' && needs.release-please.outputs.release_created == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-yml-${{ matrix.arch }}
+          path: dist/latest-mac.yml
+          if-no-files-found: error
+
+  # Combine the two single-arch mac manifests into one listing both arches, then
+  # overwrite latest-mac.yml on the Release so electron-updater serves Intel and
+  # Apple Silicon the build that matches. Only runs for a real release cut.
+  merge-mac-yml:
+    needs: [release-please, release]
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download per-arch mac manifests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mac-yml-*
+          path: mac-yml
+
+      # Install only `yaml` (into a temp dir so the checkout stays clean) rather
+      # than the whole app tree — the merge just parses two small files.
+      - name: Merge manifests
+        run: |
+          mkdir -p /tmp/ym && (cd /tmp/ym && npm init -y >/dev/null 2>&1 && npm i yaml@^2 >/dev/null 2>&1)
+          NODE_PATH=/tmp/ym/node_modules node scripts/merge-mac-yml.cjs \
+            mac-yml/mac-yml-arm64/latest-mac.yml \
+            mac-yml/mac-yml-x64/latest-mac.yml \
+            latest-mac.yml
+
+      - name: Upload merged manifest to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" latest-mac.yml --clobber

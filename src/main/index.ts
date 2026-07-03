@@ -22,6 +22,7 @@ import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { loadShellEnv } from './shell-path';
 import { appRouter } from './trpc/router';
+import { updaterManager } from './updater';
 
 // Kept alive across hide/show so reopening from the Dock restores the exact
 // prior view instead of booting a fresh window. isQuitting lets the real quit
@@ -136,6 +137,13 @@ app.whenReady().then(async () => {
     windows: [win],
     createContext: async () => ({ db, chatEndpoint }),
   });
+
+  // Broadcast updater state into whichever main window is live (it survives
+  // hide/close, and getWindow() re-resolves after a rebuild). Then run a single
+  // startup check off the critical path — v1 has no polling, and the delay keeps
+  // the network probe from competing with first paint.
+  updaterManager.init(() => mainWindow);
+  setTimeout(() => void updaterManager.check(), 4000);
 
   // Resolve the user's login-shell environment in the background so PATH and
   // their exported vars match the terminal. It can take seconds behind a slow

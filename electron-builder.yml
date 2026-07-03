@@ -44,10 +44,14 @@ mac:
   #
   # arm64 and x64 are each built on their own native CI runner (Apple Silicon
   # vs Intel), which sidesteps cross-compiling the native modules
-  # (better-sqlite3, node-pty). dmg-only — no zip/auto-update target — so the
-  # two per-arch publish jobs never race on a shared latest-mac.yml.
+  # (better-sqlite3, node-pty). dmg is the human download; zip feeds
+  # electron-updater (Squirrel.Mac can't consume a dmg, and without a zip target
+  # no latest-mac.yml is emitted at all). Each runner writes a single-arch
+  # latest-mac.yml that would clobber the other's on publish, so a merge-mac-yml
+  # job in release.yml combines the two into one manifest listing both arches.
   target:
     - dmg
+    - zip
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
