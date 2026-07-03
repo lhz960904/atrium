@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/lhz960904/atrium/compare/v0.4.0...v0.4.1) (2026-07-03)
+
+
+### Bug Fixes
+
+* **updater:** relaunch on install + clean release-notes rendering ([#32](https://github.com/lhz960904/atrium/issues/32)) ([7dd56cf](https://github.com/lhz960904/atrium/commit/7dd56cfe260f1260584dd33eb6aea4864d3b0ddd))
+
 ## [0.4.0](https://github.com/lhz960904/atrium/compare/v0.3.0...v0.4.0) (2026-07-03)
 
 
