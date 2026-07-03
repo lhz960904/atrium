@@ -1,12 +1,5 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import {
-  ArrowUpCircle,
-  CalendarClock,
-  FolderPlus,
-  Search,
-  Settings,
-  SquarePen,
-} from 'lucide-react';
+import { CalendarClock, FolderPlus, Search, Settings, SquarePen } from 'lucide-react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dropThreadChat } from '../../lib/chat-store';
@@ -201,10 +194,9 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
           <button
             type="button"
             onClick={openUpdateDialog}
-            className="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-accent text-sm hover:bg-accent/10"
+            className="shrink-0 rounded-full bg-accent/10 px-2.5 py-1 font-medium text-accent text-xs hover:bg-accent/20"
           >
-            <ArrowUpCircle className="size-[15px] shrink-0" />
-            <span>{t('update.entry')}</span>
+            {t('update.entry')}
           </button>
         )}
       </div>
