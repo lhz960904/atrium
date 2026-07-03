@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/lhz960904/atrium/compare/v0.3.0...v0.4.0) (2026-07-03)
+
+
+### Features
+
+* **updater:** background auto-download, hourly polling, and the About page ([#30](https://github.com/lhz960904/atrium/issues/30)) ([faeb8e2](https://github.com/lhz960904/atrium/commit/faeb8e282960385f0d00f14b33fe32eafd319ed3))
+
 ## [0.3.0](https://github.com/lhz960904/atrium/compare/v0.2.1...v0.3.0) (2026-07-03)
 
 
