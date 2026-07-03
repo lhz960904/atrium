@@ -139,11 +139,10 @@ app.whenReady().then(async () => {
   });
 
   // Broadcast updater state into whichever main window is live (it survives
-  // hide/close, and getWindow() re-resolves after a rebuild). Then run a single
-  // startup check off the critical path — v1 has no polling, and the delay keeps
-  // the network probe from competing with first paint.
+  // hide/close, and getWindow() re-resolves after a rebuild). Then start the
+  // post-launch check + periodic poll off the critical path.
   updaterManager.init(() => mainWindow);
-  setTimeout(() => void updaterManager.check(), 4000);
+  updaterManager.startAutoCheck();
 
   // Resolve the user's login-shell environment in the background so PATH and
   // their exported vars match the terminal. It can take seconds behind a slow
@@ -251,5 +250,6 @@ app.on('before-quit', () => {
   serverEndpoint?.dispose();
   scheduledManager.dispose();
   void mcpManager.dispose();
+  updaterManager.dispose();
   closeDb();
 });
