@@ -35,4 +35,6 @@ export type UpdaterState = {
   info: UpdateAvailableInfo | null;
   progress: UpdateProgress | null;
   error: string | null;
+  /** Epoch ms of the last completed check (success or failure); null = never. */
+  lastCheckedAt: number | null;
 };

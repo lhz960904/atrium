@@ -14,6 +14,7 @@ const INITIAL: UpdaterState = {
   info: null,
   progress: null,
   error: null,
+  lastCheckedAt: null,
 };
 
 type UpdateStore = {

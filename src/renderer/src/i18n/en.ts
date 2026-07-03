@@ -391,6 +391,22 @@ export const en: typeof zh = {
       systemDesc: 'Follow the system',
       note: 'Changes apply immediately. System mode follows the macOS appearance preference.',
     },
+    about: {
+      description:
+        'Atrium is a local-first desktop AI agent. Bring your own API key to connect any model provider, with the agent capabilities common in tools today.',
+      craftedBy: 'Crafted by <author>lhz960904</author>',
+      lastChecked: 'Last checked',
+      never: 'Never',
+      checkNow: 'Check for updates',
+      checking: 'Checking…',
+      upToDate: "You're already on the latest version.",
+      available: 'Version {{version}} available',
+      downloadingStatus: 'Downloading… {{percent}}%',
+      readyStatus: 'Version {{version}} downloaded, ready to install',
+      checkFailed: 'Update check failed',
+      feedback: 'Send Feedback',
+      feedbackDesc: 'Report a bug or request a feature on GitHub.',
+    },
     language: {
       title: 'Language',
       zh: '中文',
