@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { AttachmentViewer } from '../components/AttachmentViewer';
 import { CommandPalette } from '../components/CommandPalette';
 import { Toaster } from '../components/Toaster';
+import { UpdateDialog } from '../components/UpdateDialog';
 import { trpc } from '../lib/trpc';
 import { useKeybindings } from '../lib/use-keybindings';
 import { useLanguage } from '../lib/use-language';
@@ -51,6 +52,7 @@ function Root(): React.JSX.Element {
       <Outlet />
       <CommandPalette />
       <AttachmentViewer />
+      <UpdateDialog />
       <Toaster />
     </>
   );

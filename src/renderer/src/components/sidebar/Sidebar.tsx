@@ -1,11 +1,20 @@
 import { Link, useNavigate } from '@tanstack/react-router';
-import { CalendarClock, FolderPlus, Search, Settings, SquarePen } from 'lucide-react';
+import {
+  ArrowUpCircle,
+  CalendarClock,
+  FolderPlus,
+  Loader2,
+  Search,
+  Settings,
+  SquarePen,
+} from 'lucide-react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dropThreadChat } from '../../lib/chat-store';
 import { trpc } from '../../lib/trpc';
 import { useCommandPalette } from '../../state/command-palette-store';
 import { useSidebarStore } from '../../state/sidebar-store';
+import { useUpdateStore } from '../../state/update-store';
 import { ProjectRow } from './ProjectRow';
 import { SbIconButton, SbNavItem, SbSection } from './primitives';
 import { ThreadRow } from './ThreadRow';
@@ -16,6 +25,10 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
   const navigate = useNavigate();
   const width = useSidebarStore((s) => s.width);
   const openPalette = useCommandPalette((s) => s.setOpen);
+  const updateStage = useUpdateStore((s) => s.state.stage);
+  const openUpdateDialog = useUpdateStore((s) => s.openDialog);
+  const showUpdate =
+    updateStage === 'available' || updateStage === 'downloading' || updateStage === 'downloaded';
   const utils = trpc.useUtils();
   const { data: threads, isLoading } = trpc.threads.list.useQuery();
   const { data: projects } = trpc.projects.list.useQuery();
@@ -177,6 +190,22 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
       </div>
 
       <div className="shrink-0 border-t border-border-default px-3 py-2">
+        {showUpdate && (
+          <button
+            type="button"
+            onClick={openUpdateDialog}
+            className="mb-0.5 flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-accent text-sm hover:bg-accent/10"
+          >
+            <ArrowUpCircle className="size-[15px] shrink-0" />
+            <span className="flex-1 text-left">{t('update.entry')}</span>
+            {updateStage === 'downloading' && (
+              <Loader2 className="size-3.5 shrink-0 animate-spin" />
+            )}
+            {updateStage === 'downloaded' && (
+              <span className="size-2 shrink-0 rounded-full bg-accent" />
+            )}
+          </button>
+        )}
         <Link
           to="/settings/$section"
           params={{ section: 'general' }}
