@@ -125,6 +125,33 @@ test('runNow records a run; last-run + status derive from it', async () => {
   expect(after.lastRunAt).toBeInstanceOf(Date);
 });
 
+test('start() settles a run orphaned at running by a prior session', async () => {
+  const { mgr, db } = setup();
+  const task = mgr.create({ ...RECURRING });
+  // A prior session inserted 'running' then died before the terminal write; the
+  // later 'ok' proves reconcile only touches the orphan, not a finished run.
+  db.insert(schema.scheduledTaskRuns)
+    .values([
+      { id: 'orphan', taskId: task.id, status: 'running', startedAt: new Date(START - 2000) },
+      {
+        id: 'done',
+        taskId: task.id,
+        status: 'ok',
+        startedAt: new Date(START - 1000),
+        finishedAt: new Date(START - 900),
+      },
+    ])
+    .run();
+
+  await mgr.start();
+
+  const runs = mgr.listRuns(task.id);
+  const orphan = runs.find((r) => r.id === 'orphan');
+  expect(orphan?.status).toBe('interrupted');
+  expect(orphan?.finishedAt).toBeInstanceOf(Date);
+  expect(runs.find((r) => r.id === 'done')?.status).toBe('ok');
+});
+
 test('does not stack a second run while one is already in progress', async () => {
   let calls = 0;
   const { mgr } = setup(async () => {

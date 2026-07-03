@@ -193,10 +193,31 @@ export class ScheduledTaskManager {
 
   // ── lifecycle ───────────────────────────────────────────────────────────
 
+  /**
+   * A run still marked 'running' at startup is an orphan: the in-flight state
+   * lives only in memory (the `firing` set + resumable's running threads), so
+   * nothing survived the restart to finish it — fire()'s terminal write never
+   * ran because the process died mid-run (quit, crash, or kill). Settle them so
+   * the detail panel stops spinning (and polling) on a run that will never
+   * complete. Boot-only, so a genuinely live run is never caught here.
+   */
+  private reconcileOrphanedRuns(): void {
+    this.db
+      .update(scheduledTaskRuns)
+      .set({
+        status: 'interrupted',
+        finishedAt: new Date(this.nowMs()),
+        error: 'Interrupted before it finished — the app closed while the run was in progress.',
+      })
+      .where(eq(scheduledTaskRuns.status, 'running'))
+      .run();
+  }
+
   /** Schedule every enabled task and catch up anything missed while closed.
    *  Returns the catch-up promise so callers (tests) can await the missed runs;
    *  the boot path ignores it (catch-up proceeds in the background). */
   start(): Promise<void> {
+    this.reconcileOrphanedRuns();
     const now = this.nowMs();
     const missed: string[] = [];
     for (const task of this.list()) {

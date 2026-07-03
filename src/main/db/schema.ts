@@ -224,7 +224,7 @@ export const scheduledTaskRuns = sqliteTable(
       .notNull()
       .references(() => scheduledTasks.id, { onDelete: 'cascade' }),
     messageId: text('message_id'),
-    status: text({ enum: ['running', 'ok', 'error', 'skipped'] }).notNull(),
+    status: text({ enum: ['running', 'ok', 'error', 'skipped', 'interrupted'] }).notNull(),
     error: text(),
     startedAt: timestamp(),
     finishedAt: integer('finished_at', { mode: 'timestamp_ms' }),
