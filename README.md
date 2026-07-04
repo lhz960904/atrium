@@ -42,6 +42,9 @@ https://github.com/user-attachments/assets/49af7cb9-f11c-4cce-8fd8-c45e3dcbbd8f
   memory automatically as you talk, with distinct global and project-scoped memory that
   persists. Background summarization keeps memory high-quality over the long term.
 
+- **Scheduled tasks:** let the agent create scheduled tasks that run on a schedule to
+  automate recurring work — daily reports, weekly research, monthly analysis, and more.
+
 ## Architecture
 
 The renderer talks to the main process two ways: tRPC over Electron IPC for CRUD and config,

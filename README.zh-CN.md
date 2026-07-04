@@ -30,6 +30,8 @@ https://github.com/user-attachments/assets/49af7cb9-f11c-4cce-8fd8-c45e3dcbbd8f
 
 - **跨会话记忆：** 包含用户身份的录入（`get-acquainted` 技能），会话过程中自动写入记忆，可区分全局记忆、项目域记忆 持久。后台自动总结保证记忆的长期质量。
 
+- **定时任务：** 允许通过 Agent 创建定时任务，按计划执行任务来自动化重复性工作。例如自动处理每日报告、每周研究、每月分析等等。
+
 ## 架构
 
 渲染进程以两种方式与主进程通信：CRUD 与配置走 tRPC over Electron IPC，对话则从本地服务
