@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/lhz960904/atrium/compare/v0.4.2...v0.5.0) (2026-07-04)
+
+
+### Features
+
+* **agent:** cite web sources as markdown links ([7824f70](https://github.com/lhz960904/atrium/commit/7824f704e762444f9eacda783d7de5ac9309a204))
+* **chat:** render links as favicon + title chips ([06fa4ef](https://github.com/lhz960904/atrium/commit/06fa4efa5b0ef77184fb0f70adfd2123f4018d7e))
+
+
+### Bug Fixes
+
+* **agent:** seal dangling tool calls so an interrupted turn can't wedge the thread ([#41](https://github.com/lhz960904/atrium/issues/41)) ([438e091](https://github.com/lhz960904/atrium/commit/438e0917541bc5a9715c0d33960fe70fe1db632a))
+* **scheduled:** rotate to a fresh thread when the bound one is archived or gone ([#39](https://github.com/lhz960904/atrium/issues/39)) ([52ce58a](https://github.com/lhz960904/atrium/commit/52ce58aefedbbb3ae493a5292ca51e17a59649e0))
+* **scheduled:** settle runs orphaned at running on startup ([#38](https://github.com/lhz960904/atrium/issues/38)) ([6e7f766](https://github.com/lhz960904/atrium/commit/6e7f76631aee488c86e8cfe55becdab79921c4c7))
+* **tools:** make web_search honor the abort signal so stop is immediate ([#40](https://github.com/lhz960904/atrium/issues/40)) ([ba0e1f3](https://github.com/lhz960904/atrium/commit/ba0e1f3508cc297484bce2934f430b5302955e88))
+
 ## [0.4.2](https://github.com/lhz960904/atrium/compare/v0.4.1...v0.4.2) (2026-07-03)
 
 
