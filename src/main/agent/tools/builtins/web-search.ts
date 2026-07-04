@@ -10,9 +10,9 @@ export const webSearchTool = () =>
     inputSchema: z.object({
       query: z.string().min(1).describe('The search query.'),
     }),
-    execute: async ({ query }) => {
+    execute: async ({ query }, { abortSignal }) => {
       try {
-        const results = await runSearch(DDG, query);
+        const results = await runSearch(DDG, query, abortSignal);
         return formatResults(query, results);
       } catch (err) {
         return `Error: ${err instanceof Error ? err.message : String(err)}`;
