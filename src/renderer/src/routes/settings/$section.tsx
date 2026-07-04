@@ -1,4 +1,4 @@
-import type { ComposerSendKey } from '@shared/settings';
+import type { ComposerSendKey, UiFontSize } from '@shared/settings';
 import type { UpdaterStage } from '@shared/update';
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import type { ParseKeys } from 'i18next';
@@ -237,6 +237,8 @@ function AppearanceSection(): React.JSX.Element {
   const { t } = useTranslation();
   const theme = useThemeStore((s) => s.theme);
   const setTheme = useThemeStore((s) => s.setTheme);
+  const { value: uiFont, set: setUiFont } = useSetting('appearance.uiFont');
+  const { value: uiFontSize, set: setUiFontSize } = useSetting('appearance.uiFontSize');
 
   const tiles: Array<{ value: Theme; label: string; desc: string; icon: typeof Sun }> = [
     { value: 'light', label: 'Light', desc: t('settings.appearance.lightDesc'), icon: Sun },
@@ -244,38 +246,82 @@ function AppearanceSection(): React.JSX.Element {
     { value: 'system', label: 'System', desc: t('settings.appearance.systemDesc'), icon: Monitor },
   ];
 
+  const fontSizeOptions: ReadonlyArray<{ value: UiFontSize; label: string }> = [
+    { value: 'small', label: t('settings.appearance.fontSizeSmall') },
+    { value: 'default', label: t('settings.appearance.fontSizeDefault') },
+    { value: 'large', label: t('settings.appearance.fontSizeLarge') },
+  ];
+
+  const inputClass =
+    'rounded-md border border-border-default bg-elevated px-2.5 py-1.5 text-fg-primary text-sm focus:border-border-focus focus:outline-none';
+
   return (
-    <section>
-      <h2 className="mb-3 font-medium text-fg-primary text-sm">{t('settings.appearance.theme')}</h2>
-      <div className="grid grid-cols-3 gap-3">
-        {tiles.map((tile) => {
-          const Icon = tile.icon;
-          const isActive = theme === tile.value;
-          return (
-            <button
-              type="button"
-              key={tile.value}
-              onClick={() => setTheme(tile.value)}
-              className={`relative flex flex-col gap-2 rounded-lg border px-4 py-4 text-left transition-colors ${
-                isActive
-                  ? 'border-accent bg-accent-soft'
-                  : 'border-border-default bg-surface hover:border-border-strong'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <Icon className={`size-[18px] ${isActive ? 'text-accent' : 'text-fg-secondary'}`} />
-                {isActive && <Check className="size-[14px] text-accent" />}
-              </div>
-              <div>
-                <div className="font-medium text-fg-primary text-sm">{tile.label}</div>
-                <div className="text-fg-tertiary text-xs">{tile.desc}</div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-      <p className="mt-4 text-fg-tertiary text-xs">{t('settings.appearance.note')}</p>
-    </section>
+    <div className="flex flex-col gap-8">
+      <section>
+        <h2 className="mb-3 font-medium text-fg-primary text-sm">
+          {t('settings.appearance.theme')}
+        </h2>
+        <div className="grid grid-cols-3 gap-3">
+          {tiles.map((tile) => {
+            const Icon = tile.icon;
+            const isActive = theme === tile.value;
+            return (
+              <button
+                type="button"
+                key={tile.value}
+                onClick={() => setTheme(tile.value)}
+                className={`relative flex flex-col gap-2 rounded-lg border px-4 py-4 text-left transition-colors ${
+                  isActive
+                    ? 'border-accent bg-accent-soft'
+                    : 'border-border-default bg-surface hover:border-border-strong'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <Icon
+                    className={`size-[18px] ${isActive ? 'text-accent' : 'text-fg-secondary'}`}
+                  />
+                  {isActive && <Check className="size-[14px] text-accent" />}
+                </div>
+                <div>
+                  <div className="font-medium text-fg-primary text-sm">{tile.label}</div>
+                  <div className="text-fg-tertiary text-xs">{tile.desc}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-4 text-fg-tertiary text-xs">{t('settings.appearance.note')}</p>
+      </section>
+
+      <SettingGroup title={t('settings.appearance.textGroup')}>
+        <SettingRow
+          label={t('settings.appearance.uiFont')}
+          desc={t('settings.appearance.uiFontDesc')}
+          control={
+            <input
+              type="text"
+              value={uiFont}
+              onChange={(e) => setUiFont(e.target.value)}
+              placeholder={t('settings.appearance.uiFontPlaceholder')}
+              aria-label={t('settings.appearance.uiFont')}
+              className={`w-56 placeholder:text-fg-tertiary ${inputClass}`}
+            />
+          }
+        />
+        <SettingRow
+          label={t('settings.appearance.fontSize')}
+          desc={t('settings.appearance.fontSizeDesc')}
+          control={
+            <Select
+              value={uiFontSize}
+              onChange={setUiFontSize}
+              options={fontSizeOptions}
+              aria-label={t('settings.appearance.fontSize')}
+            />
+          }
+        />
+      </SettingGroup>
+    </div>
   );
 }
 

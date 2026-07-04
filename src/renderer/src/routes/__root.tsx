@@ -5,6 +5,7 @@ import { CommandPalette } from '../components/CommandPalette';
 import { Toaster } from '../components/Toaster';
 import { UpdateDialog } from '../components/UpdateDialog';
 import { trpc } from '../lib/trpc';
+import { useAppearanceVars } from '../lib/use-appearance-vars';
 import { useKeybindings } from '../lib/use-keybindings';
 import { useLanguage } from '../lib/use-language';
 import { useUpdateSync } from '../lib/use-update-sync';
@@ -12,6 +13,7 @@ import { toast } from '../state/toast-store';
 
 function Root(): React.JSX.Element {
   useLanguage(); // apply the persisted UI language on load
+  useAppearanceVars(); // mirror font / code-size prefs onto :root CSS vars
   useKeybindings(); // global app shortcuts (⌘K/⌘N/⌘B/⌘,)
   useUpdateSync(); // mirror main-process updater state into the store
   const navigate = useNavigate();

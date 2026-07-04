@@ -391,6 +391,16 @@ export const en: typeof zh = {
       darkDesc: 'Studio theme',
       systemDesc: 'Follow the system',
       note: 'Changes apply immediately. System mode follows the macOS appearance preference.',
+      textGroup: 'Text',
+      uiFont: 'UI font',
+      uiFontDesc:
+        'Font family for the app. Install the font on your system first; leave empty for the default.',
+      uiFontPlaceholder: 'e.g. Inter',
+      fontSize: 'Font size',
+      fontSizeDesc: 'Scales all text — app, chats, and code — together.',
+      fontSizeSmall: 'Small',
+      fontSizeDefault: 'Default',
+      fontSizeLarge: 'Large',
     },
     about: {
       description:
