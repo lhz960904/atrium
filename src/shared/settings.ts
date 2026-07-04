@@ -25,6 +25,11 @@ const selectedModelShape = z.object({ providerId: z.string(), modelId: z.string(
 export const COMPOSER_SEND_KEYS = ['enter', 'mod', 'shift'] as const;
 export type ComposerSendKey = (typeof COMPOSER_SEND_KEYS)[number];
 
+/** Discrete global text-size steps. Each maps to a scale multiplier applied to
+ *  the whole type scale in the renderer; 'default' is 1× (no change). */
+export const UI_FONT_SIZES = ['small', 'default', 'large'] as const;
+export type UiFontSize = (typeof UI_FONT_SIZES)[number];
+
 const generalShape = z.object({
   /** UI language; 'system' follows the OS locale. */
   language: z.enum(['system', 'en', 'zh']).default('system'),
@@ -48,6 +53,13 @@ const appearanceShape = z.object({
     maximized: false,
     fullscreen: false,
   }),
+  /** Custom app-chrome font family, typed by the user (they install the font
+   *  themselves). Empty = OS default stack. Applied with the system stack
+   *  appended as fallback, so an unavailable name degrades gracefully. */
+  uiFont: z.string().max(200).default(''),
+  /** Global text-size step; multiplies the whole type scale so app chrome, chat
+   *  text, and code resize together. */
+  uiFontSize: z.enum(UI_FONT_SIZES).default('default'),
 });
 
 const keyboardShape = z.object({

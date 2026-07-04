@@ -89,13 +89,13 @@ body,
    text-* utilities, which read these --text-* tokens — redefining them here
    scales the whole block down a notch without touching the rest of the app. */
 .atrium-md {
-  --text-xs: 0.7rem;
-  --text-sm: 0.8rem;
-  --text-base: 0.875rem;
-  --text-lg: 1rem;
-  --text-xl: 1.1rem;
-  --text-2xl: 1.35rem;
-  --text-3xl: 1.6rem;
+  --text-xs: calc(0.7rem * var(--ui-scale));
+  --text-sm: calc(0.8rem * var(--ui-scale));
+  --text-base: calc(0.875rem * var(--ui-scale));
+  --text-lg: calc(1rem * var(--ui-scale));
+  --text-xl: calc(1.1rem * var(--ui-scale));
+  --text-2xl: calc(1.35rem * var(--ui-scale));
+  --text-3xl: calc(1.6rem * var(--ui-scale));
 }
 
 /* Streamdown defaults to list-inside; outside markers so wraps hang-indent. */

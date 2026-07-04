@@ -13,19 +13,25 @@
 
 :root {
   /* ── Type families ── */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  /* The base system stack stays fixed; the user's custom UI font (appearance
+     setting) is prepended onto --font-sans at runtime, keeping this as fallback. */
+  --font-sans-system: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-sans-system);
   --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, "Menlo", monospace;
 
   /* ── Type scale ── */
-  --text-2xs: 10.5px;
-  --text-xs:  11.5px;
-  --text-sm:  12.5px;
-  --text-base: 13.5px;
-  --text-md:  14.5px;
-  --text-lg:  16px;
-  --text-xl:  20px;
-  --text-2xl: 24px;
-  --text-3xl: 32px;
+  /* --ui-scale (default 1) is set from the appearance font-size step; every size
+     multiplies through it so app chrome, chat text, and code resize together. */
+  --ui-scale: 1;
+  --text-2xs: calc(10.5px * var(--ui-scale));
+  --text-xs:  calc(11.5px * var(--ui-scale));
+  --text-sm:  calc(12.5px * var(--ui-scale));
+  --text-base: calc(13.5px * var(--ui-scale));
+  --text-md:  calc(14.5px * var(--ui-scale));
+  --text-lg:  calc(16px * var(--ui-scale));
+  --text-xl:  calc(20px * var(--ui-scale));
+  --text-2xl: calc(24px * var(--ui-scale));
+  --text-3xl: calc(32px * var(--ui-scale));
 
   /* ── Weights ── */
   --weight-regular: 400;

@@ -391,6 +391,15 @@ export const zh = {
       darkDesc: 'Studio 主题',
       systemDesc: '跟随系统外观',
       note: '切换会立即生效。System 模式会跟随 macOS 外观偏好自动变换。',
+      textGroup: '文字',
+      uiFont: '界面字体',
+      uiFontPlaceholder: '例如 Inter',
+      uiFontDesc: '应用界面使用的字体。请先在系统中安装该字体；留空则用默认字体。',
+      fontSize: '字号',
+      fontSizeDesc: '整体缩放所有文字——界面、聊天和代码。',
+      fontSizeSmall: '小',
+      fontSizeDefault: '默认',
+      fontSizeLarge: '大',
     },
     about: {
       description:
