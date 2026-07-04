@@ -332,9 +332,23 @@ export class ScheduledTaskManager {
   }
 
   /** Create the task's bound thread on first fire and record it on the task. The
-   *  thread carries a back-reference so the sidebar can tell it from a plain chat. */
+   *  thread carries a back-reference so the sidebar can tell it from a plain chat.
+   *
+   *  Reuse the bound thread only while it's a live conversation. If the user
+   *  archived it (they're done with it) or deleted it, rotate to a fresh thread
+   *  and rebind — the next run continues in a visible conversation instead of
+   *  silently appending to a hidden one (archiving never clears archivedAt) or
+   *  failing against a gone one. The old thread is left as-is, still recoverable
+   *  from the archive. */
   private ensureThread(task: ScheduledTask): ScheduledTask {
-    if (task.threadId) return task;
+    if (task.threadId) {
+      const bound = this.db
+        .select({ archivedAt: threads.archivedAt })
+        .from(threads)
+        .where(eq(threads.id, task.threadId))
+        .get();
+      if (bound && bound.archivedAt == null) return task;
+    }
     const threadId = randomUUID();
     this.db
       .insert(threads)
