@@ -38,3 +38,18 @@ test('afterRun marks a user-aborted turn as read so it skips the unread dot', as
 
   expect(calls[0]?.opts).toEqual({ markRead: true });
 });
+
+test('afterRun seals a dangling tool call before persisting the aborted message', async () => {
+  const { calls, mw } = capture();
+  const dangling = {
+    id: 'm2',
+    role: 'assistant',
+    parts: [{ type: 'tool-web_search', toolCallId: 'c1', state: 'input-available', input: {} }],
+  } as RunResultInfo['message'];
+
+  await mw.afterRun?.(ctx, { message: dangling, aborted: true });
+
+  const part = calls[0]?.message.parts[0] as Record<string, unknown>;
+  expect(part.state).toBe('output-error');
+  expect(part.toolCallId).toBe('c1');
+});

@@ -1,5 +1,6 @@
 import type { UIMessage } from 'ai';
 import type { Db } from '../../../db';
+import { sealMessageToolCalls } from '../shared/seal-tool-calls';
 import type { AgentMiddleware } from '../types';
 
 export type PersistFn = (
@@ -23,7 +24,12 @@ export function persistenceMiddleware(persist: PersistFn): AgentMiddleware {
   return {
     name: 'persistence',
     afterRun(ctx, result) {
-      persist(ctx.db, ctx.threadId, result.message, { markRead: result.aborted });
+      // Seal any tool call that never returned before persisting: an aborted turn
+      // leaves dangling tool_use parts that would break the thread's next request
+      // (no-op when the turn finished cleanly).
+      persist(ctx.db, ctx.threadId, sealMessageToolCalls(result.message), {
+        markRead: result.aborted,
+      });
     },
   };
 }
