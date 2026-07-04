@@ -19,6 +19,7 @@ import {
   profileMiddleware,
   skillsMiddleware,
   titleMiddleware,
+  toolCallSealerMiddleware,
   usageMiddleware,
 } from '../agent/middleware';
 import { isImageModel, maxContextTokens, modelPricing } from '../agent/models/catalog';
@@ -236,6 +237,10 @@ export function startHttpServer(deps: {
       // original first user message into a summary, and their injected blocks have
       // to land on whatever the post-compaction first user message is.
       middlewares: [
+        // Backstop first: seal any dangling tool call an interrupted earlier turn
+        // left in the history, before compaction or convertToModelMessages sees it
+        // — a tool_use with no tool_result would otherwise fail the whole request.
+        toolCallSealerMiddleware(),
         // Title is generated from the first user message, so it must run before
         // the skills middleware injects its index into that message (and before
         // compaction could fold it) — otherwise the title summarizes the skill
