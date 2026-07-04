@@ -1,6 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import {
   CheckCircle2,
+  CircleSlash,
   LoaderCircle,
   MessageSquareText,
   Pause,
@@ -32,11 +33,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }):
 }
 
 // A run in progress spins; the rest are terminal outcomes with a static glyph.
+// `interrupted` is neutral (muted, not a red failure) — the run was cut short by
+// an app close/kill, not by the task itself erroring.
 const RUN_STATUS = {
   running: { Icon: LoaderCircle, color: 'text-accent', spin: true },
   ok: { Icon: CheckCircle2, color: 'text-success', spin: false },
   error: { Icon: XCircle, color: 'text-danger', spin: false },
   skipped: { Icon: Play, color: 'text-fg-tertiary', spin: false },
+  interrupted: { Icon: CircleSlash, color: 'text-fg-tertiary', spin: false },
 } as const;
 
 function RunRow({
