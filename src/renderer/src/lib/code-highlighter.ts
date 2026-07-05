@@ -26,8 +26,21 @@ import tsx from '@shikijs/langs/tsx';
 import typescript from '@shikijs/langs/typescript';
 import xml from '@shikijs/langs/xml';
 import yaml from '@shikijs/langs/yaml';
+import catppuccinLatte from '@shikijs/themes/catppuccin-latte';
+import catppuccinMocha from '@shikijs/themes/catppuccin-mocha';
 import darkPlus from '@shikijs/themes/dark-plus';
+import dracula from '@shikijs/themes/dracula';
+import githubDark from '@shikijs/themes/github-dark';
 import githubLight from '@shikijs/themes/github-light';
+import minLight from '@shikijs/themes/min-light';
+import nord from '@shikijs/themes/nord';
+import oneDarkPro from '@shikijs/themes/one-dark-pro';
+import oneLight from '@shikijs/themes/one-light';
+import rosePineDawn from '@shikijs/themes/rose-pine-dawn';
+import solarizedLight from '@shikijs/themes/solarized-light';
+import tokyoNight from '@shikijs/themes/tokyo-night';
+import vitesseDark from '@shikijs/themes/vitesse-dark';
+import vitesseLight from '@shikijs/themes/vitesse-light';
 import { createHighlighterCoreSync } from 'shiki/core';
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 
@@ -48,7 +61,24 @@ export const highlighter = createHighlighterCoreSync({
   // forgiving: skip a grammar regex the JS engine can't translate instead of
   // throwing mid-render — a rare token loses color, the block still renders.
   engine: createJavaScriptRegexEngine({ forgiving: true }),
-  themes: [githubLight, darkPlus],
+  // Curated set matching CODE_THEMES_LIGHT / CODE_THEMES_DARK in shared/settings.
+  themes: [
+    githubLight,
+    oneLight,
+    vitesseLight,
+    catppuccinLatte,
+    minLight,
+    solarizedLight,
+    rosePineDawn,
+    darkPlus,
+    githubDark,
+    oneDarkPro,
+    dracula,
+    nord,
+    vitesseDark,
+    tokyoNight,
+    catppuccinMocha,
+  ],
   langs: [
     typescript,
     javascript,

@@ -30,6 +30,31 @@ export type ComposerSendKey = (typeof COMPOSER_SEND_KEYS)[number];
 export const UI_FONT_SIZES = ['small', 'default', 'large'] as const;
 export type UiFontSize = (typeof UI_FONT_SIZES)[number];
 
+/** Curated Shiki syntax themes offered for code blocks, split by the app's
+ *  light/dark mode. Ids must stay in sync with the themes loaded by the
+ *  renderer's Shiki highlighter (src/renderer/.../code-highlighter.ts). */
+export const CODE_THEMES_LIGHT = [
+  'github-light',
+  'one-light',
+  'vitesse-light',
+  'catppuccin-latte',
+  'min-light',
+  'solarized-light',
+  'rose-pine-dawn',
+] as const;
+export const CODE_THEMES_DARK = [
+  'dark-plus',
+  'github-dark',
+  'one-dark-pro',
+  'dracula',
+  'nord',
+  'vitesse-dark',
+  'tokyo-night',
+  'catppuccin-mocha',
+] as const;
+export type CodeThemeLight = (typeof CODE_THEMES_LIGHT)[number];
+export type CodeThemeDark = (typeof CODE_THEMES_DARK)[number];
+
 const generalShape = z.object({
   /** UI language; 'system' follows the OS locale. */
   language: z.enum(['system', 'en', 'zh']).default('system'),
@@ -60,6 +85,10 @@ const appearanceShape = z.object({
   /** Global text-size step; multiplies the whole type scale so app chrome, chat
    *  text, and code resize together. */
   uiFontSize: z.enum(UI_FONT_SIZES).default('default'),
+  /** Shiki syntax theme for code blocks in light mode. */
+  codeThemeLight: z.enum(CODE_THEMES_LIGHT).default('github-light'),
+  /** Shiki syntax theme for code blocks in dark mode. */
+  codeThemeDark: z.enum(CODE_THEMES_DARK).default('dark-plus'),
 });
 
 const keyboardShape = z.object({

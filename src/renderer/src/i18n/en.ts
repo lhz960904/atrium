@@ -401,6 +401,9 @@ export const en: typeof zh = {
       fontSizeSmall: 'Small',
       fontSizeDefault: 'Default',
       fontSizeLarge: 'Large',
+      codeGroup: 'Code theme',
+      codeThemeLight: 'Light theme',
+      codeThemeDark: 'Dark theme',
     },
     about: {
       description:
