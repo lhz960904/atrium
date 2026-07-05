@@ -1,21 +1,25 @@
 import { Link, useNavigate } from '@tanstack/react-router';
 import { CalendarClock, FolderPlus, Search, Settings, SquarePen } from 'lucide-react';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dropThreadChat } from '../../lib/chat-store';
 import { trpc } from '../../lib/trpc';
 import { useCommandPalette } from '../../state/command-palette-store';
-import { useSidebarStore } from '../../state/sidebar-store';
 import { useUpdateStore } from '../../state/update-store';
 import { ProjectRow } from './ProjectRow';
 import { SbIconButton, SbNavItem, SbSection } from './primitives';
-import { ThreadRow } from './ThreadRow';
+import { ThreadRow, useThreadRowActions } from './ThreadRow';
 import type { ProjectItem, ThreadItem } from './types';
+
+// Stable empty list so a project with no threads keeps a referentially-constant
+// `threads` prop across renders, letting the memoized ProjectRow bail out.
+const EMPTY_THREADS: ThreadItem[] = [];
 
 export const Sidebar = memo(function Sidebar(): React.JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const width = useSidebarStore((s) => s.width);
+  // One shared set of row mutations for the whole list (see useThreadRowActions).
+  const rowActions = useThreadRowActions();
   const openPalette = useCommandPalette((s) => s.setOpen);
   const updateStage = useUpdateStore((s) => s.state.stage);
   const openUpdateDialog = useUpdateStore((s) => s.openDialog);
@@ -27,12 +31,16 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
   // Poll the main process for which threads are generating; a small id list, so
   // the interval is cheap (unlike polling message content).
   const { data: running } = trpc.threads.running.useQuery(undefined, { refetchInterval: 2000 });
-  const runningSet = new Set(running);
+  // React Query keeps `running` referentially stable across polls when the set
+  // is unchanged (structural sharing), so this Set — and every row prop derived
+  // from it — stays stable and the memoized rows don't re-render every 2s.
+  const runningSet = useMemo(() => new Set(running), [running]);
   // Threads bound to a scheduled task get a hover clock badge. The binding lives
   // on the task (scheduledTasks.threadId), so derive the set from the task list.
   const { data: scheduled } = trpc.scheduled.list.useQuery();
-  const scheduledThreadIds = new Set(
-    (scheduled ?? []).map((task) => task.threadId).filter(Boolean),
+  const scheduledThreadIds = useMemo(
+    () => new Set((scheduled ?? []).map((task) => task.threadId).filter(Boolean)),
+    [scheduled],
   );
 
   // Adding a project is a sidebar-level action (the Projects header button), not
@@ -49,13 +57,16 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
   // Collapse state is held centrally so it survives a project moving between the
   // Pinned and Projects sections (which remounts the row) on pin/unpin.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const toggleCollapse = (id: string): void =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggleCollapse = useCallback(
+    (id: string): void =>
+      setCollapsed((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+    [],
+  );
 
   // A background run (a scheduled task) has no client mounted to refresh views
   // when it starts or finishes. Watch the polled running set: for every thread
@@ -80,41 +91,69 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
     utils.threads.list.invalidate();
   }, [running, utils]);
 
-  const allThreads = threads ?? [];
-  const allProjects = projects ?? [];
-  // A pinned thread always floats to the Pinned section as a standalone row, so
-  // project / chat lists only ever render their own non-pinned threads.
-  const pinnedThreads = allThreads.filter((th) => th.pinned);
-  const pinnedProjects = allProjects.filter((p) => p.pinned);
-  const openProjects = allProjects.filter((p) => !p.pinned);
-  const projectThreads = (projectId: string): ThreadItem[] =>
-    allThreads.filter((th) => th.projectId === projectId && !th.pinned);
-  const looseThreads = allThreads.filter((th) => th.projectId == null && !th.pinned);
+  // Bucket threads once per data change instead of re-filtering the whole list
+  // per project on every render. A pinned thread always floats to the Pinned
+  // section as a standalone row, so project / chat lists only ever render their
+  // own non-pinned threads.
+  const { pinnedThreads, pinnedProjects, openProjects, looseThreads, threadsByProject } =
+    useMemo(() => {
+      const allThreads = threads ?? [];
+      const allProjects = projects ?? [];
+      const byProject = new Map<string, ThreadItem[]>();
+      const loose: ThreadItem[] = [];
+      for (const th of allThreads) {
+        if (th.pinned) continue;
+        if (th.projectId == null) loose.push(th);
+        else {
+          const bucket = byProject.get(th.projectId);
+          if (bucket) bucket.push(th);
+          else byProject.set(th.projectId, [th]);
+        }
+      }
+      return {
+        pinnedThreads: allThreads.filter((th) => th.pinned),
+        pinnedProjects: allProjects.filter((p) => p.pinned),
+        openProjects: allProjects.filter((p) => !p.pinned),
+        looseThreads: loose,
+        threadsByProject: byProject,
+      };
+    }, [threads, projects]);
   const hasPinned = pinnedThreads.length > 0 || pinnedProjects.length > 0;
 
-  const renderThread = (thread: ThreadItem): React.JSX.Element => (
-    <ThreadRow
-      key={thread.id}
-      thread={thread}
-      running={runningSet.has(thread.id)}
-      hasSchedule={scheduledThreadIds.has(thread.id)}
-    />
+  const renderThread = useCallback(
+    (thread: ThreadItem): React.JSX.Element => (
+      <ThreadRow
+        key={thread.id}
+        thread={thread}
+        running={runningSet.has(thread.id)}
+        hasSchedule={scheduledThreadIds.has(thread.id)}
+        actions={rowActions}
+      />
+    ),
+    [runningSet, scheduledThreadIds, rowActions],
   );
-  const renderProject = (project: ProjectItem): React.JSX.Element => (
-    <ProjectRow
-      key={project.id}
-      project={project}
-      expanded={!collapsed.has(project.id)}
-      onToggle={() => toggleCollapse(project.id)}
-      threads={projectThreads(project.id)}
-      renderThread={renderThread}
-    />
+  const renderProject = useCallback(
+    (project: ProjectItem): React.JSX.Element => (
+      <ProjectRow
+        key={project.id}
+        project={project}
+        expanded={!collapsed.has(project.id)}
+        onToggle={toggleCollapse}
+        threads={threadsByProject.get(project.id) ?? EMPTY_THREADS}
+        renderThread={renderThread}
+      />
+    ),
+    [collapsed, toggleCollapse, threadsByProject, renderThread],
   );
 
   return (
     <aside
       className="flex h-full min-h-0 select-none flex-col border-r border-border-default bg-surface"
-      style={{ width }}
+      // Width comes from AppLayout via the --sidebar-width CSS variable so a
+      // resize drag (which updates it every frame) repaints without re-rendering
+      // the whole sidebar tree. Kept explicit — not 100% — so collapsing (grid
+      // column → 0) clips the sidebar instead of reflowing its contents.
+      style={{ width: 'var(--sidebar-width, 260px)' }}
     >
       <div className="atrium-titlebar" />
 

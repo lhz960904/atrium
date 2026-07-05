@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { LANG_CACHE_KEY } from '../i18n';
 import { useSetting } from './use-setting';
 
 export type LanguagePref = 'system' | 'en' | 'zh';
@@ -22,11 +23,16 @@ export function useLanguage(): { pref: LanguagePref; setLanguage: (p: LanguagePr
   useEffect(() => {
     if (isLoading) return;
     const lng = resolveLang(pref);
+    // Cache synchronously so the next launch seeds i18n with the right language
+    // and skips the mount-time changeLanguage (see i18n/index.ts).
+    localStorage.setItem(LANG_CACHE_KEY, lng);
     if (i18n.language !== lng) void i18n.changeLanguage(lng);
   }, [isLoading, pref, i18n]);
 
   const setLanguage = (p: LanguagePref): void => {
-    void i18n.changeLanguage(resolveLang(p));
+    const lng = resolveLang(p);
+    localStorage.setItem(LANG_CACHE_KEY, lng);
+    void i18n.changeLanguage(lng);
     set(p);
   };
 

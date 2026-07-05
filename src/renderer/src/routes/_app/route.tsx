@@ -47,11 +47,17 @@ function AppLayout(): React.JSX.Element {
   return (
     <div
       className="grid h-screen"
-      style={{
-        gridTemplateColumns: `${collapsed ? 0 : width}px 1fr`,
-        // Animate collapse/expand, but track the cursor 1:1 while dragging.
-        transition: dragging ? 'none' : 'grid-template-columns 200ms ease-out',
-      }}
+      style={
+        {
+          gridTemplateColumns: `${collapsed ? 0 : width}px 1fr`,
+          // Publish the width to the sidebar via CSS so its <aside> tracks a resize
+          // drag without the Sidebar subtree re-rendering every frame — this layout
+          // re-renders for the grid column anyway.
+          '--sidebar-width': `${width}px`,
+          // Animate collapse/expand, but track the cursor 1:1 while dragging.
+          transition: dragging ? 'none' : 'grid-template-columns 200ms ease-out',
+        } as React.CSSProperties
+      }
     >
       <div className="relative min-w-0 overflow-hidden">
         <Sidebar />
