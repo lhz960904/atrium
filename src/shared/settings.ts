@@ -58,8 +58,9 @@ export type CodeThemeDark = (typeof CODE_THEMES_DARK)[number];
 const generalShape = z.object({
   /** UI language; 'system' follows the OS locale. */
   language: z.enum(['system', 'en', 'zh']).default('system'),
-  /** Last-picked chat model; null until the user has any enabled model. */
-  selectedModel: selectedModelShape.nullable().default(null),
+  /** Global default chat model — the fallback for any thread that hasn't bound
+   *  its own model. null until the user has any enabled model. */
+  defaultModel: selectedModelShape.nullable().default(null),
   /** Summarize a thread's first message into its title. On by default. */
   autoGenerateTitle: z.boolean().default(true),
   /** Show the app's icon in the macOS menu bar. Off by default. */
@@ -117,7 +118,7 @@ export const SettingsSchema = z.object({
 
 /**
  * A patch must carry ONLY the keys being set. zod v4's `.partial()` keeps each
- * field's `.default`, so parsing `{ language }` would refill `selectedModel`,
+ * field's `.default`, so parsing `{ language }` would refill `defaultModel`,
  * `autoGenerateTitle`, … to their defaults — and the spread in the patch
  * procedure would then overwrite those stored values. Strip the defaults so an
  * omitted field stays absent (undefined) and survives the merge untouched.
@@ -148,7 +149,7 @@ export type SelectedModel = z.infer<typeof selectedModelShape>;
 /**
  * Dot-path address for one setting, à la lodash.get: `${scope}.${key}` for a
  * scoped setting, or a bare key for a (future) top-level scalar. A scope's value
- * objects (selectedModel, windowState) are read/written whole — they're leaves,
+ * objects (defaultModel, windowState) are read/written whole — they're leaves,
  * not further-addressable. To allow a genuinely deeper namespace later, recurse
  * the `.${key}` arm; today there's none, so this stops at one level (no risk of
  * minting a path the two-level patch schema can't accept).

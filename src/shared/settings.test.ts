@@ -6,7 +6,7 @@ import { SETTINGS_DEFAULTS, SettingsPatchSchema } from './settings';
 test('patch carries only the provided keys — no default backfill', () => {
   const parsed = SettingsPatchSchema.parse({ general: { language: 'zh' } });
   expect(parsed).toEqual({ general: { language: 'zh' } });
-  // selectedModel / autoGenerateTitle must be ABSENT, not defaulted in.
+  // defaultModel / autoGenerateTitle must be ABSENT, not defaulted in.
   expect(Object.keys(parsed.general ?? {})).toEqual(['language']);
 });
 
@@ -23,5 +23,5 @@ test('an empty scope patch stays empty (no fields invented)', () => {
 // them), so SETTINGS_DEFAULTS stays complete.
 test('full defaults remain complete', () => {
   expect(SETTINGS_DEFAULTS.general.autoGenerateTitle).toBe(true);
-  expect(SETTINGS_DEFAULTS.general.selectedModel).toBeNull();
+  expect(SETTINGS_DEFAULTS.general.defaultModel).toBeNull();
 });
