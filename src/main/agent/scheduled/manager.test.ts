@@ -26,6 +26,7 @@ function makeDb(): Db {
   raw.run('PRAGMA foreign_keys = ON');
   raw.run(`CREATE TABLE threads (
     id text PRIMARY KEY NOT NULL, title text, project_id text, metadata text,
+    model_provider_id text, model_id text,
     created_at integer DEFAULT (unixepoch()*1000) NOT NULL,
     updated_at integer DEFAULT (unixepoch()*1000) NOT NULL,
     last_read_at integer, archived_at integer, pinned integer DEFAULT false NOT NULL)`);

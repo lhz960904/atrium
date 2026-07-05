@@ -28,7 +28,23 @@ export function openSettings(): Conf<Settings> {
     name: 'settings',
     defaults: DEFAULTS,
   });
+  migrateDefaultModel(_conf);
   return _conf;
+}
+
+/**
+ * One-time rename: `general.selectedModel` (the old global "current model")
+ * became `general.defaultModel` (the fallback for threads without their own).
+ * Copy a stored value across so an upgrade doesn't silently reset the model.
+ */
+function migrateDefaultModel(conf: Conf<Settings>): void {
+  const general = conf.get('general') as
+    | (Partial<Settings['general']> & { selectedModel?: Settings['general']['defaultModel'] })
+    | undefined;
+  if (general?.selectedModel != null && general.defaultModel == null) {
+    const { selectedModel, ...rest } = general;
+    conf.set('general', { ...rest, defaultModel: selectedModel } as Settings['general']);
+  }
 }
 
 /**

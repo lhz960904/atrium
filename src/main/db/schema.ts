@@ -10,6 +10,10 @@ export const threads = sqliteTable('threads', {
   title: text(),
   projectId: text('project_id'),
   metadata: text({ mode: 'json' }),
+  /** Model this thread is bound to; both null = inherit general.defaultModel.
+   *  Mirrors the (provider_id, model_id) pair on subagents / scheduled tasks. */
+  modelProviderId: text('model_provider_id'),
+  modelId: text('model_id'),
   createdAt: timestamp(),
   updatedAt: timestamp(),
   /** When the user last viewed this thread; null = never (treated as read).

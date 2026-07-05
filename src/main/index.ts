@@ -182,7 +182,7 @@ app.whenReady().then(async () => {
     runDream,
     model: () => {
       try {
-        const sel = getSettings('general.selectedModel');
+        const sel = getSettings('general.defaultModel');
         return sel ? resolveModel(db, sel.providerId, sel.modelId) : null;
       } catch {
         return null;
@@ -216,11 +216,11 @@ app.whenReady().then(async () => {
       endpoint: { port: chatEndpoint.port, token: chatEndpoint.token },
       runningThreadIds: getRunningThreadIds,
       defaultModel: () => {
-        // The renderer only persists general.selectedModel on an explicit pick, so
+        // The renderer only persists general.defaultModel on an explicit pick, so
         // it can be null even when the user has a working model — fall back to the
         // first enabled one so a headless run isn't blocked on "no model".
         try {
-          return getSettings('general.selectedModel') ?? firstEnabledModel(db);
+          return getSettings('general.defaultModel') ?? firstEnabledModel(db);
         } catch {
           return null;
         }

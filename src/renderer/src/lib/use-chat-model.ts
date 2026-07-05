@@ -73,7 +73,7 @@ export function useChatModel() {
     value: persistedModel,
     set: persistModel,
     isLoading: persistLoading,
-  } = useSetting('general.selectedModel');
+  } = useSetting('general.defaultModel');
   const selected = useModelStore((s) => s.selected);
   const setStore = useModelStore((s) => s.setSelected);
 
