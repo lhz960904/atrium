@@ -98,7 +98,9 @@ export function getThreadChat(
     // threadId is fixed per Chat; the model is read live from the store so a
     // mid-session model switch applies to the next send without rebuilding.
     transport: makeChatTransport(seed.baseUrl, seed.token, () => {
-      const m = useModelStore.getState().selected;
+      // Read this thread's own model (published by useChatModel), so a switch in
+      // one thread never leaks into another's turn or resume.
+      const m = useModelStore.getState().byThread[threadId];
       return {
         threadId,
         providerId: m?.providerId,

@@ -52,8 +52,11 @@ export function ModelPicker({
     variant === 'field'
       ? 'flex w-full items-center justify-between gap-1.5 rounded-lg border border-border-default bg-surface px-3 py-2 text-fg-primary text-sm hover:border-border-strong'
       : 'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-fg-tertiary text-sm hover:bg-elevated hover:text-fg-secondary';
-  // field: match the trigger width; inline (composer): a fixed, right-aligned menu.
-  const widthClass = variant === 'field' ? 'w-[var(--radix-popover-trigger-width)]' : 'w-80';
+  // A field trigger can be narrow (a right-aligned settings row) or wide (a form
+  // field): floor the panel so model names never truncate, but let it grow to a
+  // wide trigger. Inline (composer) is a fixed menu.
+  const widthClass =
+    variant === 'field' ? 'min-w-[280px] w-[var(--radix-popover-trigger-width)]' : 'w-80';
 
   const pick = (v: ModelValue): void => {
     onChange(v);
@@ -73,12 +76,14 @@ export function ModelPicker({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
-          align={variant === 'field' ? 'start' : 'end'}
+          // Anchor the right edge to the trigger so a panel wider than a narrow
+          // right-aligned trigger opens leftward, staying on-screen.
+          align="end"
           side="bottom"
           sideOffset={6}
           collisionPadding={12}
           onOpenAutoFocus={(e) => e.preventDefault()}
-          className={`z-50 flex max-h-[var(--radix-popover-content-available-height)] flex-col overflow-hidden rounded-lg border border-border-default bg-elevated shadow-lg ${widthClass}`}
+          className={`z-50 flex max-h-[min(340px,var(--radix-popover-content-available-height))] flex-col overflow-hidden rounded-lg border border-border-default bg-elevated shadow-lg ${widthClass}`}
         >
           <ModelList groups={groups} value={value} inheritLabel={inheritLabel} onPick={pick} />
         </Popover.Content>

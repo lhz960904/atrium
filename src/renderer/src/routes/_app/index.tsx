@@ -8,6 +8,7 @@ import { ProjectPicker } from '../../components/chat/composer/ProjectPicker';
 import { timeAgo } from '../../lib/time';
 import { trpc } from '../../lib/trpc';
 import { useStartOnboarding } from '../../lib/use-onboarding';
+import { NEW_CHAT, useModelStore } from '../../state/model-store';
 import { usePendingInput } from '../../state/pending-input-store';
 import { usePendingProject } from '../../state/pending-project-store';
 
@@ -76,7 +77,12 @@ function HomeView(): React.JSX.Element {
     if (trimmed.length === 0 && attachments.length === 0) return;
     usePendingInput.getState().set({ text: trimmed, attachments });
     const title = trimmed || attachments[0]?.name || t('home.newChat');
-    createThread.mutate({ title: title.slice(0, 60), projectId: projectId ?? undefined });
+    // Carry an explicit home-composer pick onto the new thread; if untouched,
+    // model stays null so the thread inherits general.defaultModel. Either way,
+    // reset so the next new chat starts from the default again.
+    const model = useModelStore.getState().byThread[NEW_CHAT] ?? null;
+    useModelStore.getState().clear(NEW_CHAT);
+    createThread.mutate({ title: title.slice(0, 60), projectId: projectId ?? undefined, model });
   };
 
   const { start: startOnboarding, isPending: onboardingPending } = useStartOnboarding();
