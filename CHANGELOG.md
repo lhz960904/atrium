@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/lhz960904/atrium/compare/v0.5.0...v0.6.0) (2026-07-05)
+
+
+### Features
+
+* **appearance:** configurable Shiki code theme with preview ([56b813d](https://github.com/lhz960904/atrium/commit/56b813defc87a23afb3e2b10a611e52f2d1eeb9d))
+* **settings:** add UI font and global font size to appearance ([244603b](https://github.com/lhz960904/atrium/commit/244603b377cef74c907c25040173caede4a41c05))
+
 ## [0.5.0](https://github.com/lhz960904/atrium/compare/v0.4.2...v0.5.0) (2026-07-04)
 
 
