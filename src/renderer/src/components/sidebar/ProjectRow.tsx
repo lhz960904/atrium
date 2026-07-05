@@ -1,13 +1,13 @@
 import { useNavigate } from '@tanstack/react-router';
 import { ChevronDown, ChevronRight, Folder, FolderOpen, SquarePen } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePendingProject } from '../../state/pending-project-store';
 import { ProjectMenu } from './ProjectMenu';
 import { RowAction } from './primitives';
 import type { ProjectItem, ThreadItem } from './types';
 
-export function ProjectRow({
+export const ProjectRow = memo(function ProjectRow({
   project,
   expanded,
   onToggle,
@@ -16,7 +16,7 @@ export function ProjectRow({
 }: {
   project: ProjectItem;
   expanded: boolean;
-  onToggle: () => void;
+  onToggle: (projectId: string) => void;
   threads: ThreadItem[];
   renderThread: (thread: ThreadItem) => React.JSX.Element;
 }): React.JSX.Element {
@@ -28,7 +28,7 @@ export function ProjectRow({
       <div className="group flex w-full items-center gap-1 rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-sidebar-item-hover hover:text-fg-primary">
         <button
           type="button"
-          onClick={onToggle}
+          onClick={() => onToggle(project.id)}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
           {expanded ? (
@@ -78,4 +78,4 @@ export function ProjectRow({
       </div>
     </div>
   );
-}
+});

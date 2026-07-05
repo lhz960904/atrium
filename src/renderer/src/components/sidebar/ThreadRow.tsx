@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Archive, Clock, Pin, PinOff } from 'lucide-react';
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { timeAgo } from '../../lib/time';
 import { trpc } from '../../lib/trpc';
@@ -13,15 +14,40 @@ const chatRowBase =
 const chatRowActive =
   'group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm bg-sidebar-item-active text-fg-primary';
 
-export function ThreadRow({
+type ThreadRowProps = { thread: ThreadItem; running: boolean; hasSchedule: boolean };
+
+// updatedAt / lastReadAt come back as fresh values on every refetch (Date
+// instances at runtime, though typed as ISO strings), so compare by time value
+// — reference (===) never matches. new Date() accepts both forms; null is a
+// valid lastReadAt (never read), so guard it first.
+const sameTime = (a: string | null, b: string | null): boolean =>
+  a == null || b == null ? a === b : new Date(a).getTime() === new Date(b).getTime();
+
+/**
+ * Opening a chat refetches the sidebar's thread list (a chat open can flip the
+ * running set or land a model-generated title), and the query layer returns
+ * fresh object identities even for rows whose data is unchanged — so a
+ * reference-equality memo would still re-render all 200-ish rows (and their
+ * radix-tooltip subtrees) on every chat switch. Compare the fields the row
+ * actually renders instead, so an unchanged row truly bails out.
+ */
+function threadRowPropsEqual(a: ThreadRowProps, b: ThreadRowProps): boolean {
+  return (
+    a.running === b.running &&
+    a.hasSchedule === b.hasSchedule &&
+    a.thread.id === b.thread.id &&
+    a.thread.title === b.thread.title &&
+    a.thread.pinned === b.thread.pinned &&
+    sameTime(a.thread.updatedAt, b.thread.updatedAt) &&
+    sameTime(a.thread.lastReadAt, b.thread.lastReadAt)
+  );
+}
+
+export const ThreadRow = memo(function ThreadRow({
   thread,
   running,
   hasSchedule,
-}: {
-  thread: ThreadItem;
-  running: boolean;
-  hasSchedule: boolean;
-}): React.JSX.Element {
+}: ThreadRowProps): React.JSX.Element {
   const { t } = useTranslation();
   const utils = trpc.useUtils();
   const refresh = (): void => {
@@ -93,4 +119,4 @@ export function ThreadRow({
       )}
     </Link>
   );
-}
+}, threadRowPropsEqual);
