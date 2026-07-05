@@ -5,6 +5,9 @@ import { messages, projects, threads } from '../../db/schema';
 import { getRunningThreadIds } from '../../server/resumable';
 import { publicProcedure, router } from '../trpc';
 
+/** A thread's bound model; null = inherit general.defaultModel. */
+const modelInput = z.object({ providerId: z.string(), modelId: z.string() }).nullable();
+
 export const threadsRouter = router({
   /** Active (non-archived) threads, most-recently-updated first. */
   list: publicProcedure.query(({ ctx }) => {
@@ -119,6 +122,21 @@ export const threadsRouter = router({
       ctx.db
         .update(threads)
         .set({ title: input.title, updatedAt: now, lastReadAt: now })
+        .where(eq(threads.id, input.id))
+        .run();
+    }),
+
+  /** Bind (or clear) this thread's model; null = inherit general.defaultModel.
+   *  Doesn't touch updatedAt — picking a model isn't thread activity. */
+  setModel: publicProcedure
+    .input(z.object({ id: z.string(), model: modelInput }))
+    .mutation(({ ctx, input }) => {
+      ctx.db
+        .update(threads)
+        .set({
+          modelProviderId: input.model?.providerId ?? null,
+          modelId: input.model?.modelId ?? null,
+        })
         .where(eq(threads.id, input.id))
         .run();
     }),
