@@ -43,6 +43,7 @@ export const threadsRouter = router({
         .object({
           title: z.string().optional(),
           projectId: z.string().optional(),
+          model: modelInput.optional(),
         })
         .optional(),
     )
@@ -54,6 +55,8 @@ export const threadsRouter = router({
           id,
           title: input?.title ?? null,
           projectId: input?.projectId ?? null,
+          modelProviderId: input?.model?.providerId ?? null,
+          modelId: input?.model?.modelId ?? null,
         })
         .run();
       return { id };

@@ -2,18 +2,30 @@ import { create } from 'zustand';
 
 export type SelectedModel = { providerId: string; modelId: string };
 
+/** Sentinel threadId for the home / new-chat composer, which has no thread yet;
+ *  its pick is carried onto the thread the first send creates. */
+export const NEW_CHAT = '';
+
 /**
- * Currently selected chat model, shared between the composer's ModelPicker
- * and the chat view's transport. Hydrated from settings + providers and
- * persisted by `useChatModel`; this store is just the in-memory source of
- * truth both sides read.
+ * Resolved chat model per thread (keyed by threadId; NEW_CHAT for the home
+ * composer). `useChatModel(threadId)` publishes the resolved model here and the
+ * chat transport reads it back by threadId at send time — so every thread sends
+ * its own model, including a background thread that resumes while another is open.
  */
 type ModelStore = {
-  selected: SelectedModel | null;
-  setSelected: (m: SelectedModel) => void;
+  byThread: Record<string, SelectedModel>;
+  setForThread: (threadId: string, model: SelectedModel) => void;
+  clear: (threadId: string) => void;
 };
 
 export const useModelStore = create<ModelStore>((set) => ({
-  selected: null,
-  setSelected: (selected) => set({ selected }),
+  byThread: {},
+  setForThread: (threadId, model) =>
+    set((s) => ({ byThread: { ...s.byThread, [threadId]: model } })),
+  clear: (threadId) =>
+    set((s) => {
+      if (!(threadId in s.byThread)) return s;
+      const { [threadId]: _drop, ...rest } = s.byThread;
+      return { byThread: rest };
+    }),
 }));

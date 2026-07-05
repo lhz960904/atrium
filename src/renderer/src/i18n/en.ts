@@ -433,6 +433,10 @@ export const en: typeof zh = {
       groupGeneral: 'General',
       language: 'Language',
       languageDesc: 'Interface language. System follows your OS setting.',
+      defaultModel: 'Default model',
+      defaultModelDesc:
+        'Model new conversations start with; change it per conversation in the chat.',
+      defaultModelAuto: 'Auto (first available)',
       autoTitle: 'Auto-generate chat titles',
       autoTitleDesc: 'Summarize the first message into a title on a new chat.',
       launchAtLogin: 'Launch at login',

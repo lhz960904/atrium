@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { type SelectedModel, useModelStore } from '../state/model-store';
+import { NEW_CHAT, type SelectedModel, useModelStore } from '../state/model-store';
 import { trpc } from './trpc';
 import { useSetting } from './use-setting';
 
@@ -60,37 +60,57 @@ function firstModel(groups: ModelGroup[]): SelectedModel | null {
   return g ? { providerId: g.providerId, modelId: g.models[0] } : null;
 }
 
+const sameModel = (a: SelectedModel | null, b: SelectedModel | null): boolean =>
+  a?.providerId === b?.providerId && a?.modelId === b?.modelId;
+
 /**
- * Single source of truth for the chat model: derives the enabled-model groups
- * from providers, hydrates the store (persisted choice if still valid, else
- * first available), and persists changes. Both the composer's ModelPicker and
- * the chat transport call this; react-query dedupes the queries and the
- * hydration effect is idempotent.
+ * The chat model for one thread (NEW_CHAT on the home composer). Resolves, in
+ * order: this session's live pick → the thread's persisted binding → the global
+ * default (`general.defaultModel`) → the first available model, skipping any no
+ * longer enabled. Publishes the result to the model store — the transport reads
+ * it back by threadId at send time — and persists a pick onto the thread.
  */
-export function useChatModel() {
+export function useChatModel(threadId: string = NEW_CHAT) {
+  const utils = trpc.useUtils();
   const providers = trpc.providers.list.useQuery();
-  const {
-    value: persistedModel,
-    set: persistModel,
-    isLoading: persistLoading,
-  } = useSetting('general.defaultModel');
-  const selected = useModelStore((s) => s.selected);
-  const setStore = useModelStore((s) => s.setSelected);
+  const { value: defaultModel } = useSetting('general.defaultModel');
+  const thread = trpc.threads.get.useQuery({ id: threadId }, { enabled: threadId !== NEW_CHAT });
+  const stored = useModelStore((s) => s.byThread[threadId]);
+  const setForThread = useModelStore((s) => s.setForThread);
+  const setModel = trpc.threads.setModel.useMutation();
 
   const groups = useMemo(() => deriveGroups(providers.data ?? []), [providers.data]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: setStore is stable
+  const boundProviderId = thread.data?.modelProviderId;
+  const boundModelId = thread.data?.modelId;
+  const selected = useMemo(() => {
+    if (isValid(stored, groups)) return stored;
+    const bound =
+      boundProviderId && boundModelId
+        ? { providerId: boundProviderId, modelId: boundModelId }
+        : null;
+    if (isValid(bound, groups)) return bound;
+    if (isValid(defaultModel, groups)) return defaultModel;
+    return firstModel(groups);
+  }, [stored, boundProviderId, boundModelId, defaultModel, groups]);
+
+  // Publish the resolved model so the transport always has one for this thread,
+  // even before any pick. Skip NEW_CHAT: the home composer must not pin a new
+  // thread to today's default — only an explicit pick binds it (below).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: setForThread is stable
   useEffect(() => {
-    if (!providers.data || persistLoading) return;
-    if (isValid(selected, groups)) return;
-    const candidate = persistedModel ?? null;
-    const next = isValid(candidate, groups) ? candidate : firstModel(groups);
-    if (next) setStore(next);
-  }, [providers.data, persistedModel, persistLoading, selected, groups]);
+    if (threadId === NEW_CHAT) return;
+    if (selected && !sameModel(stored ?? null, selected)) setForThread(threadId, selected);
+  }, [selected, threadId, stored]);
 
   const setSelected = (m: SelectedModel): void => {
-    setStore(m);
-    persistModel(m);
+    setForThread(threadId, m);
+    if (threadId === NEW_CHAT) return; // no thread yet — carried on first send
+    // Reflect the binding at once so display + transport agree before the round-trip.
+    utils.threads.get.setData({ id: threadId }, (prev) =>
+      prev ? { ...prev, modelProviderId: m.providerId, modelId: m.modelId } : prev,
+    );
+    setModel.mutate({ id: threadId, model: m });
   };
 
   return { selected, groups, setSelected, loading: providers.isLoading };

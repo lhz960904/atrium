@@ -1,4 +1,5 @@
 import type { ComposerSendKey } from '@shared/settings';
+import { useParams } from '@tanstack/react-router';
 import { Document } from '@tiptap/extension-document';
 import { HardBreak } from '@tiptap/extension-hard-break';
 import { Paragraph } from '@tiptap/extension-paragraph';
@@ -70,7 +71,9 @@ export const Composer = memo(function Composer({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [empty, setEmpty] = useState(initialText.trim().length === 0);
   const skill = useSlashMenu(commands ?? []);
-  const { selected, setSelected, groups } = useChatModel();
+  // No threadId on the home route → NEW_CHAT; the chat route supplies the id.
+  const { threadId } = useParams({ strict: false });
+  const { selected, setSelected, groups } = useChatModel(threadId);
   const { value: sendKey } = useSetting('general.composerSendKey');
 
   // The editor is created once, so handleKeyDown closes over the first render;

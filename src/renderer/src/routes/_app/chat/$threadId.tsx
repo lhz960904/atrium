@@ -13,7 +13,7 @@ import { trpc } from '../../../lib/trpc';
 import { useApprovals } from '../../../lib/use-approvals';
 import { useChatModel } from '../../../lib/use-chat-model';
 import { useCompactionStore } from '../../../state/compaction-store';
-import type { SelectedModel } from '../../../state/model-store';
+import { type SelectedModel, useModelStore } from '../../../state/model-store';
 import { usePendingInput } from '../../../state/pending-input-store';
 
 export const Route = createFileRoute('/_app/chat/$threadId')({
@@ -35,7 +35,7 @@ function ChatView(): React.JSX.Element {
   const { threadId } = Route.useParams();
   const thread = trpc.threads.get.useQuery({ id: threadId });
   const endpoint = trpc.system.chatEndpoint.useQuery();
-  const { selected } = useChatModel();
+  const { selected } = useChatModel(threadId);
 
   if (thread.isLoading || endpoint.isLoading) {
     return <Centered>{t('common.loading')}</Centered>;
@@ -192,6 +192,9 @@ function ChatRunner({
   // biome-ignore lint/correctness/useExhaustiveDependencies: sendMessage is stable; fire when model becomes ready
   useEffect(() => {
     if (sentRef.current || !model) return;
+    // Guarantee the transport has this thread's model before the first send —
+    // publishing effects elsewhere may not have run yet on a fresh mount.
+    useModelStore.getState().setForThread(threadId, model);
     const draft = usePendingInput.getState().consume();
     if (draft) {
       const files = toFileParts(draft.attachments);

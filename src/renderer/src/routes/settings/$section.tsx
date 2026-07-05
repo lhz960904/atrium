@@ -13,6 +13,7 @@ import { ArrowUpRight, Check, MessageSquare, Monitor, Moon, Sun } from 'lucide-r
 import { useMemo } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { getTokenStyleObject } from 'shiki';
+import { ModelPicker } from '../../components/ModelPicker';
 import { Select } from '../../components/Select';
 import { ArchivedSection } from '../../components/settings/archived/ArchivedSection';
 import { IdentitySection } from '../../components/settings/identity/IdentitySection';
@@ -27,6 +28,7 @@ import { SubagentsSection } from '../../components/settings/subagents/SubagentsS
 import { UsageSection } from '../../components/settings/usage/UsageSection';
 import { highlighter } from '../../lib/code-highlighter';
 import { trpc } from '../../lib/trpc';
+import { deriveGroups } from '../../lib/use-chat-model';
 import { type LanguagePref, useLanguage } from '../../lib/use-language';
 import { useSetting } from '../../lib/use-setting';
 import { type Theme, useThemeStore } from '../../state/theme-store';
@@ -164,6 +166,9 @@ function GeneralSection(): React.JSX.Element {
   const { value: inMenuBar, set: setInMenuBar } = useSetting('general.showInMenuBar');
   const { value: hideTokens, set: setHideTokens } = useSetting('general.composerHideTokenUsage');
   const { value: sendKey, set: setSendKey } = useSetting('general.composerSendKey');
+  const { value: defaultModel, set: setDefaultModel } = useSetting('general.defaultModel');
+  const providers = trpc.providers.list.useQuery();
+  const modelGroups = deriveGroups(providers.data ?? []);
   const utils = trpc.useUtils();
   const openAtLogin = trpc.settings.openAtLogin.useQuery();
   const setOpenAtLogin = trpc.settings.setOpenAtLogin.useMutation({
@@ -186,6 +191,19 @@ function GeneralSection(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-8">
       <SettingGroup title={t('settings.general.groupGeneral')}>
+        <SettingRow
+          label={t('settings.general.defaultModel')}
+          desc={t('settings.general.defaultModelDesc')}
+          control={
+            <ModelPicker
+              value={defaultModel}
+              onChange={(v) => v && setDefaultModel(v)}
+              groups={modelGroups}
+              variant="field"
+              placeholder={t('settings.general.defaultModelAuto')}
+            />
+          }
+        />
         <SettingRow
           label={t('settings.general.language')}
           desc={t('settings.general.languageDesc')}
