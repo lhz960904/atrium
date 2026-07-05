@@ -84,7 +84,17 @@ export function useChatModel(threadId: string = NEW_CHAT) {
   const boundProviderId = thread.data?.modelProviderId;
   const boundModelId = thread.data?.modelId;
   const selected = useMemo(() => {
-    if (isValid(stored, groups)) return stored;
+    // Home composer: no thread to bind to, so this session's pick is the binding.
+    if (threadId === NEW_CHAT) {
+      if (isValid(stored, groups)) return stored;
+      if (isValid(defaultModel, groups)) return defaultModel;
+      return firstModel(groups);
+    }
+    // A real thread: its persisted binding wins. `setSelected` updates that
+    // binding optimistically, so a live pick still shows at once. The store is
+    // only the transport's copy and must NOT feed back into resolution — the
+    // value it publishes before the thread row loads would otherwise mask the
+    // saved binding and make every thread snap back to the default on reload.
     const bound =
       boundProviderId && boundModelId
         ? { providerId: boundProviderId, modelId: boundModelId }
@@ -92,7 +102,7 @@ export function useChatModel(threadId: string = NEW_CHAT) {
     if (isValid(bound, groups)) return bound;
     if (isValid(defaultModel, groups)) return defaultModel;
     return firstModel(groups);
-  }, [stored, boundProviderId, boundModelId, defaultModel, groups]);
+  }, [threadId, stored, boundProviderId, boundModelId, defaultModel, groups]);
 
   // Publish the resolved model so the transport always has one for this thread,
   // even before any pick. Skip NEW_CHAT: the home composer must not pin a new
