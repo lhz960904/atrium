@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { dropThreadChat } from '../../lib/chat-store';
 import { trpc } from '../../lib/trpc';
 import { useCommandPalette } from '../../state/command-palette-store';
-import { useSidebarStore } from '../../state/sidebar-store';
 import { useUpdateStore } from '../../state/update-store';
 import { ProjectRow } from './ProjectRow';
 import { SbIconButton, SbNavItem, SbSection } from './primitives';
@@ -19,7 +18,6 @@ const EMPTY_THREADS: ThreadItem[] = [];
 export const Sidebar = memo(function Sidebar(): React.JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const width = useSidebarStore((s) => s.width);
   const openPalette = useCommandPalette((s) => s.setOpen);
   const updateStage = useUpdateStore((s) => s.state.stage);
   const openUpdateDialog = useUpdateStore((s) => s.openDialog);
@@ -148,7 +146,11 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
   return (
     <aside
       className="flex h-full min-h-0 select-none flex-col border-r border-border-default bg-surface"
-      style={{ width }}
+      // Width comes from AppLayout via the --sidebar-width CSS variable so a
+      // resize drag (which updates it every frame) repaints without re-rendering
+      // the whole sidebar tree. Kept explicit — not 100% — so collapsing (grid
+      // column → 0) clips the sidebar instead of reflowing its contents.
+      style={{ width: 'var(--sidebar-width, 260px)' }}
     >
       <div className="atrium-titlebar" />
 
