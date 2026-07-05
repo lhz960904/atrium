@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.0](https://github.com/lhz960904/atrium/compare/v0.6.0...v0.7.0) (2026-07-05)
+
+
+### Features
+
+* **model:** add threads.setModel to bind a model per thread ([153d9b6](https://github.com/lhz960904/atrium/commit/153d9b630dcb8e6c3ca7ddf2c249f71419a86c06))
+* **model:** per-thread model with a global default ([90d2d47](https://github.com/lhz960904/atrium/commit/90d2d4761ad696c82e0e2d75251c693c4752406f))
+
+
+### Bug Fixes
+
+* **model:** keep a thread's saved model across reload ([383eced](https://github.com/lhz960904/atrium/commit/383ecedcdafc6874b7dabbeca9e275e0b21738ba))
+
 ## [0.6.0](https://github.com/lhz960904/atrium/compare/v0.5.0...v0.6.0) (2026-07-05)
 
 
