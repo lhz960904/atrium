@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Archive, Clock, Pin, PinOff } from 'lucide-react';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { timeAgo } from '../../lib/time';
 import { trpc } from '../../lib/trpc';
@@ -90,6 +90,11 @@ export const ThreadRow = memo(function ThreadRow({
   actions,
 }: ThreadRowProps): React.JSX.Element {
   const { t } = useTranslation();
+  // Mount the hover actions (and their radix tooltips) only while the row is
+  // hovered. They're hidden until hover anyway, and eagerly mounting a full
+  // tooltip stack per action across ~200 rows is a big chunk of the initial
+  // mount and of every full re-render.
+  const [hovered, setHovered] = useState(false);
   const unread =
     thread.lastReadAt != null && new Date(thread.updatedAt) > new Date(thread.lastReadAt);
   return (
@@ -98,6 +103,8 @@ export const ThreadRow = memo(function ThreadRow({
       params={{ threadId: thread.id }}
       className={chatRowBase}
       activeProps={{ className: chatRowActive }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       <span className="min-w-0 flex-1 truncate text-left">
         {thread.title ?? t('common.untitledChat')}
@@ -111,7 +118,7 @@ export const ThreadRow = memo(function ThreadRow({
       ) : (
         // Status indicator yields to the hover actions (pin / archive).
         <span className="relative flex shrink-0 items-center">
-          <span className="flex items-center group-hover:invisible">
+          <span className={`flex items-center ${hovered ? 'invisible' : ''}`}>
             {unread ? (
               <span
                 role="status"
@@ -122,27 +129,33 @@ export const ThreadRow = memo(function ThreadRow({
               <span className="text-fg-disabled text-xs">{timeAgo(thread.updatedAt)}</span>
             )}
           </span>
-          <span className="absolute right-0 hidden items-center gap-0.5 group-hover:flex">
-            {hasSchedule && (
-              <Tooltip content={t('sidebar.scheduled')}>
-                <span className="flex items-center p-0.5 text-fg-tertiary">
-                  <Clock className="size-[13px]" />
-                </span>
-              </Tooltip>
-            )}
-            <RowAction
-              title={thread.pinned ? t('sidebar.unpin') : t('sidebar.pin')}
-              icon={
-                thread.pinned ? <PinOff className="size-[13px]" /> : <Pin className="size-[13px]" />
-              }
-              onClick={() => actions.togglePin(thread)}
-            />
-            <RowAction
-              title={t('chat.archive')}
-              icon={<Archive className="size-[13px]" />}
-              onClick={() => actions.archive(thread.id)}
-            />
-          </span>
+          {hovered && (
+            <span className="absolute right-0 flex items-center gap-0.5">
+              {hasSchedule && (
+                <Tooltip content={t('sidebar.scheduled')}>
+                  <span className="flex items-center p-0.5 text-fg-tertiary">
+                    <Clock className="size-[13px]" />
+                  </span>
+                </Tooltip>
+              )}
+              <RowAction
+                title={thread.pinned ? t('sidebar.unpin') : t('sidebar.pin')}
+                icon={
+                  thread.pinned ? (
+                    <PinOff className="size-[13px]" />
+                  ) : (
+                    <Pin className="size-[13px]" />
+                  )
+                }
+                onClick={() => actions.togglePin(thread)}
+              />
+              <RowAction
+                title={t('chat.archive')}
+                icon={<Archive className="size-[13px]" />}
+                onClick={() => actions.archive(thread.id)}
+              />
+            </span>
+          )}
         </span>
       )}
     </Link>
