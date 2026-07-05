@@ -8,7 +8,7 @@ import { useCommandPalette } from '../../state/command-palette-store';
 import { useUpdateStore } from '../../state/update-store';
 import { ProjectRow } from './ProjectRow';
 import { SbIconButton, SbNavItem, SbSection } from './primitives';
-import { ThreadRow } from './ThreadRow';
+import { ThreadRow, useThreadRowActions } from './ThreadRow';
 import type { ProjectItem, ThreadItem } from './types';
 
 // Stable empty list so a project with no threads keeps a referentially-constant
@@ -18,6 +18,8 @@ const EMPTY_THREADS: ThreadItem[] = [];
 export const Sidebar = memo(function Sidebar(): React.JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  // One shared set of row mutations for the whole list (see useThreadRowActions).
+  const rowActions = useThreadRowActions();
   const openPalette = useCommandPalette((s) => s.setOpen);
   const updateStage = useUpdateStore((s) => s.state.stage);
   const openUpdateDialog = useUpdateStore((s) => s.openDialog);
@@ -125,9 +127,10 @@ export const Sidebar = memo(function Sidebar(): React.JSX.Element {
         thread={thread}
         running={runningSet.has(thread.id)}
         hasSchedule={scheduledThreadIds.has(thread.id)}
+        actions={rowActions}
       />
     ),
-    [runningSet, scheduledThreadIds],
+    [runningSet, scheduledThreadIds, rowActions],
   );
   const renderProject = useCallback(
     (project: ProjectItem): React.JSX.Element => (

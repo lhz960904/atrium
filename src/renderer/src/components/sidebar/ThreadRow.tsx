@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { Archive, Clock, Pin, PinOff } from 'lucide-react';
-import { memo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { timeAgo } from '../../lib/time';
 import { trpc } from '../../lib/trpc';
@@ -14,7 +14,47 @@ const chatRowBase =
 const chatRowActive =
   'group flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm bg-sidebar-item-active text-fg-primary';
 
-type ThreadRowProps = { thread: ThreadItem; running: boolean; hasSchedule: boolean };
+export type ThreadRowActions = {
+  archive: (id: string) => void;
+  togglePin: (thread: ThreadItem) => void;
+};
+
+/**
+ * The pin / unpin / archive mutations are identical for every row, so creating
+ * them inside ThreadRow means ~600 React Query mutation observers (3 × ~200
+ * rows), each with its own MutationCache subscription and mount effects — a big
+ * slice of a full sidebar re-render or the initial mount. Instantiate them once
+ * at the sidebar level and hand every row the same callbacks instead.
+ */
+export function useThreadRowActions(): ThreadRowActions {
+  const { t } = useTranslation();
+  const utils = trpc.useUtils();
+  const refresh = useCallback(() => {
+    utils.threads.list.invalidate();
+  }, [utils]);
+  const archive = trpc.threads.archive.useMutation({
+    onSuccess: () => {
+      refresh();
+      toast.success(t('chat.archived'));
+    },
+  });
+  const pin = trpc.threads.pin.useMutation({ onSuccess: refresh });
+  const unpin = trpc.threads.unpin.useMutation({ onSuccess: refresh });
+  return useMemo(
+    () => ({
+      archive: (id: string) => archive.mutate({ id }),
+      togglePin: (thread: ThreadItem) => (thread.pinned ? unpin : pin).mutate({ id: thread.id }),
+    }),
+    [archive, pin, unpin],
+  );
+}
+
+type ThreadRowProps = {
+  thread: ThreadItem;
+  running: boolean;
+  hasSchedule: boolean;
+  actions: ThreadRowActions;
+};
 
 // updatedAt / lastReadAt come back as fresh values on every refetch (Date
 // instances at runtime, though typed as ISO strings), so compare by time value
@@ -47,21 +87,9 @@ export const ThreadRow = memo(function ThreadRow({
   thread,
   running,
   hasSchedule,
+  actions,
 }: ThreadRowProps): React.JSX.Element {
   const { t } = useTranslation();
-  const utils = trpc.useUtils();
-  const refresh = (): void => {
-    utils.threads.list.invalidate();
-  };
-  const archive = trpc.threads.archive.useMutation({
-    onSuccess: () => {
-      refresh();
-      toast.success(t('chat.archived'));
-    },
-  });
-  const pin = trpc.threads.pin.useMutation({ onSuccess: refresh });
-  const unpin = trpc.threads.unpin.useMutation({ onSuccess: refresh });
-
   const unread =
     thread.lastReadAt != null && new Date(thread.updatedAt) > new Date(thread.lastReadAt);
   return (
@@ -107,12 +135,12 @@ export const ThreadRow = memo(function ThreadRow({
               icon={
                 thread.pinned ? <PinOff className="size-[13px]" /> : <Pin className="size-[13px]" />
               }
-              onClick={() => (thread.pinned ? unpin : pin).mutate({ id: thread.id })}
+              onClick={() => actions.togglePin(thread)}
             />
             <RowAction
               title={t('chat.archive')}
               icon={<Archive className="size-[13px]" />}
-              onClick={() => archive.mutate({ id: thread.id })}
+              onClick={() => actions.archive(thread.id)}
             />
           </span>
         </span>
