@@ -1,9 +1,18 @@
-import type { ComposerSendKey, UiFontSize } from '@shared/settings';
+import {
+  CODE_THEMES_DARK,
+  CODE_THEMES_LIGHT,
+  type CodeThemeDark,
+  type CodeThemeLight,
+  type ComposerSendKey,
+  type UiFontSize,
+} from '@shared/settings';
 import type { UpdaterStage } from '@shared/update';
 import { createFileRoute, notFound } from '@tanstack/react-router';
 import type { ParseKeys } from 'i18next';
 import { ArrowUpRight, Check, MessageSquare, Monitor, Moon, Sun } from 'lucide-react';
+import { useMemo } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
+import { getTokenStyleObject } from 'shiki';
 import { Select } from '../../components/Select';
 import { ArchivedSection } from '../../components/settings/archived/ArchivedSection';
 import { IdentitySection } from '../../components/settings/identity/IdentitySection';
@@ -16,6 +25,7 @@ import { ProvidersSection } from '../../components/settings/providers/ProvidersS
 import { SkillsSection } from '../../components/settings/skills/SkillsSection';
 import { SubagentsSection } from '../../components/settings/subagents/SubagentsSection';
 import { UsageSection } from '../../components/settings/usage/UsageSection';
+import { highlighter } from '../../lib/code-highlighter';
 import { trpc } from '../../lib/trpc';
 import { type LanguagePref, useLanguage } from '../../lib/use-language';
 import { useSetting } from '../../lib/use-setting';
@@ -233,12 +243,64 @@ function GeneralSection(): React.JSX.Element {
   );
 }
 
+/** Shiki theme id → display label, e.g. `one-dark-pro` → `One Dark Pro`. */
+const prettyTheme = (id: string): string =>
+  id.replace(/(^|-)([a-z])/g, (_, sep, ch) => (sep ? ' ' : '') + ch.toUpperCase()).trim();
+
+const LIGHT_THEME_OPTIONS: ReadonlyArray<{ value: CodeThemeLight; label: string }> =
+  CODE_THEMES_LIGHT.map((v) => ({ value: v, label: prettyTheme(v) }));
+const DARK_THEME_OPTIONS: ReadonlyArray<{ value: CodeThemeDark; label: string }> =
+  CODE_THEMES_DARK.map((v) => ({ value: v, label: prettyTheme(v) }));
+
+const PREVIEW_CODE = `interface Config {
+  name: string; // workspace label
+  accent: string;
+}
+const theme: Config = { name: "atrium", accent: "#2383E2" };
+export const enabled = true;`;
+
+/** Renders the fixed snippet in a specific Shiki theme, using that theme's own
+ *  background/foreground — so a code theme can be judged before it's applied. */
+function ThemePreview({ theme }: { theme: string }): React.JSX.Element {
+  const { tokens, bg, fg } = useMemo(
+    () => highlighter.codeToTokens(PREVIEW_CODE, { lang: 'typescript', theme }),
+    [theme],
+  );
+  return (
+    <div
+      className="overflow-hidden rounded-lg border border-border-default text-xs leading-relaxed"
+      style={{ background: bg, color: fg }}
+    >
+      <pre className="overflow-x-auto p-3 font-mono">
+        {tokens.map((line, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: preview lines have no stable id
+          <div key={i} className="flex">
+            <span className="mr-3 w-4 shrink-0 select-none text-right tabular-nums opacity-40">
+              {i + 1}
+            </span>
+            <span className="whitespace-pre">
+              {line.map((tk, k) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: preview tokens have no stable id
+                <span key={k} style={getTokenStyleObject(tk)}>
+                  {tk.content}
+                </span>
+              ))}
+            </span>
+          </div>
+        ))}
+      </pre>
+    </div>
+  );
+}
+
 function AppearanceSection(): React.JSX.Element {
   const { t } = useTranslation();
   const theme = useThemeStore((s) => s.theme);
   const setTheme = useThemeStore((s) => s.setTheme);
   const { value: uiFont, set: setUiFont } = useSetting('appearance.uiFont');
   const { value: uiFontSize, set: setUiFontSize } = useSetting('appearance.uiFontSize');
+  const { value: codeThemeLight, set: setCodeThemeLight } = useSetting('appearance.codeThemeLight');
+  const { value: codeThemeDark, set: setCodeThemeDark } = useSetting('appearance.codeThemeDark');
 
   const tiles: Array<{ value: Theme; label: string; desc: string; icon: typeof Sun }> = [
     { value: 'light', label: 'Light', desc: t('settings.appearance.lightDesc'), icon: Sun },
@@ -321,6 +383,40 @@ function AppearanceSection(): React.JSX.Element {
           }
         />
       </SettingGroup>
+
+      <section>
+        <h2 className="mb-3 font-medium text-fg-primary text-sm">
+          {t('settings.appearance.codeGroup')}
+        </h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex min-w-0 flex-col gap-2">
+            <span className="font-medium text-fg-secondary text-xs">
+              {t('settings.appearance.codeThemeLight')}
+            </span>
+            <Select
+              value={codeThemeLight}
+              onChange={setCodeThemeLight}
+              options={LIGHT_THEME_OPTIONS}
+              aria-label={t('settings.appearance.codeThemeLight')}
+              className="w-full"
+            />
+            <ThemePreview theme={codeThemeLight} />
+          </div>
+          <div className="flex min-w-0 flex-col gap-2">
+            <span className="font-medium text-fg-secondary text-xs">
+              {t('settings.appearance.codeThemeDark')}
+            </span>
+            <Select
+              value={codeThemeDark}
+              onChange={setCodeThemeDark}
+              options={DARK_THEME_OPTIONS}
+              aria-label={t('settings.appearance.codeThemeDark')}
+              className="w-full"
+            />
+            <ThemePreview theme={codeThemeDark} />
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

@@ -400,6 +400,9 @@ export const zh = {
       fontSizeSmall: '小',
       fontSizeDefault: '默认',
       fontSizeLarge: '大',
+      codeGroup: '代码主题',
+      codeThemeLight: '浅色主题',
+      codeThemeDark: '深色主题',
     },
     about: {
       description:

@@ -25,7 +25,8 @@ import {
   SiYaml,
 } from 'react-icons/si';
 import { getTokenStyleObject, type ThemedToken } from 'shiki';
-import { DARK_THEME, highlighter, LIGHT_THEME, resolveLang } from '../../lib/code-highlighter';
+import { highlighter, resolveLang } from '../../lib/code-highlighter';
+import { useSetting } from '../../lib/use-setting';
 import { useThemeStore } from '../../state/theme-store';
 import { CopyButton } from './CopyButton';
 
@@ -82,9 +83,11 @@ const LANG_ICONS: Record<string, IconType> = {
  */
 export function CodeBlock({ code, lang }: { code: string; lang: string }): React.JSX.Element {
   const dark = useThemeStore((s) => s.resolvedTheme === 'dark');
+  const { value: codeThemeLight } = useSetting('appearance.codeThemeLight');
+  const { value: codeThemeDark } = useSetting('appearance.codeThemeDark');
   const Icon = LANG_ICONS[lang] ?? FileCode;
   const langId = resolveLang(lang);
-  const theme = dark ? DARK_THEME : LIGHT_THEME;
+  const theme = dark ? codeThemeDark : codeThemeLight;
 
   const [tokens, setTokens] = useState<ThemedToken[]>([]);
   const stream = useRef<{

@@ -6,6 +6,8 @@ type SelectProps<T extends string> = {
   onChange: (value: T) => void;
   options: ReadonlyArray<{ value: T; label: string }>;
   'aria-label'?: string;
+  /** Extra classes for the trigger, e.g. `w-full` to fill a column. */
+  className?: string;
 };
 
 /** Compact dropdown over Radix Select — the default control for enumerated
@@ -16,12 +18,13 @@ export function Select<T extends string>({
   onChange,
   options,
   'aria-label': ariaLabel,
+  className,
 }: SelectProps<T>): React.JSX.Element {
   return (
     <RadixSelect.Root value={value} onValueChange={(v) => onChange(v as T)}>
       <RadixSelect.Trigger
         aria-label={ariaLabel}
-        className="inline-flex min-w-[150px] items-center justify-between gap-2 rounded-lg border border-border-default bg-surface py-1.5 pr-2.5 pl-3 text-fg-primary text-sm outline-0 transition-colors hover:border-border-strong focus:border-accent data-[state=open]:border-accent"
+        className={`inline-flex min-w-[150px] items-center justify-between gap-2 rounded-lg border border-border-default bg-surface py-1.5 pr-2.5 pl-3 text-fg-primary text-sm outline-0 transition-colors hover:border-border-strong focus:border-accent data-[state=open]:border-accent ${className ?? ''}`}
       >
         <RadixSelect.Value />
         <RadixSelect.Icon>
