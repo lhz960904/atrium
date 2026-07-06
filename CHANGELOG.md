@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/lhz960904/atrium/compare/v0.8.1...v0.8.2) (2026-07-06)
+
+
+### Bug Fixes
+
+* **mcp:** drop blank args and env entries from server config ([#53](https://github.com/lhz960904/atrium/issues/53)) ([00e6a53](https://github.com/lhz960904/atrium/commit/00e6a53ac19b065126739de1a65d3fc079e0d13f))
+
 ## [0.8.1](https://github.com/lhz960904/atrium/compare/v0.8.0...v0.8.1) (2026-07-06)
 
 
