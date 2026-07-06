@@ -102,7 +102,9 @@ export function McpSection(): React.JSX.Element {
                 <X className="size-4" />
               </Dialog.Close>
             </div>
-            <div className="min-h-0 flex-1 overflow-hidden">
+            {/* The dialog is max-h (hugs short forms), so its height is indefinite and
+                percentage heights don't resolve inside — size the form via nested flex. */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {editing !== null && (
                 <McpForm
                   server={editing === 'new' ? null : editing}
