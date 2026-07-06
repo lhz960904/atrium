@@ -66,6 +66,41 @@ test('countTokens uses the most recent anchor, not an earlier one', () => {
   expect(countTokens(msgs)).toBe(1002);
 });
 
+test('tool outputs with images are charged flat, not by base64 length', () => {
+  const dataUrl = `data:image/png;base64,${'A'.repeat(400_000)}`;
+  const msg = ui('assistant', [
+    {
+      type: 'dynamic-tool',
+      input: {},
+      output: { text: 'shot', images: [{ mediaType: 'image/png', dataUrl }] },
+    },
+  ]);
+  expect(tokensOfUIMessage(msg)).toBe(estimateTokens('{}shot') + 1600);
+});
+
+test('countTokensModel charges content-type image parts flat', () => {
+  const msgs = [
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: '1',
+          toolName: 'shot',
+          output: {
+            type: 'content',
+            value: [
+              { type: 'text', text: 'aaaa' },
+              { type: 'image-data', data: 'A'.repeat(100_000), mediaType: 'image/png' },
+            ],
+          },
+        },
+      ],
+    },
+  ] as unknown as ModelMessage[];
+  expect(countTokensModel(msgs)).toBe(1 + 1600);
+});
+
 test('countTokensModel is a pure estimate over content', () => {
   const msgs: ModelMessage[] = [
     { role: 'user', content: 'aaaaaaaa' }, // 2

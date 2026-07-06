@@ -49,6 +49,57 @@ test('renderTranscript labels roles and renders tool parts', () => {
   expect(out).toContain('[tool result read]');
 });
 
+test('renderTranscript strips inline images from content-type tool outputs', () => {
+  const msgs = [
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: '1',
+          toolName: 'shot',
+          output: {
+            type: 'content',
+            value: [
+              { type: 'text', text: 'took it' },
+              { type: 'image-data', data: 'QUFBQQ==', mediaType: 'image/png' },
+            ],
+          },
+        },
+      ],
+    },
+  ] as unknown as ModelMessage[];
+  const out = renderTranscript(msgs);
+  expect(out).toContain('took it');
+  expect(out).toContain('[image-data omitted]');
+  expect(out).not.toContain('QUFBQQ==');
+});
+
+test('renderTranscript strips images from json-wrapped structured outputs', () => {
+  const msgs = [
+    {
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: '1',
+          toolName: 'shot',
+          output: {
+            type: 'json',
+            value: {
+              text: 'shot',
+              images: [{ mediaType: 'image/png', dataUrl: 'data:image/png;base64,QUFBQQ==' }],
+            },
+          },
+        },
+      ],
+    },
+  ] as unknown as ModelMessage[];
+  const out = renderTranscript(msgs);
+  expect(out).toContain('shot\n[1 image(s) omitted]');
+  expect(out).not.toContain('QUFBQQ==');
+});
+
 test('summarize feeds the structured instruction and the transcript to the model', async () => {
   let opts: LanguageModelV3CallOptions | undefined;
   const model = summaryModel('done', (o) => {
