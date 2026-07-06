@@ -1,7 +1,8 @@
+import type { ImageToolOutput } from '@shared/chat-types';
 import { dynamicTool, jsonSchema, type Tool } from 'ai';
 import type { McpToolEntry } from './catalog';
 import type { McpManager } from './manager';
-import { type McpToolOutput, renderToolResult } from './render';
+import { renderToolResult } from './render';
 
 type ToolResultOutput = Awaited<ReturnType<NonNullable<Tool['toModelOutput']>>>;
 
@@ -50,7 +51,7 @@ export function mcpOutputToModelOutput(
   imageToolResults: boolean,
 ): ToolResultOutput {
   if (typeof output === 'string') return { type: 'text', value: output };
-  const { text, images } = output as McpToolOutput;
+  const { text, images } = output as ImageToolOutput;
   if (!imageToolResults) {
     const note = `[${images.length} image(s) omitted: the current model cannot view images]`;
     return { type: 'text', value: text ? `${text}\n${note}` : note };

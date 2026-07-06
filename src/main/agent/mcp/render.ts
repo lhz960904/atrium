@@ -1,14 +1,10 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { ImageToolOutput, ToolResultImage } from '@shared/chat-types';
 import { headTruncate } from '../tools/output';
 
 // Caps the inline result like the file tools do; spilling oversized output to
 // disk (with a read_file pointer) is a later milestone.
 const MCP_OUTPUT_MAX = 50_000;
-
-export type McpImage = { mediaType: string; dataUrl: string };
-
-/** Structured MCP output: flattened text plus the image blocks worth showing. */
-export type McpToolOutput = { text: string; images: McpImage[] };
 
 /**
  * Flatten an MCP tool result into the tool's output. Text-only results stay a
@@ -18,8 +14,8 @@ export type McpToolOutput = { text: string; images: McpImage[] };
  * image parts and the renderer can display them. Error results stay text-only:
  * every block (images included) collapses to its text summary.
  */
-export function renderToolResult(result: CallToolResult): string | McpToolOutput {
-  const images: McpImage[] = [];
+export function renderToolResult(result: CallToolResult): string | ImageToolOutput {
+  const images: ToolResultImage[] = [];
   const textParts: string[] = [];
   for (const block of result.content) {
     if (block.type === 'image' && !result.isError) {

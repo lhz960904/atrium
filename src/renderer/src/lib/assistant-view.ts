@@ -1,13 +1,14 @@
 import type { AtriumUIMessage } from '@shared/chat';
-import type {
-  Clarify,
-  ClarifyQuestion,
-  ClarifyResult,
-  Subagent,
-  SubagentStatus,
-  Tool,
-  ToolStatus,
-  TraceSegment,
+import {
+  type Clarify,
+  type ClarifyQuestion,
+  type ClarifyResult,
+  isImageToolOutput,
+  type Subagent,
+  type SubagentStatus,
+  type Tool,
+  type ToolStatus,
+  type TraceSegment,
 } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
 import { type DynamicToolUIPart, getStaticToolName, isStaticToolUIPart, type ToolUIPart } from 'ai';
@@ -105,11 +106,18 @@ export function buildAssistantView(parts: AtriumUIMessage['parts'], t: TFunction
       if (name === 'task') work.push({ kind: 'subagent', subagent: toSubagentModel(part) });
       else work.push({ kind: 'tool', tool: toToolModel(part, name, t) });
     } else if (part.type === 'dynamic-tool') {
-      // An external agent's tool call — arbitrary name, rendered generically by
-      // its ACP kind (the part.toolName) + the agent-supplied title.
+      // An external agent's or MCP server's tool call — arbitrary name, rendered
+      // generically by its kind (the part.toolName) + the agent-supplied title.
       lastToolIdx = work.length;
       toolCount++;
       work.push({ kind: 'tool', tool: toDynamicToolModel(part, t) });
+      // Images the tool returned (e.g. a browser screenshot) render inline like
+      // generated images: trailing the marker, in `final` unless work continues.
+      if (part.state === 'output-available' && isImageToolOutput(part.output)) {
+        for (const img of part.output.images) {
+          work.push({ kind: 'image', id: `s${seq++}`, url: img.dataUrl, mediaType: img.mediaType });
+        }
+      }
     }
   }
 
@@ -215,6 +223,9 @@ function toStatus(part: AtriumToolPart | DynamicToolUIPart): ToolStatus {
 
 function toOutput(part: AtriumToolPart | DynamicToolUIPart): string | undefined {
   if (part.state === 'output-error') return part.errorText;
-  if (part.state === 'output-available') return String(part.output);
-  return undefined;
+  if (part.state !== 'output-available') return undefined;
+  // Structured image outputs expand to their text — the images render as their
+  // own segments, and stringifying the object would dump base64 into the row.
+  if (isImageToolOutput(part.output)) return part.output.text || undefined;
+  return String(part.output);
 }
