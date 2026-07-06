@@ -36,7 +36,7 @@ export function Select<T extends string>({
           position="popper"
           sideOffset={6}
           // Lock the panel to the trigger's width so the two always match.
-          className="z-50 w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border border-border-default bg-elevated shadow-lg"
+          className="z-[var(--z-popover)] w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border border-border-default bg-elevated shadow-lg"
         >
           <RadixSelect.Viewport className="p-1">
             {options.map((o) => (

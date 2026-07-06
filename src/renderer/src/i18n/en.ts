@@ -638,6 +638,19 @@ export const en: typeof zh = {
         connecting: 'Connecting…',
         disabled: 'Disabled',
       },
+      json: {
+        button: 'Edit as JSON',
+        title: 'MCP servers as JSON',
+        description: 'Import from another AI client, or edit every server as one JSON document.',
+        diffToggle: 'Compare',
+        importFrom: 'Import from',
+        fromFile: 'From file…',
+        fixJsonFirst: 'Fix the JSON syntax before importing.',
+        reset: 'Reset to current',
+        apply: 'Apply',
+        applying: 'Applying…',
+        notes: 'Notes',
+      },
     },
     skills: {
       empty:

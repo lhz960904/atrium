@@ -1,10 +1,11 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { Pencil, Plus, Server, Trash2, X } from 'lucide-react';
+import { Braces, Pencil, Plus, Server, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 import { EnableSwitch } from '../providers/EnableSwitch';
 import { McpForm, type McpServerItem } from './McpForm';
+import { McpJsonEditor } from './McpJsonEditor';
 
 /** What the form dialog is editing: a server, `new`, or closed. */
 type Editing = McpServerItem | 'new' | null;
@@ -15,6 +16,7 @@ export function McpSection(): React.JSX.Element {
   const servers = trpc.mcp.list.useQuery(undefined, { refetchInterval: 2500 });
   const utils = trpc.useUtils();
   const [editing, setEditing] = useState<Editing>(null);
+  const [jsonOpen, setJsonOpen] = useState(false);
 
   // Refresh both the list and the attention badge (nav red dot) after any change.
   const refresh = (): void => {
@@ -40,14 +42,24 @@ export function McpSection(): React.JSX.Element {
         <span className="text-fg-tertiary text-sm">
           {t('settings.mcp.count', { count: list.length })}
         </span>
-        <button
-          type="button"
-          onClick={() => setEditing('new')}
-          className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-fg-on-accent text-sm hover:bg-accent-hover"
-        >
-          <Plus className="size-4" />
-          {t('settings.mcp.addServer')}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setJsonOpen(true)}
+            className="flex items-center gap-1.5 rounded-md border border-border-default px-3 py-1.5 text-fg-secondary text-sm hover:bg-elevated"
+          >
+            <Braces className="size-4" />
+            {t('settings.mcp.json.button')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditing('new')}
+            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-fg-on-accent text-sm hover:bg-accent-hover"
+          >
+            <Plus className="size-4" />
+            {t('settings.mcp.addServer')}
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -98,6 +110,31 @@ export function McpSection(): React.JSX.Element {
                   onCancel={() => setEditing(null)}
                 />
               )}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root open={jsonOpen} onOpenChange={setJsonOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[var(--z-modal)] bg-black/40 backdrop-blur-sm" />
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-[var(--z-modal)] flex h-[85vh] w-[min(760px,92vw)] flex-col overflow-hidden rounded-xl border border-border-default bg-elevated shadow-xl outline-none"
+          >
+            <div className="flex shrink-0 items-center gap-2 border-border-default border-b px-4 py-2.5">
+              <Dialog.Title className="min-w-0 flex-1 truncate font-medium text-fg-primary text-sm">
+                {t('settings.mcp.json.title')}
+              </Dialog.Title>
+              <Dialog.Close
+                className="rounded-md p-1.5 text-fg-tertiary hover:bg-surface-strong hover:text-fg-secondary"
+                title={t('common.close')}
+              >
+                <X className="size-4" />
+              </Dialog.Close>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {jsonOpen && <McpJsonEditor onClose={() => setJsonOpen(false)} />}
             </div>
           </Dialog.Content>
         </Dialog.Portal>

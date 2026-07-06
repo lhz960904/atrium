@@ -1,12 +1,25 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
+import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { z } from 'zod';
+import {
+  type ImportSourceId,
+  listImportSources,
+  readImportFile,
+  readImportSource,
+} from '../../agent/mcp/client-imports';
 import {
   type McpSecrets,
   type McpTransport,
   mcpSecretsSchema,
   parseConfig,
 } from '../../agent/mcp/config';
+import {
+  type ExportServer,
+  parseMcpJson,
+  planSync,
+  serializeMcpServers,
+} from '../../agent/mcp/json-config';
 import { type McpServerStatus, mcpManager } from '../../agent/mcp/manager';
 import { decryptSecrets, encryptSecrets } from '../../agent/mcp/secrets';
 import type { Db } from '../../db';
@@ -34,6 +47,9 @@ const fields = z.object({
   // Secret env/headers travel with the form's Save, not a separate call.
   secrets: mcpSecretsSchema.default({}),
 });
+
+/** The edited JSON is the full desired state — applying it overwrites to match. */
+const jsonInput = z.object({ json: z.string() });
 
 export const mcpRouter = router({
   list: publicProcedure.query(({ ctx }): McpServerView[] => {
@@ -143,7 +159,153 @@ export const mcpRouter = router({
       .get();
     return decryptSecrets(row?.blob ?? null);
   }),
+
+  /** Which other AI clients have an importable config on this machine, and how many servers. */
+  importSources: publicProcedure.query(() => listImportSources()),
+
+  /** Read one client's config, normalized to mcp.json text, to load into the editor. */
+  readImport: publicProcedure
+    .input(z.object({ source: z.enum(['cursor', 'claude-code', 'claude-desktop', 'codex']) }))
+    .query(({ input }) => {
+      try {
+        return { json: readImportSource(input.source as ImportSourceId) };
+      } catch (err) {
+        throw badRequest(err instanceof Error ? err.message : 'Import failed.');
+      }
+    }),
+
+  /** Native picker for any config file (covers project-level scopes); null if cancelled. */
+  importFile: publicProcedure.mutation(async () => {
+    const opts: OpenDialogOptions = {
+      properties: ['openFile'],
+      filters: [
+        { name: 'MCP config', extensions: ['json', 'toml'] },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    };
+    const win = BrowserWindow.getFocusedWindow();
+    const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    if (res.canceled || res.filePaths.length === 0) return { json: null };
+    try {
+      return { json: readImportFile(res.filePaths[0]) };
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : 'Could not read that file.');
+    }
+  }),
+
+  /** Serialize every server to an mcp.json string; secret values always stay masked. */
+  exportJson: publicProcedure.query(({ ctx }) => ({
+    json: serializeMcpServers(exportServers(ctx.db)),
+  })),
+
+  /** Validate edited JSON and surface any fields dropped on parse; no DB access. */
+  previewJson: publicProcedure.input(jsonInput).query(({ input }) => {
+    try {
+      return {
+        valid: true as const,
+        error: undefined,
+        warnings: parseMcpJson(input.json).warnings,
+      };
+    } catch (err) {
+      return {
+        valid: false as const,
+        error: err instanceof Error ? err.message : 'Invalid JSON',
+        warnings: [] as string[],
+      };
+    }
+  }),
+
+  /** Apply an edited mcp.json as the full desired state: create/update by name, delete the rest. */
+  applyJson: publicProcedure.input(jsonInput).mutation(({ ctx, input }) => {
+    let parsed: ReturnType<typeof parseMcpJson>;
+    try {
+      parsed = parseMcpJson(input.json);
+    } catch (err) {
+      throw badRequest(err instanceof Error ? err.message : 'Invalid JSON');
+    }
+    const rows = ctx.db.select().from(mcpServers).all();
+    const byName = new Map(rows.map((r) => [r.name, r] as const));
+    const plan = planSync(
+      parsed.servers.map((s) => s.name),
+      [...byName.keys()],
+    );
+    const toRemove = plan.delete;
+
+    const now = new Date();
+    const touched: string[] = [];
+    const removedIds: string[] = [];
+
+    ctx.db.transaction((tx) => {
+      for (const s of parsed.servers) {
+        const config = validateConfig(s.transport, s.config);
+        const existing = byName.get(s.name);
+        if (existing) {
+          // The JSON shows secrets in plaintext, so what's there is exactly what we store.
+          tx.update(mcpServers)
+            .set({
+              name: s.name,
+              enabled: s.enabled,
+              transport: s.transport,
+              config,
+              credentialsEncrypted: secretsBlob(s.secrets),
+              updatedAt: now,
+            })
+            .where(eq(mcpServers.id, existing.id))
+            .run();
+          touched.push(existing.id);
+        } else {
+          const id = randomUUID();
+          tx.insert(mcpServers)
+            .values({
+              id,
+              name: s.name,
+              enabled: s.enabled,
+              transport: s.transport,
+              config,
+              credentialsEncrypted: secretsBlob(s.secrets),
+              createdAt: now,
+              updatedAt: now,
+            })
+            .run();
+          touched.push(id);
+        }
+      }
+      for (const name of toRemove) {
+        const row = byName.get(name);
+        if (row) {
+          tx.delete(mcpServers).where(eq(mcpServers.id, row.id)).run();
+          removedIds.push(row.id);
+        }
+      }
+    });
+
+    // Manager reconnects/disconnects are side effects — run them after the commit.
+    for (const id of touched) syncServer(id);
+    for (const id of removedIds) void mcpManager.disconnect(id);
+
+    return {
+      created: plan.create,
+      updated: plan.update,
+      deleted: toRemove,
+      warnings: parsed.warnings,
+    };
+  }),
 });
+
+/** Every server as an ExportServer (config defaults filled, secrets decrypted). */
+function exportServers(db: Db): ExportServer[] {
+  return db
+    .select()
+    .from(mcpServers)
+    .all()
+    .map((r) => ({
+      name: r.name,
+      enabled: r.enabled,
+      transport: r.transport,
+      config: parseConfig(r.transport, r.config ?? {}),
+      secrets: decryptSecrets(r.credentialsEncrypted ?? null),
+    }));
+}
 
 function validateConfig(transport: McpTransport, config: unknown) {
   try {
