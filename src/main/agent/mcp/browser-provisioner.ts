@@ -14,12 +14,14 @@ const PLAYWRIGHT_MCP = '@playwright/mcp@latest';
 export const PUBLIC_BROWSER_ID = 'atrium:browser';
 
 /**
- * Public browsing: the agent drives a fresh, isolated browser — no login, never
- * the user's everyday profile. No `--browser` is forced, so Playwright picks its
- * own default rather than assuming the user runs Chrome. Spawned via npx, so it
- * needs Node on PATH (resolved from the login shell at startup); when Node or a
- * launchable browser is missing the server simply fails to connect and the
- * capability reads as unavailable rather than breaking anything.
+ * Public browsing: the agent drives a fresh, login-less browser, never the
+ * user's everyday profile. No `--browser` is passed, so playwright-mcp uses its
+ * default — the installed Chrome (its "chrome" channel) with a throwaway
+ * `--isolated` profile — which is why it launches the user's real Chrome rather
+ * than downloading a separate Chromium. Spawned via npx, so it needs Node on
+ * PATH (resolved from the login shell at startup); if Node or Chrome is missing
+ * the server just fails to connect and the capability reads as unavailable
+ * rather than breaking anything.
  */
 function publicBrowserServer(): ResolvedMcpServer {
   return {
