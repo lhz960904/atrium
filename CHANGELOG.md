@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0](https://github.com/lhz960904/atrium/compare/v0.7.0...v0.8.0) (2026-07-06)
+
+
+### Features
+
+* **mcp:** edit MCP servers as JSON with client imports and live diff ([#50](https://github.com/lhz960904/atrium/issues/50)) ([2ece1ab](https://github.com/lhz960904/atrium/commit/2ece1ab1dc799e9633d4fb89cc99be915970fea0))
+
+
+### Performance Improvements
+
+* **sidebar:** remove redundant re-renders across sidebar and startup ([#48](https://github.com/lhz960904/atrium/issues/48)) ([e5c7a27](https://github.com/lhz960904/atrium/commit/e5c7a274a3836d459b683bfcc63089e1711789c2))
+
 ## [0.7.0](https://github.com/lhz960904/atrium/compare/v0.6.0...v0.7.0) (2026-07-05)
 
 
