@@ -1,6 +1,7 @@
 import { Globe, Info, Lock, Monitor, Plug, Puzzle, RefreshCw, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSetting } from '../../../lib/use-setting';
 import { EnableSwitch } from '../providers/EnableSwitch';
 
 // Where the user installs the pieces. The extension is the official Playwright
@@ -108,7 +109,7 @@ function Hint({
 
 export function BrowserSection(): React.JSX.Element {
   const { t } = useTranslation();
-  const [enabled, setEnabled] = useState(false);
+  const { value: enabled, set: setEnabled } = useSetting('browser.enabled');
   // TODO(browser): drive from the main process — real Chrome detection plus the
   // live extension/bridge connection status — instead of this fixed phase.
   const [phase] = useState<BrowserPhase>('setup');

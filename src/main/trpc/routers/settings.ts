@@ -20,6 +20,7 @@ export const settingsRouter = router({
       appearance: getSettings('appearance'),
       keyboard: getSettings('keyboard'),
       permissions: getSettings('permissions'),
+      browser: getSettings('browser'),
     };
   }),
 
