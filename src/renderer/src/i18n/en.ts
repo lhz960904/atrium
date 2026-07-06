@@ -405,6 +405,49 @@ export const en: typeof zh = {
       codeThemeLight: 'Light theme',
       codeThemeDark: 'Dark theme',
     },
+    browser: {
+      lede: "Let the agent browse and act in your Chrome — reusing the sites you're already signed in to, and working in the background without taking over your browser.",
+      control: 'Browser control',
+      controlDesc: 'Allow the agent to navigate, click, type, and read pages.',
+      setup: 'Setup',
+      statusNotConnected: 'Not connected',
+      statusConnected: 'Connected',
+      statusChromeNotFound: 'Chrome not found',
+      installChrome: 'Install Google Chrome',
+      installChromeDesc:
+        "Signed-in browsing reuses the logins in your everyday Chrome, so it needs Chrome installed. We didn't find it on this computer.",
+      installChromeBtn: 'Install Google Chrome',
+      installChromeHint:
+        'No Chrome? You can still use Public browsing below right now — the agent uses its own browser. Only reusing your logins needs Chrome.',
+      installExt: 'Add the extension to Chrome',
+      installExtDesc:
+        "The agent talks to Chrome through the Playwright extension. Add it, then come back here — we'll detect it automatically.",
+      installExtBtn: 'Add to Chrome',
+      installExtHint: "Can't open the Chrome Web Store? See the sideload guide.",
+      connect: 'Connect your browser',
+      connectDesc:
+        'Open a tab you’re signed in to, then approve the one-time connection — you choose which tab to share.',
+      connectBtn: 'Connect',
+      connectionTitle: 'Connection',
+      connectionSession: 'Chrome · your signed-in session',
+      connectionSessionDesc:
+        'Reusing your logged-in tabs. Reconnects automatically — no need to re-approve.',
+      reconnect: 'Reconnect',
+      disconnect: 'Disconnect',
+      extensionLinked: 'Extension linked',
+      tabGroupNote: 'Shared tab group: Playwright · drag a tab in to let the agent use it',
+      modesTitle: 'How the agent picks a browser',
+      modePublic: 'Public browsing',
+      modePublicDesc:
+        'Agent opens its own window. No login, never touches your Chrome. Always available.',
+      modeSignedIn: 'Signed-in browsing',
+      modeSignedInDesc: 'Agent uses your Chrome tab with your logins.',
+      modeReady: 'Ready',
+      modeNeedsSetup: 'Needs setup',
+      modeNeedsChrome: 'Needs Chrome',
+      bannerNote:
+        'While the agent is active you’ll see a “… is debugging this browser” banner in Chrome. That’s expected — it only shows while connected and disappears when you disconnect.',
+    },
     about: {
       description:
         'Atrium is a local-first desktop AI agent. Bring your own API key to connect any model provider, with the agent capabilities common in tools today.',
