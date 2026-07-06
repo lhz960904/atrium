@@ -170,7 +170,7 @@ app.whenReady().then(async () => {
   // Connect configured MCP servers once the shell env is merged — stdio servers
   // read PATH from process.env at spawn, so they must not start before it. A
   // slow or failing server never blocks startup.
-  void shellEnvReady.then(() => mcpManager.init(db)).then(() => syncBrowserProvisioning());
+  void shellEnvReady.then(() => mcpManager.init(db)).then(() => syncBrowserProvisioning(db));
 
   // Discover skills in the background, off the critical path. The scheduler
   // (below) waits on this so a boot-time catch-up run still sees the full index;

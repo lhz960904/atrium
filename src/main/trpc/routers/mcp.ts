@@ -32,6 +32,8 @@ type McpServerView = {
   id: string;
   name: string;
   enabled: boolean;
+  /** Provisioned by a feature (e.g. the browser); shown read-only, not editable. */
+  managed: boolean;
   transport: McpTransport;
   config: Record<string, unknown> | null;
   hasCredentials: boolean;
@@ -62,6 +64,7 @@ export const mcpRouter = router({
         id: r.id,
         name: r.name,
         enabled: r.enabled,
+        managed: r.managed,
         transport: r.transport,
         config: r.config as Record<string, unknown> | null,
         hasCredentials: !!r.credentialsEncrypted,
@@ -117,6 +120,7 @@ export const mcpRouter = router({
 
   update: publicProcedure.input(fields.extend({ id: z.string() })).mutation(({ ctx, input }) => {
     const { id, ...rest } = input;
+    assertNotManaged(ctx.db, id);
     assertNameFree(ctx.db, rest.name, id);
     const config = validateConfig(rest.transport, rest.config);
     ctx.db
@@ -137,6 +141,7 @@ export const mcpRouter = router({
   setEnabled: publicProcedure
     .input(z.object({ id: z.string(), enabled: z.boolean() }))
     .mutation(({ ctx, input }) => {
+      assertNotManaged(ctx.db, input.id);
       ctx.db
         .update(mcpServers)
         .set({ enabled: input.enabled, updatedAt: new Date() })
@@ -146,6 +151,7 @@ export const mcpRouter = router({
     }),
 
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    assertNotManaged(ctx.db, input.id);
     ctx.db.delete(mcpServers).where(eq(mcpServers.id, input.id)).run();
     void mcpManager.disconnect(input.id);
   }),
@@ -223,7 +229,13 @@ export const mcpRouter = router({
     } catch (err) {
       throw badRequest(err instanceof Error ? err.message : 'Invalid JSON');
     }
-    const rows = ctx.db.select().from(mcpServers).all();
+    // Managed servers aren't user config: keep them out of the JSON sync so it
+    // neither edits nor deletes them.
+    const rows = ctx.db
+      .select()
+      .from(mcpServers)
+      .all()
+      .filter((r) => !r.managed);
     const byName = new Map(rows.map((r) => [r.name, r] as const));
     const plan = planSync(
       parsed.servers.map((s) => s.name),
@@ -298,6 +310,7 @@ function exportServers(db: Db): ExportServer[] {
     .select()
     .from(mcpServers)
     .all()
+    .filter((r) => !r.managed)
     .map((r) => ({
       name: r.name,
       enabled: r.enabled,
@@ -326,6 +339,16 @@ function secretsBlob(secrets: McpSecrets): Buffer | null {
 /** Apply a row change to the live manager (reconnects, or drops it if now disabled). */
 function syncServer(id: string): void {
   void mcpManager.reload(id);
+}
+
+/** Managed servers (provisioned by a feature) are read-only — block user edits. */
+function assertNotManaged(db: Db, id: string): void {
+  const row = db
+    .select({ managed: mcpServers.managed })
+    .from(mcpServers)
+    .where(eq(mcpServers.id, id))
+    .get();
+  if (row?.managed) throw badRequest('This server is managed and cannot be changed here.');
 }
 
 function assertNameFree(db: Db, name: string, excludeId?: string): void {

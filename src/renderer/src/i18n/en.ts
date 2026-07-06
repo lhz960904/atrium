@@ -667,6 +667,7 @@ export const en: typeof zh = {
       addServer: 'Add MCP server',
       editServer: 'Edit {{name}}',
       count: '{{count}} configured',
+      fromPlugins: 'From plugins',
       emptyList: 'No MCP servers yet.',
       emptyHint: 'Pick an MCP server on the left, or add one.',
       authenticate: 'Authenticate',

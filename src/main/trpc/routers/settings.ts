@@ -27,14 +27,14 @@ export const settingsRouter = router({
 
   /** Merge a scoped partial patch into settings. The generic writer for every
    *  preference, so adding a setting needs no new procedure. */
-  patch: publicProcedure.input(SettingsPatchSchema).mutation(({ input }) => {
+  patch: publicProcedure.input(SettingsPatchSchema).mutation(({ ctx, input }) => {
     const conf = getSettings();
     for (const scope of Object.keys(input) as (keyof Settings)[]) {
       conf.set(scope, { ...getSettings(scope), ...input[scope] });
     }
     // Flipping browser control reconciles the managed browser MCP server so the
     // agent's browser tools appear/disappear without a restart.
-    if (input.browser) void syncBrowserProvisioning();
+    if (input.browser) void syncBrowserProvisioning(ctx.db);
   }),
 
   // "Launch at login" lives in the OS login items (the user can also flip it in

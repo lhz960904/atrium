@@ -405,7 +405,7 @@ export const zh = {
       codeThemeDark: '深色主题',
     },
     browser: {
-      lede: '让 AI 在你的 Chrome 里浏览和操作——复用你已经登录的网站，在后台工作而不抢占你的浏览器。',
+      lede: '让 AI 在你的 Chrome 里浏览和操作，并且复用你已经登录的网站，在后台工作而不抢占你的浏览器。',
       control: '浏览器控制',
       controlDesc: '允许 AI 导航、点击、输入和读取页面。',
       setup: '设置',
@@ -651,6 +651,7 @@ export const zh = {
       addServer: '添加 MCP 服务',
       editServer: '编辑 {{name}}',
       count: '已配置 {{count}} 个',
+      fromPlugins: '来自插件',
       emptyList: '还没有 MCP 服务。',
       emptyHint: '选择左侧的 MCP 服务，或添加一个。',
       authenticate: '授权',

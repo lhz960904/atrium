@@ -28,10 +28,6 @@ export class McpManager {
   private readonly statuses = new Map<string, McpServerStatus>();
   private readonly pendingAuth = new Map<string, AbortController>();
   private readonly reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  // Managed servers Atrium provisions itself (e.g. the browser). Their defs live
-  // here, never in the DB, so reconnect/reload resolve them from memory and they
-  // never surface in the MCP settings list.
-  private readonly managed = new Map<string, ResolvedMcpServer>();
   private db: Db | null = null;
 
   async init(db: Db): Promise<void> {
@@ -95,7 +91,7 @@ export class McpManager {
   }
 
   private async reconnect(id: string, attempt: number): Promise<void> {
-    const server = this.managed.get(id) ?? (this.db ? resolveServerById(this.db, id) : null);
+    const server = this.db ? resolveServerById(this.db, id) : null;
     if (!server?.enabled) {
       // Deleted or disabled while waiting → stop and forget its status, so a
       // racing reconnect can't leave a stale entry behind the attention badge.
@@ -145,25 +141,8 @@ export class McpManager {
   /** Reconnect a server by id after its config changed, or drop it if now disabled. */
   async reload(id: string): Promise<void> {
     await this.disconnect(id);
-    const server = this.managed.get(id) ?? (this.db ? resolveServerById(this.db, id) : null);
+    const server = this.db ? resolveServerById(this.db, id) : null;
     if (server?.enabled) await this.connect(server);
-  }
-
-  /**
-   * Register (or tear down) a managed server — one Atrium runs itself rather than
-   * a user DB row. It connects, reconnects on drop, and joins the tool catalog
-   * like any server, but its definition stays in memory (never the DB), so it
-   * never appears in the MCP settings list. Passing null removes and disconnects it.
-   */
-  async setManaged(id: string, server: ResolvedMcpServer | null): Promise<void> {
-    if (!server) {
-      this.managed.delete(id);
-      await this.disconnect(id);
-      return;
-    }
-    this.managed.set(id, server);
-    await this.disconnect(id);
-    await this.connect(server);
   }
 
   /** Run the interactive OAuth flow for an http server, then reconnect with the tokens. */
