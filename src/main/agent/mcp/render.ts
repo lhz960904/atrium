@@ -1,18 +1,43 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { headTruncate } from '../tools/output';
 
-// M0 caps the inline result like the file tools do; spilling oversized output to
+// Caps the inline result like the file tools do; spilling oversized output to
 // disk (with a read_file pointer) is a later milestone.
 const MCP_OUTPUT_MAX = 50_000;
 
-/** Flatten an MCP tool result's content blocks into model-readable text. */
-export function renderToolResult(result: CallToolResult): string {
+export type McpImage = { mediaType: string; dataUrl: string };
+
+/** Structured MCP output: flattened text plus the image blocks worth showing. */
+export type McpToolOutput = { text: string; images: McpImage[] };
+
+/**
+ * Flatten an MCP tool result into the tool's output. Text-only results stay a
+ * plain string — this keeps new outputs shape-compatible with history persisted
+ * before image support existed, so downstream code handles one union everywhere.
+ * Results carrying images return { text, images } so toModelOutput can emit real
+ * image parts and the renderer can display them. Error results stay text-only:
+ * every block (images included) collapses to its text summary.
+ */
+export function renderToolResult(result: CallToolResult): string | McpToolOutput {
+  const images: McpImage[] = [];
+  const textParts: string[] = [];
+  for (const block of result.content) {
+    if (block.type === 'image' && !result.isError) {
+      images.push({
+        mediaType: block.mimeType,
+        dataUrl: `data:${block.mimeType};base64,${block.data}`,
+      });
+      continue;
+    }
+    textParts.push(renderBlock(block));
+  }
   const body = headTruncate(
-    result.content.map(renderBlock).join('\n'),
+    textParts.join('\n'),
     MCP_OUTPUT_MAX,
     'call the tool again with a narrower request',
   );
-  return result.isError ? `The tool reported an error:\n${body}` : body;
+  if (result.isError) return `The tool reported an error:\n${body}`;
+  return images.length > 0 ? { text: body, images } : body;
 }
 
 function renderBlock(block: CallToolResult['content'][number]): string {

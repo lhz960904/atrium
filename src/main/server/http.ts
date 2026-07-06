@@ -34,7 +34,7 @@ import type { Db } from '../db';
 import { createLogger } from '../log';
 import { resolveAcpSpec } from '../providers/acp-spec';
 import { getProviderManifest } from '../providers/manifest';
-import { resolveModel } from '../providers/resolve';
+import { resolveModel, supportsImageToolResults } from '../providers/resolve';
 import { getSettings } from '../settings/conf';
 import {
   loadThreadMessages,
@@ -219,7 +219,9 @@ export function startHttpServer(deps: {
         db: deps.db,
         skills,
         bgShells,
-        mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager),
+        mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
+          imageToolResults: supportsImageToolResults(providerId, modelId),
+        }),
         permission: {
           mode,
           rules: getSettings('permissions.trustRules'),

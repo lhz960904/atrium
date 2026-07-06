@@ -4,7 +4,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { SelectedModel } from '@shared/settings';
 import type { ImageModel, LanguageModel } from 'ai';
 import { eq } from 'drizzle-orm';
-import { isImageModel } from '../agent/models/catalog';
+import { isImageModel, modelCapabilities } from '../agent/models/catalog';
 import type { Db } from '../db';
 import { providers } from '../db/schema';
 import { decryptCredentials } from './credentials';
@@ -67,6 +67,22 @@ export function resolveModel(db: Db, providerId: string, modelId: string): Langu
     case 'google-gemini':
       return createGoogleGenerativeAI({ apiKey, baseURL })(modelId);
   }
+}
+
+/**
+ * Whether tool results for this provider+model may carry inline image parts.
+ * Both halves matter: the model needs vision, and the provider conversion must
+ * support content-type tool results with images — @ai-sdk/anthropic and
+ * @ai-sdk/google do, while openai-compatible JSON-stringifies content parts,
+ * which would dump raw base64 into the prompt as text.
+ */
+export function supportsImageToolResults(providerId: string, modelId: string): boolean {
+  const manifest = getProviderManifest(providerId);
+  if (manifest?.kind !== 'cloud-api') return false;
+  return (
+    (manifest.protocol === 'anthropic' || manifest.protocol === 'google-gemini') &&
+    modelCapabilities(modelId).vision
+  );
 }
 
 /**
