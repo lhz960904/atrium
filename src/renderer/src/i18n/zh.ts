@@ -416,12 +416,10 @@ export const zh = {
       installChromeDesc:
         '登录模式会复用你日常 Chrome 里的登录态，所以需要装有 Chrome。我们没在这台电脑上找到它。',
       installChromeBtn: '安装 Google Chrome',
-      installChromeHint:
-        '没有 Chrome？下方的「公开浏览」现在就能用——AI 会用它自己的浏览器。只有复用你的登录态才需要 Chrome。',
+      installChromeHint: '使用 Chrome 可以直接复用你的登录信息，用你的身份帮你完成任务',
       installExt: '为 Chrome 添加扩展',
       installExtDesc: 'AI 通过 Playwright 扩展与 Chrome 通信。添加后回到这里，我们会自动检测。',
       installExtBtn: '添加到 Chrome',
-      installExtHint: '打不开 Chrome 应用商店？看侧载指南。',
       connect: '连接你的浏览器',
       connectDesc: '打开一个你已登录的标签页，然后完成一次性授权——由你选择共享哪个标签页。',
       connectBtn: '连接',
@@ -434,14 +432,14 @@ export const zh = {
       tabGroupNote: '共享标签组：Playwright · 把标签页拖进去即可交给 AI 使用',
       modesTitle: 'AI 如何选择浏览器',
       modePublic: '公开浏览',
-      modePublicDesc: 'AI 打开它自己的窗口。无需登录，绝不碰你的 Chrome。始终可用。',
+      modePublicDesc: 'AI 打开新的 Chrome 实例，不碰你原本的Chrome，但是无法使用你的登录信息。',
       modeSignedIn: '登录浏览',
-      modeSignedInDesc: 'AI 使用你带登录态的 Chrome 标签页。',
+      modeSignedInDesc: '配合 Chrome 插件，AI 可以使用你的登录信息来完成任务。',
       modeReady: '就绪',
       modeNeedsSetup: '待设置',
       modeNeedsChrome: '需要 Chrome',
       bannerNote:
-        'AI 工作时，Chrome 顶部会出现一条「… 正在调试此浏览器」的横幅。这是正常的——只在连接期间显示，断开后消失。',
+        'AI 工作时，Chrome 顶部会出现一条「… 正在调试此浏览器」的横幅。这是正常的请放心。',
     },
     about: {
       description:

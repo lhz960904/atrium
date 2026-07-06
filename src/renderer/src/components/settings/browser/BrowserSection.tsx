@@ -97,9 +97,9 @@ function Hint({
 }): React.JSX.Element {
   const Icon = tone === 'warn' ? TriangleAlert : Info;
   return (
-    <div className="mt-2 flex max-w-[470px] items-start gap-1.5 text-fg-tertiary text-xs">
+    <div className="mt-2 flex items-start gap-1.5 text-fg-tertiary text-xs">
       <Icon
-        className={`mt-0.5 size-3.5 shrink-0 ${tone === 'warn' ? 'text-warning' : 'text-fg-tertiary'}`}
+        className={`size-3.5 shrink-0 ${tone === 'warn' ? 'text-warning' : 'text-fg-tertiary'}`}
       />
       <span>{children}</span>
     </div>
@@ -178,7 +178,6 @@ export function BrowserSection(): React.JSX.Element {
                     <Puzzle className="size-4" />
                     {t('settings.browser.installExtBtn')}
                   </a>
-                  <Hint>{t('settings.browser.installExtHint')}</Hint>
                 </Step>
                 <Step
                   marker="2"
@@ -263,12 +262,12 @@ export function BrowserSection(): React.JSX.Element {
                 </div>
                 <div className="mt-0.5 text-fg-tertiary text-xs">
                   {t('settings.browser.modeSignedInDesc')}
+                  <Hint tone="warn">{t('settings.browser.bannerNote')}</Hint>
                 </div>
               </div>
               <Pill tone={signedInMode.tone} label={signedInMode.label} />
             </div>
           </div>
-          {phase !== 'connected' && <Hint tone="warn">{t('settings.browser.bannerNote')}</Hint>}
         </section>
       )}
     </div>

@@ -418,12 +418,11 @@ export const en: typeof zh = {
         "Signed-in browsing reuses the logins in your everyday Chrome, so it needs Chrome installed. We didn't find it on this computer.",
       installChromeBtn: 'Install Google Chrome',
       installChromeHint:
-        'No Chrome? You can still use Public browsing below right now — the agent uses its own browser. Only reusing your logins needs Chrome.',
+        'Using Chrome lets the agent reuse your existing logins and get things done as you.',
       installExt: 'Add the extension to Chrome',
       installExtDesc:
         "The agent talks to Chrome through the Playwright extension. Add it, then come back here — we'll detect it automatically.",
       installExtBtn: 'Add to Chrome',
-      installExtHint: "Can't open the Chrome Web Store? See the sideload guide.",
       connect: 'Connect your browser',
       connectDesc:
         'Open a tab you’re signed in to, then approve the one-time connection — you choose which tab to share.',
@@ -439,14 +438,15 @@ export const en: typeof zh = {
       modesTitle: 'How the agent picks a browser',
       modePublic: 'Public browsing',
       modePublicDesc:
-        'Agent opens its own window. No login, never touches your Chrome. Always available.',
+        'The agent opens a new Chrome instance — it won’t touch your existing Chrome, but it can’t use your logins.',
       modeSignedIn: 'Signed-in browsing',
-      modeSignedInDesc: 'Agent uses your Chrome tab with your logins.',
+      modeSignedInDesc:
+        'With the Chrome extension, the agent can use your logins to get things done.',
       modeReady: 'Ready',
       modeNeedsSetup: 'Needs setup',
       modeNeedsChrome: 'Needs Chrome',
       bannerNote:
-        'While the agent is active you’ll see a “… is debugging this browser” banner in Chrome. That’s expected — it only shows while connected and disappears when you disconnect.',
+        'While the agent is active you’ll see a “… is debugging this browser” banner in Chrome. That’s expected — nothing to worry about.',
     },
     about: {
       description:
