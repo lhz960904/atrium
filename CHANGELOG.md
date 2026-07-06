@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/lhz960904/atrium/compare/v0.8.0...v0.8.1) (2026-07-06)
+
+
+### Bug Fixes
+
+* **mcp:** keep form dialog actions visible and restore scrolling ([#51](https://github.com/lhz960904/atrium/issues/51)) ([70b03a1](https://github.com/lhz960904/atrium/commit/70b03a13eac879feb9d0a722329dae422befd18a))
+
 ## [0.8.0](https://github.com/lhz960904/atrium/compare/v0.7.0...v0.8.0) (2026-07-06)
 
 
