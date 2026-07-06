@@ -1,6 +1,6 @@
 import { Globe, Info, Lock, Monitor, Plug, Puzzle, RefreshCw, TriangleAlert } from 'lucide-react';
-import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { trpc } from '../../../lib/trpc';
 import { useSetting } from '../../../lib/use-setting';
 import { EnableSwitch } from '../providers/EnableSwitch';
 
@@ -107,12 +107,24 @@ function Hint({
   );
 }
 
+/** Current phase of the signed-in browser. Returns BrowserPhase (not a narrowed
+ *  literal) so the 'connected' branches stay valid until the bridge status lands. */
+function deriveBrowserPhase(chromeInstalled: boolean): BrowserPhase {
+  // TODO(browser): return 'connected' once the extension/bridge status is wired.
+  return chromeInstalled ? 'setup' : 'no-chrome';
+}
+
 export function BrowserSection(): React.JSX.Element {
   const { t } = useTranslation();
   const { value: enabled, set: setEnabled } = useSetting('browser.enabled');
-  // TODO(browser): drive from the main process — real Chrome detection plus the
-  // live extension/bridge connection status — instead of this fixed phase.
-  const [phase] = useState<BrowserPhase>('setup');
+  const env = trpc.browser.environment.useQuery();
+  // Assume Chrome is present until the probe resolves, so a machine that has it
+  // doesn't flash the "install Chrome" state on load.
+  const chromeInstalled = env.data?.chromeInstalled ?? true;
+  // No Chrome means the feature can't run, so it reads as off and the switch is
+  // disabled; with Chrome it follows the stored preference.
+  const effectiveOn = enabled && chromeInstalled;
+  const phase = deriveBrowserPhase(chromeInstalled);
 
   const setupPill =
     phase === 'connected'
@@ -143,11 +155,15 @@ export function BrowserSection(): React.JSX.Element {
               {t('settings.browser.controlDesc')}
             </div>
           </div>
-          <EnableSwitch on={enabled} onToggle={() => setEnabled(!enabled)} />
+          <EnableSwitch
+            on={effectiveOn}
+            disabled={!chromeInstalled}
+            onToggle={() => setEnabled(!enabled)}
+          />
         </div>
       </div>
 
-      {enabled && phase !== 'connected' && (
+      {(!chromeInstalled || effectiveOn) && phase !== 'connected' && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 font-semibold text-fg-primary text-sm">
             {t('settings.browser.setup')}
@@ -197,7 +213,7 @@ export function BrowserSection(): React.JSX.Element {
         </section>
       )}
 
-      {enabled && phase === 'connected' && (
+      {effectiveOn && phase === 'connected' && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 font-semibold text-fg-primary text-sm">
             {t('settings.browser.connectionTitle')}
@@ -233,7 +249,7 @@ export function BrowserSection(): React.JSX.Element {
         </section>
       )}
 
-      {enabled && (
+      {effectiveOn && (
         <section>
           <h2 className="mb-3 font-semibold text-fg-primary text-sm">
             {t('settings.browser.modesTitle')}

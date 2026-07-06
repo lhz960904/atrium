@@ -33,9 +33,8 @@ export const settingsRouter = router({
       conf.set(scope, { ...getSettings(scope), ...input[scope] });
     }
     // Flipping browser control reconciles the managed browser MCP server so the
-    // agent's browser tools appear/disappear without a restart. Read the merged
-    // value back rather than the patch (patchShape erases the field's type).
-    if (input.browser) void syncBrowserProvisioning(getSettings('browser').enabled);
+    // agent's browser tools appear/disappear without a restart.
+    if (input.browser) void syncBrowserProvisioning();
   }),
 
   // "Launch at login" lives in the OS login items (the user can also flip it in

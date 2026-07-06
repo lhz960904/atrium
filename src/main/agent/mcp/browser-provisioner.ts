@@ -1,3 +1,5 @@
+import { isChromeInstalled } from '../../browser/detect';
+import { getSettings } from '../../settings/conf';
 import type { ResolvedMcpServer } from './config';
 import { mcpManager } from './manager';
 
@@ -36,8 +38,20 @@ function publicBrowserServer(): ResolvedMcpServer {
   };
 }
 
-/** Reconcile the managed public-browsing server with the master toggle: connect
- *  it when browser control is on, tear it down when off. */
-export async function syncBrowserProvisioning(enabled: boolean): Promise<void> {
-  await mcpManager.setManaged(PUBLIC_BROWSER_ID, enabled ? publicBrowserServer() : null);
+/** Whether the public browser should be running: the user hasn't turned browser
+ *  control off AND Chrome is installed for it to launch. A missing Chrome keeps
+ *  it torn down (rather than spawning a server doomed to fail on first navigate),
+ *  which is what makes the feature default to off when Chrome isn't present. */
+export function shouldRunPublicBrowser(): boolean {
+  return getSettings('browser').enabled && isChromeInstalled();
+}
+
+/** Reconcile the managed public-browsing server with the current state: connect
+ *  it when browser control is on and Chrome is present, tear it down otherwise.
+ *  Call after the toggle changes or Chrome availability may have shifted. */
+export async function syncBrowserProvisioning(): Promise<void> {
+  await mcpManager.setManaged(
+    PUBLIC_BROWSER_ID,
+    shouldRunPublicBrowser() ? publicBrowserServer() : null,
+  );
 }
