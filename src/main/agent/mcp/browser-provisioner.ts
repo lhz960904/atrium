@@ -5,69 +5,95 @@ import { mcpServers } from '../../db/schema';
 import { createLogger } from '../../log';
 import { getSettings } from '../../settings/conf';
 import { mcpManager } from './manager';
+import { encryptSecrets } from './secrets';
 
 const log = createLogger('mcp');
 
 /*
- * The browser feature provisions its MCP server as a normal `mcp_servers` row
- * flagged `managed`, so it flows through the exact same store/manager path as a
- * user server — no special-casing in the manager. Being managed, the MCP
- * settings list shows it read-only (no edit/toggle/delete). Tracks @latest so it
- * moves with the auto-updating browser extension the signed-in server uses later.
+ * The browser feature provisions its MCP servers as normal `mcp_servers` rows
+ * flagged `managed`, so they flow through the same store/manager/list path as
+ * user servers — no special-casing in the manager, and the settings list shows
+ * them read-only under "From plugins". Tracks @latest so it moves with the
+ * auto-updating browser extension.
  */
 const PLAYWRIGHT_MCP = '@playwright/mcp@latest';
 
-/** Fixed id/name for the managed public-browsing row. */
-const BROWSER_SERVER_ID = 'atrium-browser';
-const BROWSER_SERVER_NAME = 'browser';
+/** Fixed ids/names for the two managed rows. Public = the agent's own login-less
+ *  browser; signed-in = the user's Chrome via the extension bridge. */
+const PUBLIC_ID = 'atrium-browser';
+const SIGNED_IN_ID = 'atrium-browser-login';
 
-/** Whether the public browser should run: browser control is on AND Chrome is
- *  installed to launch (playwright-mcp's default channel). A missing Chrome keeps
- *  the row absent rather than spawning a server doomed to fail on first navigate. */
-export function shouldRunPublicBrowser(): boolean {
-  return getSettings('browser').enabled && isChromeInstalled();
-}
-
-/**
- * Reconcile the managed public-browsing server row with the current state, then
- * reload the manager so its connection and the agent's browser tools follow.
- * Call at startup, when the toggle changes, or when Chrome availability may have.
- * Public browsing drives a fresh, login-less browser: no `--browser` is passed,
- * so playwright-mcp uses its default (the installed Chrome), with an `--isolated`
- * throwaway profile.
- */
-export async function syncBrowserProvisioning(db: Db): Promise<void> {
+/** Upsert (when it should run) or delete a managed browser row. Secret env (the
+ *  extension token) is stored encrypted, like any server credential. */
+function reconcileRow(
+  db: Db,
+  id: string,
+  name: string,
+  run: boolean,
+  args: string[],
+  secretEnv?: Record<string, string>,
+): void {
   try {
-    if (shouldRunPublicBrowser()) {
-      const now = new Date();
-      const config = {
-        command: 'npx',
-        args: ['-y', PLAYWRIGHT_MCP, '--isolated'],
-        env: {},
-        envPassthrough: [],
-      };
-      db.insert(mcpServers)
-        .values({
-          id: BROWSER_SERVER_ID,
-          name: BROWSER_SERVER_NAME,
+    if (!run) {
+      db.delete(mcpServers).where(eq(mcpServers.id, id)).run();
+      return;
+    }
+    const now = new Date();
+    const config = { command: 'npx', args, env: {}, envPassthrough: [] };
+    const credentialsEncrypted = secretEnv ? encryptSecrets({ env: secretEnv }) : null;
+    db.insert(mcpServers)
+      .values({
+        id,
+        name,
+        enabled: true,
+        managed: true,
+        transport: 'stdio',
+        config,
+        credentialsEncrypted,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: mcpServers.id,
+        set: {
           enabled: true,
           managed: true,
           transport: 'stdio',
           config,
-          createdAt: now,
+          credentialsEncrypted,
           updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: mcpServers.id,
-          set: { enabled: true, managed: true, transport: 'stdio', config, updatedAt: now },
-        })
-        .run();
-    } else {
-      db.delete(mcpServers).where(eq(mcpServers.id, BROWSER_SERVER_ID)).run();
-    }
+        },
+      })
+      .run();
   } catch (err) {
-    // Most likely the name is already taken by a user server; leave that be.
-    log.warn('could not reconcile the managed browser server:', err);
+    // Most likely the name collides with a user server; leave it be.
+    log.warn(`could not reconcile managed browser server "${name}":`, err);
   }
-  await mcpManager.reload(BROWSER_SERVER_ID);
+}
+
+/**
+ * Reconcile both managed browser rows with the current state, then reload the
+ * manager so connections and the agent's tools follow. Call at startup, on the
+ * toggle, on connect/disconnect, or when Chrome availability may have shifted.
+ *
+ * Public browsing drives a fresh, login-less browser (no `--browser`, so
+ * playwright-mcp's default installed Chrome, `--isolated`); it runs whenever
+ * control is on and Chrome is present. Signed-in browsing (`--extension`) also
+ * needs the user to have connected, and passes the stored token so reconnects
+ * skip the extension's approval dialog.
+ */
+export async function syncBrowserProvisioning(db: Db): Promise<void> {
+  const s = getSettings('browser');
+  const chrome = isChromeInstalled();
+  reconcileRow(db, PUBLIC_ID, 'browser', s.enabled && chrome, ['-y', PLAYWRIGHT_MCP, '--isolated']);
+  reconcileRow(
+    db,
+    SIGNED_IN_ID,
+    'browser-login',
+    s.enabled && chrome && s.connected,
+    ['-y', PLAYWRIGHT_MCP, '--extension'],
+    s.extensionToken ? { PLAYWRIGHT_MCP_EXTENSION_TOKEN: s.extensionToken } : undefined,
+  );
+  await mcpManager.reload(PUBLIC_ID);
+  await mcpManager.reload(SIGNED_IN_ID);
 }

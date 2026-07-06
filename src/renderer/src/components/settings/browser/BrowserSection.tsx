@@ -108,23 +108,29 @@ function Hint({
 }
 
 /** Current phase of the signed-in browser. Returns BrowserPhase (not a narrowed
- *  literal) so the 'connected' branches stay valid until the bridge status lands. */
-function deriveBrowserPhase(chromeInstalled: boolean): BrowserPhase {
-  // TODO(browser): return 'connected' once the extension/bridge status is wired.
-  return chromeInstalled ? 'setup' : 'no-chrome';
+ *  literal) so every branch stays type-valid regardless of the current values. */
+function deriveBrowserPhase(chromeInstalled: boolean, connected: boolean): BrowserPhase {
+  if (!chromeInstalled) return 'no-chrome';
+  return connected ? 'connected' : 'setup';
 }
 
 export function BrowserSection(): React.JSX.Element {
   const { t } = useTranslation();
   const { value: enabled, set: setEnabled } = useSetting('browser.enabled');
+  const utils = trpc.useUtils();
   const env = trpc.browser.environment.useQuery();
   // Assume Chrome is present until the probe resolves, so a machine that has it
   // doesn't flash the "install Chrome" state on load.
   const chromeInstalled = env.data?.chromeInstalled ?? true;
+  const connected = env.data?.connected ?? false;
   // No Chrome means the feature can't run, so it reads as off and the switch is
   // disabled; with Chrome it follows the stored preference.
   const effectiveOn = enabled && chromeInstalled;
-  const phase = deriveBrowserPhase(chromeInstalled);
+  const phase = deriveBrowserPhase(chromeInstalled, connected);
+
+  const refreshEnv = (): void => void utils.browser.environment.invalidate();
+  const connect = trpc.browser.connect.useMutation({ onSuccess: refreshEnv });
+  const disconnect = trpc.browser.disconnect.useMutation({ onSuccess: refreshEnv });
 
   const setupPill =
     phase === 'connected'
@@ -198,11 +204,16 @@ export function BrowserSection(): React.JSX.Element {
                 </Step>
                 <Step
                   marker="2"
-                  tone="idle"
+                  tone="active"
                   title={t('settings.browser.connect')}
                   desc={t('settings.browser.connectDesc')}
                 >
-                  <button type="button" disabled className={`${PRIMARY_BTN} opacity-45`}>
+                  <button
+                    type="button"
+                    onClick={() => connect.mutate()}
+                    disabled={connect.isPending}
+                    className={`${PRIMARY_BTN} disabled:opacity-45`}
+                  >
                     <Plug className="size-4" />
                     {t('settings.browser.connectBtn')}
                   </button>
@@ -230,11 +241,21 @@ export function BrowserSection(): React.JSX.Element {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <button type="button" className={GHOST_BTN}>
+                <button
+                  type="button"
+                  onClick={() => connect.mutate()}
+                  disabled={connect.isPending}
+                  className={`${GHOST_BTN} disabled:opacity-45`}
+                >
                   <RefreshCw className="size-3.5" />
                   {t('settings.browser.reconnect')}
                 </button>
-                <button type="button" className={GHOST_BTN}>
+                <button
+                  type="button"
+                  onClick={() => disconnect.mutate()}
+                  disabled={disconnect.isPending}
+                  className={`${GHOST_BTN} disabled:opacity-45`}
+                >
                   {t('settings.browser.disconnect')}
                 </button>
               </div>
