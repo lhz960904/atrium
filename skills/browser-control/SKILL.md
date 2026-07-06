@@ -44,6 +44,12 @@ Then wait. Once they've connected, retry in the signed-in browser.
 
 Even with the signed-in browser connected, **never** type the user's password, solve a CAPTCHA, or complete a 2FA / verification step for them. If a flow hits one, pause and ask the user to do that step in their browser, then continue.
 
+## If the browser itself isn't installed
+
+Browser control drives **Google Chrome**. If Chrome isn't installed, the tools are still listed, but the first one that opens a page fails with an error like "browser not found", "executable doesn't exist", or "Chrome … is not installed". That isn't a mistake on your part, and retrying won't help.
+
+When you see such an error, stop and tell the user plainly that browser control needs Google Chrome installed, and point them to <https://www.google.com/chrome/>. Continue once they've installed it.
+
 ## Driving a page well
 
 - **Look before you act, cheaply.** Take an **accessibility snapshot** of the page first — it's your primary way to "see," it gives you stable handles to the elements, and it costs far less than a screenshot. Take a **screenshot** only when you need the actual visuals (layout, an image, "does this look right").
