@@ -221,6 +221,7 @@ export function startHttpServer(deps: {
         bgShells,
         mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
           imageToolResults: supportsImageToolResults(providerId, modelId),
+          workspaceRoot,
         }),
         permission: {
           mode,

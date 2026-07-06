@@ -3,6 +3,7 @@ import { dynamicTool, jsonSchema, type Tool } from 'ai';
 import type { McpToolEntry } from './catalog';
 import type { McpManager } from './manager';
 import { renderToolResult } from './render';
+import { spillOversizedImages } from './spill';
 
 type ToolResultOutput = Awaited<ReturnType<NonNullable<Tool['toModelOutput']>>>;
 
@@ -17,7 +18,7 @@ type ToolResultOutput = Awaited<ReturnType<NonNullable<Tool['toModelOutput']>>>;
 export function buildMcpTools(
   entries: McpToolEntry[],
   manager: McpManager,
-  opts: { imageToolResults: boolean },
+  opts: { imageToolResults: boolean; workspaceRoot: string },
 ): Record<string, Tool> {
   const tools: Record<string, Tool> = {};
   for (const entry of entries) {
@@ -31,7 +32,7 @@ export function buildMcpTools(
           (input ?? {}) as Record<string, unknown>,
           { signal: abortSignal },
         );
-        return renderToolResult(result);
+        return spillOversizedImages(renderToolResult(result), opts.workspaceRoot);
       },
       toModelOutput: ({ output }) => mcpOutputToModelOutput(output, opts.imageToolResults),
     });
