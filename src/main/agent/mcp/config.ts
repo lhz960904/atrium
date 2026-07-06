@@ -9,19 +9,45 @@ import type { McpServerRow } from '../../db/schema';
  * only) so it stays unit-testable — the safeStorage crypto is in ./secrets.
  */
 
-const stringMap = z.record(z.string(), z.string());
+const isBlank = (s: string) => s.trim() === '';
+
+/*
+ * The settings form appends a fresh empty row for each arg and env var, so an
+ * untouched row reaches the schema as a blank "" arg or a nameless "" -> ""
+ * env entry. Left in, a blank arg becomes a stray positional on the command
+ * line (e.g. `npx @playwright/mcp --extension ""`), which some MCP servers
+ * reject on startup. Normalize the blanks away in the schema itself, so every
+ * write path (form, JSON editor, client import) and every read (connect time)
+ * is clean — a config already stored with blanks repairs itself when next parsed.
+ */
+const stringList = z
+  .array(z.string())
+  .default([])
+  .transform((xs) => xs.filter((x) => !isBlank(x)));
+
+// Drop entries with a blank key (a nameless env var / header). A blank *value*
+// is kept: `FOO=` is a legitimate empty env var.
+const stringMap = z
+  .record(z.string(), z.string())
+  .transform((m) => Object.fromEntries(Object.entries(m).filter(([k]) => !isBlank(k))));
+
+// A blank optional string (empty cwd / token) means "unset", not a literal "".
+const optionalString = z
+  .string()
+  .transform((s) => (isBlank(s) ? undefined : s))
+  .optional();
 
 /** stdio launch config; secret env values are layered in from McpSecrets. */
 export const stdioConfigSchema = z.object({
-  command: z.string().min(1),
-  args: z.array(z.string()).default([]),
+  command: z.string().trim().min(1),
+  args: stringList,
   // Non-secret env. Names whose values come from the host process belong in
   // envPassthrough; truly secret values belong in McpSecrets.env.
   env: stringMap.default({}),
   // Host env var names forwarded from process.env at connect time.
-  envPassthrough: z.array(z.string()).default([]),
+  envPassthrough: stringList,
   // Working directory; empty means the thread's workspace root.
-  cwd: z.string().optional(),
+  cwd: optionalString,
 });
 
 /** Streamable HTTP / SSE config; secret headers are layered in from McpSecrets. */
@@ -32,7 +58,7 @@ export const httpConfigSchema = z.object({
   headersFromEnv: stringMap.default({}),
   // Convenience for the common case: a host env var whose value becomes the
   // `Authorization: Bearer <value>` header at connect time.
-  bearerTokenEnvVar: z.string().optional(),
+  bearerTokenEnvVar: optionalString,
 });
 
 export type StdioConfig = z.infer<typeof stdioConfigSchema>;
