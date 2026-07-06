@@ -106,133 +106,136 @@ export function McpForm({ server, onDone, onCancel }: McpFormProps): React.JSX.E
   const valid = name.trim().length > 0 && (transport === 'stdio' ? command.trim() : url.trim());
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-6">
-      <div>
-        <span className={label}>{t('settings.mcp.name')}</span>
-        <input
-          className={input}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={t('settings.mcp.namePlaceholder')}
-        />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
+        <div>
+          <span className={label}>{t('settings.mcp.name')}</span>
+          <input
+            className={input}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t('settings.mcp.namePlaceholder')}
+          />
+        </div>
+
+        <div className="flex rounded-lg border border-border-default p-0.5">
+          {(['stdio', 'http'] as const).map((tr) => (
+            <button
+              key={tr}
+              type="button"
+              onClick={() => setTransport(tr)}
+              className={`flex-1 rounded-md px-3 py-1.5 text-sm ${
+                transport === tr ? 'bg-surface-strong text-fg-primary' : 'text-fg-secondary'
+              }`}
+            >
+              {t(tr === 'stdio' ? 'settings.mcp.stdio' : 'settings.mcp.http')}
+            </button>
+          ))}
+        </div>
+
+        {transport === 'stdio' ? (
+          <>
+            <div>
+              <span className={label}>{t('settings.mcp.command')}</span>
+              <input
+                className={input}
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                placeholder="npx -y @scope/server"
+              />
+            </div>
+            <StrList
+              listLabel={t('settings.mcp.args')}
+              items={args}
+              onChange={setArgs}
+              addLabel={t('settings.mcp.addArg')}
+            />
+            <PairEditor
+              listLabel={t('settings.mcp.env')}
+              note={t('settings.mcp.envNote')}
+              items={env}
+              onChange={setEnv}
+              addLabel={t('settings.mcp.addEnv')}
+            />
+            <StrList
+              listLabel={t('settings.mcp.envPassthrough')}
+              note={t('settings.mcp.envPassthroughNote')}
+              items={envPassthrough}
+              onChange={setEnvPassthrough}
+              addLabel={t('settings.mcp.addVar')}
+            />
+            <div>
+              <span className={label}>{t('settings.mcp.cwd')}</span>
+              <input
+                className={input}
+                value={cwd}
+                onChange={(e) => setCwd(e.target.value)}
+                placeholder="~/code"
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <span className={label}>{t('settings.mcp.url')}</span>
+              <input
+                className={input}
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://mcp.example.com/mcp"
+              />
+            </div>
+            <div>
+              <span className={label}>{t('settings.mcp.bearerTokenEnvVar')}</span>
+              <input
+                className={input}
+                value={bearerTokenEnvVar}
+                onChange={(e) => setBearerTokenEnvVar(e.target.value)}
+                placeholder="MCP_BEARER_TOKEN"
+              />
+            </div>
+            <PairEditor
+              listLabel={t('settings.mcp.headers')}
+              note={t('settings.mcp.headersNote')}
+              items={headers}
+              onChange={setHeaders}
+              addLabel={t('settings.mcp.addHeader')}
+            />
+            <PairEditor
+              listLabel={t('settings.mcp.headersFromEnv')}
+              note={t('settings.mcp.headersFromEnvNote')}
+              items={headersFromEnv}
+              onChange={setHeadersFromEnv}
+              addLabel={t('settings.mcp.addVar')}
+            />
+          </>
+        )}
+
+        <label className="flex items-center gap-2 text-fg-secondary text-sm">
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+          {t('settings.mcp.enabled')}
+        </label>
       </div>
 
-      <div className="flex rounded-lg border border-border-default p-0.5">
-        {(['stdio', 'http'] as const).map((tr) => (
+      <div className="shrink-0 border-border-default border-t px-6 py-3">
+        {error && <p className="mb-2 text-danger text-sm">{error}</p>}
+        <div className="flex items-center justify-end gap-2">
           <button
-            key={tr}
             type="button"
-            onClick={() => setTransport(tr)}
-            className={`flex-1 rounded-md px-3 py-1.5 text-sm ${
-              transport === tr ? 'bg-surface-strong text-fg-primary' : 'text-fg-secondary'
-            }`}
+            onClick={onCancel}
+            className="rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-elevated"
           >
-            {t(tr === 'stdio' ? 'settings.mcp.stdio' : 'settings.mcp.http')}
+            {t('common.cancel')}
           </button>
-        ))}
-      </div>
-
-      {transport === 'stdio' ? (
-        <>
-          <div>
-            <span className={label}>{t('settings.mcp.command')}</span>
-            <input
-              className={input}
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-              placeholder="npx -y @scope/server"
-            />
-          </div>
-          <StrList
-            listLabel={t('settings.mcp.args')}
-            items={args}
-            onChange={setArgs}
-            addLabel={t('settings.mcp.addArg')}
-          />
-          <PairEditor
-            listLabel={t('settings.mcp.env')}
-            note={t('settings.mcp.envNote')}
-            items={env}
-            onChange={setEnv}
-            addLabel={t('settings.mcp.addEnv')}
-          />
-          <StrList
-            listLabel={t('settings.mcp.envPassthrough')}
-            note={t('settings.mcp.envPassthroughNote')}
-            items={envPassthrough}
-            onChange={setEnvPassthrough}
-            addLabel={t('settings.mcp.addVar')}
-          />
-          <div>
-            <span className={label}>{t('settings.mcp.cwd')}</span>
-            <input
-              className={input}
-              value={cwd}
-              onChange={(e) => setCwd(e.target.value)}
-              placeholder="~/code"
-            />
-          </div>
-        </>
-      ) : (
-        <>
-          <div>
-            <span className={label}>{t('settings.mcp.url')}</span>
-            <input
-              className={input}
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://mcp.example.com/mcp"
-            />
-          </div>
-          <div>
-            <span className={label}>{t('settings.mcp.bearerTokenEnvVar')}</span>
-            <input
-              className={input}
-              value={bearerTokenEnvVar}
-              onChange={(e) => setBearerTokenEnvVar(e.target.value)}
-              placeholder="MCP_BEARER_TOKEN"
-            />
-          </div>
-          <PairEditor
-            listLabel={t('settings.mcp.headers')}
-            note={t('settings.mcp.headersNote')}
-            items={headers}
-            onChange={setHeaders}
-            addLabel={t('settings.mcp.addHeader')}
-          />
-          <PairEditor
-            listLabel={t('settings.mcp.headersFromEnv')}
-            note={t('settings.mcp.headersFromEnvNote')}
-            items={headersFromEnv}
-            onChange={setHeadersFromEnv}
-            addLabel={t('settings.mcp.addVar')}
-          />
-        </>
-      )}
-
-      <label className="flex items-center gap-2 text-fg-secondary text-sm">
-        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-        {t('settings.mcp.enabled')}
-      </label>
-
-      {error && <p className="text-danger text-sm">{error}</p>}
-
-      <div className="flex items-center gap-2 pt-1">
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving || !valid}
-          className="rounded-md bg-accent px-3 py-1.5 text-fg-on-accent text-sm hover:bg-accent-hover disabled:opacity-40"
-        >
-          {server ? t('common.save') : t('common.create')}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md px-3 py-1.5 text-fg-secondary text-sm hover:bg-elevated"
-        >
-          {t('common.cancel')}
-        </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving || !valid}
+            className="rounded-md bg-accent px-3 py-1.5 text-fg-on-accent text-sm hover:bg-accent-hover disabled:opacity-40"
+          >
+            {server ? t('common.save') : t('common.create')}
+          </button>
+        </div>
       </div>
     </div>
   );
