@@ -2,6 +2,7 @@ import type { TrustRule } from '@shared/permissions/rules';
 import { type Settings, SettingsPatchSchema } from '@shared/settings';
 import { app } from 'electron';
 import { z } from 'zod';
+import { syncBrowserProvisioning } from '../../agent/mcp/browser-provisioner';
 import { getSettings } from '../../settings/conf';
 import { publicProcedure, router } from '../trpc';
 
@@ -31,6 +32,10 @@ export const settingsRouter = router({
     for (const scope of Object.keys(input) as (keyof Settings)[]) {
       conf.set(scope, { ...getSettings(scope), ...input[scope] });
     }
+    // Flipping browser control reconciles the managed browser MCP server so the
+    // agent's browser tools appear/disappear without a restart. Read the merged
+    // value back rather than the patch (patchShape erases the field's type).
+    if (input.browser) void syncBrowserProvisioning(getSettings('browser').enabled);
   }),
 
   // "Launch at login" lives in the OS login items (the user can also flip it in
