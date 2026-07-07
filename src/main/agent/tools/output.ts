@@ -9,6 +9,13 @@ import type { Tool } from 'ai';
 
 type ToolResultOutput = Awaited<ReturnType<NonNullable<Tool['toModelOutput']>>>;
 
+/**
+ * Cap for images carried inline as base64 (MCP results, view_image). Past this
+ * they spill to disk instead: Anthropic rejects images over 5MB and downscales
+ * past ~1568px anyway, so bigger payloads only bloat the store and stream.
+ */
+export const IMAGE_INLINE_MAX_BYTES = 3 * 1024 * 1024;
+
 /** Keep the start; append a marker telling the model what was cut + a hint. */
 export function headTruncate(s: string, max: number, hint: string): string {
   if (max <= 0 || s.length <= max) return s;

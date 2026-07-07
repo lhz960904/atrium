@@ -3,11 +3,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { resolveAbsolute } from '../../sandbox/paths';
 import type { ToolCtx } from '../context';
-import { fsErrorMessage, imageOutputToModelOutput } from '../output';
-
-// Matches the MCP inline cap: past this the base64 bloats the store and stream,
-// and Anthropic rejects images over 5MB anyway.
-const IMAGE_MAX_BYTES = 3 * 1024 * 1024;
+import { fsErrorMessage, IMAGE_INLINE_MAX_BYTES, imageOutputToModelOutput } from '../output';
 
 const SIGNATURES: Array<{ mediaType: string; matches: (b: Uint8Array) => boolean }> = [
   {
@@ -59,7 +55,7 @@ export const viewImageTool = (ctx: ToolCtx) =>
         if (!mediaType) {
           return `Error: Not a supported image file (png, jpeg, gif, webp): ${path}`;
         }
-        if (bytes.byteLength > IMAGE_MAX_BYTES) {
+        if (bytes.byteLength > IMAGE_INLINE_MAX_BYTES) {
           const mb = (bytes.byteLength / (1024 * 1024)).toFixed(1);
           return `Error: Image is ${mb}MB, over the 3MB inline limit. Downscale it first (e.g. \`sips -Z 1568 <file> --out <smaller copy>\`) and view the smaller copy.`;
         }

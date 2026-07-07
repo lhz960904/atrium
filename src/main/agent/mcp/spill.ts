@@ -1,13 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ImageToolOutput, ToolResultImage } from '@shared/chat-types';
-
-/**
- * Inline cap per image. Anthropic rejects images over 5MB and downscales past
- * ~1568px anyway, so beyond this size the base64 only bloats the message store
- * and stream with no model-side gain — the image goes to disk instead.
- */
-const INLINE_MAX_BYTES = 3 * 1024 * 1024;
+import { IMAGE_INLINE_MAX_BYTES } from '../tools/output';
 
 /** Where oversized tool images land, relative to the thread's workspace. */
 const MEDIA_DIR = join('.atrium', 'media');
@@ -26,12 +21,10 @@ function extensionOf(mediaType: string): string {
   return subtype === 'jpeg' ? 'jpg' : subtype;
 }
 
-let sequence = 0;
-
 async function writeImage(image: ToolResultImage, workspaceRoot: string): Promise<string> {
   const dir = join(workspaceRoot, MEDIA_DIR);
   await mkdir(dir, { recursive: true });
-  const name = `tool-image-${Date.now().toString(36)}-${sequence++}.${extensionOf(image.mediaType)}`;
+  const name = `tool-image-${randomUUID().slice(0, 8)}.${extensionOf(image.mediaType)}`;
   const path = join(dir, name);
   await writeFile(path, Buffer.from(base64Of(image.dataUrl), 'base64'));
   return path;
@@ -51,7 +44,7 @@ export async function spillOversizedImages(
   const keep: ToolResultImage[] = [];
   const notes: string[] = [];
   for (const image of output.images) {
-    if (rawBytesOf(image.dataUrl) <= INLINE_MAX_BYTES) {
+    if (rawBytesOf(image.dataUrl) <= IMAGE_INLINE_MAX_BYTES) {
       keep.push(image);
       continue;
     }
