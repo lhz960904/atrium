@@ -53,6 +53,23 @@ function buildComponents(streaming: boolean): Components {
     pre: ({ children }) => <>{children}</>,
     // Links render as favicon + label chips instead of raw URLs (Codex-style).
     a: ({ href, children }) => <LinkChip href={href}>{children}</LinkChip>,
+    // A local file path in a Markdown image can't load in the chat (no file://
+    // access), so it would show a broken-image box. Render it as a path chip
+    // instead; web/data/blob URLs stay real images.
+    img: ({ src, alt }) => {
+      const url = typeof src === 'string' ? src : '';
+      if (/^(https?:|data:|blob:)/.test(url)) {
+        return (
+          <img src={url} alt={alt ?? ''} className="my-2 max-h-[320px] max-w-full rounded-lg" />
+        );
+      }
+      return (
+        <code className="rounded bg-code-bg px-1 py-0.5 font-mono text-[0.85em] text-fg-primary">
+          {alt ? `${alt}: ` : ''}
+          {url}
+        </code>
+      );
+    },
     table: ({ children }) => <TableBlock>{children}</TableBlock>,
     th: ({ children }) => (
       <th className="whitespace-nowrap border-border-default border-b bg-surface px-3 py-2 text-left font-medium text-fg-primary">
