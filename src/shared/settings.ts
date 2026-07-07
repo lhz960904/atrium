@@ -107,6 +107,21 @@ const permissionsShape = z.object({
   reviewerModel: selectedModelShape.nullable().default(null),
 });
 
+const browserShape = z.object({
+  /** Master switch for agent browser control. On by default: public browsing
+   *  (the agent's own window, no login) works out of the box; the signed-in
+   *  browser still needs the user to connect their Chrome. */
+  enabled: z.boolean().default(true),
+  /** Whether the user has connected the signed-in browser (the --extension
+   *  server). Persisted so the connection is re-provisioned across restarts.
+   *  The extension owns the approval; it prompts on connect ("Allow & select"). */
+  connected: z.boolean().default(false),
+  /** The extension's own auth token, imported from its status page so reconnects
+   *  skip the approval dialog. Empty until imported; the extension rejects any
+   *  other value, so it can only be the extension's, not a minted one. */
+  extensionToken: z.string().default(''),
+});
+
 // zod v4's `.default` takes the resolved output (not an input run through the
 // schema), so seed each scope's default from its own all-defaults parse.
 export const SettingsSchema = z.object({
@@ -114,6 +129,7 @@ export const SettingsSchema = z.object({
   appearance: appearanceShape.default(appearanceShape.parse({})),
   keyboard: keyboardShape.default(keyboardShape.parse({})),
   permissions: permissionsShape.default(permissionsShape.parse({})),
+  browser: browserShape.default(browserShape.parse({})),
 });
 
 /**
@@ -137,6 +153,7 @@ export const SettingsPatchSchema = z.object({
   appearance: patchShape(appearanceShape).optional(),
   keyboard: patchShape(keyboardShape).optional(),
   permissions: patchShape(permissionsShape).optional(),
+  browser: patchShape(browserShape).optional(),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;

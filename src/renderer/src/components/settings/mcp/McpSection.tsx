@@ -35,6 +35,8 @@ export function McpSection(): React.JSX.Element {
   }
 
   const list = servers.data;
+  const userServers = list.filter((s) => !s.managed);
+  const managed = list.filter((s) => s.managed);
 
   return (
     <div className="mx-auto flex h-full w-full max-w-[820px] flex-col gap-3">
@@ -63,21 +65,35 @@ export function McpSection(): React.JSX.Element {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {list.length === 0 ? (
+        {userServers.length === 0 && managed.length === 0 ? (
           <Empty onAdd={() => setEditing('new')} />
         ) : (
-          <div className="flex flex-col gap-2">
-            {list.map((s) => (
-              <Row
-                key={s.id}
-                item={s}
-                onEdit={() => setEditing(s)}
-                onToggle={(enabled) => setEnabled.mutate({ id: s.id, enabled })}
-                onDelete={() => del.mutate({ id: s.id })}
-                onAuthenticate={() => authenticate.mutate({ id: s.id })}
-                authenticating={authenticate.isPending && authenticate.variables?.id === s.id}
-              />
-            ))}
+          <div className="flex flex-col gap-5">
+            {userServers.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {userServers.map((s) => (
+                  <Row
+                    key={s.id}
+                    item={s}
+                    onEdit={() => setEditing(s)}
+                    onToggle={(enabled) => setEnabled.mutate({ id: s.id, enabled })}
+                    onDelete={() => del.mutate({ id: s.id })}
+                    onAuthenticate={() => authenticate.mutate({ id: s.id })}
+                    authenticating={authenticate.isPending && authenticate.variables?.id === s.id}
+                  />
+                ))}
+              </div>
+            )}
+            {managed.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <h3 className="px-1 font-medium text-fg-tertiary text-xs">
+                  {t('settings.mcp.fromPlugins')}
+                </h3>
+                {managed.map((s) => (
+                  <ManagedRow key={s.id} item={s} />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -153,6 +169,50 @@ const DOT: Record<string, string> = {
   disabled: 'bg-fg-disabled',
 };
 
+/** One-line summary of a server's target: the stdio command or the http url. */
+function subtitleOf(item: McpServerItem): string {
+  const cfg = item.config ?? {};
+  return item.transport === 'stdio'
+    ? [cfg.command, ...(Array.isArray(cfg.args) ? cfg.args : [])]
+        .filter(Boolean)
+        .map(String)
+        .join(' ')
+    : String(cfg.url ?? '');
+}
+
+/** A feature-provisioned server: shown read-only (no edit/toggle/delete), with
+ *  just its live status — the user controls it from the feature that owns it. */
+function ManagedRow({ item }: { item: McpServerItem }): React.JSX.Element {
+  const { t } = useTranslation();
+  const subtitle = subtitleOf(item);
+  const state = !item.enabled ? 'disabled' : (item.status ?? 'connecting');
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-border-default bg-surface px-4 py-3">
+      <span
+        title={t(`settings.mcp.status.${state}`)}
+        className={`size-2 shrink-0 rounded-full ${DOT[state]}`}
+      />
+      <Server className="size-4 shrink-0 text-fg-tertiary" />
+      <div className="flex min-w-0 flex-1 flex-col items-start">
+        <span className="flex max-w-full items-center gap-2">
+          <span className="truncate font-medium text-fg-primary text-sm">{item.name}</span>
+          <span className="shrink-0 rounded bg-surface-strong px-1.5 py-0.5 text-[10px] text-fg-tertiary uppercase">
+            {item.transport}
+          </span>
+        </span>
+        {subtitle && (
+          <span
+            title={subtitle}
+            className="mt-0.5 max-w-full truncate font-mono text-fg-tertiary text-xs"
+          >
+            {subtitle}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Row({
   item,
   onEdit,
@@ -169,14 +229,7 @@ function Row({
   authenticating: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  const cfg = item.config ?? {};
-  const subtitle =
-    item.transport === 'stdio'
-      ? [cfg.command, ...(Array.isArray(cfg.args) ? cfg.args : [])]
-          .filter(Boolean)
-          .map(String)
-          .join(' ')
-      : String(cfg.url ?? '');
+  const subtitle = subtitleOf(item);
   const state = !item.enabled ? 'disabled' : (item.status ?? 'connecting');
   return (
     <div className="group flex items-center gap-3 rounded-lg border border-border-default bg-surface px-4 py-3">

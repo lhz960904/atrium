@@ -2,6 +2,7 @@ import type { TrustRule } from '@shared/permissions/rules';
 import { type Settings, SettingsPatchSchema } from '@shared/settings';
 import { app } from 'electron';
 import { z } from 'zod';
+import { syncBrowserProvisioning } from '../../agent/mcp/browser-provisioner';
 import { getSettings } from '../../settings/conf';
 import { publicProcedure, router } from '../trpc';
 
@@ -20,16 +21,20 @@ export const settingsRouter = router({
       appearance: getSettings('appearance'),
       keyboard: getSettings('keyboard'),
       permissions: getSettings('permissions'),
+      browser: getSettings('browser'),
     };
   }),
 
   /** Merge a scoped partial patch into settings. The generic writer for every
    *  preference, so adding a setting needs no new procedure. */
-  patch: publicProcedure.input(SettingsPatchSchema).mutation(({ input }) => {
+  patch: publicProcedure.input(SettingsPatchSchema).mutation(({ ctx, input }) => {
     const conf = getSettings();
     for (const scope of Object.keys(input) as (keyof Settings)[]) {
       conf.set(scope, { ...getSettings(scope), ...input[scope] });
     }
+    // Flipping browser control reconciles the managed browser MCP server so the
+    // agent's browser tools appear/disappear without a restart.
+    if (input.browser) void syncBrowserProvisioning(ctx.db);
   }),
 
   // "Launch at login" lives in the OS login items (the user can also flip it in

@@ -405,6 +405,56 @@ export const en: typeof zh = {
       codeThemeLight: 'Light theme',
       codeThemeDark: 'Dark theme',
     },
+    browser: {
+      lede: "Let the agent browse and act in your Chrome — reusing the sites you're already signed in to, and working in the background without taking over your browser.",
+      control: 'Browser control',
+      controlDesc: 'Allow the agent to navigate, click, type, and read pages.',
+      setup: 'Setup',
+      statusNotConnected: 'Not connected',
+      statusConnected: 'Connected',
+      statusChromeNotFound: 'Chrome not found',
+      installChrome: 'Install Google Chrome',
+      installChromeDesc:
+        "Signed-in browsing reuses the logins in your everyday Chrome, so it needs Chrome installed. We didn't find it on this computer.",
+      installChromeBtn: 'Install Google Chrome',
+      installChromeHint:
+        'Using Chrome lets the agent reuse your existing logins and get things done as you.',
+      installExt: 'Add the extension to Chrome',
+      installExtDesc:
+        "The agent talks to Chrome through the Playwright extension. Add it, then come back here — we'll detect it automatically.",
+      installExtBtn: 'Add to Chrome',
+      extInstalled: '✓ Extension detected',
+      connect: 'Connect your browser',
+      connectDesc:
+        'Open a tab you’re signed in to, then approve the one-time connection — you choose which tab to share.',
+      connectBtn: 'Connect',
+      silentLabel: 'Skip the approval on reconnect',
+      silentImport: 'Import token →',
+      silentEnabled: '✓ Silent reconnect on',
+      tokenWaiting: 'Waiting for the token — click Copy on the extension page that just opened',
+      tokenSkip: 'Skip, approve manually',
+      tokenError: "That's not a valid token — copy it from the extension page.",
+      connectionTitle: 'Connection',
+      connectionSession: 'Chrome · your signed-in session',
+      connectionSessionDesc:
+        'Reusing your logged-in tabs. Reconnects automatically — no need to re-approve.',
+      reconnect: 'Reconnect',
+      disconnect: 'Disconnect',
+      extensionLinked: 'Extension linked',
+      tabGroupNote: 'Shared tab group: Playwright · drag a tab in to let the agent use it',
+      modesTitle: 'How the agent picks a browser',
+      modePublic: 'Public browsing',
+      modePublicDesc:
+        'The agent opens a new Chrome instance — it won’t touch your existing Chrome, but it can’t use your logins.',
+      modeSignedIn: 'Signed-in browsing',
+      modeSignedInDesc:
+        'With the Chrome extension, the agent can use your logins to get things done.',
+      modeReady: 'Ready',
+      modeNeedsSetup: 'Needs setup',
+      modeNeedsChrome: 'Needs Chrome',
+      bannerNote:
+        'While the agent is active you’ll see a “… is debugging this browser” banner in Chrome. That’s expected — nothing to worry about.',
+    },
     about: {
       description:
         'Atrium is a local-first desktop AI agent. Bring your own API key to connect any model provider, with the agent capabilities common in tools today.',
@@ -624,6 +674,7 @@ export const en: typeof zh = {
       addServer: 'Add MCP server',
       editServer: 'Edit {{name}}',
       count: '{{count}} configured',
+      fromPlugins: 'From plugins',
       emptyList: 'No MCP servers yet.',
       emptyHint: 'Pick an MCP server on the left, or add one.',
       authenticate: 'Authenticate',
