@@ -120,39 +120,33 @@ function Hint({
   );
 }
 
-/** Optional silent-reconnect control: opens the extension's token page and, when
- *  the user comes back having copied it, imports the token so future connects
- *  skip the approval dialog. */
-function TokenControl({
-  hasToken,
-  awaiting,
-  notFound,
-  onStart,
+/** The input shown while waiting for the user to copy the extension token. The
+ *  clipboard is polled automatically; this also accepts a manual paste. */
+function TokenWaitingInput({
+  onManual,
+  onSkip,
 }: {
-  hasToken: boolean;
-  awaiting: boolean;
-  notFound: boolean;
-  onStart: () => void;
+  onManual: (value: string) => void;
+  onSkip?: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
-  if (hasToken)
-    return (
-      <span className="font-medium text-success text-xs">
-        {t('settings.browser.silentEnabled')}
-      </span>
-    );
   return (
-    <div className="flex flex-col gap-1">
-      <button
-        type="button"
-        onClick={onStart}
-        disabled={awaiting}
-        className="self-start font-medium text-accent text-xs hover:underline disabled:opacity-50"
-      >
-        {awaiting ? t('settings.browser.silentWaiting') : t('settings.browser.silentImport')}
-      </button>
-      {notFound && (
-        <span className="text-warning text-xs">{t('settings.browser.silentNotFound')}</span>
+    <div className="flex flex-col gap-1.5">
+      <input
+        type="text"
+        placeholder={t('settings.browser.tokenWaiting')}
+        onChange={(e) => onManual(e.target.value)}
+        className="w-full max-w-[380px] rounded-md border border-border-default bg-elevated px-2.5 py-1.5 font-mono text-fg-primary text-xs outline-none placeholder:font-sans placeholder:text-fg-tertiary focus:border-accent"
+      />
+      <span className="text-fg-tertiary text-xs">{t('settings.browser.tokenHint')}</span>
+      {onSkip && (
+        <button
+          type="button"
+          onClick={onSkip}
+          className="self-start text-fg-tertiary text-xs hover:underline"
+        >
+          {t('settings.browser.tokenSkip')}
+        </button>
       )}
     </div>
   );
@@ -169,7 +163,8 @@ export function BrowserSection(): React.JSX.Element {
   const { t } = useTranslation();
   const { value: enabled, set: setEnabled } = useSetting('browser.enabled');
   const utils = trpc.useUtils();
-  const env = trpc.browser.environment.useQuery();
+  // Poll so installing Chrome / the extension, or connecting, shows up live.
+  const env = trpc.browser.environment.useQuery(undefined, { refetchInterval: 2000 });
   // Assume Chrome is present until the probe resolves, so a machine that has it
   // doesn't flash the "install Chrome" state on load.
   const chromeInstalled = env.data?.chromeInstalled ?? true;
@@ -185,27 +180,37 @@ export function BrowserSection(): React.JSX.Element {
   const connect = trpc.browser.connect.useMutation({ onSuccess: refreshEnv });
   const disconnect = trpc.browser.disconnect.useMutation({ onSuccess: refreshEnv });
 
-  const [awaitingToken, setAwaitingToken] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const openTokenPage = trpc.browser.openTokenPage.useMutation();
   const importToken = trpc.browser.importToken.useMutation({
     onSuccess: (r) => {
-      setAwaitingToken(false);
-      if (r.imported) refreshEnv();
+      if (r.imported) {
+        setWaiting(false);
+        refreshEnv();
+      }
     },
   });
-  const startTokenImport = (): void => {
-    setAwaitingToken(true);
+  // While waiting, poll the clipboard so the moment the user copies the token —
+  // whenever that is — we pick it up and update, with no extra step.
+  const clip = trpc.browser.clipboardToken.useQuery(undefined, {
+    enabled: waiting && !hasToken,
+    refetchInterval: 1200,
+  });
+  useEffect(() => {
+    if (waiting && clip.data?.token) importToken.mutate({ token: clip.data.token });
+  }, [waiting, clip.data?.token, importToken]);
+  const startTokenFlow = (): void => {
+    setWaiting(true);
     openTokenPage.mutate();
   };
-  // When the user returns from the extension's token page (the window regains
-  // focus), read the clipboard once and import if it holds the token.
-  useEffect(() => {
-    if (!awaitingToken) return;
-    const onFocus = (): void => importToken.mutate();
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [awaitingToken, importToken]);
-  const tokenNotFound = !awaitingToken && importToken.data?.imported === false;
+  const skipToApproval = (): void => {
+    setWaiting(false);
+    connect.mutate();
+  };
+  const manualToken = (text: string): void => {
+    const m = text.trim().match(/^(?:PLAYWRIGHT_MCP_EXTENSION_TOKEN=)?([A-Za-z0-9_-]+)$/);
+    if (m) importToken.mutate({ token: m[1] });
+  };
 
   const setupPill =
     phase === 'connected'
@@ -302,25 +307,19 @@ export function BrowserSection(): React.JSX.Element {
                   title={t('settings.browser.connect')}
                   desc={t('settings.browser.connectDesc')}
                 >
-                  <div className="flex flex-col gap-2.5">
+                  {waiting ? (
+                    <TokenWaitingInput onManual={manualToken} onSkip={skipToApproval} />
+                  ) : (
                     <button
                       type="button"
-                      onClick={() => connect.mutate()}
-                      disabled={!extensionInstalled || connect.isPending}
+                      onClick={startTokenFlow}
+                      disabled={!extensionInstalled}
                       className={`${PRIMARY_BTN} self-start disabled:opacity-45`}
                     >
                       <Plug className="size-4" />
                       {t('settings.browser.connectBtn')}
                     </button>
-                    {extensionInstalled && (
-                      <TokenControl
-                        hasToken={hasToken}
-                        awaiting={awaitingToken}
-                        notFound={tokenNotFound}
-                        onStart={startTokenImport}
-                      />
-                    )}
-                  </div>
+                  )}
                 </Step>
               </>
             )}
@@ -370,14 +369,25 @@ export function BrowserSection(): React.JSX.Element {
                 {t('settings.browser.tabGroupNote')}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-4 border-border-default border-t px-4 py-3">
-              <span className="text-fg-tertiary text-xs">{t('settings.browser.silentLabel')}</span>
-              <TokenControl
-                hasToken={hasToken}
-                awaiting={awaitingToken}
-                notFound={tokenNotFound}
-                onStart={startTokenImport}
-              />
+            <div className="flex items-start justify-between gap-4 border-border-default border-t px-4 py-3">
+              <span className="mt-0.5 text-fg-tertiary text-xs">
+                {t('settings.browser.silentLabel')}
+              </span>
+              {hasToken ? (
+                <span className="font-medium text-success text-xs">
+                  {t('settings.browser.silentEnabled')}
+                </span>
+              ) : waiting ? (
+                <TokenWaitingInput onManual={manualToken} />
+              ) : (
+                <button
+                  type="button"
+                  onClick={startTokenFlow}
+                  className="font-medium text-accent text-xs hover:underline"
+                >
+                  {t('settings.browser.silentImport')}
+                </button>
+              )}
             </div>
           </div>
         </section>
