@@ -164,15 +164,17 @@ function SettingsLayout(): React.JSX.Element {
     <div className="grid h-screen grid-cols-[260px_1fr]">
       <aside className="flex min-h-0 flex-col border-r border-border-default bg-surface">
         <div className="atrium-titlebar" />
-        <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
+        <div className="p-3 pb-2">
           <button
             type="button"
             onClick={goBackToApp}
-            className="mb-2 flex items-center gap-2 rounded-md px-3 py-2 text-fg-tertiary text-sm hover:bg-surface-strong hover:text-fg-primary"
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-fg-tertiary text-sm hover:bg-surface-strong hover:text-fg-primary"
           >
             <ArrowLeft className="size-3.5" />
             {t('settings.backToApp')}
           </button>
+        </div>
+        <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3 pt-0">
           {NAV_ITEMS.map((item, i) => {
             const Icon = item.icon;
             const showHeader = item.group != null && item.group !== NAV_ITEMS[i - 1]?.group;
