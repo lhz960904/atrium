@@ -1,3 +1,9 @@
+import {
+  type NormalizedPart,
+  type NormalizedToolOutput,
+  normalizedParts,
+  stringifyUnknown,
+} from '@shared/message-parts';
 import { generateText, type LanguageModel, type ModelMessage } from 'ai';
 
 /**
@@ -28,62 +34,33 @@ const SUMMARY_INSTRUCTION = `Summarize the conversation below using exactly thes
 7. Current work in progress (most recent first).
 8. Next step, aligned with the user's most recent request.`;
 
-function stringify(value: unknown): string {
-  if (value == null) return '';
-  if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return '';
-  }
-}
-
-/** Any content part a ModelMessage can carry — derived from the SDK, not hand-rolled. */
-type ContentPart = Exclude<ModelMessage['content'], string>[number];
-
 /**
- * Render a tool output for the transcript, keeping it text-only: inline images
- * (base64) must never reach the summarizer — they'd bloat the prompt with
- * megabytes of undecodable text, and the summary model may lack vision anyway.
- * Handles the wire ToolResultOutput shapes and the tool's own { text, images }
- * object (which 'json' wraps after message conversion).
+ * Inline images (base64) must never reach the summarizer — they'd bloat the
+ * prompt with megabytes of undecodable text, and the summary model may lack
+ * vision anyway. Normalization already keeps them out of `text`; render just
+ * a count so the summary knows something visual happened.
  */
-function renderToolOutput(output: unknown): string {
-  if (output != null && typeof output === 'object') {
-    const o = output as Record<string, unknown>;
-    if (o.type === 'json') return renderToolOutput(o.value);
-    if (o.type === 'text' || o.type === 'error-text') return String(o.value);
-    if (typeof o.text === 'string' && Array.isArray(o.images)) {
-      return [o.text, `[${o.images.length} image(s) omitted]`].filter(Boolean).join('\n');
-    }
-    if (o.type === 'content' && Array.isArray(o.value)) {
-      return (o.value as Record<string, unknown>[])
-        .map((p) => (typeof p.text === 'string' ? p.text : `[${String(p.type)} omitted]`))
-        .join('\n');
-    }
-  }
-  return stringify(output);
+function renderToolOutput(output: NormalizedToolOutput): string {
+  const imageNote = output.images.length > 0 ? `[${output.images.length} image(s) omitted]` : '';
+  return [output.text, imageNote].filter(Boolean).join('\n');
 }
 
-function renderPart(part: ContentPart): string {
-  switch (part.type) {
+function renderPart(part: NormalizedPart): string {
+  switch (part.kind) {
     case 'text':
     case 'reasoning':
       return part.text;
     case 'tool-call':
-      return `[tool ${part.toolName}] ${stringify(part.input)}`;
+      return `[tool ${part.name}] ${stringifyUnknown(part.input)}`;
     case 'tool-result':
-      return `[tool result ${part.toolName}] ${renderToolOutput(part.output)}`;
+      return `[tool result ${part.name}] ${renderToolOutput(part.output)}`;
     default:
-      return `[${part.type}]`;
+      return `[${part.kind}]`;
   }
 }
 
 function renderMessage(msg: ModelMessage): string {
-  const { content } = msg;
-  const body =
-    typeof content === 'string' ? content : (content as ContentPart[]).map(renderPart).join('\n');
-  return `## ${msg.role}\n${body}`;
+  return `## ${msg.role}\n${normalizedParts(msg).map(renderPart).join('\n')}`;
 }
 
 export function renderTranscript(messages: ModelMessage[]): string {

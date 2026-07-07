@@ -1,3 +1,4 @@
+import { textOfMessage } from '@shared/message-parts';
 import { generateText, type UIMessage } from 'ai';
 import type { Db } from '../../../db';
 import type { AgentMiddleware, RunContext } from '../types';
@@ -11,11 +12,7 @@ const TITLE_SYSTEM =
 
 function firstUserText(messages: UIMessage[]): string {
   const user = messages.find((m) => m.role === 'user');
-  if (!user) return '';
-  return user.parts
-    .map((p) => (p.type === 'text' ? p.text : ''))
-    .join(' ')
-    .trim();
+  return user ? textOfMessage(user, ' ') : '';
 }
 
 function cleanTitle(raw: string): string {

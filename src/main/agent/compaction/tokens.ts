@@ -1,8 +1,9 @@
+import { normalizedParts, stringifyUnknown } from '@shared/message-parts';
 import type { ModelMessage, UIMessage } from 'ai';
 
 /**
  * Token accounting for compaction's threshold check. Not exact — exactness
- * would need a per-provider tokenizer we don't carry. The strategy (C-5):
+ * would need a per-provider tokenizer we don't carry. The strategy:
  * anchor on the provider's own count where we have it, estimate only the tail.
  */
 
@@ -20,90 +21,45 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
 
-type LoosePart = Record<string, unknown>;
-type Cost = { text: string; images: number };
-
-function stringifyField(value: unknown): string {
-  if (value == null) return '';
-  if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return '';
-  }
-}
-
 /**
- * Split a tool output into text plus a flat image count when it carries inline
- * images — either the tool's own { text, images } object or, after message
- * conversion, the wire ToolResultOutput ('json' wrapping the object, or
- * 'content' with image parts). Returns null for outputs with no image shape.
+ * Size estimate over the normalized parts of a message, either family.
+ * Text-bearing content counts by length; tool-result images count flat.
  */
-function toolOutputCost(output: unknown): Cost | null {
-  if (output == null || typeof output !== 'object') return null;
-  const o = output as LoosePart;
-  if (o.type === 'json') return toolOutputCost(o.value);
-  if (typeof o.text === 'string' && Array.isArray(o.images)) {
-    return { text: o.text, images: o.images.length };
-  }
-  if (o.type === 'content' && Array.isArray(o.value)) {
-    const cost: Cost = { text: '', images: 0 };
-    for (const part of o.value as LoosePart[]) {
-      if (typeof part.text === 'string') cost.text += part.text;
-      else cost.images += 1;
+function tokensOfMessage(msg: UIMessage | ModelMessage): number {
+  let text = '';
+  let images = 0;
+  for (const part of normalizedParts(msg)) {
+    switch (part.kind) {
+      case 'text':
+      case 'reasoning':
+        text += part.text;
+        break;
+      case 'tool-call':
+        text += stringifyUnknown(part.input);
+        break;
+      case 'tool-result':
+        text += part.output.text;
+        images += part.output.images.length;
+        break;
+      case 'data':
+        text += stringifyUnknown(part.data);
+        break;
+      default:
+        // Attached files/sources aren't counted, matching the pre-normalized
+        // estimate; tool-result images are the ones that dominate real prompts.
+        break;
     }
-    return cost;
   }
-  return null;
-}
-
-function addOutput(cost: Cost, output: unknown): void {
-  const c = toolOutputCost(output);
-  if (c) {
-    cost.text += c.text;
-    cost.images += c.images;
-  } else {
-    cost.text += stringifyField(output);
-  }
-}
-
-/** Accumulate the bulky fields of a UIMessage's parts. */
-function costOfUIMessage(msg: UIMessage): Cost {
-  const cost: Cost = { text: '', images: 0 };
-  for (const p of (msg.parts ?? []) as LoosePart[]) {
-    if (typeof p.text === 'string') cost.text += p.text;
-    if ('input' in p) cost.text += stringifyField(p.input);
-    if ('output' in p) addOutput(cost, p.output);
-    if ('data' in p) cost.text += stringifyField(p.data);
-  }
-  return cost;
-}
-
-/** Accumulate the text-bearing content of a ModelMessage. */
-function costOfModelMessage(msg: ModelMessage): Cost {
-  const cost: Cost = { text: '', images: 0 };
-  const content = msg.content as unknown;
-  if (typeof content === 'string') return { text: content, images: 0 };
-  if (!Array.isArray(content)) return cost;
-  for (const p of content as LoosePart[]) {
-    if (typeof p.text === 'string') cost.text += p.text;
-    if ('input' in p) cost.text += stringifyField(p.input);
-    if ('output' in p) addOutput(cost, p.output);
-  }
-  return cost;
-}
-
-function tokensOf(cost: Cost): number {
-  return estimateTokens(cost.text) + cost.images * IMAGE_TOKENS;
+  return estimateTokens(text) + images * IMAGE_TOKENS;
 }
 
 /** Per-message size estimate, used by window selection. */
 export function tokensOfUIMessage(msg: UIMessage): number {
-  return tokensOf(costOfUIMessage(msg));
+  return tokensOfMessage(msg);
 }
 
 export function tokensOfModelMessage(msg: ModelMessage): number {
-  return tokensOf(costOfModelMessage(msg));
+  return tokensOfMessage(msg);
 }
 
 function contextTokensOf(msg: UIMessage): number | undefined {
