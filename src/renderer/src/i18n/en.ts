@@ -410,6 +410,7 @@ export const en: typeof zh = {
       control: 'Browser control',
       controlDesc: 'Allow the agent to navigate, click, type, and read pages.',
       setup: 'Setup',
+      refresh: 'Re-check',
       statusNotConnected: 'Not connected',
       statusConnected: 'Connected',
       statusChromeNotFound: 'Chrome not found',

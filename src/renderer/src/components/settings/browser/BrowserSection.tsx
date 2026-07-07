@@ -184,10 +184,18 @@ export function BrowserSection(): React.JSX.Element {
 
       {(!chromeInstalled || effectiveOn) && phase !== 'connected' && (
         <section>
-          <h2 className="mb-3 flex items-center gap-2 font-semibold text-fg-primary text-sm">
-            {t('settings.browser.setup')}
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="font-semibold text-fg-primary text-sm">{t('settings.browser.setup')}</h2>
             <Pill tone={setupPill.tone} label={setupPill.label} />
-          </h2>
+            <button
+              type="button"
+              onClick={() => void env.refetch()}
+              title={t('settings.browser.refresh')}
+              className="ml-auto rounded-md p-1 text-fg-tertiary hover:bg-elevated hover:text-fg-secondary"
+            >
+              <RefreshCw className={`size-3.5 ${env.isFetching ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
           <div className="divide-y divide-border-default rounded-xl border border-border-default bg-surface">
             {phase === 'no-chrome' ? (
               <Step

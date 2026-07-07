@@ -409,6 +409,7 @@ export const zh = {
       control: '浏览器控制',
       controlDesc: '允许 AI 导航、点击、输入和读取页面。',
       setup: '设置',
+      refresh: '重新检测',
       statusNotConnected: '未连接',
       statusConnected: '已连接',
       statusChromeNotFound: '未检测到 Chrome',
