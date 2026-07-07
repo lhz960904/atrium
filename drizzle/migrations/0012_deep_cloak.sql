@@ -1,0 +1,1 @@
+ALTER TABLE `mcp_servers` ADD `managed` integer DEFAULT false NOT NULL;

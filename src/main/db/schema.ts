@@ -125,6 +125,9 @@ export const mcpServers = sqliteTable('mcp_servers', {
   id: text().primaryKey(),
   name: text().notNull().unique(),
   enabled: integer({ mode: 'boolean' }).notNull().default(false),
+  /** Provisioned by a feature (e.g. the browser), not the user: shown read-only
+   *  in the MCP list and not editable/deletable/exportable. */
+  managed: integer({ mode: 'boolean' }).notNull().default(false),
   transport: text({ enum: ['stdio', 'http', 'sse'] }).notNull(),
   config: text({ mode: 'json' }),
   /** safeStorage-encrypted JSON; null when no credentials are stored. */

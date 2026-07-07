@@ -6,6 +6,7 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { app, BrowserWindow, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
+import { syncBrowserProvisioning } from './agent/mcp/browser-provisioner';
 import { mcpManager } from './agent/mcp/manager';
 import { runDream, startDreamScheduler } from './agent/memory';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
@@ -169,7 +170,7 @@ app.whenReady().then(async () => {
   // Connect configured MCP servers once the shell env is merged — stdio servers
   // read PATH from process.env at spawn, so they must not start before it. A
   // slow or failing server never blocks startup.
-  void shellEnvReady.then(() => mcpManager.init(db));
+  void shellEnvReady.then(() => mcpManager.init(db)).then(() => syncBrowserProvisioning(db));
 
   // Discover skills in the background, off the critical path. The scheduler
   // (below) waits on this so a boot-time catch-up run still sees the full index;
