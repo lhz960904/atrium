@@ -125,29 +125,35 @@ function Hint({
 function TokenWaitingInput({
   onManual,
   onSkip,
+  error,
 }: {
   onManual: (value: string) => void;
   onSkip?: () => void;
+  error: boolean;
 }): React.JSX.Element {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-col gap-1.5">
-      <input
-        type="text"
-        placeholder={t('settings.browser.tokenWaiting')}
-        onChange={(e) => onManual(e.target.value)}
-        className="w-full max-w-[380px] rounded-md border border-border-default bg-elevated px-2.5 py-1.5 font-mono text-fg-primary text-xs outline-none placeholder:font-sans placeholder:text-fg-tertiary focus:border-accent"
-      />
-      <span className="text-fg-tertiary text-xs">{t('settings.browser.tokenHint')}</span>
-      {onSkip && (
-        <button
-          type="button"
-          onClick={onSkip}
-          className="self-start text-fg-tertiary text-xs hover:underline"
-        >
-          {t('settings.browser.tokenSkip')}
-        </button>
-      )}
+    <div className="flex max-w-[460px] flex-col gap-1.5">
+      <div className="flex items-center gap-3">
+        <input
+          type="text"
+          placeholder={t('settings.browser.tokenWaiting')}
+          onChange={(e) => onManual(e.target.value)}
+          className={`min-w-0 flex-1 rounded-md border bg-elevated px-2.5 py-1.5 font-mono text-fg-primary text-xs outline-none placeholder:font-sans placeholder:text-fg-tertiary ${
+            error ? 'border-danger' : 'border-border-default focus:border-accent'
+          }`}
+        />
+        {onSkip && (
+          <button
+            type="button"
+            onClick={onSkip}
+            className="shrink-0 font-medium text-accent text-xs hover:underline"
+          >
+            {t('settings.browser.tokenSkip')}
+          </button>
+        )}
+      </div>
+      {error && <span className="text-danger text-xs">{t('settings.browser.tokenError')}</span>}
     </div>
   );
 }
@@ -181,44 +187,59 @@ export function BrowserSection(): React.JSX.Element {
   const disconnect = trpc.browser.disconnect.useMutation({ onSuccess: refreshEnv });
 
   const [waiting, setWaiting] = useState(false);
-  // The token already on the clipboard when the flow starts. We ignore it and
-  // only import once the value CHANGES — otherwise a token copied earlier would
-  // be grabbed the instant the user clicks, skipping the copy step entirely.
-  const [baselineToken, setBaselineToken] = useState<string | null>(null);
+  // The clipboard text when the flow starts. We ignore it and only act once the
+  // text CHANGES — so a token copied earlier isn't grabbed the instant the user
+  // clicks, skipping the copy step.
+  const [baselineText, setBaselineText] = useState('');
+  const [tokenError, setTokenError] = useState(false);
   const openTokenPage = trpc.browser.openTokenPage.useMutation();
   const importToken = trpc.browser.importToken.useMutation({
     onSuccess: (r) => {
       if (r.imported) {
         setWaiting(false);
+        setTokenError(false);
         refreshEnv();
       }
     },
   });
-  // While waiting, poll the clipboard so the moment the user copies the token —
-  // whenever that is — we pick it up and update, with no extra step.
+  // While waiting, poll the clipboard (this section only — the query unmounts
+  // with it, so polling stops on navigate-away). React to a FRESH copy: import a
+  // valid token, or flag a copy that isn't one.
   const clip = trpc.browser.clipboardToken.useQuery(undefined, {
     enabled: waiting && !hasToken,
     refetchInterval: 1200,
   });
   useEffect(() => {
-    if (waiting && clip.data?.token && clip.data.token !== baselineToken)
-      importToken.mutate({ token: clip.data.token });
-  }, [waiting, clip.data?.token, baselineToken, importToken]);
+    if (!waiting || importToken.isPending || !clip.data || clip.data.text === baselineText) return;
+    if (clip.data.token) importToken.mutate({ token: clip.data.token });
+    else setTokenError(true);
+  }, [waiting, clip.data, baselineText, importToken]);
   const startTokenFlow = async (): Promise<void> => {
-    // Snapshot whatever token is already on the clipboard BEFORE enabling the
-    // poll, so a token copied earlier doesn't count as a fresh one.
-    const { token } = await utils.browser.clipboardToken.fetch();
-    setBaselineToken(token);
+    const { text } = await utils.browser.clipboardToken.fetch();
+    setBaselineText(text);
+    setTokenError(false);
     setWaiting(true);
     openTokenPage.mutate();
   };
   const skipToApproval = (): void => {
     setWaiting(false);
+    setTokenError(false);
     connect.mutate();
   };
-  const manualToken = (text: string): void => {
-    const m = text.trim().match(/^(?:PLAYWRIGHT_MCP_EXTENSION_TOKEN=)?([A-Za-z0-9_-]+)$/);
-    if (m) importToken.mutate({ token: m[1] });
+  const manualToken = (value: string): void => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setTokenError(false);
+      return;
+    }
+    const m = trimmed.match(/^(?:PLAYWRIGHT_MCP_EXTENSION_TOKEN=)?([A-Za-z0-9_-]+)$/);
+    // A real token is long; a short match is just mid-typing, so don't act yet.
+    if (m && m[1].length >= 20) {
+      setTokenError(false);
+      importToken.mutate({ token: m[1] });
+    } else if (!m) {
+      setTokenError(true);
+    }
   };
 
   const setupPill =
@@ -260,18 +281,10 @@ export function BrowserSection(): React.JSX.Element {
 
       {(!chromeInstalled || effectiveOn) && phase !== 'connected' && (
         <section>
-          <div className="mb-3 flex items-center gap-2">
-            <h2 className="font-semibold text-fg-primary text-sm">{t('settings.browser.setup')}</h2>
+          <h2 className="mb-3 flex items-center gap-2 font-semibold text-fg-primary text-sm">
+            {t('settings.browser.setup')}
             <Pill tone={setupPill.tone} label={setupPill.label} />
-            <button
-              type="button"
-              onClick={() => void env.refetch()}
-              title={t('settings.browser.refresh')}
-              className="ml-auto rounded-md p-1 text-fg-tertiary hover:bg-elevated hover:text-fg-secondary"
-            >
-              <RefreshCw className={`size-3.5 ${env.isFetching ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
+          </h2>
           <div className="divide-y divide-border-default rounded-xl border border-border-default bg-surface">
             {phase === 'no-chrome' ? (
               <Step
@@ -317,7 +330,11 @@ export function BrowserSection(): React.JSX.Element {
                   desc={t('settings.browser.connectDesc')}
                 >
                   {waiting ? (
-                    <TokenWaitingInput onManual={manualToken} onSkip={skipToApproval} />
+                    <TokenWaitingInput
+                      onManual={manualToken}
+                      onSkip={skipToApproval}
+                      error={tokenError}
+                    />
                   ) : (
                     <button
                       type="button"
@@ -387,7 +404,7 @@ export function BrowserSection(): React.JSX.Element {
                   {t('settings.browser.silentEnabled')}
                 </span>
               ) : waiting ? (
-                <TokenWaitingInput onManual={manualToken} />
+                <TokenWaitingInput onManual={manualToken} error={tokenError} />
               ) : (
                 <button
                   type="button"

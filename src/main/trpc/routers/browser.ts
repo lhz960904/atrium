@@ -41,8 +41,13 @@ export const browserRouter = router({
   }),
 
   /** Peek at the clipboard for the extension token — read-only, so the UI can
-   *  poll it while waiting for the user to copy and react the moment they do. */
-  clipboardToken: publicProcedure.query(() => ({ token: clipboardTokenValue() })),
+   *  poll it while waiting for the user to copy and react the moment they do.
+   *  `text` (capped) lets the UI tell a fresh copy from the pre-existing content
+   *  and flag a copy that isn't a token. */
+  clipboardToken: publicProcedure.query(() => {
+    const text = clipboard.readText().trim();
+    return { token: text.match(TOKEN_RE)?.[1] ?? null, text: text.slice(0, 512) };
+  }),
 
   /** Open the extension's status page, where the token + a copy button live. */
   openTokenPage: publicProcedure.mutation(() => {
