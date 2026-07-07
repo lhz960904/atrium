@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { syncBrowserProvisioning } from '../../agent/mcp/browser-provisioner';
 import { isChromeInstalled } from '../../browser/detect';
 import { getSettings } from '../../settings/conf';
@@ -12,17 +11,14 @@ export const browserRouter = router({
     return { chromeInstalled: isChromeInstalled(), connected: s.connected };
   }),
 
-  /** Connect the signed-in browser: mint a stable extension token on first use,
-   *  mark connected, and provision the --extension server. */
+  /** Connect the signed-in browser: mark connected and provision the --extension
+   *  server. The extension prompts for approval ("Allow & select") on connect. */
   connect: publicProcedure.mutation(({ ctx }) => {
-    const s = getSettings('browser');
-    const extensionToken = s.extensionToken || randomBytes(24).toString('base64url');
-    getSettings().set('browser', { ...s, connected: true, extensionToken });
+    getSettings().set('browser', { ...getSettings('browser'), connected: true });
     void syncBrowserProvisioning(ctx.db);
   }),
 
-  /** Disconnect the signed-in browser: tear its server down; the token is kept
-   *  so a later reconnect stays silent. */
+  /** Disconnect the signed-in browser: tear its --extension server down. */
   disconnect: publicProcedure.mutation(({ ctx }) => {
     getSettings().set('browser', { ...getSettings('browser'), connected: false });
     void syncBrowserProvisioning(ctx.db);

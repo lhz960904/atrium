@@ -113,11 +113,9 @@ const browserShape = z.object({
    *  browser still needs the user to connect their Chrome. */
   enabled: z.boolean().default(true),
   /** Whether the user has connected the signed-in browser (the --extension
-   *  server). Persisted so the connection is re-provisioned across restarts. */
+   *  server). Persisted so the connection is re-provisioned across restarts.
+   *  The extension owns the approval; it prompts on connect ("Allow & select"). */
   connected: z.boolean().default(false),
-  /** Stable token passed to the extension bridge so reconnects skip the approval
-   *  dialog. Minted once on first connect; empty until then. */
-  extensionToken: z.string().default(''),
 });
 
 // zod v4's `.default` takes the resolved output (not an input run through the

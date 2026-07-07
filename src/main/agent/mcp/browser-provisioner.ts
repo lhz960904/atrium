@@ -5,7 +5,6 @@ import { mcpServers } from '../../db/schema';
 import { createLogger } from '../../log';
 import { getSettings } from '../../settings/conf';
 import { mcpManager } from './manager';
-import { encryptSecrets } from './secrets';
 
 const log = createLogger('mcp');
 
@@ -23,16 +22,8 @@ const PLAYWRIGHT_MCP = '@playwright/mcp@latest';
 const PUBLIC_ID = 'atrium-browser';
 const SIGNED_IN_ID = 'atrium-browser-login';
 
-/** Upsert (when it should run) or delete a managed browser row. Secret env (the
- *  extension token) is stored encrypted, like any server credential. */
-function reconcileRow(
-  db: Db,
-  id: string,
-  name: string,
-  run: boolean,
-  args: string[],
-  secretEnv?: Record<string, string>,
-): void {
+/** Upsert (when it should run) or delete a managed browser row. */
+function reconcileRow(db: Db, id: string, name: string, run: boolean, args: string[]): void {
   try {
     if (!run) {
       db.delete(mcpServers).where(eq(mcpServers.id, id)).run();
@@ -40,7 +31,6 @@ function reconcileRow(
     }
     const now = new Date();
     const config = { command: 'npx', args, env: {}, envPassthrough: [] };
-    const credentialsEncrypted = secretEnv ? encryptSecrets({ env: secretEnv }) : null;
     db.insert(mcpServers)
       .values({
         id,
@@ -49,18 +39,19 @@ function reconcileRow(
         managed: true,
         transport: 'stdio',
         config,
-        credentialsEncrypted,
         createdAt: now,
         updatedAt: now,
       })
       .onConflictDoUpdate({
         target: mcpServers.id,
+        // Clear any stale secret (e.g. an old extension token) — managed browser
+        // rows carry no credentials.
         set: {
           enabled: true,
           managed: true,
           transport: 'stdio',
           config,
-          credentialsEncrypted,
+          credentialsEncrypted: null,
           updatedAt: now,
         },
       })
@@ -79,21 +70,18 @@ function reconcileRow(
  * Public browsing drives a fresh, login-less browser (no `--browser`, so
  * playwright-mcp's default installed Chrome, `--isolated`); it runs whenever
  * control is on and Chrome is present. Signed-in browsing (`--extension`) also
- * needs the user to have connected, and passes the stored token so reconnects
- * skip the extension's approval dialog.
+ * needs the user to have connected; the extension owns the approval and prompts
+ * for it on connect ("Allow & select"), so no token is passed.
  */
 export async function syncBrowserProvisioning(db: Db): Promise<void> {
   const s = getSettings('browser');
   const chrome = isChromeInstalled();
   reconcileRow(db, PUBLIC_ID, 'browser', s.enabled && chrome, ['-y', PLAYWRIGHT_MCP, '--isolated']);
-  reconcileRow(
-    db,
-    SIGNED_IN_ID,
-    'browser-login',
-    s.enabled && chrome && s.connected,
-    ['-y', PLAYWRIGHT_MCP, '--extension'],
-    s.extensionToken ? { PLAYWRIGHT_MCP_EXTENSION_TOKEN: s.extensionToken } : undefined,
-  );
+  reconcileRow(db, SIGNED_IN_ID, 'browser-login', s.enabled && chrome && s.connected, [
+    '-y',
+    PLAYWRIGHT_MCP,
+    '--extension',
+  ]);
   await mcpManager.reload(PUBLIC_ID);
   await mcpManager.reload(SIGNED_IN_ID);
 }
