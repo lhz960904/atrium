@@ -1,7 +1,10 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+
+/** The official "Playwright Extension" Chrome Web Store id. */
+const PLAYWRIGHT_EXTENSION_ID = 'mmlmfjhmonkocbjadbfplnigmagldckm';
 
 /**
  * Whether Google Chrome is installed. The browser feature drives Chrome
@@ -37,4 +40,40 @@ export function isChromeInstalled(): boolean {
     }
   }
   return false;
+}
+
+/** Chrome's user-data root (where per-profile dirs live), by platform. */
+function chromeUserDataDir(): string | null {
+  const home = homedir();
+  if (process.platform === 'darwin')
+    return join(home, 'Library', 'Application Support', 'Google', 'Chrome');
+  if (process.platform === 'win32') {
+    const base = process.env.LOCALAPPDATA;
+    return base ? join(base, 'Google', 'Chrome', 'User Data') : null;
+  }
+  return join(home, '.config', 'google-chrome');
+}
+
+/**
+ * Whether the Playwright Extension is installed in any Chrome profile. Chrome
+ * unpacks each extension to `<profile>/Extensions/<id>/`, so we scan the profile
+ * dirs for that id — a cheap on-disk check, no Chrome APIs. Detecting the
+ * install (not just a live bridge) is what lets the setup step confirm itself
+ * and unlock the connect step.
+ */
+export function isPlaywrightExtensionInstalled(): boolean {
+  const root = chromeUserDataDir();
+  if (!root) return false;
+  let entries: string[];
+  try {
+    entries = readdirSync(root);
+  } catch {
+    return false;
+  }
+  // "Default", "Profile 1", "Profile 2", … each hold their own Extensions dir.
+  return entries.some(
+    (profile) =>
+      (profile === 'Default' || profile.startsWith('Profile ')) &&
+      existsSync(join(root, profile, 'Extensions', PLAYWRIGHT_EXTENSION_ID)),
+  );
 }

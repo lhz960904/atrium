@@ -1,4 +1,14 @@
-import { Globe, Info, Lock, Monitor, Plug, Puzzle, RefreshCw, TriangleAlert } from 'lucide-react';
+import {
+  Check,
+  Globe,
+  Info,
+  Lock,
+  Monitor,
+  Plug,
+  Puzzle,
+  RefreshCw,
+  TriangleAlert,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 import { useSetting } from '../../../lib/use-setting';
@@ -57,17 +67,19 @@ function Step({
   children,
 }: {
   marker: React.ReactNode;
-  tone?: 'active' | 'idle' | 'warn';
+  tone?: 'active' | 'idle' | 'warn' | 'done';
   title: string;
   desc: string;
   children?: React.ReactNode;
 }): React.JSX.Element {
   const markerTone =
-    tone === 'warn'
-      ? 'bg-warning/14 text-warning'
-      : tone === 'active'
-        ? 'bg-accent-soft text-accent'
-        : 'border border-border-default bg-surface-strong text-fg-secondary';
+    tone === 'done'
+      ? 'bg-success/12 text-success'
+      : tone === 'warn'
+        ? 'bg-warning/14 text-warning'
+        : tone === 'active'
+          ? 'bg-accent-soft text-accent'
+          : 'border border-border-default bg-surface-strong text-fg-secondary';
   return (
     <div className="flex gap-3.5 p-4">
       <div
@@ -122,6 +134,7 @@ export function BrowserSection(): React.JSX.Element {
   // Assume Chrome is present until the probe resolves, so a machine that has it
   // doesn't flash the "install Chrome" state on load.
   const chromeInstalled = env.data?.chromeInstalled ?? true;
+  const extensionInstalled = env.data?.extensionInstalled ?? false;
   const connected = env.data?.connected ?? false;
   // No Chrome means the feature can't run, so it reads as off and the switch is
   // disabled; with Chrome it follows the stored preference.
@@ -192,26 +205,37 @@ export function BrowserSection(): React.JSX.Element {
             ) : (
               <>
                 <Step
-                  marker="1"
-                  tone="active"
+                  marker={extensionInstalled ? <Check className="size-3.5" /> : '1'}
+                  tone={extensionInstalled ? 'done' : 'active'}
                   title={t('settings.browser.installExt')}
                   desc={t('settings.browser.installExtDesc')}
                 >
-                  <a href={EXTENSION_URL} target="_blank" rel="noreferrer" className={PRIMARY_BTN}>
-                    <Puzzle className="size-4" />
-                    {t('settings.browser.installExtBtn')}
-                  </a>
+                  {extensionInstalled ? (
+                    <span className="font-medium text-success text-xs">
+                      {t('settings.browser.extInstalled')}
+                    </span>
+                  ) : (
+                    <a
+                      href={EXTENSION_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={PRIMARY_BTN}
+                    >
+                      <Puzzle className="size-4" />
+                      {t('settings.browser.installExtBtn')}
+                    </a>
+                  )}
                 </Step>
                 <Step
                   marker="2"
-                  tone="active"
+                  tone={extensionInstalled ? 'active' : 'idle'}
                   title={t('settings.browser.connect')}
                   desc={t('settings.browser.connectDesc')}
                 >
                   <button
                     type="button"
                     onClick={() => connect.mutate()}
-                    disabled={connect.isPending}
+                    disabled={!extensionInstalled || connect.isPending}
                     className={`${PRIMARY_BTN} disabled:opacity-45`}
                   >
                     <Plug className="size-4" />

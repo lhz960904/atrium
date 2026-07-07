@@ -423,6 +423,7 @@ export const en: typeof zh = {
       installExtDesc:
         "The agent talks to Chrome through the Playwright extension. Add it, then come back here — we'll detect it automatically.",
       installExtBtn: 'Add to Chrome',
+      extInstalled: '✓ Extension detected',
       connect: 'Connect your browser',
       connectDesc:
         'Open a tab you’re signed in to, then approve the one-time connection — you choose which tab to share.',

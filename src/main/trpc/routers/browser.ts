@@ -1,14 +1,19 @@
 import { syncBrowserProvisioning } from '../../agent/mcp/browser-provisioner';
-import { isChromeInstalled } from '../../browser/detect';
+import { isChromeInstalled, isPlaywrightExtensionInstalled } from '../../browser/detect';
 import { getSettings } from '../../settings/conf';
 import { publicProcedure, router } from '../trpc';
 
 export const browserRouter = router({
   /** State for the Browser settings section: whether Chrome is installed (gates
-   *  the whole feature) and whether the signed-in browser has been connected. */
+   *  the whole feature), whether the extension is installed (gates connect), and
+   *  whether the signed-in browser has been connected. */
   environment: publicProcedure.query(() => {
     const s = getSettings('browser');
-    return { chromeInstalled: isChromeInstalled(), connected: s.connected };
+    return {
+      chromeInstalled: isChromeInstalled(),
+      extensionInstalled: isPlaywrightExtensionInstalled(),
+      connected: s.connected,
+    };
   }),
 
   /** Connect the signed-in browser: mark connected and provision the --extension

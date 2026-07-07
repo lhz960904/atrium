@@ -420,6 +420,7 @@ export const zh = {
       installExt: '为 Chrome 添加扩展',
       installExtDesc: 'AI 通过 Playwright 扩展与 Chrome 通信。添加后回到这里，我们会自动检测。',
       installExtBtn: '添加到 Chrome',
+      extInstalled: '✓ 已检测到扩展',
       connect: '连接你的浏览器',
       connectDesc: '打开一个你已登录的标签页，然后完成一次性授权——由你选择共享哪个标签页。',
       connectBtn: '连接',
