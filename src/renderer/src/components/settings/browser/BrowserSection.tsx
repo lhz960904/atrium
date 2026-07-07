@@ -9,6 +9,7 @@ import {
   RefreshCw,
   TriangleAlert,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 import { useSetting } from '../../../lib/use-setting';
@@ -119,6 +120,44 @@ function Hint({
   );
 }
 
+/** Optional silent-reconnect control: opens the extension's token page and, when
+ *  the user comes back having copied it, imports the token so future connects
+ *  skip the approval dialog. */
+function TokenControl({
+  hasToken,
+  awaiting,
+  notFound,
+  onStart,
+}: {
+  hasToken: boolean;
+  awaiting: boolean;
+  notFound: boolean;
+  onStart: () => void;
+}): React.JSX.Element {
+  const { t } = useTranslation();
+  if (hasToken)
+    return (
+      <span className="font-medium text-success text-xs">
+        {t('settings.browser.silentEnabled')}
+      </span>
+    );
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        onClick={onStart}
+        disabled={awaiting}
+        className="self-start font-medium text-accent text-xs hover:underline disabled:opacity-50"
+      >
+        {awaiting ? t('settings.browser.silentWaiting') : t('settings.browser.silentImport')}
+      </button>
+      {notFound && (
+        <span className="text-warning text-xs">{t('settings.browser.silentNotFound')}</span>
+      )}
+    </div>
+  );
+}
+
 /** Current phase of the signed-in browser. Returns BrowserPhase (not a narrowed
  *  literal) so every branch stays type-valid regardless of the current values. */
 function deriveBrowserPhase(chromeInstalled: boolean, connected: boolean): BrowserPhase {
@@ -136,6 +175,7 @@ export function BrowserSection(): React.JSX.Element {
   const chromeInstalled = env.data?.chromeInstalled ?? true;
   const extensionInstalled = env.data?.extensionInstalled ?? false;
   const connected = env.data?.connected ?? false;
+  const hasToken = env.data?.hasToken ?? false;
   // No Chrome means the feature can't run, so it reads as off and the switch is
   // disabled; with Chrome it follows the stored preference.
   const effectiveOn = enabled && chromeInstalled;
@@ -144,6 +184,28 @@ export function BrowserSection(): React.JSX.Element {
   const refreshEnv = (): void => void utils.browser.environment.invalidate();
   const connect = trpc.browser.connect.useMutation({ onSuccess: refreshEnv });
   const disconnect = trpc.browser.disconnect.useMutation({ onSuccess: refreshEnv });
+
+  const [awaitingToken, setAwaitingToken] = useState(false);
+  const openTokenPage = trpc.browser.openTokenPage.useMutation();
+  const importToken = trpc.browser.importToken.useMutation({
+    onSuccess: (r) => {
+      setAwaitingToken(false);
+      if (r.imported) refreshEnv();
+    },
+  });
+  const startTokenImport = (): void => {
+    setAwaitingToken(true);
+    openTokenPage.mutate();
+  };
+  // When the user returns from the extension's token page (the window regains
+  // focus), read the clipboard once and import if it holds the token.
+  useEffect(() => {
+    if (!awaitingToken) return;
+    const onFocus = (): void => importToken.mutate();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [awaitingToken, importToken]);
+  const tokenNotFound = !awaitingToken && importToken.data?.imported === false;
 
   const setupPill =
     phase === 'connected'
@@ -240,15 +302,25 @@ export function BrowserSection(): React.JSX.Element {
                   title={t('settings.browser.connect')}
                   desc={t('settings.browser.connectDesc')}
                 >
-                  <button
-                    type="button"
-                    onClick={() => connect.mutate()}
-                    disabled={!extensionInstalled || connect.isPending}
-                    className={`${PRIMARY_BTN} disabled:opacity-45`}
-                  >
-                    <Plug className="size-4" />
-                    {t('settings.browser.connectBtn')}
-                  </button>
+                  <div className="flex flex-col gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => connect.mutate()}
+                      disabled={!extensionInstalled || connect.isPending}
+                      className={`${PRIMARY_BTN} self-start disabled:opacity-45`}
+                    >
+                      <Plug className="size-4" />
+                      {t('settings.browser.connectBtn')}
+                    </button>
+                    {extensionInstalled && (
+                      <TokenControl
+                        hasToken={hasToken}
+                        awaiting={awaitingToken}
+                        notFound={tokenNotFound}
+                        onStart={startTokenImport}
+                      />
+                    )}
+                  </div>
                 </Step>
               </>
             )}
@@ -297,6 +369,15 @@ export function BrowserSection(): React.JSX.Element {
               <span className="text-fg-secondary text-xs">
                 {t('settings.browser.tabGroupNote')}
               </span>
+            </div>
+            <div className="flex items-center justify-between gap-4 border-border-default border-t px-4 py-3">
+              <span className="text-fg-tertiary text-xs">{t('settings.browser.silentLabel')}</span>
+              <TokenControl
+                hasToken={hasToken}
+                awaiting={awaitingToken}
+                notFound={tokenNotFound}
+                onStart={startTokenImport}
+              />
             </div>
           </div>
         </section>

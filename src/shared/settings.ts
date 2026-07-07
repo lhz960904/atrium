@@ -116,6 +116,10 @@ const browserShape = z.object({
    *  server). Persisted so the connection is re-provisioned across restarts.
    *  The extension owns the approval; it prompts on connect ("Allow & select"). */
   connected: z.boolean().default(false),
+  /** The extension's own auth token, imported from its status page so reconnects
+   *  skip the approval dialog. Empty until imported; the extension rejects any
+   *  other value, so it can only be the extension's, not a minted one. */
+  extensionToken: z.string().default(''),
 });
 
 // zod v4's `.default` takes the resolved output (not an input run through the

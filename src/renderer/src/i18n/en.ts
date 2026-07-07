@@ -429,6 +429,11 @@ export const en: typeof zh = {
       connectDesc:
         'Open a tab you’re signed in to, then approve the one-time connection — you choose which tab to share.',
       connectBtn: 'Connect',
+      silentLabel: 'Skip the approval on reconnect',
+      silentImport: 'Import token from extension →',
+      silentWaiting: 'Copy the token on the page, then come back…',
+      silentEnabled: '✓ Silent reconnect on',
+      silentNotFound: "Didn't find a token — click Copy on the extension page first.",
       connectionTitle: 'Connection',
       connectionSession: 'Chrome · your signed-in session',
       connectionSessionDesc:
