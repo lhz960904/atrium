@@ -217,6 +217,7 @@ export const en: typeof zh = {
     archived: 'Archived',
     copyAll: 'Copy conversation',
     copiedAll: 'Conversation copied',
+    copyFailed: 'Copy failed',
     exportMarkdown: 'Export as Markdown',
     exported: 'Exported to {{path}}',
     exportFailed: 'Export failed',

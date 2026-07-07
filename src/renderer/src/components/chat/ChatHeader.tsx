@@ -71,8 +71,13 @@ export function ChatHeader({
 
   const copyAll = async (): Promise<void> => {
     setMenuOpen(false);
-    await navigator.clipboard.writeText(await buildMarkdown());
-    toast.success(t('chat.copiedAll'));
+    try {
+      await navigator.clipboard.writeText(await buildMarkdown());
+      toast.success(t('chat.copiedAll'));
+    } catch {
+      // Clipboard write can be refused (e.g. unfocused document) — surface it.
+      toast.error(t('chat.copyFailed'));
+    }
   };
 
   const exportMarkdown = async (): Promise<void> => {

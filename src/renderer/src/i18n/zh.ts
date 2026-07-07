@@ -217,6 +217,7 @@ export const zh = {
     archived: '已归档',
     copyAll: '复制全文',
     copiedAll: '已复制全文',
+    copyFailed: '复制失败',
     exportMarkdown: '导出为 Markdown',
     exported: '已导出到 {{path}}',
     exportFailed: '导出失败',
