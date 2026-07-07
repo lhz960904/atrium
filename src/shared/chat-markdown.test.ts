@@ -4,7 +4,7 @@ import { type ChatMarkdownLabels, exportFilename, renderChatMarkdown } from './c
 
 const labels: ChatMarkdownLabels = {
   user: 'User',
-  assistant: 'Assistant',
+  assistant: 'AI',
   tools: (n) => `Used ${n} tool(s)`,
   image: (name) => (name ? `Image: ${name}` : 'Image'),
 };
@@ -21,10 +21,10 @@ test('renders user text and assistant prose under role labels', () => {
       ui('assistant', [{ type: 'text', text: 'hi **there**' }]),
     ],
   });
-  expect(md).toBe('# My chat\n\n**User**\n\nhello\n\n**Assistant**\n\nhi **there**\n');
+  expect(md).toBe('# My chat\n\n## User\n\nhello\n\n## AI\n\nhi **there**\n');
 });
 
-test('collapses a run of tool calls to one placeholder and skips reasoning/outputs', () => {
+test('collapses all tool activity and interleaved narration into one placeholder', () => {
   const md = renderChatMarkdown({
     title: 'T',
     labels,
@@ -39,12 +39,15 @@ test('collapses a run of tool calls to one placeholder and skips reasoning/outpu
           input: { cmd: 'ls' },
           output: 'secret output',
         },
+        { type: 'text', text: 'now reading the result' },
         { type: 'tool-read', toolCallId: '2', state: 'output-available', input: {}, output: 'x' },
         { type: 'text', text: 'done' },
       ]),
     ],
   });
-  expect(md).toContain('let me check\n\n> Used 2 tool(s)\n\ndone');
+  expect(md).toContain('## AI\n\n> Used 2 tool(s)\n\ndone');
+  expect(md).not.toContain('let me check');
+  expect(md).not.toContain('now reading the result');
   expect(md).not.toContain('thinking hard');
   expect(md).not.toContain('secret output');
 });

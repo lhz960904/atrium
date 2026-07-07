@@ -222,7 +222,7 @@ export const zh = {
     exported: '已导出到 {{path}}',
     exportFailed: '导出失败',
     exportUser: '用户',
-    exportAssistant: '助手',
+    exportAssistant: 'AI',
     exportTools: '使用了 {{count}} 个工具',
     exportImage: '图片',
     mermaidSyntaxError: 'Mermaid 语法错误',

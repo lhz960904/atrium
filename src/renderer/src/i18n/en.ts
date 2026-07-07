@@ -222,7 +222,7 @@ export const en: typeof zh = {
     exported: 'Exported to {{path}}',
     exportFailed: 'Export failed',
     exportUser: 'User',
-    exportAssistant: 'Assistant',
+    exportAssistant: 'AI',
     exportTools: 'Used {{count}} tool(s)',
     exportImage: 'Image',
     mermaidSyntaxError: 'Mermaid syntax error',
