@@ -5,35 +5,29 @@ import { resolveAbsolute } from '../../sandbox/paths';
 import type { ToolCtx } from '../context';
 import { fsErrorMessage, IMAGE_INLINE_MAX_BYTES, imageOutputToModelOutput } from '../output';
 
-const SIGNATURES: Array<{ mediaType: string; matches: (b: Uint8Array) => boolean }> = [
-  {
-    mediaType: 'image/png',
-    matches: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
-  },
-  { mediaType: 'image/jpeg', matches: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
-  {
-    mediaType: 'image/gif',
-    matches: (b) => b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38,
-  },
+/**
+ * Magic-byte signatures for the image formats vision providers accept
+ * (Anthropic/Google take png, jpeg, gif, webp). Each entry lists byte runs that
+ * must match at fixed offsets — WEBP is RIFF<size>WEBP, hence two runs. We
+ * sniff contents rather than trust the extension: extensions lie.
+ */
+type ByteRun = { offset: number; bytes: number[] };
+const SIGNATURES: Array<{ mediaType: string; runs: ByteRun[] }> = [
+  { mediaType: 'image/png', runs: [{ offset: 0, bytes: [0x89, 0x50, 0x4e, 0x47] }] },
+  { mediaType: 'image/jpeg', runs: [{ offset: 0, bytes: [0xff, 0xd8, 0xff] }] },
+  { mediaType: 'image/gif', runs: [{ offset: 0, bytes: [0x47, 0x49, 0x46, 0x38] }] },
   {
     mediaType: 'image/webp',
-    matches: (b) =>
-      b.length > 11 &&
-      b[0] === 0x52 &&
-      b[1] === 0x49 &&
-      b[2] === 0x46 &&
-      b[3] === 0x46 &&
-      b[8] === 0x57 &&
-      b[9] === 0x45 &&
-      b[10] === 0x42 &&
-      b[11] === 0x50,
+    runs: [
+      { offset: 0, bytes: [0x52, 0x49, 0x46, 0x46] },
+      { offset: 8, bytes: [0x57, 0x45, 0x42, 0x50] },
+    ],
   },
 ];
 
-/** Sniff the media type from magic bytes — extensions lie, file contents don't. */
-function sniffMediaType(bytes: Uint8Array): string | null {
-  if (bytes.length < 4) return null;
-  return SIGNATURES.find((s) => s.matches(bytes))?.mediaType ?? null;
+function sniffMediaType(data: Uint8Array): string | null {
+  const matches = (run: ByteRun) => run.bytes.every((b, i) => data[run.offset + i] === b);
+  return SIGNATURES.find((s) => s.runs.every(matches))?.mediaType ?? null;
 }
 
 export const viewImageTool = (ctx: ToolCtx) =>
