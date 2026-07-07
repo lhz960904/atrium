@@ -1,6 +1,8 @@
 import * as Popover from '@radix-ui/react-popover';
+import type { AtriumUIMessage } from '@shared/chat';
+import { exportFilename, renderChatMarkdown } from '@shared/chat-markdown';
 import { useNavigate } from '@tanstack/react-router';
-import { Archive, Ellipsis, Pencil } from 'lucide-react';
+import { Archive, Copy, Ellipsis, FileDown, Pencil } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../lib/trpc';
@@ -43,6 +45,50 @@ export function ChatHeader({
       navigate({ to: '/' });
     },
   });
+  const saveFile = trpc.system.saveTextFile.useMutation();
+
+  // Both actions read the DB (not the mounted chat state) so the full history
+  // is exported even while a turn streams or the view holds a truncated list.
+  const buildMarkdown = async (): Promise<string> => {
+    const rows = await utils.messages.listByThread.fetch({ threadId });
+    const messages = rows.map((m) => ({
+      id: m.id,
+      role: m.role,
+      parts: m.parts,
+      metadata: m.metadata ?? undefined,
+    })) as AtriumUIMessage[];
+    return renderChatMarkdown({
+      title,
+      messages,
+      labels: {
+        user: t('chat.exportUser'),
+        assistant: t('chat.exportAssistant'),
+        tools: (count) => t('chat.exportTools', { count }),
+        image: (name) => (name ? `${t('chat.exportImage')}: ${name}` : t('chat.exportImage')),
+      },
+    });
+  };
+
+  const copyAll = async (): Promise<void> => {
+    setMenuOpen(false);
+    await navigator.clipboard.writeText(await buildMarkdown());
+    toast.success(t('chat.copiedAll'));
+  };
+
+  const exportMarkdown = async (): Promise<void> => {
+    setMenuOpen(false);
+    try {
+      const content = await buildMarkdown();
+      const path = await saveFile.mutateAsync({
+        defaultName: `${exportFilename(title)}.md`,
+        content,
+        filters: [{ name: 'Markdown', extensions: ['md'] }],
+      });
+      if (path) toast.success(t('chat.exported', { path }));
+    } catch {
+      toast.error(t('chat.exportFailed'));
+    }
+  };
 
   const startRename = (): void => {
     setMenuOpen(false);
@@ -112,6 +158,14 @@ export function ChatHeader({
                 <button type="button" onClick={startRename} className={menuItem}>
                   <Pencil className="size-[14px] shrink-0 text-fg-tertiary" />
                   {t('chat.rename')}
+                </button>
+                <button type="button" onClick={() => void copyAll()} className={menuItem}>
+                  <Copy className="size-[14px] shrink-0 text-fg-tertiary" />
+                  {t('chat.copyAll')}
+                </button>
+                <button type="button" onClick={() => void exportMarkdown()} className={menuItem}>
+                  <FileDown className="size-[14px] shrink-0 text-fg-tertiary" />
+                  {t('chat.exportMarkdown')}
                 </button>
                 <button
                   type="button"
