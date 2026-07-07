@@ -26,6 +26,20 @@ export type Tool = {
   output?: string;
 };
 
+/** Image a tool returned inline (MCP image blocks, view_image). dataUrl feeds
+ *  <img src> directly; the model-facing conversion strips the data: prefix.
+ *  filename, when known, titles the attachment viewer. */
+export type ToolResultImage = { mediaType: string; dataUrl: string; filename?: string };
+
+/** Structured tool output: flattened text plus the images worth showing. */
+export type ImageToolOutput = { text: string; images: ToolResultImage[] };
+
+export function isImageToolOutput(value: unknown): value is ImageToolOutput {
+  if (value == null || typeof value !== 'object') return false;
+  const v = value as { text?: unknown; images?: unknown };
+  return typeof v.text === 'string' && Array.isArray(v.images);
+}
+
 export type SubagentStatus = 'streaming' | 'done' | 'failed' | 'cancelled';
 
 export type Subagent = {

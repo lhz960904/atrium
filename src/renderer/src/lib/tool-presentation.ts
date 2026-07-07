@@ -175,6 +175,13 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     target: (i) => i.prompt ?? '',
     typeLabel: (_i, t) => t('tool.type.image'),
   },
+  view_image: {
+    icon: ImageIcon,
+    verbKey: 'tool.verb.viewImage',
+    verbActiveKey: 'tool.verbActive.viewImage',
+    target: (i) => basename(i.path),
+    typeLabel: (i, t) => t('tool.type.file', { path: i.path ?? '' }),
+  },
   memory: {
     icon: Brain,
     verbKey: 'tool.verb.memory',

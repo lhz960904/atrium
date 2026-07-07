@@ -7,6 +7,7 @@ import { killShellTool } from './kill-shell';
 
 const sandbox: Sandbox = {
   readFile: async () => '',
+  readFileBytes: async () => new Uint8Array(),
   writeFile: async () => ({ bytes: 0 }),
   list: async () => [],
   exec: async () => ({ output: '', exitCode: 0 }),

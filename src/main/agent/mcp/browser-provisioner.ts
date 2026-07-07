@@ -1,4 +1,6 @@
+import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
+import { app } from 'electron';
 import { isChromeInstalled } from '../../browser/detect';
 import type { Db } from '../../db';
 import { mcpServers } from '../../db/schema';
@@ -88,13 +90,23 @@ function reconcileRow(
 export async function syncBrowserProvisioning(db: Db): Promise<void> {
   const s = getSettings('browser');
   const chrome = isChromeInstalled();
-  reconcileRow(db, PUBLIC_ID, 'browser', s.enabled && chrome, ['-y', PLAYWRIGHT_MCP, '--isolated']);
+  // An explicit absolute output dir: saved screenshots/files then surface as
+  // absolute paths in tool results, so the model (view_image) and the user can
+  // actually find them — the default is relative to the server's own cwd.
+  const outputDir = join(app.getPath('userData'), 'media', 'browser');
+  reconcileRow(db, PUBLIC_ID, 'browser', s.enabled && chrome, [
+    '-y',
+    PLAYWRIGHT_MCP,
+    '--isolated',
+    '--output-dir',
+    outputDir,
+  ]);
   reconcileRow(
     db,
     SIGNED_IN_ID,
     'browser-login',
     s.enabled && chrome && s.connected,
-    ['-y', PLAYWRIGHT_MCP, '--extension'],
+    ['-y', PLAYWRIGHT_MCP, '--extension', '--output-dir', outputDir],
     s.extensionToken ? { PLAYWRIGHT_MCP_EXTENSION_TOKEN: s.extensionToken } : {},
   );
   await mcpManager.reload(PUBLIC_ID);

@@ -98,7 +98,12 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
       const result = streamText({
         model: opts.model,
         system: ctx.request.system,
-        messages: await convertToModelMessages(ctx.request.messages),
+        // Passing tools routes historical tool outputs through each tool's
+        // toModelOutput — without it, an MCP image result in history would be
+        // JSON-stringified, sending raw base64 as prompt text.
+        messages: await convertToModelMessages(ctx.request.messages, {
+          tools: ctx.request.tools,
+        }),
         tools: ctx.request.tools,
         // Complex coding tasks routinely exceed a dozen steps; within-turn
         // compaction (beforeStep) keeps the loop from overflowing the window.

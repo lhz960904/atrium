@@ -34,7 +34,7 @@ import type { Db } from '../db';
 import { createLogger } from '../log';
 import { resolveAcpSpec } from '../providers/acp-spec';
 import { getProviderManifest } from '../providers/manifest';
-import { resolveModel } from '../providers/resolve';
+import { resolveModel, supportsImageToolResults } from '../providers/resolve';
 import { getSettings } from '../settings/conf';
 import {
   loadThreadMessages,
@@ -202,6 +202,7 @@ export function startHttpServer(deps: {
     const sandbox = new LocalSandbox(workspaceRoot);
     const skills = getSkills();
     const mode = permissionMode ?? DEFAULT_PERMISSION_MODE;
+    const supportsImages = supportsImageToolResults(providerId, modelId);
     const agentStream = await runAgent({
       model: resolveModel(deps.db, providerId, modelId),
       providerId,
@@ -219,7 +220,11 @@ export function startHttpServer(deps: {
         db: deps.db,
         skills,
         bgShells,
-        mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager),
+        supportsImageToolResults: supportsImages,
+        mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
+          supportsImageToolResults: supportsImages,
+          workspaceRoot,
+        }),
         permission: {
           mode,
           rules: getSettings('permissions.trustRules'),

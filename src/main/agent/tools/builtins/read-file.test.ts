@@ -7,6 +7,7 @@ import { readFileTool } from './read-file';
 function ctx(over: Partial<Sandbox>): ToolCtx {
   const base: Sandbox = {
     readFile: async () => '',
+    readFileBytes: async () => new Uint8Array(),
     writeFile: async () => ({ bytes: 0 }),
     list: async () => [],
     exec: async () => ({ output: '', exitCode: 0 }),

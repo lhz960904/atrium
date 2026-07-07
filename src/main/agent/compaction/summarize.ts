@@ -41,6 +41,30 @@ function stringify(value: unknown): string {
 /** Any content part a ModelMessage can carry — derived from the SDK, not hand-rolled. */
 type ContentPart = Exclude<ModelMessage['content'], string>[number];
 
+/**
+ * Render a tool output for the transcript, keeping it text-only: inline images
+ * (base64) must never reach the summarizer — they'd bloat the prompt with
+ * megabytes of undecodable text, and the summary model may lack vision anyway.
+ * Handles the wire ToolResultOutput shapes and the tool's own { text, images }
+ * object (which 'json' wraps after message conversion).
+ */
+function renderToolOutput(output: unknown): string {
+  if (output != null && typeof output === 'object') {
+    const o = output as Record<string, unknown>;
+    if (o.type === 'json') return renderToolOutput(o.value);
+    if (o.type === 'text' || o.type === 'error-text') return String(o.value);
+    if (typeof o.text === 'string' && Array.isArray(o.images)) {
+      return [o.text, `[${o.images.length} image(s) omitted]`].filter(Boolean).join('\n');
+    }
+    if (o.type === 'content' && Array.isArray(o.value)) {
+      return (o.value as Record<string, unknown>[])
+        .map((p) => (typeof p.text === 'string' ? p.text : `[${String(p.type)} omitted]`))
+        .join('\n');
+    }
+  }
+  return stringify(output);
+}
+
 function renderPart(part: ContentPart): string {
   switch (part.type) {
     case 'text':
@@ -49,7 +73,7 @@ function renderPart(part: ContentPart): string {
     case 'tool-call':
       return `[tool ${part.toolName}] ${stringify(part.input)}`;
     case 'tool-result':
-      return `[tool result ${part.toolName}] ${stringify(part.output)}`;
+      return `[tool result ${part.toolName}] ${renderToolOutput(part.output)}`;
     default:
       return `[${part.type}]`;
   }

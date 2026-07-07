@@ -106,7 +106,7 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   const result = streamText({
     model,
     system,
-    messages: await convertToModelMessages(messages),
+    messages: await convertToModelMessages(messages, { tools }),
     tools,
     stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
     prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),

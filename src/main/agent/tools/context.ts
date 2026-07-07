@@ -26,6 +26,12 @@ export type ToolCtx = {
   bgShells?: BackgroundShells;
   /** Tools from connected MCP servers, keyed by their qualified mcp__<server>__<tool> name. */
   mcpTools?: Record<string, Tool>;
+  /** Whether the active provider+model can consume image tool results (see
+   *  supportsImageToolResults). Absent defaults to false on purpose: a dropped
+   *  image degrades to a text note the model can react to, while wrongly
+   *  emitting image parts lets openai-compatible stringify base64 into the
+   *  prompt. */
+  supportsImageToolResults?: boolean;
   permission?: {
     mode: PermissionMode;
     rules?: TrustRule[];
