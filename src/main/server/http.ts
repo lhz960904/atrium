@@ -202,7 +202,7 @@ export function startHttpServer(deps: {
     const sandbox = new LocalSandbox(workspaceRoot);
     const skills = getSkills();
     const mode = permissionMode ?? DEFAULT_PERMISSION_MODE;
-    const imageToolResults = supportsImageToolResults(providerId, modelId);
+    const supportsImages = supportsImageToolResults(providerId, modelId);
     const agentStream = await runAgent({
       model: resolveModel(deps.db, providerId, modelId),
       providerId,
@@ -220,9 +220,9 @@ export function startHttpServer(deps: {
         db: deps.db,
         skills,
         bgShells,
-        imageToolResults,
+        supportsImageToolResults: supportsImages,
         mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
-          imageToolResults,
+          supportsImageToolResults: supportsImages,
           workspaceRoot,
         }),
         permission: {

@@ -31,7 +31,7 @@ export type ToolCtx = {
    *  image degrades to a text note the model can react to, while wrongly
    *  emitting image parts lets openai-compatible stringify base64 into the
    *  prompt. */
-  imageToolResults?: boolean;
+  supportsImageToolResults?: boolean;
   permission?: {
     mode: PermissionMode;
     rules?: TrustRule[];

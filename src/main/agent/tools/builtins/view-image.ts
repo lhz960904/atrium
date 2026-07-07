@@ -74,5 +74,6 @@ export const viewImageTool = (ctx: ToolCtx) =>
         return fsErrorMessage(err, path, 'reading');
       }
     },
-    toModelOutput: ({ output }) => imageOutputToModelOutput(output, ctx.imageToolResults ?? false),
+    toModelOutput: ({ output }) =>
+      imageOutputToModelOutput(output, ctx.supportsImageToolResults ?? false),
   });

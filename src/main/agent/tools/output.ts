@@ -40,11 +40,11 @@ export function middleTruncate(s: string, max: number): string {
  */
 export function imageOutputToModelOutput(
   output: unknown,
-  imageToolResults: boolean,
+  supportsImageToolResults: boolean,
 ): ToolResultOutput {
   if (typeof output === 'string') return { type: 'text', value: output };
   const { text, images } = output as ImageToolOutput;
-  if (!imageToolResults) {
+  if (!supportsImageToolResults) {
     const note = `[${images.length} image(s) omitted: the current model cannot view images]`;
     return { type: 'text', value: text ? `${text}\n${note}` : note };
   }

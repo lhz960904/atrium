@@ -16,7 +16,7 @@ import { spillOversizedImages } from './spill';
 export function buildMcpTools(
   entries: McpToolEntry[],
   manager: McpManager,
-  opts: { imageToolResults: boolean; workspaceRoot: string },
+  opts: { supportsImageToolResults: boolean; workspaceRoot: string },
 ): Record<string, Tool> {
   const tools: Record<string, Tool> = {};
   for (const entry of entries) {
@@ -32,7 +32,8 @@ export function buildMcpTools(
         );
         return spillOversizedImages(renderToolResult(result), opts.workspaceRoot);
       },
-      toModelOutput: ({ output }) => imageOutputToModelOutput(output, opts.imageToolResults),
+      toModelOutput: ({ output }) =>
+        imageOutputToModelOutput(output, opts.supportsImageToolResults),
     });
   }
   return tools;
