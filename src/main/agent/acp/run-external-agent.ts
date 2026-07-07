@@ -1,4 +1,5 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk';
+import { textOfMessage } from '@shared/message-parts';
 import type { PermissionMode } from '@shared/permissions';
 import {
   createUIMessageStream,
@@ -37,10 +38,7 @@ export type RunExternalAgentOptions = {
 function latestUserText(messages: UIMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role !== 'user') continue;
-    return (messages[i].parts ?? [])
-      .map((p) => (p.type === 'text' ? p.text : ''))
-      .join('')
-      .trim();
+    return textOfMessage(messages[i]);
   }
   return '';
 }

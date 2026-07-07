@@ -71,7 +71,7 @@ test('renderTranscript strips inline images from content-type tool outputs', () 
   ] as unknown as ModelMessage[];
   const out = renderTranscript(msgs);
   expect(out).toContain('took it');
-  expect(out).toContain('[image-data omitted]');
+  expect(out).toContain('[1 image(s) omitted]');
   expect(out).not.toContain('QUFBQQ==');
 });
 
