@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import { tool } from 'ai';
 import { z } from 'zod';
 import { resolveAbsolute } from '../../sandbox/paths';
@@ -69,6 +70,7 @@ export const viewImageTool = (ctx: ToolCtx) =>
             {
               mediaType,
               dataUrl: `data:${mediaType};base64,${Buffer.from(bytes).toString('base64')}`,
+              filename: basename(abs),
             },
           ],
         };

@@ -121,7 +121,13 @@ export function buildAssistantView(parts: AtriumUIMessage['parts'], t: TFunction
   function pushToolImages(part: AtriumToolPart | DynamicToolUIPart): void {
     if (part.state !== 'output-available' || !isImageToolOutput(part.output)) return;
     for (const img of part.output.images) {
-      work.push({ kind: 'image', id: `s${seq++}`, url: img.dataUrl, mediaType: img.mediaType });
+      work.push({
+        kind: 'image',
+        id: `s${seq++}`,
+        url: img.dataUrl,
+        mediaType: img.mediaType,
+        filename: img.filename,
+      });
     }
   }
 

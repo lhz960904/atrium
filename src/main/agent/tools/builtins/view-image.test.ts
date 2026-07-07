@@ -34,11 +34,12 @@ test('returns structured output with a data url for a png', async () => {
   const result = await t.execute?.({ description: 'x', path: 'shot.png' }, opts);
   expect(gotPath).toBe('/ws/shot.png');
   expect(result).toEqual({
-    text: expect.stringContaining('/ws/shot.png (image/png, 1 KB)'),
+    text: '/ws/shot.png (image/png, 1 KB)',
     images: [
       {
         mediaType: 'image/png',
         dataUrl: `data:image/png;base64,${Buffer.from(png()).toString('base64')}`,
+        filename: 'shot.png',
       },
     ],
   });
