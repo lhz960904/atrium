@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0](https://github.com/lhz960904/atrium/compare/v0.9.0...v0.10.0) (2026-07-07)
+
+
+### Features
+
+* **chat:** copy conversation and export as markdown ([#60](https://github.com/lhz960904/atrium/issues/60)) ([9953110](https://github.com/lhz960904/atrium/commit/995311019c5064b4dd66c69a481d7ac696f53692))
+
+
+### Bug Fixes
+
+* **settings:** pin back-to-app button above sidebar scroll ([#58](https://github.com/lhz960904/atrium/issues/58)) ([a591463](https://github.com/lhz960904/atrium/commit/a5914638b8bcf0cc20fa0e8d2138f00e86995878))
+
 ## [0.9.0](https://github.com/lhz960904/atrium/compare/v0.8.2...v0.9.0) (2026-07-07)
 
 
