@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/lhz960904/atrium/compare/v0.8.2...v0.9.0) (2026-07-07)
+
+
+### Features
+
+* **browser:** support browser control ([#56](https://github.com/lhz960904/atrium/issues/56)) ([da4b81b](https://github.com/lhz960904/atrium/commit/da4b81b409a39ddbb5eeab35898834b11edf13cd))
+* **mcp:** support multimodal MCP tool results ([#55](https://github.com/lhz960904/atrium/issues/55)) ([a2c433e](https://github.com/lhz960904/atrium/commit/a2c433e74fb7b4f5df62089f15a7253ba8982002))
+
 ## [0.8.2](https://github.com/lhz960904/atrium/compare/v0.8.1...v0.8.2) (2026-07-06)
 
 
