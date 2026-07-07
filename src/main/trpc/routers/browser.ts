@@ -43,9 +43,15 @@ export const browserRouter = router({
     void syncBrowserProvisioning(ctx.db);
   }),
 
-  /** Disconnect the signed-in browser: tear its --extension server down. */
+  /** Disconnect the signed-in browser: tear its --extension server down and clear
+   *  the stored token, so it fully resets (a stale/invalid token can't linger and
+   *  keep the extension rejecting the connection). Reconnecting re-imports it. */
   disconnect: publicProcedure.mutation(({ ctx }) => {
-    getSettings().set('browser', { ...getSettings('browser'), connected: false });
+    getSettings().set('browser', {
+      ...getSettings('browser'),
+      connected: false,
+      extensionToken: '',
+    });
     void syncBrowserProvisioning(ctx.db);
   }),
 
