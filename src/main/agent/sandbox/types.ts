@@ -11,6 +11,7 @@
  */
 export interface Sandbox {
   readFile(path: string): Promise<string>;
+  readFileBytes(path: string): Promise<Uint8Array>;
   writeFile(path: string, content: string, append?: boolean): Promise<{ bytes: number }>;
   list(path: string, maxDepth?: number): Promise<string[]>;
   exec(

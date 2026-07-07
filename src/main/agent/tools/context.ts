@@ -26,6 +26,8 @@ export type ToolCtx = {
   bgShells?: BackgroundShells;
   /** Tools from connected MCP servers, keyed by their qualified mcp__<server>__<tool> name. */
   mcpTools?: Record<string, Tool>;
+  /** Whether the active provider+model can consume image tool results (see supportsImageToolResults). */
+  imageToolResults?: boolean;
   permission?: {
     mode: PermissionMode;
     rules?: TrustRule[];

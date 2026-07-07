@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { imageOutputToModelOutput } from '../tools/output';
 import { renderToolResult } from './render';
-import { mcpOutputToModelOutput } from './tool-adapter';
 
 const result = (over: Partial<CallToolResult>): CallToolResult =>
   ({ content: [], ...over }) as CallToolResult;
@@ -67,12 +67,12 @@ test('prefixes a tool error and keeps error results text-only', () => {
 });
 
 test('model output: plain string passes through as text', () => {
-  expect(mcpOutputToModelOutput('hello', true)).toEqual({ type: 'text', value: 'hello' });
+  expect(imageOutputToModelOutput('hello', true)).toEqual({ type: 'text', value: 'hello' });
 });
 
 test('model output: images become image-data parts when supported', () => {
   expect(
-    mcpOutputToModelOutput(
+    imageOutputToModelOutput(
       { text: 'shot', images: [{ mediaType: 'image/png', dataUrl: 'data:image/png;base64,aGk=' }] },
       true,
     ),
@@ -87,7 +87,7 @@ test('model output: images become image-data parts when supported', () => {
 
 test('model output: images degrade to a note when unsupported', () => {
   expect(
-    mcpOutputToModelOutput(
+    imageOutputToModelOutput(
       { text: 'shot', images: [{ mediaType: 'image/png', dataUrl: 'data:image/png;base64,aGk=' }] },
       false,
     ),
@@ -99,7 +99,7 @@ test('model output: images degrade to a note when unsupported', () => {
 
 test('model output: image-only result omits the empty text part', () => {
   expect(
-    mcpOutputToModelOutput(
+    imageOutputToModelOutput(
       { text: '', images: [{ mediaType: 'image/png', dataUrl: 'data:image/png;base64,aGk=' }] },
       true,
     ),

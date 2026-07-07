@@ -1,11 +1,9 @@
-import type { ImageToolOutput } from '@shared/chat-types';
 import { dynamicTool, jsonSchema, type Tool } from 'ai';
+import { imageOutputToModelOutput } from '../tools/output';
 import type { McpToolEntry } from './catalog';
 import type { McpManager } from './manager';
 import { renderToolResult } from './render';
 import { spillOversizedImages } from './spill';
-
-type ToolResultOutput = Awaited<ReturnType<NonNullable<Tool['toModelOutput']>>>;
 
 /**
  * Wrap each catalog entry as an AI SDK tool keyed by its qualified name, ready to
@@ -34,38 +32,8 @@ export function buildMcpTools(
         );
         return spillOversizedImages(renderToolResult(result), opts.workspaceRoot);
       },
-      toModelOutput: ({ output }) => mcpOutputToModelOutput(output, opts.imageToolResults),
+      toModelOutput: ({ output }) => imageOutputToModelOutput(output, opts.imageToolResults),
     });
   }
   return tools;
-}
-
-/**
- * Map a tool output onto the wire format. Plain strings (text-only results and
- * pre-image history rows) go out as text. Structured outputs inline their images
- * as image-data parts — unless the provider+model can't consume image tool
- * results, in which case the images are dropped with an explicit note so the
- * model knows what it isn't seeing.
- */
-export function mcpOutputToModelOutput(
-  output: unknown,
-  imageToolResults: boolean,
-): ToolResultOutput {
-  if (typeof output === 'string') return { type: 'text', value: output };
-  const { text, images } = output as ImageToolOutput;
-  if (!imageToolResults) {
-    const note = `[${images.length} image(s) omitted: the current model cannot view images]`;
-    return { type: 'text', value: text ? `${text}\n${note}` : note };
-  }
-  return {
-    type: 'content',
-    value: [
-      ...(text ? [{ type: 'text' as const, text }] : []),
-      ...images.map((img) => ({
-        type: 'image-data' as const,
-        data: img.dataUrl.slice(img.dataUrl.indexOf(',') + 1),
-        mediaType: img.mediaType,
-      })),
-    ],
-  };
 }

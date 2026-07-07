@@ -25,6 +25,7 @@ import {
 import { skillTool } from './builtins/skill';
 import { taskTool } from './builtins/task';
 import { todoWriteTool } from './builtins/todo-write';
+import { viewImageTool } from './builtins/view-image';
 import { webFetchTool } from './builtins/web-fetch';
 import { webSearchTool } from './builtins/web-search';
 import { writeFileTool } from './builtins/write-file';
@@ -76,6 +77,7 @@ export function getTools(ctx: ToolCtx): Record<string, Tool> {
     skill: skillTool({ skills: ctx.skills ?? [] }),
     ask_clarification: askClarificationTool(),
     image_gen: imageGenTool({ models: listEnabledImageModels(ctx.db) }),
+    view_image: viewImageTool(ctx),
     memory: memoryTool(ctx),
     profile: profileTool(),
     schedule_create: scheduleCreateTool(),

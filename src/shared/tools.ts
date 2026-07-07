@@ -22,6 +22,7 @@ export const TOOL_NAMES = [
   'skill',
   'ask_clarification',
   'image_gen',
+  'view_image',
   'memory',
   'profile',
   'schedule_create',

@@ -105,19 +105,23 @@ export function buildAssistantView(parts: AtriumUIMessage['parts'], t: TFunction
       // flat tool marker.
       if (name === 'task') work.push({ kind: 'subagent', subagent: toSubagentModel(part) });
       else work.push({ kind: 'tool', tool: toToolModel(part, name, t) });
+      pushToolImages(part);
     } else if (part.type === 'dynamic-tool') {
       // An external agent's or MCP server's tool call — arbitrary name, rendered
       // generically by its kind (the part.toolName) + the agent-supplied title.
       lastToolIdx = work.length;
       toolCount++;
       work.push({ kind: 'tool', tool: toDynamicToolModel(part, t) });
-      // Images the tool returned (e.g. a browser screenshot) render inline like
-      // generated images: trailing the marker, in `final` unless work continues.
-      if (part.state === 'output-available' && isImageToolOutput(part.output)) {
-        for (const img of part.output.images) {
-          work.push({ kind: 'image', id: `s${seq++}`, url: img.dataUrl, mediaType: img.mediaType });
-        }
-      }
+      pushToolImages(part);
+    }
+  }
+
+  // Images a tool returned (a browser screenshot, a viewed file) render inline
+  // like generated images: trailing the marker, in `final` unless work continues.
+  function pushToolImages(part: AtriumToolPart | DynamicToolUIPart): void {
+    if (part.state !== 'output-available' || !isImageToolOutput(part.output)) return;
+    for (const img of part.output.images) {
+      work.push({ kind: 'image', id: `s${seq++}`, url: img.dataUrl, mediaType: img.mediaType });
     }
   }
 
