@@ -181,6 +181,10 @@ export function BrowserSection(): React.JSX.Element {
   const disconnect = trpc.browser.disconnect.useMutation({ onSuccess: refreshEnv });
 
   const [waiting, setWaiting] = useState(false);
+  // The token already on the clipboard when the flow starts. We ignore it and
+  // only import once the value CHANGES — otherwise a token copied earlier would
+  // be grabbed the instant the user clicks, skipping the copy step entirely.
+  const [baselineToken, setBaselineToken] = useState<string | null>(null);
   const openTokenPage = trpc.browser.openTokenPage.useMutation();
   const importToken = trpc.browser.importToken.useMutation({
     onSuccess: (r) => {
@@ -197,9 +201,14 @@ export function BrowserSection(): React.JSX.Element {
     refetchInterval: 1200,
   });
   useEffect(() => {
-    if (waiting && clip.data?.token) importToken.mutate({ token: clip.data.token });
-  }, [waiting, clip.data?.token, importToken]);
-  const startTokenFlow = (): void => {
+    if (waiting && clip.data?.token && clip.data.token !== baselineToken)
+      importToken.mutate({ token: clip.data.token });
+  }, [waiting, clip.data?.token, baselineToken, importToken]);
+  const startTokenFlow = async (): Promise<void> => {
+    // Snapshot whatever token is already on the clipboard BEFORE enabling the
+    // poll, so a token copied earlier doesn't count as a fresh one.
+    const { token } = await utils.browser.clipboardToken.fetch();
+    setBaselineToken(token);
     setWaiting(true);
     openTokenPage.mutate();
   };
@@ -312,7 +321,7 @@ export function BrowserSection(): React.JSX.Element {
                   ) : (
                     <button
                       type="button"
-                      onClick={startTokenFlow}
+                      onClick={() => void startTokenFlow()}
                       disabled={!extensionInstalled}
                       className={`${PRIMARY_BTN} self-start disabled:opacity-45`}
                     >
@@ -382,7 +391,7 @@ export function BrowserSection(): React.JSX.Element {
               ) : (
                 <button
                   type="button"
-                  onClick={startTokenFlow}
+                  onClick={() => void startTokenFlow()}
                   className="font-medium text-accent text-xs hover:underline"
                 >
                   {t('settings.browser.silentImport')}
