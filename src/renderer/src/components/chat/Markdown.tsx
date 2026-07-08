@@ -1,16 +1,26 @@
 import 'katex/dist/katex.min.css';
 import { useMemo } from 'react';
 import remarkMath from 'remark-math';
-import { type AnimateOptions, type Components, defaultRemarkPlugins, Streamdown } from 'streamdown';
+import {
+  type AnimateOptions,
+  type Components,
+  defaultRemarkPlugins,
+  Streamdown,
+  type StreamdownProps,
+} from 'streamdown';
 import { CodeBlock } from './CodeBlock';
 import { MathFence } from './KatexMath';
 import { LinkChip } from './LinkChip';
 import { MermaidDiagram } from './MermaidDiagram';
 import { TableBlock } from './TableBlock';
 
-// Math is opt-in in Streamdown. remark-math tags $…$ / $$…$$ as `language-math`
-// code; we render those with KaTeX in the code renderer below.
-const remarkPlugins = [...Object.values(defaultRemarkPlugins), remarkMath];
+// Math is opt-in in Streamdown. remark-math tags $$…$$ as `language-math`
+// code; we render those with KaTeX in the code renderer below. Single-dollar
+// math is disabled so dollar amounts in plain text don't parse as formulas.
+const remarkPlugins: NonNullable<StreamdownProps['remarkPlugins']> = [
+  ...Object.values(defaultRemarkPlugins),
+  [remarkMath, { singleDollarTextMath: false }],
+];
 
 /**
  * Renders assistant text as Markdown via Streamdown — streaming-safe (it styles

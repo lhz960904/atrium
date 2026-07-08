@@ -1,9 +1,9 @@
 import katex from 'katex';
 
 /**
- * Renders a LaTeX expression with KaTeX. remark-math turns `$…$` / `$$…$$`
- * into code nodes tagged `language-math` (+ `math-inline` / `math-display`);
- * we render them here instead of letting them fall through as code.
+ * Renders a LaTeX expression with KaTeX. remark-math turns `$$…$$` into code
+ * nodes tagged `language-math` (+ `math-inline` / `math-display`); we render
+ * them here instead of letting them fall through as code.
  */
 export function KatexMath({ tex, display }: { tex: string; display: boolean }): React.JSX.Element {
   const html = katex.renderToString(tex, { displayMode: display, throwOnError: false });
