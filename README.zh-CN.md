@@ -18,6 +18,8 @@ Atrium 是一款本地优先的桌面 AI Agent 助手。支持携带秘钥接入
 
 https://github.com/user-attachments/assets/49af7cb9-f11c-4cce-8fd8-c45e3dcbbd8f
 
+<img src="images/showcase.svg" alt="Atrium 界面截图" />
+
 ## 功能特性
 
 - **多供应商支持：** Anthropic、Google Gemini、任意 OpenAI 兼容端点、通过 Ollama 运行的本地模型，以及外部 CLI agent（Claude Code、Codex、Gemini CLI）- 全部使用你自己的密钥，并在本地加密。
