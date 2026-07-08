@@ -1,6 +1,6 @@
 import { tool } from 'ai';
 import { z } from 'zod';
-import { DDG, formatResults } from './web/engines';
+import { ENGINES, formatResults } from './web/engines';
 import { runSearch } from './web/run-search';
 
 export const webSearchTool = () =>
@@ -11,11 +11,20 @@ export const webSearchTool = () =>
       query: z.string().min(1).describe('The search query.'),
     }),
     execute: async ({ query }, { abortSignal }) => {
-      try {
-        const results = await runSearch(DDG, query, abortSignal);
-        return formatResults(query, results);
-      } catch (err) {
-        return `Error: ${err instanceof Error ? err.message : String(err)}`;
+      // Engines are tried in order: a bot challenge or timeout on one falls
+      // through to the next, so only a failure across all of them surfaces as
+      // an error. "No results found" is reserved for a genuinely empty page.
+      const failures: string[] = [];
+      for (const engine of ENGINES) {
+        try {
+          const results = await runSearch(engine, query, abortSignal);
+          return formatResults(query, results);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (abortSignal?.aborted) return `Error: ${msg}`;
+          failures.push(`${engine.name}: ${msg}`);
+        }
       }
+      return `Error: all search engines failed — ${failures.join('; ')}`;
     },
   });
