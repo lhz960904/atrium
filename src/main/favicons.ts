@@ -107,7 +107,31 @@ async function get(
   };
 }
 
+/**
+ * Some servers pipe favicon bytes through a text-encoding layer that mangles
+ * the binary into UTF-8 replacement characters. Chromium still "decodes" such
+ * an ICO — to fully transparent pixels — so the renderer's error fallback never
+ * fires. A real ICO's directory always fits inside the file; one that doesn't
+ * is rejected here so the lookup falls through to the next source.
+ */
+function isCorruptIco(bytes: Uint8Array): boolean {
+  const b = bytes;
+  if (b.length < 6 || b[0] !== 0 || b[1] !== 0 || b[2] !== 1 || b[3] !== 0) return false;
+  const view = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  const count = view.getUint16(4, true);
+  const dirEnd = 6 + count * 16;
+  if (count === 0 || dirEnd > b.length) return true;
+  for (let i = 0; i < count; i++) {
+    const entry = 6 + i * 16;
+    const size = view.getUint32(entry + 8, true);
+    const offset = view.getUint32(entry + 12, true);
+    if (size === 0 || offset < dirEnd || offset + size > b.length) return true;
+  }
+  return false;
+}
+
 function asImage(res: { bytes: Uint8Array<ArrayBuffer>; type: string | null }): Favicon | null {
+  if (isCorruptIco(res.bytes)) return null;
   const ct = res.type?.startsWith('image/') ? res.type : sniff(res.bytes);
   return ct ? { bytes: res.bytes, contentType: ct } : null;
 }
@@ -195,12 +219,14 @@ async function load(host: string): Promise<Favicon | null> {
   if (existsSync(path)) {
     try {
       const raw = await readFile(path);
-      const fav: Favicon = {
-        bytes: new Uint8Array(raw),
-        contentType: sniff(raw) ?? 'image/x-icon',
-      };
-      mem.set(host, fav);
-      return fav;
+      const bytes = new Uint8Array(raw);
+      // A corrupt icon cached before validation existed must not be served
+      // forever — ignore it and re-resolve.
+      if (!isCorruptIco(bytes)) {
+        const fav: Favicon = { bytes, contentType: sniff(raw) ?? 'image/x-icon' };
+        mem.set(host, fav);
+        return fav;
+      }
     } catch {
       // Unreadable cache file — fall through and re-fetch.
     }
@@ -231,11 +257,16 @@ export async function getFavicon(host: string): Promise<Favicon | null> {
   return p;
 }
 
-// Must run before app 'ready'. `standard` gives the URL a parseable host and
-// `secure` keeps the images from counting as insecure content in the renderer.
+// Must run before app 'ready'. `standard` gives the URL a parseable host,
+// `secure` keeps the images from counting as insecure content, and
+// `corsEnabled` (with the allow-origin header below) lets the renderer load
+// them as crossorigin images whose pixels it may inspect for visibility.
 export function registerFaviconScheme(): void {
   protocol.registerSchemesAsPrivileged([
-    { scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: false } },
+    {
+      scheme: SCHEME,
+      privileges: { standard: true, secure: true, supportFetchAPI: false, corsEnabled: true },
+    },
   ]);
 }
 
@@ -251,7 +282,11 @@ export function serveFavicons(): void {
     if (!fav) return new Response(null, { status: 404 });
     return new Response(fav.bytes, {
       status: 200,
-      headers: { 'content-type': fav.contentType, 'cache-control': 'max-age=86400' },
+      headers: {
+        'content-type': fav.contentType,
+        'cache-control': 'max-age=86400',
+        'access-control-allow-origin': '*',
+      },
     });
   });
 }
