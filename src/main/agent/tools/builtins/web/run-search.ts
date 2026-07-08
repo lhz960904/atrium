@@ -16,9 +16,18 @@ const MAX_ATTEMPTS = 2;
 const RETRY_BACKOFF_MS = 2_500;
 
 // Single-file mutex: every search chains off the previous one, so only one
-// hidden window ever drives DDG at a time and the next waits its turn.
+// hidden window ever drives an engine at a time and the next waits its turn.
 let queue: Promise<unknown> = Promise.resolve();
-let lastSearchEndedAt = 0;
+// Rate limiting is per engine, so falling back to another engine never waits.
+const lastEndedAt = new Map<string, number>();
+
+/** The engine served a bot challenge instead of results; retrying won't clear it. */
+export class SearchBlockedError extends Error {
+  constructor() {
+    super('blocked by a bot-challenge page');
+    this.name = 'SearchBlockedError';
+  }
+}
 
 // Electron is required lazily so this module imports cleanly outside an Electron
 // runtime (e.g. the bun test runner), matching how the agent runner defers it.
@@ -61,7 +70,7 @@ async function throttledSearch(
   signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   throwIfAborted(signal);
-  const sinceLast = Date.now() - lastSearchEndedAt;
+  const sinceLast = Date.now() - (lastEndedAt.get(engine.name) ?? 0);
   if (sinceLast < MIN_GAP_MS) await delay(MIN_GAP_MS - sinceLast, signal);
   try {
     let lastErr: unknown;
@@ -70,14 +79,15 @@ async function throttledSearch(
       try {
         return await attemptSearch(engine, query, signal);
       } catch (err) {
-        if (signal?.aborted) throw err; // a stop isn't a retryable failure
+        // A stop isn't retryable, and a bot challenge won't clear in one backoff.
+        if (signal?.aborted || err instanceof SearchBlockedError) throw err;
         lastErr = err;
         if (attempt < MAX_ATTEMPTS) await delay(RETRY_BACKOFF_MS, signal);
       }
     }
     throw lastErr;
   } finally {
-    lastSearchEndedAt = Date.now();
+    lastEndedAt.set(engine.name, Date.now());
   }
 }
 
@@ -103,7 +113,11 @@ async function attemptSearch(
     throwIfAborted(signal);
     const wc = win.webContents;
     await withTimeout(wc.loadURL(engine.buildUrl(query)), NAV_TIMEOUT_MS, 'navigation');
-    await pollFor(wc, engine.readyExpr, RESULTS_TIMEOUT_MS, signal);
+    const state = await pollForState(wc, engine, RESULTS_TIMEOUT_MS, signal);
+    if (state === 'challenge') throw new SearchBlockedError();
+    if (state === 'timeout')
+      throw new Error(`rendered no results within ${RESULTS_TIMEOUT_MS / 1000}s`);
+    if (state === 'empty') return [];
     const raw = await wc.executeJavaScript(engine.scrapeScript);
     return engine.parse(Array.isArray(raw) ? raw : []);
   } finally {
@@ -112,20 +126,33 @@ async function attemptSearch(
   }
 }
 
-/** Resolve once the in-page count expression goes truthy, or stop at timeout. */
-async function pollFor(
+type PageState = 'ready' | 'empty' | 'challenge' | 'timeout';
+
+/**
+ * Poll until the page settles into a recognizable state. A challenge is checked
+ * first so a blocked engine fails over in under a second instead of burning the
+ * whole results timeout; only a page that never settles reports 'timeout'.
+ */
+async function pollForState(
   wc: WebContents,
-  countExpr: string,
+  engine: SearchEngine,
   timeoutMs: number,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<PageState> {
+  const classifyExpr = `(() => {
+    if (${engine.challengeExpr ?? 'false'}) return 'challenge';
+    if (${engine.readyExpr}) return 'ready';
+    if (${engine.emptyExpr ?? 'false'}) return 'empty';
+    return '';
+  })()`;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     throwIfAborted(signal);
-    const n = await wc.executeJavaScript(countExpr).catch(() => 0);
-    if (n) return;
+    const state = await wc.executeJavaScript(classifyExpr).catch(() => '');
+    if (state) return state as PageState;
     await delay(POLL_INTERVAL_MS, signal);
   }
+  return 'timeout';
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

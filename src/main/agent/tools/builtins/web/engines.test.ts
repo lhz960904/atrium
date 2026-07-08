@@ -1,5 +1,11 @@
 import { expect, test } from 'bun:test';
-import { formatResults, parseDdgResults, type RawResult } from './engines';
+import {
+  formatResults,
+  parseBingResults,
+  parseBraveResults,
+  parseDdgResults,
+  type RawResult,
+} from './engines';
 
 const redirect = (realUrl: string) =>
   `https://duckduckgo.com/l/?uddg=${encodeURIComponent(realUrl)}&rut=abc123`;
@@ -53,6 +59,43 @@ test('skips entries missing a title or an unparseable href', () => {
     { title: 'Bad', href: 'not a url', snippet: '' },
   ];
   expect(parseDdgResults(raw)).toEqual([]);
+});
+
+test('keeps direct Brave hrefs and drops links staying on brave.com', () => {
+  const raw: RawResult[] = [
+    { title: 'Harness: AI for DevOps', href: 'https://www.harness.io/', snippet: 'CI/CD' },
+    { title: 'Brave feature', href: 'https://search.brave.com/help', snippet: '' },
+    { title: 'Bad', href: 'not a url', snippet: '' },
+  ];
+  expect(parseBraveResults(raw)).toEqual([
+    { title: 'Harness: AI for DevOps', url: 'https://www.harness.io/', snippet: 'CI/CD' },
+  ]);
+});
+
+test('decodes the destination out of the Bing /ck/a redirect wrapper', () => {
+  const dest = 'https://harness-engineering.ai/blog/agent-harness-complete-guide/';
+  const u = `a1${Buffer.from(dest, 'utf8').toString('base64url')}`;
+  const raw: RawResult[] = [
+    {
+      title: 'The Complete Guide to Agent Harness',
+      href: `https://www.bing.com/ck/a?!&&p=abc&u=${u}&ntb=1`,
+      snippet: 'An agent harness is…',
+    },
+  ];
+  expect(parseBingResults(raw)).toEqual([
+    { title: 'The Complete Guide to Agent Harness', url: dest, snippet: 'An agent harness is…' },
+  ]);
+});
+
+test('drops Bing links whose destination stays on bing.com', () => {
+  const u = `a1${Buffer.from('https://www.bing.com/images', 'utf8').toString('base64url')}`;
+  const raw: RawResult[] = [
+    { title: 'Images', href: `https://www.bing.com/ck/a?u=${u}`, snippet: '' },
+    { title: 'Plain', href: 'https://example.com/page', snippet: '' },
+  ];
+  expect(parseBingResults(raw)).toEqual([
+    { title: 'Plain', url: 'https://example.com/page', snippet: '' },
+  ]);
 });
 
 test('formats results as a numbered markdown list', () => {

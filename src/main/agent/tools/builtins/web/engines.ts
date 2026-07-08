@@ -18,6 +18,10 @@ export type SearchEngine = {
   buildUrl: (query: string) => string;
   /** Polled in-page (count expression) to know results have rendered. */
   readyExpr: string;
+  /** Truthy in-page expression when the engine shows a bot challenge instead of results. */
+  challengeExpr?: string;
+  /** Truthy in-page expression when the engine rendered a genuine no-results state. */
+  emptyExpr?: string;
   /** In-page JS (IIFE) returning RawResult[]. */
   scrapeScript: string;
   /** Decode/clean the raw scrape into final results. */
@@ -76,9 +80,102 @@ export const DDG: SearchEngine = {
   name: 'duckduckgo',
   buildUrl: (query) => `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
   readyExpr: 'document.querySelectorAll(\'a.result__a[href*="uddg"]\').length',
+  challengeExpr: '!!document.querySelector(\'[class*="anomaly-modal"], #challenge-form\')',
+  emptyExpr: "!!document.querySelector('.no-results')",
   scrapeScript: DDG_SCRAPE,
   parse: parseDdgResults,
 };
+
+const BRAVE_SCRAPE = `(() => {
+  const out = [];
+  for (const s of document.querySelectorAll('.snippet[data-type="web"]')) {
+    const a = s.querySelector('a[href^="http"]');
+    const title = s.querySelector('.title');
+    if (!a || !title) continue;
+    const desc = s.querySelector('.content, p');
+    out.push({
+      title: (title.textContent || '').trim(),
+      href: a.href,
+      snippet: (desc ? desc.textContent : '').trim(),
+    });
+  }
+  return out;
+})()`;
+
+/** Brave links point straight at the destination; drop anything staying on brave.com. */
+export function parseBraveResults(raw: RawResult[]): SearchResult[] {
+  const out: SearchResult[] = [];
+  for (const r of raw) {
+    if (!r.title || !r.href) continue;
+    let host: string;
+    try {
+      host = new URL(r.href).hostname;
+    } catch {
+      continue;
+    }
+    if (host === 'brave.com' || host.endsWith('.brave.com')) continue;
+    out.push({ title: r.title, url: r.href, snippet: r.snippet });
+  }
+  return out;
+}
+
+export const BRAVE: SearchEngine = {
+  name: 'brave',
+  buildUrl: (query) => `https://search.brave.com/search?q=${encodeURIComponent(query)}`,
+  readyExpr: 'document.querySelectorAll(\'.snippet[data-type="web"]\').length',
+  scrapeScript: BRAVE_SCRAPE,
+  parse: parseBraveResults,
+};
+
+const BING_SCRAPE = `(() => {
+  const out = [];
+  for (const li of document.querySelectorAll('li.b_algo')) {
+    const a = li.querySelector('h2 a');
+    if (!a) continue;
+    const desc = li.querySelector('.b_caption p, p');
+    out.push({
+      title: (a.textContent || '').trim(),
+      href: a.href,
+      snippet: (desc ? desc.textContent : '').trim(),
+    });
+  }
+  return out;
+})()`;
+
+/**
+ * Bing wraps every hit in a `bing.com/ck/a` redirect; the destination is the
+ * base64url-encoded `u` param, prefixed with "a1". Unwrap it and drop anything
+ * still pointing at bing.com.
+ */
+export function parseBingResults(raw: RawResult[]): SearchResult[] {
+  const out: SearchResult[] = [];
+  for (const r of raw) {
+    if (!r.title || !r.href) continue;
+    let url = r.href;
+    try {
+      const href = new URL(r.href);
+      const u = href.searchParams.get('u');
+      if (u?.startsWith('a1')) url = Buffer.from(u.slice(2), 'base64url').toString('utf8');
+      const host = new URL(url).hostname;
+      if (host === 'bing.com' || host.endsWith('.bing.com')) continue;
+    } catch {
+      continue;
+    }
+    out.push({ title: r.title, url, snippet: r.snippet });
+  }
+  return out;
+}
+
+export const BING: SearchEngine = {
+  name: 'bing',
+  buildUrl: (query) => `https://www.bing.com/search?q=${encodeURIComponent(query)}`,
+  readyExpr: "document.querySelectorAll('li.b_algo').length",
+  scrapeScript: BING_SCRAPE,
+  parse: parseBingResults,
+};
+
+/** Tried in order; a blocked or timed-out engine falls through to the next. */
+export const ENGINES: SearchEngine[] = [DDG, BRAVE, BING];
 
 /** Render results as a compact numbered Markdown list for the model. */
 export function formatResults(query: string, results: SearchResult[]): string {
