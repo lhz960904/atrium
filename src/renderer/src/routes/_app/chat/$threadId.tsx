@@ -1,6 +1,7 @@
 import { type Chat, useChat } from '@ai-sdk/react';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
+import { sealDanglingToolCalls } from '@shared/seal-tool-calls';
 import { createFileRoute } from '@tanstack/react-router';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -117,13 +118,17 @@ function ChatRunner({
 
   // Stopping: detach this client immediately, then tell main to abort the run
   // (the producer is decoupled for resume, so stop() alone won't reach it).
+  // Seal dangling tool calls in the live view too — persistence seals them in
+  // the DB, but this Chat keeps its in-memory parts, so without the mirror
+  // seal a stopped tool would spin as "running" until the thread is reseeded.
   const onStop = useCallback((): void => {
     stop();
+    setMessages(sealDanglingToolCalls);
     void fetch(`${endpoint.baseUrl}/api/chat/${threadId}/abort`, {
       method: 'POST',
       headers: { 'x-atrium-token': endpoint.token },
     }).catch(() => {});
-  }, [stop, endpoint.baseUrl, endpoint.token, threadId]);
+  }, [stop, setMessages, endpoint.baseUrl, endpoint.token, threadId]);
 
   // Cancelling a clarification: resolve the call so the next turn's history is
   // valid, but don't auto-resume (the store's sendAutomaticallyWhen skips a
