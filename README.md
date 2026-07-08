@@ -19,8 +19,6 @@ own key, with all the AI-agent capabilities you'd expect today.
 
 https://github.com/user-attachments/assets/49af7cb9-f11c-4cce-8fd8-c45e3dcbbd8f
 
-<img src="images/showcase.svg" alt="Atrium screenshots" />
-
 ## Features
 
 - **Multi-provider:** Anthropic, Google Gemini, any OpenAI-compatible endpoint, local models
