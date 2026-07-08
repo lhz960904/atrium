@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.3](https://github.com/lhz960904/atrium/compare/v0.10.2...v0.10.3) (2026-07-08)
+
+
+### Bug Fixes
+
+* **chat:** keep link favicons visible with blank and dark-icon fallbacks ([#70](https://github.com/lhz960904/atrium/issues/70)) ([edf9bc7](https://github.com/lhz960904/atrium/commit/edf9bc7c3ee6b88c80562f5577779a86c5dbdd9c))
+
 ## [0.10.2](https://github.com/lhz960904/atrium/compare/v0.10.1...v0.10.2) (2026-07-08)
 
 
