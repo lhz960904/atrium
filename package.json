@@ -108,6 +108,7 @@
     "codemirror": "^6.0.2",
     "croner": "^10",
     "cronstrue": "^3",
+    "decode-ico": "^0.4.1",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "electron": "^39.2.6",
