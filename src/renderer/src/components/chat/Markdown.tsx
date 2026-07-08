@@ -14,15 +14,9 @@ import { LinkChip } from './LinkChip';
 import { MermaidDiagram } from './MermaidDiagram';
 import { TableBlock } from './TableBlock';
 
-/*
- * Math is opt-in in Streamdown. remark-math tags $$…$$ as `language-math`
- * code; we render those with KaTeX in the code renderer below.
- *
- * Single-dollar `$…$` is deliberately NOT math: chat text is full of dollar
- * amounts ($100亿, $85/股), and remark-math's default would grab the span
- * between two of them and typeset it as a formula. Inline math still works
- * via $$…$$ or a ```math fence.
- */
+// Math is opt-in in Streamdown. remark-math tags $$…$$ as `language-math`
+// code; we render those with KaTeX in the code renderer below. Single-dollar
+// math is disabled so dollar amounts in plain text don't parse as formulas.
 const remarkPlugins: NonNullable<StreamdownProps['remarkPlugins']> = [
   ...Object.values(defaultRemarkPlugins),
   [remarkMath, { singleDollarTextMath: false }],
