@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.2](https://github.com/lhz960904/atrium/compare/v0.10.1...v0.10.2) (2026-07-08)
+
+
+### Bug Fixes
+
+* **chat:** seal stopped tool calls in the live view ([#64](https://github.com/lhz960904/atrium/issues/64)) ([33768f4](https://github.com/lhz960904/atrium/commit/33768f4c73f399190a60df03a1836631e29c17c6))
+* **tools:** detect search bot challenges and fall back across engines ([#63](https://github.com/lhz960904/atrium/issues/63)) ([01f97e8](https://github.com/lhz960904/atrium/commit/01f97e83eba5c0630ce766787d1d685168e25ae6))
+
 ## [0.10.1](https://github.com/lhz960904/atrium/compare/v0.10.0...v0.10.1) (2026-07-08)
 
 
