@@ -1,6 +1,6 @@
+import { sealMessageToolCalls } from '@shared/seal-tool-calls';
 import type { UIMessage } from 'ai';
 import type { Db } from '../../../db';
-import { sealMessageToolCalls } from '../shared/seal-tool-calls';
 import type { AgentMiddleware } from '../types';
 
 export type PersistFn = (

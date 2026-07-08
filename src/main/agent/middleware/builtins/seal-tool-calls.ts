@@ -1,4 +1,4 @@
-import { sealDanglingToolCalls } from '../shared/seal-tool-calls';
+import { sealDanglingToolCalls } from '@shared/seal-tool-calls';
 import type { AgentMiddleware, RunContext } from '../types';
 
 /**

@@ -21,14 +21,14 @@ function isDangling(part: Part): boolean {
  * terminal 'output-error', keeping tool_use <-> tool_result paired. A message
  * with nothing dangling is returned unchanged (same reference).
  */
-export function sealMessageToolCalls(msg: UIMessage): UIMessage {
+export function sealMessageToolCalls<M extends UIMessage>(msg: M): M {
   if (!msg.parts.some(isDangling)) return msg;
   const parts = msg.parts.map((part) =>
     isDangling(part) ? ({ ...part, state: 'output-error', errorText: SEAL_ERROR } as Part) : part,
-  );
+  ) as M['parts'];
   return { ...msg, parts };
 }
 
-export function sealDanglingToolCalls(messages: UIMessage[]): UIMessage[] {
-  return messages.map(sealMessageToolCalls);
+export function sealDanglingToolCalls<M extends UIMessage>(messages: M[]): M[] {
+  return messages.map((m) => sealMessageToolCalls(m));
 }
