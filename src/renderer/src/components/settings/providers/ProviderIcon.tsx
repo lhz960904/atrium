@@ -30,6 +30,7 @@ const SVG_BY_ID: Record<string, string> = {
   'kimi-coding': kimiSvg,
   'zai-coding': zhipuSvg,
   'volcengine-agent': volcengineSvg,
+  'volcengine-coding': volcengineSvg,
   openrouter: openrouterSvg,
   aihubmix: aihubmixSvg,
   'claude-code': claudecodeSvg,

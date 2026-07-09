@@ -175,6 +175,31 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     ],
   },
   {
+    id: 'volcengine-coding',
+    kind: 'cloud-api',
+    name: 'Volcengine Coding Plan',
+    descriptionKey: 'settings.providers.desc.volcengineCoding',
+    protocol: 'anthropic',
+    defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
+    consoleUrl:
+      'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=subscribe',
+    // Like the agent plan: no model-listing API, doc's text-generation set.
+    models: [
+      'ark-code-latest',
+      'doubao-seed-code',
+      'doubao-seed-2.0-code',
+      'doubao-seed-2.0-lite',
+      'doubao-seed-2.0-pro',
+      'deepseek-v4-flash',
+      'deepseek-v4-pro',
+      'minimax-m2.7',
+      'minimax-m3',
+      'glm-5.2',
+      'kimi-k2.6',
+      'kimi-k2.7-code',
+    ],
+  },
+  {
     id: 'openrouter',
     kind: 'cloud-api',
     name: 'OpenRouter',
