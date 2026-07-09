@@ -222,7 +222,10 @@ export function startHttpServer(deps: {
         skills,
         bgShells,
         supportsImageToolResults: supportsImages,
-        computerUse: process.platform === 'darwin' ? getComputerUseHelper() : undefined,
+        computerUse:
+          process.platform === 'darwin' && getSettings('computerUse.enabled')
+            ? getComputerUseHelper()
+            : undefined,
         mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
           supportsImageToolResults: supportsImages,
           workspaceRoot,
