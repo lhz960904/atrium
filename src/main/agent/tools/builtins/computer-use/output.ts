@@ -1,5 +1,6 @@
 import type { ImageToolOutput } from '@shared/chat-types';
 import type { HelperResponse } from '../../../../computer-use';
+import { captureWindow } from '../../../../computer-use/screenshot';
 import { spillOversizedImages } from '../../../mcp/spill';
 import type { ToolCtx } from '../../context';
 
@@ -11,7 +12,8 @@ interface HelperResult {
   ok: boolean;
   toolName: string;
   snapshot?: { windowTitle?: string; treeText: string };
-  artifacts?: { screenshotMimeType?: string; screenshotBase64?: string };
+  /** The window to screenshot (the helper can't capture — the main process does). */
+  data?: { windowId?: number; windowWidth?: number; windowHeight?: number };
   meta?: { rawText?: string };
   error?: { code: string; message: string };
 }
@@ -38,19 +40,22 @@ async function toToolOutput(
   }
 
   const text = result.meta?.rawText ?? result.snapshot?.treeText ?? `${result.toolName} completed.`;
-  const base64 = result.artifacts?.screenshotBase64;
-  if (!base64) {
+
+  // The helper doesn't capture; it returns the window to shoot. Capture it in
+  // the main process (which holds the grant); a failed capture degrades to text.
+  const window = result.data;
+  if (!window || typeof window.windowId !== 'number') {
     return text;
   }
-
-  const mediaType = result.artifacts?.screenshotMimeType ?? 'image/png';
-  const output: ImageToolOutput = {
-    text,
-    images: [
-      { mediaType, dataUrl: `data:${mediaType};base64,${base64}`, filename: 'screenshot.png' },
-    ],
-  };
-  return spillOversizedImages(output, workspaceRoot);
+  const image = await captureWindow(
+    window.windowId,
+    window.windowWidth ?? 0,
+    window.windowHeight ?? 0,
+  );
+  if (!image) {
+    return text;
+  }
+  return spillOversizedImages({ text, images: [image] }, workspaceRoot);
 }
 
 /**
