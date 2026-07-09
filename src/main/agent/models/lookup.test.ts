@@ -4,6 +4,7 @@ import {
   FALLBACK_CONTEXT_TOKENS,
   findModelInfo,
   maxContextTokensFrom,
+  modelPricingFrom,
 } from './lookup';
 import type { ModelsCatalog } from './types';
 
@@ -89,6 +90,45 @@ test('capabilitiesFrom marks image output from mode even without output modaliti
     'text',
     'image',
   ]);
+});
+
+test('manifest-declared metadata covers ids the litellm dataset misses', () => {
+  expect(maxContextTokensFrom(catalog, 'ark-code-latest')).toBe(200_000);
+  expect(capabilitiesFrom(catalog, 'ark-code-latest').toolCall).toBe(true);
+  expect(maxContextTokensFrom(catalog, 'doubao-seed-code')).toBe(262_144);
+  expect(capabilitiesFrom(catalog, 'doubao-seed-code').vision).toBe(true);
+});
+
+test('a manifest catalogId alias resolves the version-pinned litellm key', () => {
+  const withPinned: ModelsCatalog = {
+    sample_spec: {},
+    'volcengine/doubao-seed-2-0-code-preview-260215': {
+      max_input_tokens: 256_000,
+      max_output_tokens: 128_000,
+      supports_vision: true,
+    },
+    'volcengine/doubao-seed-2-0-lite-260215': { max_input_tokens: 256_000 },
+  };
+  expect(maxContextTokensFrom(withPinned, 'doubao-seed-2.0-code')).toBe(256_000);
+  expect(capabilitiesFrom(withPinned, 'doubao-seed-2.0-code').vision).toBe(true);
+  // vendor prefix + casing on the serving id resolve through the same alias
+  expect(maxContextTokensFrom(withPinned, 'volcengine/Doubao-Seed-2.0-Lite')).toBe(256_000);
+});
+
+test('an alias whose litellm key vanished degrades to the conservative fallback', () => {
+  // doubao-seed-2.0-pro declares only a catalogId; absent from this catalog
+  expect(maxContextTokensFrom(catalog, 'doubao-seed-2.0-pro')).toBe(FALLBACK_CONTEXT_TOKENS);
+});
+
+test('manifest-declared fields override a litellm entry, undeclared fields survive', () => {
+  const withUpstream: ModelsCatalog = {
+    sample_spec: {},
+    'volcengine/ark-code-latest': { max_input_tokens: 999, input_cost_per_token: 5 },
+  };
+  // the vendor-documented window wins over litellm's bare-name variant…
+  expect(maxContextTokensFrom(withUpstream, 'ark-code-latest')).toBe(200_000);
+  // …while fields the manifest doesn't declare still come from litellm
+  expect(modelPricingFrom(withUpstream, 'ark-code-latest').input).toBe(5);
 });
 
 test('capabilitiesFrom defaults conservatively for an unknown id', () => {
