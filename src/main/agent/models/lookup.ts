@@ -11,6 +11,41 @@ const toModalities = (list?: string[]): Modality[] =>
 const bareName = (id: string): string => id.slice(id.lastIndexOf('/') + 1).toLowerCase();
 
 /**
+ * Vendor-documented entries for ids the litellm dataset doesn't carry — the
+ * Volcengine Ark plan models. Without a window the UI's context gauge and the
+ * compaction threshold fall back to 128k, half these models' real size.
+ * Consulted only on a catalog miss, so a litellm entry that lands upstream
+ * later wins automatically.
+ */
+const CATALOG_SUPPLEMENT: Record<string, ModelInfo> = {
+  // Auto-dispatch alias; sized to the smallest window in its dispatch pool.
+  'ark-code-latest': {
+    max_input_tokens: 200_000,
+    max_output_tokens: 131_072,
+    supports_function_calling: true,
+    supports_reasoning: true,
+  },
+  'doubao-seed-code': {
+    max_input_tokens: 262_144,
+    supports_vision: true,
+    supports_function_calling: true,
+    supports_reasoning: true,
+  },
+  ...Object.fromEntries(
+    ['mini', 'lite', 'code', 'pro'].map((tier) => [
+      `doubao-seed-2.0-${tier}`,
+      {
+        max_input_tokens: 262_144,
+        max_output_tokens: 131_072,
+        supports_vision: true,
+        supports_function_calling: true,
+        supports_reasoning: true,
+      } satisfies ModelInfo,
+    ]),
+  ),
+};
+
+/**
  * Resolve a model id to its litellm entry. An exact key hit wins; otherwise we
  * match on the bare model name (last `/`-segment, case-insensitive). Relays and
  * aggregators rewrite the prefix and casing freely — litellm keys Kimi as
@@ -26,7 +61,7 @@ export function findModelInfo(catalog: ModelsCatalog, modelId: string): ModelInf
   for (const [key, info] of Object.entries(catalog)) {
     if (key !== 'sample_spec' && bareName(key) === target) return info;
   }
-  return undefined;
+  return CATALOG_SUPPLEMENT[target];
 }
 
 export function maxContextTokensFrom(catalog: ModelsCatalog, modelId: string): number {

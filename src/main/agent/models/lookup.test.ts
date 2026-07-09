@@ -91,6 +91,23 @@ test('capabilitiesFrom marks image output from mode even without output modaliti
   ]);
 });
 
+test('the supplement covers ark plan ids the litellm dataset misses', () => {
+  expect(maxContextTokensFrom(catalog, 'ark-code-latest')).toBe(200_000);
+  expect(maxContextTokensFrom(catalog, 'doubao-seed-2.0-code')).toBe(262_144);
+  expect(capabilitiesFrom(catalog, 'doubao-seed-2.0-pro').vision).toBe(true);
+  expect(capabilitiesFrom(catalog, 'ark-code-latest').toolCall).toBe(true);
+  // vendor prefix + casing resolve through the same bare-name join
+  expect(maxContextTokensFrom(catalog, 'volcengine/Doubao-Seed-2.0-Lite')).toBe(262_144);
+});
+
+test('a litellm entry beats the supplement', () => {
+  const withUpstream: ModelsCatalog = {
+    sample_spec: {},
+    'volcengine/ark-code-latest': { max_input_tokens: 999 },
+  };
+  expect(maxContextTokensFrom(withUpstream, 'ark-code-latest')).toBe(999);
+});
+
 test('capabilitiesFrom defaults conservatively for an unknown id', () => {
   const caps = capabilitiesFrom(catalog, 'no-such-model');
   expect(caps.vision).toBe(false);
