@@ -503,9 +503,17 @@ export const en: typeof zh = {
       screenRecording: 'Screen Recording',
       screenRecordingDesc: 'Lets Atrium capture the target app window so the AI can see it.',
       granted: 'Granted',
-      needed: 'Not granted',
-      permHint:
-        'Grant both in System Settings so the AI can operate apps — Atrium will guide you when it needs them.',
+      grant: 'Grant',
+      restarting: 'Granted — restarting Atrium…',
+      restartNote: 'Atrium restarts automatically once both are granted.',
+      dragTitle: 'Grant "{{name}}"',
+      dragDesc:
+        'System Settings is open. Drag the block below into the list to grant — no need to click “+” or hunt for the file.',
+      dragName: 'Atrium',
+      dragHint: 'Hold and drag →',
+      dropHead: '{{name}} · System Settings',
+      dropHint: 'Drop it onto the list in System Settings to add and enable it.',
+      dragClose: 'Later',
       behaviorTitle: 'Behavior & safety',
       menubar: 'Show status in the menu bar',
       menubarDesc:
