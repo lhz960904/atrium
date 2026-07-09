@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/lhz960904/atrium/compare/v0.10.4...v0.11.0) (2026-07-09)
+
+
+### Features
+
+* **providers:** add volcengine agent plan and coding plan providers ([#76](https://github.com/lhz960904/atrium/issues/76)) ([69aecaf](https://github.com/lhz960904/atrium/commit/69aecafcf9c26a783e41b1181259b2d2e6eca70f))
+
 ## [0.10.4](https://github.com/lhz960904/atrium/compare/v0.10.3...v0.10.4) (2026-07-09)
 
 
