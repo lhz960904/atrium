@@ -1,5 +1,8 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import readline from 'node:readline';
+import { createLogger } from '../log';
+
+const log = createLogger('computer-use-helper');
 
 export interface HelperResponse {
   id: string;
@@ -57,12 +60,25 @@ export class ComputerUseHelper {
     const reader = readline.createInterface({ input: child.stdout });
     reader.on('line', (line) => this.onLine(line));
 
+    // Consume stderr into the app log. An unread pipe can fill and stall the
+    // helper, and a crash's diagnostics would otherwise be lost.
+    const stderrReader = readline.createInterface({ input: child.stderr });
+    stderrReader.on('line', (line) => {
+      if (line.trim()) {
+        log.warn(line);
+      }
+    });
+
     child.on('exit', (code) => {
       this.child = null;
+      if (code) {
+        log.warn(`helper exited (code ${code})`);
+      }
       this.rejectAll(new Error(`Computer Use helper exited (code ${code ?? 'unknown'}).`));
     });
     child.on('error', (error) => {
       this.child = null;
+      log.error('helper failed to spawn', error);
       this.rejectAll(error instanceof Error ? error : new Error(String(error)));
     });
 
