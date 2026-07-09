@@ -181,9 +181,18 @@ export function UpdateDialog(): React.JSX.Element {
                 <button type="button" className={ghostBtn} onClick={closeDialog}>
                   {t('update.later')}
                 </button>
-                <button type="button" className={accentBtn} onClick={() => install.mutate()}>
-                  <RotateCw className="size-4" />
-                  {t('update.restartNow')}
+                <button
+                  type="button"
+                  className={accentBtn}
+                  disabled={install.isPending}
+                  onClick={() => install.mutate()}
+                >
+                  {install.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RotateCw className="size-4" />
+                  )}
+                  {install.isPending ? t('update.restarting') : t('update.restartNow')}
                 </button>
               </>
             ) : stage === 'downloading' ? (

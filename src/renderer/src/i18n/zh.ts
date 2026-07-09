@@ -30,6 +30,7 @@ export const zh = {
     downloading: '下载中…',
     downloadComplete: '下载完成，重启即可安装。',
     restartNow: '立即重启',
+    restarting: '重启中…',
     later: '稍后',
     failed: '更新失败',
     retry: '重试',
