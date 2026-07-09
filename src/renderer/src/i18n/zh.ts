@@ -606,6 +606,8 @@ export const zh = {
         moonshot: 'Kimi 系列（Moonshot AI）。长上下文。',
         kimiCoding: '月之暗面 · Coding 订阅版（Anthropic 兼容）。',
         zaiCoding: '智谱清言 GLM Coding 订阅版（Anthropic 兼容）。',
+        volcengineAgent: '火山方舟 · Agent Plan 订阅版（Anthropic 兼容）。',
+        volcengineCoding: '火山方舟 · Coding Plan 订阅版（Anthropic 兼容）。',
         openrouter: '统一 API 路由 300+ 模型。',
         aihubmix: '一站式 LLM 聚合，单 key 调多家模型。',
         claudeCode: '通过 ACP 调用你本地已登录的 Claude Code（复用订阅，无需 API key）。',

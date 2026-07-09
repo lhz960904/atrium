@@ -14,6 +14,18 @@ export type ProviderKind = 'cloud-api' | 'local-cli' | 'local-service';
 export type CloudApiProtocol = 'anthropic' | 'openai-compatible' | 'google-gemini';
 
 /**
+ * @ai-sdk/anthropic requests `${baseURL}/messages`, so it needs a base that
+ * already contains the `/v1` segment — but vendors advertise their
+ * Anthropic-compatible bases without it (Claude Code appends `/v1/messages`
+ * itself), and users paste those documented URLs. Accept both shapes by
+ * appending `/v1` unless the base already ends with it.
+ */
+export function anthropicApiBase(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, '');
+  return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
+}
+
+/**
  * How to launch a local CLI as an ACP agent. Some CLIs speak ACP natively (run
  * their own binary); others need the official ACP adapter package, whose bin we
  * resolve from node_modules.
@@ -135,6 +147,57 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     defaultBaseUrl: 'https://open.bigmodel.cn/api/anthropic',
     consoleUrl: 'https://open.bigmodel.cn/',
     models: ['glm-4.6'],
+  },
+  {
+    id: 'volcengine-agent',
+    kind: 'cloud-api',
+    name: 'Volcengine Agent Plan',
+    descriptionKey: 'settings.providers.desc.volcengineAgent',
+    protocol: 'anthropic',
+    defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
+    consoleUrl:
+      'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=agentPlan',
+    // The plan endpoint has no model-listing API; this is the doc's supported
+    // text-generation set (each id verified against the live endpoint).
+    models: [
+      'ark-code-latest',
+      'doubao-seed-2.0-mini',
+      'doubao-seed-2.0-lite',
+      'doubao-seed-2.0-code',
+      'doubao-seed-2.0-pro',
+      'deepseek-v4-flash',
+      'deepseek-v4-pro',
+      'minimax-m2.7',
+      'minimax-m3',
+      'glm-5.2',
+      'kimi-k2.6',
+      'kimi-k2.7-code',
+    ],
+  },
+  {
+    id: 'volcengine-coding',
+    kind: 'cloud-api',
+    name: 'Volcengine Coding Plan',
+    descriptionKey: 'settings.providers.desc.volcengineCoding',
+    protocol: 'anthropic',
+    defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
+    consoleUrl:
+      'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=subscribe',
+    // Like the agent plan: no model-listing API, doc's text-generation set.
+    models: [
+      'ark-code-latest',
+      'doubao-seed-code',
+      'doubao-seed-2.0-code',
+      'doubao-seed-2.0-lite',
+      'doubao-seed-2.0-pro',
+      'deepseek-v4-flash',
+      'deepseek-v4-pro',
+      'minimax-m2.7',
+      'minimax-m3',
+      'glm-5.2',
+      'kimi-k2.6',
+      'kimi-k2.7-code',
+    ],
   },
   {
     id: 'openrouter',

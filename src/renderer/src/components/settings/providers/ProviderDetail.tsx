@@ -73,6 +73,9 @@ function CloudApiForm({
     fetchedModels?: string[];
     enabledModels?: string[];
   };
+  // Manifest models are the curated floor — some providers (coding/agent
+  // plans) expose no listing endpoint, so fetch results only extend them.
+  const models = [...new Set([...provider.models, ...(config.fetchedModels ?? [])])];
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
       <ApiKeyField
@@ -93,7 +96,7 @@ function CloudApiForm({
             ? t('settings.providers.fetchHint')
             : t('settings.providers.fetchHintNoKey')
         }
-        models={config.fetchedModels ?? []}
+        models={models}
         enabledModels={config.enabledModels ?? []}
       />
     </div>
