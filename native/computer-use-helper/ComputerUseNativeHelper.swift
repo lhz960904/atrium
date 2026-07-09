@@ -2795,6 +2795,25 @@ func scrollResult(params: [String: JSONValue]) -> ResultPayload {
   return getAppStateResult(appRef: appRef)
 }
 
+// Self-report TCC status. This helper — not Atrium's main process — is the
+// signed identity that holds Accessibility + Screen Recording, so it is the
+// only correct source of truth for the settings UI's permission state.
+func permissionsResult() -> ResultPayload {
+  let accessibility = AXIsProcessTrusted()
+  let screenRecording = CGPreflightScreenCaptureAccess()
+  return ResultPayload(
+    ok: true,
+    toolName: "permissions",
+    app: nil,
+    snapshot: nil,
+    artifacts: nil,
+    data: ["accessibility": .bool(accessibility), "screenRecording": .bool(screenRecording)],
+    warnings: [],
+    meta: MetaPayload(observedShape: "text", rawText: nil),
+    error: nil
+  )
+}
+
 while let line = readLine() {
   if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
     continue
@@ -2828,6 +2847,8 @@ while let line = readLine() {
       result = setValueResult(params: request.params)
     case "scroll":
       result = scrollResult(params: request.params)
+    case "permissions":
+      result = permissionsResult()
     default:
       result = makeErrorResult(toolName: request.method, code: "unsupported_action", message: "Unsupported helper method: \(request.method)")
     }
