@@ -14,6 +14,18 @@ export type ProviderKind = 'cloud-api' | 'local-cli' | 'local-service';
 export type CloudApiProtocol = 'anthropic' | 'openai-compatible' | 'google-gemini';
 
 /**
+ * @ai-sdk/anthropic requests `${baseURL}/messages`, so it needs a base that
+ * already contains the `/v1` segment — but vendors advertise their
+ * Anthropic-compatible bases without it (Claude Code appends `/v1/messages`
+ * itself), and users paste those documented URLs. Accept both shapes by
+ * appending `/v1` unless the base already ends with it.
+ */
+export function anthropicApiBase(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, '');
+  return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
+}
+
+/**
  * How to launch a local CLI as an ACP agent. Some CLIs speak ACP natively (run
  * their own binary); others need the official ACP adapter package, whose bin we
  * resolve from node_modules.
