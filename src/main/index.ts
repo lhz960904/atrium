@@ -12,6 +12,7 @@ import { runDream, startDreamScheduler } from './agent/memory';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
 import { scheduledManager, startScheduledTasks } from './agent/scheduled';
 import { refreshSkills } from './agent/skills/registry';
+import { registerComputerUseDrag } from './computer-use/drag';
 import { closeDb, openDb } from './db';
 import { registerFaviconScheme, serveFavicons } from './favicons';
 import { initLogging } from './log';
@@ -143,6 +144,7 @@ app.whenReady().then(async () => {
     windows: [win],
     createContext: async () => ({ db, chatEndpoint }),
   });
+  registerComputerUseDrag();
 
   // Broadcast updater state into whichever main window is live (it survives
   // hide/close, and getWindow() re-resolves after a rebuild). onBeforeInstall

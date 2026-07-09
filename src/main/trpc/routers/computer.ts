@@ -1,5 +1,14 @@
-import { systemPreferences } from 'electron';
+import { PRIVACY_PANES } from '@shared/computer-use';
+import { app, shell, systemPreferences } from 'electron';
+import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
+
+// Deep links into the exact privacy list for each grant, so the drag-to-grant
+// flow lands the user on the right pane with one click.
+const PRIVACY_PANE_URL: Record<(typeof PRIVACY_PANES)[number], string> = {
+  accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+  screenRecording: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+};
 
 export const computerRouter = router({
   /**
@@ -17,5 +26,19 @@ export const computerRouter = router({
       accessibility: systemPreferences.isTrustedAccessibilityClient(false),
       screenRecording: systemPreferences.getMediaAccessStatus('screen') === 'granted',
     };
+  }),
+
+  /** Opens the System Settings privacy pane for a grant (drag target for the drag-to-grant flow). */
+  openPrivacyPane: publicProcedure.input(z.enum(PRIVACY_PANES)).mutation(({ input }) => {
+    void shell.openExternal(PRIVACY_PANE_URL[input]);
+  }),
+
+  /**
+   * Relaunches Atrium. macOS only reflects a screen-recording grant/revoke after
+   * the app restarts, so the drag-to-grant flow calls this once both grants land.
+   */
+  relaunch: publicProcedure.mutation(() => {
+    app.relaunch();
+    app.exit(0);
   }),
 });
