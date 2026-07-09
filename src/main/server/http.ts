@@ -30,6 +30,7 @@ import { getSkills } from '../agent/skills/registry';
 import { getTools } from '../agent/tools';
 import { skillPreserver } from '../agent/tools/builtins/skill';
 import { todoPreserver } from '../agent/tools/builtins/todo';
+import { getComputerUseHelper } from '../computer-use';
 import type { Db } from '../db';
 import { createLogger } from '../log';
 import { resolveAcpSpec } from '../providers/acp-spec';
@@ -221,6 +222,7 @@ export function startHttpServer(deps: {
         skills,
         bgShells,
         supportsImageToolResults: supportsImages,
+        computerUse: process.platform === 'darwin' ? getComputerUseHelper() : undefined,
         mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
           supportsImageToolResults: supportsImages,
           workspaceRoot,

@@ -1,6 +1,7 @@
 import type { PermissionMode } from '@shared/permissions';
 import type { TrustRule } from '@shared/permissions/rules';
 import type { LanguageModel, Tool } from 'ai';
+import type { ComputerUseHelper } from '../../computer-use';
 import type { Db } from '../../db';
 import type { BackgroundShells } from '../sandbox/background-shells';
 import type { Sandbox } from '../sandbox/types';
@@ -26,6 +27,8 @@ export type ToolCtx = {
   bgShells?: BackgroundShells;
   /** Tools from connected MCP servers, keyed by their qualified mcp__<server>__<tool> name. */
   mcpTools?: Record<string, Tool>;
+  /** The Computer Use helper (macOS desktop automation); absent off macOS. */
+  computerUse?: ComputerUseHelper;
   /** Whether the active provider+model can consume image tool results (see
    *  supportsImageToolResults). Absent defaults to false on purpose: a dropped
    *  image degrades to a text note the model can react to, while wrongly
