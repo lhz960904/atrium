@@ -2049,7 +2049,6 @@ func getAppStateResult(
   let title = entry.title
   let bundleId = app?.bundleIdentifier ?? appRef
   let appName = app?.localizedName ?? entry.ownerName
-  let screenshot = captureWindowScreenshot(captureEntry)
   let axSnapshot = app.map(buildAXSnapshot)
   let bodyText = axSnapshot?.treeText ?? ""
   let treeText = bodyText.isEmpty
@@ -2057,78 +2056,32 @@ func getAppStateResult(
     : "App=\(bundleId) (pid \(entry.pid))\nWindow: \"\(title ?? "<unknown>")\", App: \(appName).\n\(bodyText)"
   let rawText = "Computer Use state (CUA App Version: 750)\n<app_state>\n\(treeText)\n\n</app_state>"
 
+  // Screenshots are taken by Atrium's main process (which holds the Screen
+  // Recording grant); the helper only returns the window info the main process
+  // needs to capture it — screen capture is bound to the originating process's
+  // own grant, which a child helper never inherits.
   let result = ResultPayload(
     ok: true,
     toolName: "get_app_state",
     app: AppPayload(name: appName, bundleId: app?.bundleIdentifier, pid: Int(entry.pid)),
     snapshot: SnapshotPayload(windowTitle: title, treeText: treeText, elements: axSnapshot?.elements ?? []),
-    artifacts: screenshot,
-    data: nil,
+    artifacts: nil,
+    data: [
+      "windowId": .number(Double(entry.windowID)),
+      "windowX": .number(Double(entry.bounds.origin.x)),
+      "windowY": .number(Double(entry.bounds.origin.y)),
+      "windowWidth": .number(Double(entry.bounds.width)),
+      "windowHeight": .number(Double(entry.bounds.height)),
+    ],
     warnings: [
       axSnapshot == nil ? "Accessibility tree extraction is unavailable for this app instance." : nil,
       axSnapshot?.warnings.first,
-      screenshot == nil ? "Native helper screenshot capture is not implemented yet." : nil
     ].compactMap { $0 },
     meta: MetaPayload(observedShape: "state+image", rawText: rawText),
     error: nil
   )
   OverlayCursorController.shared.extendVisibility()
   return result
-}
-
-func pngData(from image: CGImage) -> Data? {
-  let bitmapRep = NSBitmapImageRep(cgImage: image)
-  return bitmapRep.representation(using: .png, properties: [:])
-}
-
-func captureWindowScreenshot(_ entry: WindowEntry) -> ArtifactsPayload? {
-  let executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
-  let helperURL = executableURL.deletingLastPathComponent().appendingPathComponent("WindowCaptureHelper")
-  let process = Process()
-  process.executableURL = helperURL
-  process.arguments = [
-    "--pid", String(entry.pid),
-    "--window-id", String(entry.windowID),
-    "--title", entry.title ?? "",
-  ]
-
-  let stdout = Pipe()
-  let stderr = Pipe()
-  process.standardOutput = stdout
-  process.standardError = stderr
-
-  do {
-    try process.run()
-    let deadline = Date().addingTimeInterval(3)
-    while process.isRunning, Date() < deadline {
-      Thread.sleep(forTimeInterval: 0.01)
-    }
-    if process.isRunning {
-      process.terminate()
-      Thread.sleep(forTimeInterval: 0.05)
-      if process.isRunning {
-        process.interrupt()
-      }
-      return nil
-    }
-
-    guard process.terminationStatus == 0 else {
-      return nil
-    }
-
-    let base64Data = stdout.fileHandleForReading.readDataToEndOfFile()
-    guard let base64 = String(data: base64Data, encoding: .utf8)?
-      .trimmingCharacters(in: .whitespacesAndNewlines),
-      !base64.isEmpty
-    else {
-      return nil
-    }
-
-    let artifacts = ArtifactsPayload(screenshotMimeType: "image/png", screenshotBase64: base64)
-    return artifacts
-  } catch {
-    return nil
-  }
 }
 
 func targetWindowElement(for app: NSRunningApplication) -> AXUIElement? {

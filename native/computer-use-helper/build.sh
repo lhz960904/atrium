@@ -17,13 +17,8 @@ rm -rf "$APP"
 mkdir -p "$MACOS"
 cp "$HERE/Info.plist" "$APP/Contents/Info.plist"
 swiftc -O "$HERE/ComputerUseNativeHelper.swift" -o "$MACOS/AtriumComputerUse"
-swiftc -O "$HERE/WindowCaptureHelper.swift"    -o "$MACOS/WindowCaptureHelper"
 
-echo "→ Signing (inside-out) with: $IDENTITY"
-# Nested binary first, then the bundle — signatures must be applied inside-out.
-codesign --force --options runtime \
-  --entitlements "$HERE/entitlements.plist" \
-  --sign "$IDENTITY" "$MACOS/WindowCaptureHelper"
+echo "→ Signing with: $IDENTITY"
 codesign --force --options runtime \
   --entitlements "$HERE/entitlements.plist" \
   --sign "$IDENTITY" "$APP"
