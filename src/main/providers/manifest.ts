@@ -149,6 +149,18 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     models: ['glm-4.6'],
   },
   {
+    id: 'volcengine-agent',
+    kind: 'cloud-api',
+    name: 'Volcengine Agent Plan',
+    descriptionKey: 'settings.providers.desc.volcengineAgent',
+    protocol: 'anthropic',
+    defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
+    consoleUrl:
+      'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=agentPlan',
+    // The plan endpoint has no model-listing API; this is the doc's supported set.
+    models: ['ark-code-latest', 'kimi-k2.6', 'glm-5.2', 'minimax-m2.7'],
+  },
+  {
     id: 'openrouter',
     kind: 'cloud-api',
     name: 'OpenRouter',

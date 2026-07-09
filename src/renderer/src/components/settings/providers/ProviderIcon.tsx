@@ -10,6 +10,7 @@ import moonshotSvg from '@lobehub/icons-static-svg/icons/moonshot.svg?raw';
 import ollamaSvg from '@lobehub/icons-static-svg/icons/ollama.svg?raw';
 import openaiSvg from '@lobehub/icons-static-svg/icons/openai.svg?raw';
 import openrouterSvg from '@lobehub/icons-static-svg/icons/openrouter.svg?raw';
+import volcengineSvg from '@lobehub/icons-static-svg/icons/volcengine-color.svg?raw';
 import zhipuSvg from '@lobehub/icons-static-svg/icons/zhipu-color.svg?raw';
 
 /**
@@ -28,6 +29,7 @@ const SVG_BY_ID: Record<string, string> = {
   moonshot: moonshotSvg,
   'kimi-coding': kimiSvg,
   'zai-coding': zhipuSvg,
+  'volcengine-agent': volcengineSvg,
   openrouter: openrouterSvg,
   aihubmix: aihubmixSvg,
   'claude-code': claudecodeSvg,
