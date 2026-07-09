@@ -1,3 +1,4 @@
+import { type ManifestModel, PROVIDER_MANIFEST } from '../../providers/manifest';
 import type { Modality, ModelCapabilities, ModelInfo, ModelPricing, ModelsCatalog } from './types';
 
 /** Conservative window for ids the dataset doesn't know — compact early, never overflow. */
@@ -10,40 +11,31 @@ const toModalities = (list?: string[]): Modality[] =>
 /** The bare model name: the segment after the last `/`, lowercased. */
 const bareName = (id: string): string => id.slice(id.lastIndexOf('/') + 1).toLowerCase();
 
+function declaredInfo(model: ManifestModel): ModelInfo | undefined {
+  const info: ModelInfo = {};
+  if (model.contextTokens != null) info.max_input_tokens = model.contextTokens;
+  if (model.outputTokens != null) info.max_output_tokens = model.outputTokens;
+  if (model.vision != null) info.supports_vision = model.vision;
+  if (model.toolCall != null) info.supports_function_calling = model.toolCall;
+  if (model.reasoning != null) info.supports_reasoning = model.reasoning;
+  return Object.keys(info).length > 0 ? info : undefined;
+}
+
 /**
- * Vendor-documented entries for ids the litellm dataset doesn't carry — the
- * Volcengine Ark plan models. Without a window the UI's context gauge and the
- * compaction threshold fall back to 128k, half these models' real size.
- * Consulted only on a catalog miss, so a litellm entry that lands upstream
- * later wins automatically.
+ * Metadata declared on the provider manifest's models, keyed by bare name.
+ * A declaration is the vendor's documented truth for the exact endpoint we
+ * ship — litellm's bare-name join can miss (Ark plan ids) or land on another
+ * vendor's variant of the same model — so declared fields override the litellm
+ * entry, while undeclared fields still resolve through it.
  */
-const CATALOG_SUPPLEMENT: Record<string, ModelInfo> = {
-  // Auto-dispatch alias; sized to the smallest window in its dispatch pool.
-  'ark-code-latest': {
-    max_input_tokens: 200_000,
-    max_output_tokens: 131_072,
-    supports_function_calling: true,
-    supports_reasoning: true,
-  },
-  'doubao-seed-code': {
-    max_input_tokens: 262_144,
-    supports_vision: true,
-    supports_function_calling: true,
-    supports_reasoning: true,
-  },
-  ...Object.fromEntries(
-    ['mini', 'lite', 'code', 'pro'].map((tier) => [
-      `doubao-seed-2.0-${tier}`,
-      {
-        max_input_tokens: 262_144,
-        max_output_tokens: 131_072,
-        supports_vision: true,
-        supports_function_calling: true,
-        supports_reasoning: true,
-      } satisfies ModelInfo,
-    ]),
-  ),
-};
+const MANIFEST_OVERLAY: Record<string, ModelInfo> = {};
+for (const provider of PROVIDER_MANIFEST) {
+  if (provider.kind !== 'cloud-api') continue;
+  for (const model of provider.models) {
+    const info = declaredInfo(model);
+    if (info) MANIFEST_OVERLAY[bareName(model.id)] = info;
+  }
+}
 
 /**
  * Resolve a model id to its litellm entry. An exact key hit wins; otherwise we
@@ -52,16 +44,24 @@ const CATALOG_SUPPLEMENT: Record<string, ModelInfo> = {
  * `moonshot/kimi-k2.5`, while a relay serves `moonshotai/Kimi-K2.5` — so the
  * stable join key is the model name, not the vendor path. Same-name entries
  * across providers are the same model, so the first match's capabilities apply.
+ * Fields declared in the provider manifest overlay whatever litellm has.
  */
 export function findModelInfo(catalog: ModelsCatalog, modelId: string): ModelInfo | undefined {
-  if (modelId !== 'sample_spec' && catalog[modelId]) return catalog[modelId];
-
   const target = bareName(modelId);
-  if (target === 'sample_spec') return undefined;
-  for (const [key, info] of Object.entries(catalog)) {
-    if (key !== 'sample_spec' && bareName(key) === target) return info;
+  if (modelId === 'sample_spec' || target === 'sample_spec') return undefined;
+
+  let fromCatalog = catalog[modelId];
+  if (!fromCatalog) {
+    for (const [key, info] of Object.entries(catalog)) {
+      if (key !== 'sample_spec' && bareName(key) === target) {
+        fromCatalog = info;
+        break;
+      }
+    }
   }
-  return CATALOG_SUPPLEMENT[target];
+  const declared = MANIFEST_OVERLAY[target];
+  if (fromCatalog && declared) return { ...fromCatalog, ...declared };
+  return declared ?? fromCatalog;
 }
 
 export function maxContextTokensFrom(catalog: ModelsCatalog, modelId: string): number {
