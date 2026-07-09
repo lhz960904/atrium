@@ -51,10 +51,12 @@ class UpdaterManager {
 
     autoUpdater.logger = log;
     // Download a found update in the background so the dialog opens on progress
-    // or "ready to install". autoInstallOnAppQuit stays off so the swap only
-    // happens on an explicit Restart Now, never silently on quit.
+    // or "ready to install". autoInstallOnAppQuit must stay on: on macOS,
+    // turning it off defers Squirrel.Mac's staging (unzip + codesign verify) to
+    // the Restart Now click, freezing the button for a second. With it on the
+    // update is pre-staged, so restart is instant and a plain quit also installs.
     autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = false;
+    autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.allowDowngrade = false;
 
     autoUpdater.on('checking-for-update', () => this.set({ stage: 'checking', error: null }));

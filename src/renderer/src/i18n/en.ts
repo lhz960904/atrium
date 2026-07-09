@@ -29,6 +29,7 @@ export const en: typeof zh = {
     downloading: 'Downloading…',
     downloadComplete: 'Download complete! Ready to install.',
     restartNow: 'Restart Now',
+    restarting: 'Restarting…',
     later: 'Later',
     failed: 'Update failed',
     retry: 'Retry',
