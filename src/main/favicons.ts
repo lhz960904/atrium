@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import decodeIco from 'decode-ico';
-import { app, protocol } from 'electron';
+import { app, nativeImage, protocol } from 'electron';
 import { parseHTML } from 'linkedom';
 import { createLogger } from './log';
 
@@ -133,6 +133,44 @@ function asImage(res: { bytes: Uint8Array<ArrayBuffer>; type: string | null }): 
   return ct ? { bytes: res.bytes, contentType: ct } : null;
 }
 
+// Share the renderer's "almost nothing opaque" threshold so both layers agree.
+const BLANK_OPAQUE_FRACTION = 0.02;
+function opaqueFraction(rgba: Uint8Array | Uint8ClampedArray): number {
+  const pixels = rgba.length / 4;
+  if (!pixels) return 1;
+  let opaque = 0;
+  for (let i = 3; i < rgba.length; i += 4) if (rgba[i] >= 16) opaque++;
+  return opaque / pixels;
+}
+
+/**
+ * A structurally valid icon can still be visually empty — a fully transparent
+ * placeholder that a browser would pass over in favour of the icon a page
+ * declares in <link rel=icon> (WordPress ships exactly such a default). Decode
+ * far enough to see whether any pixel is painted; an icon we can't decode (SVG,
+ * WebP) is assumed non-blank so a good icon is never dropped on a guess.
+ */
+function isBlank(bytes: Uint8Array): boolean {
+  if (bytes[0] === 0 && bytes[1] === 0 && bytes[2] === 1 && bytes[3] === 0) {
+    try {
+      const largest = decodeIco(bytes).sort((a, b) => b.width * b.height - a.width * a.height)[0];
+      return largest ? opaqueFraction(largest.data) < BLANK_OPAQUE_FRACTION : false;
+    } catch {
+      return false;
+    }
+  }
+  try {
+    const img = nativeImage.createFromBuffer(Buffer.from(bytes));
+    if (img.isEmpty()) return false;
+    // Electron's own types mis-declare getBitmap as void; it returns BGRA bytes,
+    // whose alpha lands at the same offset the opaque check reads.
+    const bitmap = img.getBitmap() as unknown as Buffer;
+    return opaqueFraction(bitmap) < BLANK_OPAQUE_FRACTION;
+  } catch {
+    return false;
+  }
+}
+
 // Pick the best-looking icon declared in the page head. Prefer scalable SVG,
 // then the highest-resolution raster (apple-touch-icons and sized <link>s),
 // falling back to the plain "icon"/"shortcut icon" defaults.
@@ -176,10 +214,11 @@ function pickIconHref(html: string, baseUrl: string): string | null {
 async function fromSite(host: string): Promise<Favicon | null> {
   // /favicon.ico first: one request, and for a ~16px chip its built-in low-res
   // variant is exactly right. Only parse the page HTML when it's missing, errors,
-  // or answers with something that isn't actually an image (SPA catch-all route).
+  // answers with something that isn't actually an image (SPA catch-all route),
+  // or hands back a blank placeholder that hides the real icon the page declares.
   const direct = await get(`https://${host}/favicon.ico`, MAX_ICON_BYTES);
   const directIcon = direct && asImage(direct);
-  if (directIcon) return directIcon;
+  if (directIcon && !isBlank(directIcon.bytes)) return directIcon;
 
   const page = await get(`https://${host}/`, MAX_HTML_BYTES);
   if (!page) return null;
@@ -187,7 +226,8 @@ async function fromSite(host: string): Promise<Favicon | null> {
   const iconUrl = pickIconHref(html, `https://${host}/`);
   if (!iconUrl) return null;
   const icon = await get(iconUrl, MAX_ICON_BYTES);
-  return icon ? asImage(icon) : null;
+  const declared = icon && asImage(icon);
+  return declared && !isBlank(declared.bytes) ? declared : null;
 }
 
 // DuckDuckGo's icon service — the privacy-respecting fallback for the many large
@@ -217,9 +257,9 @@ async function load(host: string): Promise<Favicon | null> {
     try {
       const raw = await readFile(path);
       const bytes = new Uint8Array(raw);
-      // A corrupt icon cached before validation existed must not be served
-      // forever — ignore it and re-resolve.
-      if (!isCorruptIco(bytes)) {
+      // A corrupt or blank icon cached before this validation existed must not
+      // be served forever — ignore it and re-resolve to the real icon.
+      if (!isCorruptIco(bytes) && !isBlank(bytes)) {
         const fav: Favicon = { bytes, contentType: sniff(raw) ?? 'image/x-icon' };
         mem.set(host, fav);
         return fav;
