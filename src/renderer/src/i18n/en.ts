@@ -487,6 +487,34 @@ export const en: typeof zh = {
       bannerNote:
         'While the agent is active you’ll see a “… is debugging this browser” banner in Chrome. That’s expected — nothing to worry about.',
     },
+    computer: {
+      lede: 'Let the AI see the screen and click and type in native macOS apps — desktop tasks the browser can’t do. Web tasks stay with Browser control.',
+      enable: 'Enable Computer Use',
+      enableDesc:
+        'When on, the AI can click and type in granted apps. You can turn this off anytime.',
+      comingSoon: 'Coming soon on Windows & Linux',
+      comingSoonDesc:
+        'Computer Use currently supports macOS only — support for other platforms is on the way.',
+      permissionsTitle: 'System permissions',
+      permReady: 'Ready',
+      permNeeded: 'Setup needed',
+      accessibility: 'Accessibility',
+      accessibilityDesc: 'Lets the AI read the UI and simulate clicks and keystrokes.',
+      screenRecording: 'Screen Recording',
+      screenRecordingDesc: 'Lets Atrium capture the target app window so the AI can see it.',
+      granted: 'Granted',
+      needed: 'Not granted',
+      permHint:
+        'Grant both in System Settings so the AI can operate apps — Atrium will guide you when it needs them.',
+      behaviorTitle: 'Behavior & safety',
+      menubar: 'Show status in the menu bar',
+      menubarDesc:
+        'While the AI acts, a menu-bar icon (target app + cursor) shows what it’s doing; click to stop.',
+      pause: 'Pause when I use the keyboard or mouse',
+      pauseDesc: 'The moment you move the mouse or type, the AI pauses so it doesn’t interfere.',
+      confirm: 'Confirm sensitive actions',
+      confirmDesc: 'Ask before irreversible actions like submit, pay, or delete.',
+    },
     about: {
       description:
         'Atrium is a local-first desktop AI agent. Bring your own API key to connect any model provider, with the agent capabilities common in tools today.',

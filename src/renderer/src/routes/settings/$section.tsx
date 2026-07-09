@@ -17,6 +17,7 @@ import { ModelPicker } from '../../components/ModelPicker';
 import { Select } from '../../components/Select';
 import { ArchivedSection } from '../../components/settings/archived/ArchivedSection';
 import { BrowserSection } from '../../components/settings/browser/BrowserSection';
+import { ComputerUseSection } from '../../components/settings/computer/ComputerUseSection';
 import { IdentitySection } from '../../components/settings/identity/IdentitySection';
 import { KeyboardSection } from '../../components/settings/keyboard/KeyboardSection';
 import { McpSection } from '../../components/settings/mcp/McpSection';
@@ -74,7 +75,7 @@ const SECTIONS: Record<string, SectionMeta> = {
   },
   mcp: { titleKey: 'settings.sections.mcpTitle', wide: true, fill: true, Component: McpSection },
   browser: { titleKey: 'settings.sections.browserTitle', Component: BrowserSection },
-  computer: { titleKey: 'settings.sections.computerTitle', Component: PlaceholderSection },
+  computer: { titleKey: 'settings.sections.computerTitle', Component: ComputerUseSection },
   permissions: { titleKey: 'settings.sections.permissionsTitle', Component: PermissionsSection },
   hooks: { titleKey: 'settings.sections.hooksTitle', Component: PlaceholderSection },
   connections: { titleKey: 'settings.sections.connectionsTitle', Component: PlaceholderSection },

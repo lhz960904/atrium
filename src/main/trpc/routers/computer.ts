@@ -10,9 +10,10 @@ export const computerRouter = router({
    */
   permissions: publicProcedure.query(() => {
     if (process.platform !== 'darwin') {
-      return { accessibility: false, screenRecording: false };
+      return { supported: false, accessibility: false, screenRecording: false };
     }
     return {
+      supported: true,
       accessibility: systemPreferences.isTrustedAccessibilityClient(false),
       screenRecording: systemPreferences.getMediaAccessStatus('screen') === 'granted',
     };
