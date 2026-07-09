@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/lhz960904/atrium/compare/v0.11.0...v0.11.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **models:** carry vendor model metadata in the provider manifest ([#78](https://github.com/lhz960904/atrium/issues/78)) ([6f083f2](https://github.com/lhz960904/atrium/commit/6f083f267eaa2daa6919c7be416ca4a732f3c665))
+
 ## [0.11.0](https://github.com/lhz960904/atrium/compare/v0.10.4...v0.11.0) (2026-07-09)
 
 
