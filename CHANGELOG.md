@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.4](https://github.com/lhz960904/atrium/compare/v0.10.3...v0.10.4) (2026-07-09)
+
+
+### Bug Fixes
+
+* **chat:** fall through blank favicon.ico to the page-declared icon ([#74](https://github.com/lhz960904/atrium/issues/74)) ([364ddda](https://github.com/lhz960904/atrium/commit/364ddda499241532382f9619e991e075ff32d7c4))
+* **update:** pre-stage update for instant restart, add pending button state ([#72](https://github.com/lhz960904/atrium/issues/72)) ([245f726](https://github.com/lhz960904/atrium/commit/245f726aa682b4ac66a5e6691225d6ef596dea41))
+
 ## [0.10.3](https://github.com/lhz960904/atrium/compare/v0.10.2...v0.10.3) (2026-07-08)
 
 
