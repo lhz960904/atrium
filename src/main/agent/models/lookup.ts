@@ -29,11 +29,14 @@ function declaredInfo(model: ManifestModel): ModelInfo | undefined {
  * entry, while undeclared fields still resolve through it.
  */
 const MANIFEST_OVERLAY: Record<string, ModelInfo> = {};
+/** Vendor serving id (bare) → the litellm key its metadata lives under. */
+const MANIFEST_CATALOG_ID: Record<string, string> = {};
 for (const provider of PROVIDER_MANIFEST) {
   if (provider.kind !== 'cloud-api') continue;
   for (const model of provider.models) {
     const info = declaredInfo(model);
     if (info) MANIFEST_OVERLAY[bareName(model.id)] = info;
+    if (model.catalogId) MANIFEST_CATALOG_ID[bareName(model.id)] = model.catalogId;
   }
 }
 
@@ -51,6 +54,11 @@ export function findModelInfo(catalog: ModelsCatalog, modelId: string): ModelInf
   if (modelId === 'sample_spec' || target === 'sample_spec') return undefined;
 
   let fromCatalog = catalog[modelId];
+  if (!fromCatalog) {
+    // A manifest-declared alias beats the scan: it names the exact litellm key.
+    const aliasKey = MANIFEST_CATALOG_ID[target];
+    if (aliasKey) fromCatalog = catalog[aliasKey];
+  }
   if (!fromCatalog) {
     for (const [key, info] of Object.entries(catalog)) {
       if (key !== 'sample_spec' && bareName(key) === target) {

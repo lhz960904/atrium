@@ -35,14 +35,17 @@ export type AcpLaunch =
   | { via: 'adapter'; package: string; bin: string };
 
 /**
- * A model in a provider's curated catalog. The metadata fields are the
- * vendor's documented facts for the exact endpoint we ship; anything declared
- * here overrides the litellm catalog's bare-name, cross-provider guess (see
- * agent/models/lookup.ts). Declare only what the vendor states — undeclared
- * fields still resolve through litellm.
+ * A model in a provider's curated catalog. `catalogId` maps the vendor's
+ * serving id to the litellm catalog key that carries its metadata, for when
+ * the two spellings differ (litellm pins versions: `doubao-seed-2.0-code` is
+ * keyed `volcengine/doubao-seed-2-0-code-preview-260215`). The remaining
+ * fields are vendor-documented facts for ids litellm doesn't carry at all;
+ * anything declared overrides the litellm entry, undeclared fields still
+ * resolve through it (see agent/models/lookup.ts).
  */
 export type ManifestModel = {
   id: string;
+  catalogId?: string;
   contextTokens?: number;
   outputTokens?: number;
   vision?: boolean;
@@ -93,19 +96,19 @@ export type LocalServiceManifest = {
 export type ProviderManifest = CloudApiManifest | LocalCliManifest | LocalServiceManifest;
 
 /**
- * Ark plan models missing from the litellm dataset — without declared windows
- * the context gauge and compaction threshold would fall back to 128k, half the
- * documented size. Doc: 256k context / 128k output, vision, thinking-capable.
+ * The Ark plans serve the doubao-seed-2.0 family under bare ids while litellm
+ * keys them version-pinned, so the bare-name join misses; map to the litellm
+ * keys so window/capability/pricing data flows from the catalog.
  */
-const DOUBAO_SEED_2_META = {
-  contextTokens: 262_144,
-  outputTokens: 131_072,
-  vision: true,
-  toolCall: true,
-  reasoning: true,
-} as const;
+const DOUBAO_SEED_2 = {
+  mini: { id: 'doubao-seed-2.0-mini', catalogId: 'volcengine/doubao-seed-2-0-mini-260215' },
+  lite: { id: 'doubao-seed-2.0-lite', catalogId: 'volcengine/doubao-seed-2-0-lite-260215' },
+  code: { id: 'doubao-seed-2.0-code', catalogId: 'volcengine/doubao-seed-2-0-code-preview-260215' },
+  pro: { id: 'doubao-seed-2.0-pro', catalogId: 'volcengine/doubao-seed-2-0-pro-260215' },
+} satisfies Record<string, ManifestModel>;
 
-// Auto-dispatch alias; sized to the smallest window in its dispatch pool.
+// Auto-dispatch alias litellm can't know; sized to the smallest window in its
+// dispatch pool.
 const ARK_CODE_LATEST: ManifestModel = {
   id: 'ark-code-latest',
   contextTokens: 200_000,
@@ -199,10 +202,10 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     // text-generation set (each id verified against the live endpoint).
     models: [
       ARK_CODE_LATEST,
-      { id: 'doubao-seed-2.0-mini', ...DOUBAO_SEED_2_META },
-      { id: 'doubao-seed-2.0-lite', ...DOUBAO_SEED_2_META },
-      { id: 'doubao-seed-2.0-code', ...DOUBAO_SEED_2_META },
-      { id: 'doubao-seed-2.0-pro', ...DOUBAO_SEED_2_META },
+      DOUBAO_SEED_2.mini,
+      DOUBAO_SEED_2.lite,
+      DOUBAO_SEED_2.code,
+      DOUBAO_SEED_2.pro,
       { id: 'deepseek-v4-flash' },
       { id: 'deepseek-v4-pro' },
       { id: 'minimax-m2.7' },
@@ -224,6 +227,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     // Like the agent plan: no model-listing API, doc's text-generation set.
     models: [
       ARK_CODE_LATEST,
+      // Retired from litellm's dataset; vendor doc: 256k window, multimodal.
       {
         id: 'doubao-seed-code',
         contextTokens: 262_144,
@@ -231,9 +235,9 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
         toolCall: true,
         reasoning: true,
       },
-      { id: 'doubao-seed-2.0-code', ...DOUBAO_SEED_2_META },
-      { id: 'doubao-seed-2.0-lite', ...DOUBAO_SEED_2_META },
-      { id: 'doubao-seed-2.0-pro', ...DOUBAO_SEED_2_META },
+      DOUBAO_SEED_2.code,
+      DOUBAO_SEED_2.lite,
+      DOUBAO_SEED_2.pro,
       { id: 'deepseek-v4-flash' },
       { id: 'deepseek-v4-pro' },
       { id: 'minimax-m2.7' },
