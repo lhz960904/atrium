@@ -157,8 +157,22 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
     consoleUrl:
       'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=agentPlan',
-    // The plan endpoint has no model-listing API; this is the doc's supported set.
-    models: ['ark-code-latest', 'kimi-k2.6', 'glm-5.2', 'minimax-m2.7'],
+    // The plan endpoint has no model-listing API; this is the doc's supported
+    // text-generation set (each id verified against the live endpoint).
+    models: [
+      'ark-code-latest',
+      'doubao-seed-2.0-mini',
+      'doubao-seed-2.0-lite',
+      'doubao-seed-2.0-code',
+      'doubao-seed-2.0-pro',
+      'deepseek-v4-flash',
+      'deepseek-v4-pro',
+      'minimax-m2.7',
+      'minimax-m3',
+      'glm-5.2',
+      'kimi-k2.6',
+      'kimi-k2.7-code',
+    ],
   },
   {
     id: 'openrouter',
