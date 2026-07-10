@@ -6,6 +6,7 @@ export {
 } from './builtins/compaction';
 export { dateMiddleware } from './builtins/date';
 export { type InstructionsOptions, instructionsMiddleware } from './builtins/instructions';
+export { type LoopDetectionOptions, loopDetectionMiddleware } from './builtins/loop-detection';
 export { type MemoryOptions, memoryMiddleware } from './builtins/memory';
 export { metadataMiddleware } from './builtins/metadata';
 export { type PersistFn, persistenceMiddleware } from './builtins/persistence';

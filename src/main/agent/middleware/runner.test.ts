@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { ModelMessage } from 'ai';
 import {
   composeAfterStep,
   composeBeforeStep,
@@ -43,6 +44,20 @@ test('composeBeforeStep merges overrides in order (later wins on conflict)', asy
   ];
   const merged = await composeBeforeStep(ctx, mws)({ stepNumber: 0, messages: [] });
   expect(merged).toEqual({ system: 'c', activeTools: ['bash'] });
+});
+
+test('composeBeforeStep pipelines a messages override into later middlewares', async () => {
+  const folded: ModelMessage[] = [{ role: 'user', content: 'summary' }];
+  const warning: ModelMessage = { role: 'user', content: 'warn' };
+  const mws: AgentMiddleware[] = [
+    { name: 'fold', beforeStep: () => ({ messages: folded }) },
+    { name: 'append', beforeStep: (_c, step) => ({ messages: [...step.messages, warning] }) },
+  ];
+  const merged = await composeBeforeStep(
+    ctx,
+    mws,
+  )({ stepNumber: 0, messages: [{ role: 'user', content: 'original' }] });
+  expect(merged.messages).toEqual([...folded, warning]);
 });
 
 test('composeAfterStep awaits every middleware in order', async () => {
