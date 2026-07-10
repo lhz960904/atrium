@@ -51,6 +51,19 @@ export class ComputerUseHelper {
     this.rejectAll(new Error('Computer Use helper disposed.'));
   }
 
+  /**
+   * Collapse the on-screen activity cursor at turn end. The helper's own
+   * idle-hide never fires (it blocks on readLine with no runloop to drain the
+   * timer), so the app hides the overlay explicitly. No-op when the helper never
+   * started — no action ran this turn, so nothing is on screen.
+   */
+  hideOverlay(): void {
+    if (!this.child) {
+      return;
+    }
+    void this.call('hide_overlay').catch(() => {});
+  }
+
   private ensureChild(): ChildProcessWithoutNullStreams {
     if (this.child) {
       return this.child;

@@ -257,6 +257,19 @@ final class OverlayCursorController {
     overlayQueue.asyncAfter(deadline: .now() + (delay ?? idleHideDelay), execute: workItem)
   }
 
+  // Collapse the overlay right now, synchronously on the caller's thread. The
+  // idle-hide work item can't do this once a turn ends: it hops to the main
+  // queue, which never drains while the helper blocks on readLine with no
+  // runloop — so the app hides the overlay explicitly at turn end instead.
+  func hide() {
+    cancelHide()
+    view?.pulseAlpha = 0
+    view?.pressed = false
+    window?.alphaValue = 0
+    window?.orderOut(nil)
+    currentPoint = nil
+  }
+
   func pulse() {
     _ = ensureWindow()
     view?.pressed = true
@@ -2767,6 +2780,21 @@ func permissionsResult() -> ResultPayload {
   )
 }
 
+func hideOverlayResult() -> ResultPayload {
+  OverlayCursorController.shared.hide()
+  return ResultPayload(
+    ok: true,
+    toolName: "hide_overlay",
+    app: nil,
+    snapshot: nil,
+    artifacts: nil,
+    data: nil,
+    warnings: [],
+    meta: MetaPayload(observedShape: "text", rawText: nil),
+    error: nil
+  )
+}
+
 // On-screen bounds of an app's main window via CGWindowList — no TCC grant
 // needed, so the drag overlay can anchor below System Settings before the user
 // has granted anything. Returns the largest layer-0 window for the bundle id.
@@ -2832,6 +2860,8 @@ while let line = readLine() {
       result = scrollResult(params: request.params)
     case "permissions":
       result = permissionsResult()
+    case "hide_overlay":
+      result = hideOverlayResult()
     case "get_window_bounds":
       guard case .string(let bundleId)? = request.params["bundleId"] else {
         result = makeErrorResult(
