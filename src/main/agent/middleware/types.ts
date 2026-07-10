@@ -4,6 +4,7 @@ import type {
   ModelMessage,
   TextStreamPart,
   Tool,
+  ToolChoice,
   ToolSet,
   UIMessage,
   UIMessageStreamWriter,
@@ -46,6 +47,7 @@ export type StepOverride = {
   system?: string;
   messages?: ModelMessage[];
   activeTools?: ToolName[];
+  toolChoice?: ToolChoice<ToolSet>;
 };
 
 export type StepResultInfo = {

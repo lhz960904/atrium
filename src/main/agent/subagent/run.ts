@@ -2,7 +2,12 @@ import type { ToolName } from '@shared/tools';
 import { convertToModelMessages, generateId, stepCountIs, streamText, type UIMessage } from 'ai';
 import { recordUsage, tokenCountsOf } from '../../db/usage';
 import { createLogger } from '../../log';
-import { compactionMiddleware, composeBeforeStep, type RunContext } from '../middleware';
+import {
+  compactionMiddleware,
+  composeBeforeStep,
+  loopDetectionMiddleware,
+  type RunContext,
+} from '../middleware';
 import { injectSystemReminder } from '../middleware/shared/reminder';
 import type { ModelPricing } from '../models/types';
 import { currentDateNote, workspaceGuidance } from '../prompts';
@@ -96,6 +101,7 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
       persist: () => {},
       preservers: [todoPreserver],
     }),
+    loopDetectionMiddleware(),
   ];
   const beforeStep = composeBeforeStep(subCtx, middlewares);
 
