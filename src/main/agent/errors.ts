@@ -1,6 +1,19 @@
 import { APICallError, RetryError } from 'ai';
 
 /**
+ * Retries for agent-loop model calls. The SDK default (2, exponential backoff
+ * from 2s) gives up within ~6 seconds — too brief to outlive the per-minute
+ * TPM throttles subscription providers enforce, where a 429 clears only once
+ * the minute window slides. Ten attempts back off exponentially from 2s
+ * (deferring to the server's Retry-After when present), which is enough
+ * patience for even stubborn multi-minute throttles; a waiting retry is
+ * still cancelled instantly by the turn's abort signal, and genuinely
+ * non-retryable errors (auth, validation) surface immediately — the SDK
+ * only retries errors it marks retryable.
+ */
+export const MODEL_CALL_MAX_RETRIES = 10;
+
+/**
  * A human-readable message for the client. createUIMessageStream masks errors
  * as a generic string by default (don't leak internals); we override that to
  * surface the real reason. Provider errors bury the useful text in the response

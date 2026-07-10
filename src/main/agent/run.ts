@@ -12,7 +12,7 @@ import {
   type UIMessageChunk,
 } from 'ai';
 import type { Db } from '../db';
-import { readableError } from './errors';
+import { MODEL_CALL_MAX_RETRIES, readableError } from './errors';
 import {
   type AgentMiddleware,
   composeBeforeStep,
@@ -22,6 +22,7 @@ import {
   runBeforeRun,
 } from './middleware';
 import { readSoul } from './profile/paths';
+import { stampCacheBreakpoints, usesAnthropicPromptCache } from './prompt-cache';
 import { buildSystemPrompt } from './prompts';
 import type { Sandbox } from './sandbox/types';
 
@@ -95,6 +96,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
       await runBeforeRun(ctx, opts.middlewares);
 
       const beforeStep = composeBeforeStep(ctx, opts.middlewares);
+      const stampCache = usesAnthropicPromptCache(opts.providerId);
       const result = streamText({
         model: opts.model,
         system: ctx.request.system,
@@ -108,7 +110,15 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
         // Complex coding tasks routinely exceed a dozen steps; within-turn
         // compaction (beforeStep) keeps the loop from overflowing the window.
         stopWhen: stepCountIs(100),
-        prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),
+        maxRetries: MODEL_CALL_MAX_RETRIES,
+        // Cache stamping happens after the middleware chain, not inside it:
+        // breakpoints are wire metadata that must land on the final per-step
+        // message view, whatever compaction or other overrides produced.
+        prepareStep: async ({ stepNumber, messages }) => {
+          const override = await beforeStep({ stepNumber, messages });
+          if (!stampCache) return override;
+          return { ...override, messages: stampCacheBreakpoints(override.messages ?? messages) };
+        },
         abortSignal: opts.abortSignal,
         experimental_transform: smoothStream({ chunking: 'word', delayInMs: 12 }),
         // Hands the run's RunContext to tool execute (the task tool reads it to
