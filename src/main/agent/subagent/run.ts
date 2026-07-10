@@ -11,6 +11,7 @@ import {
 } from '../middleware';
 import { injectSystemReminder } from '../middleware/shared/reminder';
 import type { ModelPricing } from '../models/types';
+import { stampCacheBreakpoints, usesAnthropicPromptCache } from '../prompt-cache';
 import { currentDateNote, workspaceGuidance } from '../prompts';
 import { todoPreserver } from '../tools/builtins/todo';
 import { filterToolsForSubagent, type SubagentDef } from './defs';
@@ -117,7 +118,12 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
     tools,
     stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
     maxRetries: MODEL_CALL_MAX_RETRIES,
-    prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),
+    // Same post-middleware cache stamping as the parent loop (see agent/run.ts).
+    prepareStep: async ({ stepNumber, messages }) => {
+      const override = await beforeStep({ stepNumber, messages });
+      if (!usesAnthropicPromptCache(providerId)) return override;
+      return { ...override, messages: stampCacheBreakpoints(override.messages ?? messages) };
+    },
     abortSignal: opts.abortSignal,
     // Bubble each step's completed tool calls up to the parent so its task card
     // shows a live activity list. todo_write is a plan-panel concern, not trace.
