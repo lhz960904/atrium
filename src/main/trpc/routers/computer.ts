@@ -1,6 +1,7 @@
 import { PRIVACY_PANES } from '@shared/computer-use';
 import { app, shell, systemPreferences } from 'electron';
 import { z } from 'zod';
+import { hideDragOverlay, showDragOverlay } from '../../computer-use/drag-overlay';
 import { publicProcedure, router } from '../trpc';
 
 // Deep links into the exact privacy list for each grant, so the drag-to-grant
@@ -40,5 +41,26 @@ export const computerRouter = router({
   relaunch: publicProcedure.mutation(() => {
     app.relaunch();
     app.exit(0);
+  }),
+
+  /** Shows the always-on-top drag source that floats over System Settings. */
+  showDragOverlay: publicProcedure
+    .input(
+      z.object({
+        title: z.string(),
+        desc: z.string(),
+        name: z.string(),
+        hint: z.string(),
+        dropHead: z.string(),
+        dropHint: z.string(),
+        closeLabel: z.string(),
+      }),
+    )
+    .mutation(({ input }) => {
+      showDragOverlay(input);
+    }),
+
+  hideDragOverlay: publicProcedure.mutation(() => {
+    hideDragOverlay();
   }),
 });

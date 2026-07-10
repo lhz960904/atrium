@@ -1,5 +1,5 @@
-import { COMPUTER_USE_DRAG_CHANNEL, type PrivacyPane } from '@shared/computer-use';
-import { Accessibility, Check, MousePointerClick, Video, X } from 'lucide-react';
+import { COMPUTER_USE_OVERLAY_CLOSED_CHANNEL, type PrivacyPane } from '@shared/computer-use';
+import { Accessibility, Check, Video } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
@@ -78,13 +78,13 @@ function GrantRow({
 }
 
 /**
- * Drag-to-grant guide, shared by the settings page and the runtime permission
- * modal. Clicking a grant opens the matching System Settings pane and reveals a
- * floating source the user drags into that list — the real grant is confirmed by
- * the permission poll driving `accessibility`/`screenRecording`, not by any drop
- * we can observe (the drop lands in another app's window). Once both land it
- * self-restarts, but only if the user actually ran the flow here: opening an
- * already-granted page must never restart on its own.
+ * Drag-to-grant guide. Clicking a grant opens the matching System Settings pane
+ * and shows a separate always-on-top drag window (owned by the main process)
+ * that floats over Settings without covering it — the source lives outside this
+ * window so Settings keeps focus while the user drags Atrium's bundle into its
+ * list. The grant is confirmed by the permission poll, not a drop we can observe;
+ * once both land it self-restarts, but only after a grant flow the user actually
+ * started here, so an already-granted page never restarts on its own.
  */
 export function AuthGuide({
   accessibility,
@@ -96,17 +96,36 @@ export function AuthGuide({
   const { t } = useTranslation();
   const openPane = trpc.computer.openPrivacyPane.useMutation();
   const relaunch = trpc.computer.relaunch.useMutation();
-  const [active, setActive] = useState<PrivacyPane | null>(null);
+  const showOverlay = trpc.computer.showDragOverlay.useMutation();
+  const hideOverlay = trpc.computer.hideDragOverlay.useMutation();
+  const [activePane, setActivePane] = useState<PrivacyPane | null>(null);
   const [restarting, setRestarting] = useState(false);
   const guided = useRef(false);
 
   const bothGranted = accessibility && screenRecording;
 
   useEffect(() => {
-    if (!active) return;
-    const granted = active === 'accessibility' ? accessibility : screenRecording;
-    if (granted) setActive(null);
-  }, [active, accessibility, screenRecording]);
+    if (!activePane) return;
+    const granted = activePane === 'accessibility' ? accessibility : screenRecording;
+    if (granted) {
+      setActivePane(null);
+      hideOverlay.mutate();
+    }
+  }, [activePane, accessibility, screenRecording, hideOverlay]);
+
+  // The overlay's own close button clears the active pane back here.
+  useEffect(() => {
+    return window.electron?.ipcRenderer.on(COMPUTER_USE_OVERLAY_CLOSED_CHANNEL, () => {
+      setActivePane(null);
+    });
+  }, []);
+
+  // Leaving the page mid-flow should take the floating window with it.
+  useEffect(() => {
+    return () => {
+      hideOverlay.mutate();
+    };
+  }, [hideOverlay]);
 
   useEffect(() => {
     if (bothGranted && guided.current && !restarting) {
@@ -117,19 +136,21 @@ export function AuthGuide({
 
   function grant(pane: PrivacyPane): void {
     guided.current = true;
-    setActive(pane);
+    setActivePane(pane);
     openPane.mutate(pane);
+    const name = t(
+      `settings.computer.${pane === 'accessibility' ? 'accessibility' : 'screenRecording'}`,
+    );
+    showOverlay.mutate({
+      title: t('settings.computer.dragTitle', { name }),
+      desc: t('settings.computer.dragDesc'),
+      name: t('settings.computer.dragName'),
+      hint: t('settings.computer.dragHint'),
+      dropHead: t('settings.computer.dropHead', { name }),
+      dropHint: t('settings.computer.dropHint'),
+      closeLabel: t('settings.computer.dragClose'),
+    });
   }
-
-  function startDrag(event: React.DragEvent): void {
-    // startDrag must fire from the gesture; the main process owns the payload.
-    event.preventDefault();
-    window.electron.ipcRenderer.send(COMPUTER_USE_DRAG_CHANNEL);
-  }
-
-  const activeName = active
-    ? t(`settings.computer.${active === 'accessibility' ? 'accessibility' : 'screenRecording'}`)
-    : '';
 
   return (
     <section>
@@ -170,49 +191,6 @@ export function AuthGuide({
           onGrant={() => grant('screenRecording')}
         />
       </div>
-
-      {active && (
-        <div className="fixed right-5 bottom-5 z-50 w-[310px] rounded-2xl border border-border-default bg-elevated p-4 shadow-lg">
-          <div className="flex items-center gap-2 font-semibold text-fg-primary text-sm">
-            {t('settings.computer.dragTitle', { name: activeName })}
-            <button
-              type="button"
-              onClick={() => setActive(null)}
-              className="ml-auto rounded-md p-0.5 text-fg-tertiary transition-colors hover:bg-surface-strong hover:text-fg-secondary"
-              aria-label={t('settings.computer.dragClose')}
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-          <p className="mt-2 text-fg-secondary text-xs leading-relaxed">
-            {t('settings.computer.dragDesc')}
-          </p>
-          <button
-            type="button"
-            draggable
-            onDragStart={startDrag}
-            className="mt-3 flex w-full cursor-grab items-center gap-2.5 rounded-[10px] border border-border-default bg-surface px-3 py-2.5 text-left shadow-sm active:cursor-grabbing"
-          >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#8E9BFF] via-[#C6A2FF] to-[#F0A9C7] text-white">
-              <MousePointerClick className="size-4" />
-            </span>
-            <span className="min-w-0">
-              <span className="block font-semibold text-[13px] text-fg-primary">
-                {t('settings.computer.dragName')}
-              </span>
-              <span className="block font-mono text-[11px] text-fg-tertiary">
-                {t('settings.computer.dragHint')}
-              </span>
-            </span>
-          </button>
-          <div className="mt-2.5 rounded-[10px] border border-border-default border-dashed px-3 py-3.5 text-center">
-            <span className="mb-1 block font-mono text-[10px] text-fg-tertiary uppercase tracking-wider">
-              {t('settings.computer.dropHead', { name: activeName })}
-            </span>
-            <span className="text-fg-tertiary text-xs">{t('settings.computer.dropHint')}</span>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
