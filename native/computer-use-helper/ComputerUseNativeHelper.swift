@@ -1450,37 +1450,37 @@ func axFocusedElement(for app: NSRunningApplication) -> AXUIElement? {
 func displayRoleName(_ role: String?) -> String {
   switch role {
   case kAXWindowRole:
-    return "fenêtre standard"
+    return "standard window"
   case kAXGroupRole:
     return "container"
   case kAXSplitGroupRole:
-    return "diviser groupe"
+    return "split group"
   case kAXSplitterRole:
-    return "diviseur"
+    return "splitter"
   case kAXScrollAreaRole:
-    return "zone de défilement"
+    return "scroll area"
   case kAXStaticTextRole:
-    return "texte"
+    return "text"
   case kAXButtonRole:
-    return "bouton"
+    return "button"
   case kAXMenuButtonRole:
-    return "bouton de menu"
+    return "menu button"
   case kAXMenuBarRole:
     return "menu bar"
   case kAXToolbarRole:
-    return "barre d’outils"
+    return "toolbar"
   case "AXWebArea":
-    return "Contenu HTML"
+    return "HTML content"
   case "AXTabGroup":
-    return "groupe d’onglet"
+    return "tab group"
   case "AXRadioButton":
-    return "onglet"
+    return "tab"
   case "AXTextField":
-    return "champ de texte"
+    return "text field"
   case kAXTextAreaRole:
-    return "zone de texte"
+    return "text area"
   case "AXPopUpButton":
-    return "popupbutton"
+    return "popup button"
   default:
     let raw = role ?? "element"
     return raw.replacingOccurrences(of: "AX", with: "").lowercased()
