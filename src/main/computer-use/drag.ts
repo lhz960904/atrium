@@ -12,7 +12,7 @@ const log = createLogger('computer-use-drag');
  * `<Bundle>.app/Contents/MacOS/<exe>`, so two levels up from its directory is the
  * bundle: Electron.app in dev, Atrium.app when packaged.
  */
-function resolveSelfBundlePath(): string {
+export function resolveSelfBundlePath(): string {
   return resolve(dirname(app.getPath('exe')), '..', '..');
 }
 

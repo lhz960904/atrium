@@ -98,6 +98,11 @@ export function AuthGuide({
   const relaunch = trpc.computer.relaunch.useMutation();
   const showOverlay = trpc.computer.showDragOverlay.useMutation();
   const hideOverlay = trpc.computer.hideDragOverlay.useMutation();
+  // react-query keeps `.mutate` referentially stable; capture it so effects (and
+  // the unmount cleanup) key off a stable value instead of the mutation object,
+  // which is new every render and would otherwise loop the cleanup.
+  const hideDrag = hideOverlay.mutate;
+  const doRelaunch = relaunch.mutate;
   const [activePane, setActivePane] = useState<PrivacyPane | null>(null);
   const [restarting, setRestarting] = useState(false);
   const guided = useRef(false);
@@ -109,9 +114,9 @@ export function AuthGuide({
     const granted = activePane === 'accessibility' ? accessibility : screenRecording;
     if (granted) {
       setActivePane(null);
-      hideOverlay.mutate();
+      hideDrag();
     }
-  }, [activePane, accessibility, screenRecording, hideOverlay]);
+  }, [activePane, accessibility, screenRecording, hideDrag]);
 
   // The overlay's own close button clears the active pane back here.
   useEffect(() => {
@@ -123,16 +128,16 @@ export function AuthGuide({
   // Leaving the page mid-flow should take the floating window with it.
   useEffect(() => {
     return () => {
-      hideOverlay.mutate();
+      hideDrag();
     };
-  }, [hideOverlay]);
+  }, [hideDrag]);
 
   useEffect(() => {
     if (bothGranted && guided.current && !restarting) {
       setRestarting(true);
-      relaunch.mutate();
+      doRelaunch();
     }
-  }, [bothGranted, restarting, relaunch]);
+  }, [bothGranted, restarting, doRelaunch]);
 
   function grant(pane: PrivacyPane): void {
     guided.current = true;
@@ -142,12 +147,12 @@ export function AuthGuide({
       `settings.computer.${pane === 'accessibility' ? 'accessibility' : 'screenRecording'}`,
     );
     showOverlay.mutate({
-      title: t('settings.computer.dragTitle', { name }),
-      desc: t('settings.computer.dragDesc'),
+      heading: t('settings.computer.dragHeading', {
+        app: t('settings.computer.dragName'),
+        perm: name,
+      }),
       name: t('settings.computer.dragName'),
-      hint: t('settings.computer.dragHint'),
-      dropHead: t('settings.computer.dropHead', { name }),
-      dropHint: t('settings.computer.dropHint'),
+      dragLabel: t('settings.computer.dragLabel'),
       closeLabel: t('settings.computer.dragClose'),
     });
   }

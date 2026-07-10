@@ -47,12 +47,9 @@ export const computerRouter = router({
   showDragOverlay: publicProcedure
     .input(
       z.object({
-        title: z.string(),
-        desc: z.string(),
+        heading: z.string(),
         name: z.string(),
-        hint: z.string(),
-        dropHead: z.string(),
-        dropHint: z.string(),
+        dragLabel: z.string(),
         closeLabel: z.string(),
       }),
     )
