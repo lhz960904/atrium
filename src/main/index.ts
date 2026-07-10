@@ -147,7 +147,7 @@ app.whenReady().then(async () => {
     createContext: async () => ({ db, chatEndpoint }),
   });
   registerComputerUseDrag();
-  registerDragOverlay(() => mainWindow?.webContents);
+  registerDragOverlay(() => mainWindow ?? undefined);
   registerPermissionBridge(() => mainWindow?.webContents);
 
   // Broadcast updater state into whichever main window is live (it survives

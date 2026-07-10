@@ -4,7 +4,7 @@ import {
   COMPUTER_USE_DRAG_CHANNEL,
   COMPUTER_USE_OVERLAY_CLOSED_CHANNEL,
 } from '@shared/computer-use';
-import { app, BrowserWindow, ipcMain, type Rectangle, screen, type WebContents } from 'electron';
+import { app, BrowserWindow, ipcMain, type Rectangle, screen } from 'electron';
 import { createLogger } from '../log';
 import { resolveSelfBundlePath } from './drag';
 import { getComputerUseHelper } from './index';
@@ -23,6 +23,7 @@ const SETTINGS_BUNDLE_ID = 'com.apple.systempreferences';
 
 let overlay: BrowserWindow | null = null;
 let followTimer: ReturnType<typeof setInterval> | null = null;
+let resolveMainWindow: (() => BrowserWindow | undefined) | null = null;
 // The real app icon (dev: Electron.app, packaged: Atrium.app) as a data URL, so
 // the drag source shows the same icon that lands in the privacy list.
 let iconDataUrl = '';
@@ -205,6 +206,19 @@ function stopFollow(): void {
   }
 }
 
+// Hide/restore the main window while the drag overlay is up, so System Settings
+// isn't covered by the (often maximized) Atrium window. While hidden, disable
+// background throttling so the renderer keeps polling permissions and can
+// auto-restart the moment the grant lands, instead of stalling behind Chromium's
+// hidden-window timer throttle.
+function parkMainWindow(hidden: boolean): void {
+  const mw = resolveMainWindow?.();
+  if (!mw) return;
+  mw.webContents.setBackgroundThrottling(!hidden);
+  if (hidden) mw.hide();
+  else mw.show();
+}
+
 function ensureOverlay(): BrowserWindow {
   if (overlay && !overlay.isDestroyed()) return overlay;
   overlay = new BrowserWindow({
@@ -236,6 +250,11 @@ export async function showDragOverlay(texts: OverlayTexts): Promise<void> {
   pendingKey = null;
   const win = ensureOverlay();
   void win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildHtml(texts))}`);
+  // Get the main window out of the way so System Settings comes to the front:
+  // otherwise the maximized Atrium window (and the runtime dialog) covers it, and
+  // there's nothing above the overlay to drop onto. The overlay is its own
+  // always-on-top window, so it stays visible; hideDragOverlay brings it back.
+  parkMainWindow(true);
   // syncOverlay reveals it only if Settings is already on this Space; otherwise
   // the follow loop shows it the moment Settings appears here.
   await syncOverlay(win, true);
@@ -247,18 +266,20 @@ export function hideDragOverlay(): void {
   appliedKey = null;
   pendingKey = null;
   overlay?.hide();
+  parkMainWindow(false);
 }
 
 /**
  * Wires the overlay's close button: hide it and tell the main window so its
  * AuthGuide can clear the active-grant state that opened it.
  */
-export function registerDragOverlay(getMainWindow: () => WebContents | undefined): void {
+export function registerDragOverlay(getMainWindow: () => BrowserWindow | undefined): void {
   if (process.platform !== 'darwin') return;
+  resolveMainWindow = getMainWindow;
   void loadIcon();
   ipcMain.on(COMPUTER_USE_CLOSE_OVERLAY_CHANNEL, () => {
     hideDragOverlay();
-    getMainWindow()?.send(COMPUTER_USE_OVERLAY_CLOSED_CHANNEL);
+    getMainWindow()?.webContents.send(COMPUTER_USE_OVERLAY_CLOSED_CHANNEL);
   });
   log.debug('drag overlay registered');
 }
