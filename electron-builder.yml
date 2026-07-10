@@ -62,6 +62,16 @@ mac:
     - NSDocumentsFolderUsageDescription: Atrium 需要访问"文稿"文件夹以读写工作区文件。
     - NSDownloadsFolderUsageDescription: Atrium 需要访问"下载"文件夹以保存生成的产物。
   notarize: true
+  # The signed Computer Use helper ships inside Resources. It's macOS-only, so it
+  # lives under mac.extraResources (appended to the common list) rather than the
+  # top-level one — Windows/Linux builds never carry it. electron-builder won't
+  # deep-sign nested extraResources, so the afterSign hook signs it (Team
+  # 43PH2NJ5C4 + hardened runtime) before notarization.
+  extraResources:
+    - from: native/computer-use-helper/build/Atrium Computer Use.app
+      to: Atrium Computer Use.app
+      filter:
+        - '**/*'
 dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
 win:
