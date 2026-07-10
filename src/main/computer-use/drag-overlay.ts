@@ -4,13 +4,18 @@ import {
   COMPUTER_USE_DRAG_CHANNEL,
   COMPUTER_USE_OVERLAY_CLOSED_CHANNEL,
 } from '@shared/computer-use';
-import { BrowserWindow, ipcMain, screen, type WebContents } from 'electron';
+import { BrowserWindow, ipcMain, type Rectangle, screen, type WebContents } from 'electron';
 import { createLogger } from '../log';
+import { getComputerUseHelper } from './index';
 
 const log = createLogger('computer-use-overlay');
 
 const WIDTH = 320;
 const HEIGHT = 250;
+const GAP = 12;
+const SETTINGS_BUNDLE_ID = 'com.apple.systempreferences';
+
+let followTimer: ReturnType<typeof setInterval> | null = null;
 
 export interface OverlayTexts {
   title: string;
@@ -85,13 +90,84 @@ function buildHtml(texts: OverlayTexts): string {
   </script></body></html>`;
 }
 
-// Fixed placement for now (screen right, vertically centered). Anchoring below
-// the System Settings window is the follow-up step.
-function positionOverlay(win: BrowserWindow): void {
+async function settingsBounds(): Promise<Rectangle | null> {
+  try {
+    const res = await getComputerUseHelper().call('get_window_bounds', {
+      bundleId: SETTINGS_BUNDLE_ID,
+    });
+    const data = (res.result as { data?: Partial<Rectangle> & { found?: boolean } })?.data;
+    if (
+      data?.found &&
+      typeof data.x === 'number' &&
+      typeof data.y === 'number' &&
+      typeof data.width === 'number' &&
+      typeof data.height === 'number'
+    ) {
+      return { x: data.x, y: data.y, width: data.width, height: data.height };
+    }
+  } catch (err) {
+    log.warn('get_window_bounds failed', err);
+  }
+  return null;
+}
+
+/**
+ * Places the overlay just outside the Settings window so it never covers the
+ * pane: below it by default, falling back to the right, then the left, then the
+ * display corner when there's no room. Coordinates are top-left points, matching
+ * both CGWindowList (helper) and Electron's screen space.
+ */
+function place(settings: Rectangle): { x: number; y: number } {
+  const area = screen.getDisplayMatching(settings).workArea;
+  const clampX = (x: number) => Math.min(Math.max(x, area.x), area.x + area.width - WIDTH);
+  const clampY = (y: number) => Math.min(Math.max(y, area.y), area.y + area.height - HEIGHT);
+
+  const below = settings.y + settings.height + GAP;
+  if (below + HEIGHT <= area.y + area.height) {
+    return { x: clampX(settings.x + (settings.width - WIDTH) / 2), y: below };
+  }
+  const right = settings.x + settings.width + GAP;
+  if (right + WIDTH <= area.x + area.width) {
+    return { x: right, y: clampY(settings.y) };
+  }
+  const left = settings.x - WIDTH - GAP;
+  if (left >= area.x) {
+    return { x: left, y: clampY(settings.y) };
+  }
+  return { x: area.x + area.width - WIDTH - 24, y: area.y + area.height - HEIGHT - 24 };
+}
+
+async function positionOverlay(win: BrowserWindow): Promise<void> {
+  const settings = await settingsBounds();
+  if (win.isDestroyed()) return;
+  if (settings) {
+    const { x, y } = place(settings);
+    win.setBounds({ x: Math.round(x), y: Math.round(y), width: WIDTH, height: HEIGHT });
+    return;
+  }
+  // Settings not visible yet: park on the right until it appears.
   const { workArea } = screen.getPrimaryDisplay();
-  const x = workArea.x + workArea.width - WIDTH - 44;
-  const y = workArea.y + Math.round((workArea.height - HEIGHT) / 2);
-  win.setBounds({ x, y, width: WIDTH, height: HEIGHT });
+  win.setBounds({
+    x: workArea.x + workArea.width - WIDTH - 44,
+    y: workArea.y + Math.round((workArea.height - HEIGHT) / 2),
+    width: WIDTH,
+    height: HEIGHT,
+  });
+}
+
+function startFollow(win: BrowserWindow): void {
+  stopFollow();
+  followTimer = setInterval(() => {
+    if (win.isDestroyed() || !win.isVisible()) return;
+    void positionOverlay(win);
+  }, 500);
+}
+
+function stopFollow(): void {
+  if (followTimer) {
+    clearInterval(followTimer);
+    followTimer = null;
+  }
 }
 
 function ensureOverlay(): BrowserWindow {
@@ -117,15 +193,18 @@ function ensureOverlay(): BrowserWindow {
   return overlay;
 }
 
-export function showDragOverlay(texts: OverlayTexts): void {
+export async function showDragOverlay(texts: OverlayTexts): Promise<void> {
   if (process.platform !== 'darwin') return;
   const win = ensureOverlay();
   void win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildHtml(texts))}`);
-  positionOverlay(win);
+  await positionOverlay(win);
+  if (win.isDestroyed()) return;
   win.showInactive();
+  startFollow(win);
 }
 
 export function hideDragOverlay(): void {
+  stopFollow();
   overlay?.hide();
 }
 

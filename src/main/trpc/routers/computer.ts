@@ -57,7 +57,7 @@ export const computerRouter = router({
       }),
     )
     .mutation(({ input }) => {
-      showDragOverlay(input);
+      void showDragOverlay(input);
     }),
 
   hideDragOverlay: publicProcedure.mutation(() => {

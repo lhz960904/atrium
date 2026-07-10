@@ -2767,6 +2767,36 @@ func permissionsResult() -> ResultPayload {
   )
 }
 
+// On-screen bounds of an app's main window via CGWindowList — no TCC grant
+// needed, so the drag overlay can anchor below System Settings before the user
+// has granted anything. Returns the largest layer-0 window for the bundle id.
+func windowBoundsResult(bundleId: String) -> ResultPayload {
+  let matches = refreshWindowEntries().filter {
+    runningApp(for: $0.pid)?.bundleIdentifier == bundleId
+  }
+  let main = matches.max {
+    ($0.bounds.width * $0.bounds.height) < ($1.bounds.width * $1.bounds.height)
+  }
+  var data: [String: JSONValue] = ["found": .bool(main != nil)]
+  if let win = main {
+    data["x"] = .number(Double(win.bounds.origin.x))
+    data["y"] = .number(Double(win.bounds.origin.y))
+    data["width"] = .number(Double(win.bounds.width))
+    data["height"] = .number(Double(win.bounds.height))
+  }
+  return ResultPayload(
+    ok: true,
+    toolName: "get_window_bounds",
+    app: nil,
+    snapshot: nil,
+    artifacts: nil,
+    data: data,
+    warnings: [],
+    meta: MetaPayload(observedShape: "text", rawText: nil),
+    error: nil
+  )
+}
+
 while let line = readLine() {
   if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
     continue
@@ -2802,6 +2832,14 @@ while let line = readLine() {
       result = scrollResult(params: request.params)
     case "permissions":
       result = permissionsResult()
+    case "get_window_bounds":
+      guard case .string(let bundleId)? = request.params["bundleId"] else {
+        result = makeErrorResult(
+          toolName: "get_window_bounds", code: "internal_error", message: "Missing bundleId parameter")
+        writeResponse(Response(id: request.id, ok: result.ok, result: result, error: nil))
+        continue
+      }
+      result = windowBoundsResult(bundleId: bundleId)
     default:
       result = makeErrorResult(toolName: request.method, code: "unsupported_action", message: "Unsupported helper method: \(request.method)")
     }
