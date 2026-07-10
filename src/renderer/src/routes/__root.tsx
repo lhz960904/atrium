@@ -2,6 +2,7 @@ import { createRootRoute, Outlet, useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 import { AttachmentViewer } from '../components/AttachmentViewer';
 import { CommandPalette } from '../components/CommandPalette';
+import { ComputerPermissionDialog } from '../components/ComputerPermissionDialog';
 import { Toaster } from '../components/Toaster';
 import { UpdateDialog } from '../components/UpdateDialog';
 import { trpc } from '../lib/trpc';
@@ -55,6 +56,7 @@ function Root(): React.JSX.Element {
       <CommandPalette />
       <AttachmentViewer />
       <UpdateDialog />
+      <ComputerPermissionDialog />
       <Toaster />
     </>
   );

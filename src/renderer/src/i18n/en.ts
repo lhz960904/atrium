@@ -510,6 +510,10 @@ export const en: typeof zh = {
       dragName: 'Atrium',
       dragLabel: 'Drag',
       dragClose: 'Later',
+      runtimeTitle: 'Computer Use needs permission',
+      runtimeDesc:
+        'The AI wants to operate an app but is missing the permissions below. Grant them and it can continue.',
+      runtimeLater: 'Later',
       behaviorTitle: 'Behavior & safety',
       menubar: 'Show status in the menu bar',
       menubarDesc:
