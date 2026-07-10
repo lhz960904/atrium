@@ -91,6 +91,14 @@ jobs:
       - name: Build renderer + main
         run: bun run build
 
+      # Compile the macOS Computer Use helper (swiftc) so it exists for
+      # extraResources at package time. It ad-hoc signs here (the signing
+      # keychain isn't imported until the packaging step); the afterSign hook
+      # re-signs it with the real Developer ID + timestamp before notarization.
+      - name: Build Computer Use helper
+        if: matrix.platform == 'mac'
+        run: bun run build:helper
+
       - name: Package and publish
         run: bunx electron-builder --${{ matrix.platform }} ${{ matrix.archFlag }} --publish ${{ needs.release-please.outputs.release_created == 'true' && 'always' || 'never' }}
         env:

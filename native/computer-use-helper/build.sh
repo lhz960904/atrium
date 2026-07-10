@@ -18,11 +18,20 @@ mkdir -p "$MACOS"
 cp "$HERE/Info.plist" "$APP/Contents/Info.plist"
 swiftc -O "$HERE/ComputerUseNativeHelper.swift" -o "$MACOS/AtriumComputerUse"
 
-echo "→ Signing with: $IDENTITY"
-codesign --force --options runtime \
-  --entitlements "$HERE/entitlements.plist" \
-  --sign "$IDENTITY" "$APP"
+# Developer ID when it's reachable (a dev machine's login keychain). In CI the
+# signing keychain isn't imported yet at compile time, so ad-hoc sign instead —
+# the electron-builder afterSign hook re-signs it for real (hardened +
+# timestamped) at package time.
+if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$IDENTITY"; then
+  echo "→ Signing with: $IDENTITY"
+  codesign --force --options runtime \
+    --entitlements "$HERE/entitlements.plist" \
+    --sign "$IDENTITY" "$APP"
+else
+  echo "→ No Developer ID identity; ad-hoc signing (afterSign re-signs for release)"
+  codesign --force --sign - "$APP"
+fi
 
 echo "→ Verifying…"
-codesign --verify --deep --strict --verbose=2 "$APP"
-echo "✓ Built + signed: $APP"
+codesign --verify --strict --verbose=2 "$APP"
+echo "✓ Built: $APP"
