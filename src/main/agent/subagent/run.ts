@@ -2,6 +2,7 @@ import type { ToolName } from '@shared/tools';
 import { convertToModelMessages, generateId, stepCountIs, streamText, type UIMessage } from 'ai';
 import { recordUsage, tokenCountsOf } from '../../db/usage';
 import { createLogger } from '../../log';
+import { MODEL_CALL_MAX_RETRIES } from '../errors';
 import {
   compactionMiddleware,
   composeBeforeStep,
@@ -115,6 +116,7 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
     messages: await convertToModelMessages(messages, { tools }),
     tools,
     stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
+    maxRetries: MODEL_CALL_MAX_RETRIES,
     prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),
     abortSignal: opts.abortSignal,
     // Bubble each step's completed tool calls up to the parent so its task card

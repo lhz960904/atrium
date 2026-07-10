@@ -12,7 +12,7 @@ import {
   type UIMessageChunk,
 } from 'ai';
 import type { Db } from '../db';
-import { readableError } from './errors';
+import { MODEL_CALL_MAX_RETRIES, readableError } from './errors';
 import {
   type AgentMiddleware,
   composeBeforeStep,
@@ -108,6 +108,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
         // Complex coding tasks routinely exceed a dozen steps; within-turn
         // compaction (beforeStep) keeps the loop from overflowing the window.
         stopWhen: stepCountIs(100),
+        maxRetries: MODEL_CALL_MAX_RETRIES,
         prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),
         abortSignal: opts.abortSignal,
         experimental_transform: smoothStream({ chunking: 'word', delayInMs: 12 }),
