@@ -1,4 +1,4 @@
-import { APICallError } from 'ai';
+import { APICallError, RetryError } from 'ai';
 
 /**
  * A human-readable message for the client. createUIMessageStream masks errors
@@ -10,6 +10,12 @@ import { APICallError } from 'ai';
  * rate-limit or exhausted quota), so the original message is the honest signal.
  */
 export function readableError(error: unknown): string {
+  // A retry-exhausted failure only carries the HTTP status text ("Too Many
+  // Requests"); the provider's actual explanation sits in the last underlying
+  // error's response body, so unwrap and dig there.
+  if (RetryError.isInstance(error) && error.lastError !== undefined) {
+    return `Failed after ${error.errors.length} attempts. Last error: ${readableError(error.lastError)}`;
+  }
   if (APICallError.isInstance(error)) {
     if (error.responseBody) {
       try {
