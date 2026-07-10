@@ -10,6 +10,7 @@ const ENTITLEMENTS = path.join(
   'computer-use-helper',
   'entitlements.plist',
 );
+const MAC_ENTITLEMENTS = path.join(__dirname, '..', 'build', 'entitlements.mac.plist');
 
 // True when a Developer ID Application identity is reachable (login keychain
 // locally, the imported CSC_LINK keychain in CI). False on forks without
@@ -38,8 +39,8 @@ exports.default = async function afterSign(context) {
     console.log('afterSign: no signing identity — leaving the helper unsigned (fork build).');
     return;
   }
-  const app = `${context.packager.appInfo.productFilename}.app`;
-  const helper = path.join(context.appOutDir, app, HELPER_REL);
+  const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
+  const helper = path.join(appPath, HELPER_REL);
   console.log(`afterSign: re-signing helper at ${helper}`);
   execFileSync(
     'codesign',
@@ -56,5 +57,25 @@ exports.default = async function afterSign(context) {
     ],
     { stdio: 'inherit' },
   );
-  execFileSync('codesign', ['--verify', '--strict', '--verbose=2', helper], { stdio: 'inherit' });
+  // Re-signing the helper changed Contents/Resources, so the app's resource seal
+  // no longer matches. Re-sign the app envelope — NOT --deep, so the nested
+  // Electron frameworks keep their own signatures — to re-seal over the updated
+  // helper. A full --deep verify then confirms the whole tree is consistent.
+  console.log('afterSign: re-sealing the app envelope');
+  execFileSync(
+    'codesign',
+    [
+      '--force',
+      '--timestamp',
+      '--options',
+      'runtime',
+      '--entitlements',
+      MAC_ENTITLEMENTS,
+      '--sign',
+      IDENTITY,
+      appPath,
+    ],
+    { stdio: 'inherit' },
+  );
+  execFileSync('codesign', ['--verify', '--deep', '--strict', appPath], { stdio: 'inherit' });
 };
