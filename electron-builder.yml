@@ -31,6 +31,9 @@ asarUnpack:
   # jieba-wasm reads its .wasm via fs.readFileSync(__dirname/...); unpack it so
   # the file resolves on disk rather than from inside the asar archive.
   - node_modules/jieba-wasm/**
+# Re-sign the nested Computer Use helper (timestamped, hardened) after the app is
+# signed and before notarization — electron-builder doesn't deep-sign extraResources.
+afterSign: scripts/after-sign.cjs
 mac:
   # Signed + notarized with a real Developer ID (Team 43PH2NJ5C4). Hardened
   # Runtime is mandatory for notarization, and it makes dyld enforce Library
