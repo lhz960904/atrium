@@ -1,5 +1,6 @@
 import type { ImageToolOutput } from '@shared/chat-types';
 import type { HelperResponse } from '../../../../computer-use';
+import { computerPermissions, promptPermissionGrant } from '../../../../computer-use/permissions';
 import { captureWindow } from '../../../../computer-use/screenshot';
 import { spillOversizedImages } from '../../../mcp/spill';
 import type { ToolCtx } from '../../context';
@@ -69,6 +70,14 @@ export async function runComputerAction(
 ): Promise<string | ImageToolOutput> {
   if (!ctx.computerUse) {
     return 'Error: Computer use is only available on macOS.';
+  }
+  // Both grants are needed to act (Accessibility) and to see (Screen Recording).
+  // If either is missing, prompt the user via the renderer instead of failing
+  // opaquely, and tell the model to retry once they've granted it.
+  const perms = computerPermissions();
+  if (!perms.accessibility || !perms.screenRecording) {
+    promptPermissionGrant(perms);
+    return "Computer use needs Accessibility and Screen Recording permission — they aren't both granted right now. I've opened the grant prompt for the user; ask them to complete it, then try the action again.";
   }
   const res = await ctx.computerUse.call(method, params);
   return toToolOutput(res, ctx.workspaceRoot);

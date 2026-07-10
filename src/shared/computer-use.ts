@@ -4,6 +4,8 @@
 export const COMPUTER_USE_DRAG_CHANNEL = 'computer:start-drag';
 export const COMPUTER_USE_CLOSE_OVERLAY_CHANNEL = 'computer:close-overlay';
 export const COMPUTER_USE_OVERLAY_CLOSED_CHANNEL = 'computer:overlay-closed';
+// Main → renderer: a tool needs a grant that's missing; renderer pops the guide.
+export const COMPUTER_USE_NEEDS_PERMISSION_CHANNEL = 'computer:needs-permission';
 
 export const PRIVACY_PANES = ['accessibility', 'screenRecording'] as const;
 export type PrivacyPane = (typeof PRIVACY_PANES)[number];

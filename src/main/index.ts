@@ -14,6 +14,7 @@ import { scheduledManager, startScheduledTasks } from './agent/scheduled';
 import { refreshSkills } from './agent/skills/registry';
 import { registerComputerUseDrag } from './computer-use/drag';
 import { registerDragOverlay } from './computer-use/drag-overlay';
+import { registerPermissionBridge } from './computer-use/permissions';
 import { closeDb, openDb } from './db';
 import { registerFaviconScheme, serveFavicons } from './favicons';
 import { initLogging } from './log';
@@ -147,6 +148,7 @@ app.whenReady().then(async () => {
   });
   registerComputerUseDrag();
   registerDragOverlay(() => mainWindow?.webContents);
+  registerPermissionBridge(() => mainWindow?.webContents);
 
   // Broadcast updater state into whichever main window is live (it survives
   // hide/close, and getWindow() re-resolves after a rebuild). onBeforeInstall
