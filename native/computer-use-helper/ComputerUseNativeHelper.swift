@@ -1806,13 +1806,20 @@ func buildAXSnapshot(for app: NSRunningApplication) -> AXSnapshotData {
 
 func axElementByIndex(for app: NSRunningApplication, index targetIndex: String) -> AXUIElement? {
   let root = axRootElement(for: app)
-  var found: AXUIElement?
-  _ = walkPresentedAXTree(root: root) { element, index, _, _ in
-    if found == nil && index == targetIndex {
-      found = element
+  var indexMatch: AXUIElement?
+  var semanticMatch: AXUIElement?
+  // Each element prints both a numeric index and a semantic `ID:`, and the model
+  // may address either — accept both so an advertised id (e.g. a window's
+  // `ID: main` with a Raise action) is actually invocable. Prefer the exact
+  // numeric index so a semantic id can't shadow a different element's index.
+  _ = walkPresentedAXTree(root: root) { element, index, semanticID, _ in
+    if indexMatch == nil && index == targetIndex {
+      indexMatch = element
+    } else if semanticMatch == nil && semanticID == targetIndex {
+      semanticMatch = element
     }
   }
-  return found
+  return indexMatch ?? semanticMatch
 }
 
 func centerPoint(for bounds: BoundsPayload) -> CGPoint? {
@@ -2043,6 +2050,12 @@ func revealInteractionPoint(_ point: CGPoint, clickToFocus: Bool) -> Bool {
 
 func getAppStateResult(appRef: String) -> ResultPayload {
   let resolvedApp = resolveApp(appRef)
+  // Surface a minimized window before resolving its on-screen entry — otherwise
+  // a backgrounded native app reads as "app not found" or an empty tree. Wait
+  // out the restore animation so CGWindowList sees the window.
+  if let resolvedApp, deminiaturizeWindows(for: resolvedApp) {
+    usleep(appActivationDelayMicros * 5)
+  }
   let resolvedEntry = resolvedApp.flatMap { windowInfo(for: $0.processIdentifier) } ?? resolveWindowEntry(appRef)
   return getAppStateResult(appRef: appRef, resolvedApp: resolvedApp, resolvedEntry: resolvedEntry)
 }
@@ -2114,6 +2127,24 @@ func raiseTargetWindow(for app: NSRunningApplication) -> Bool {
     return false
   }
   return AXUIElementPerformAction(window, kAXRaiseAction as CFString) == .success
+}
+
+// Un-minimize any minimized windows so a backgrounded app can be read and acted
+// on. A minimized window is absent from the on-screen window list (CGWindowList),
+// so without this a minimized native app resolves to no window at all. Returns
+// whether anything was restored, so the caller can wait out the restore animation.
+@discardableResult
+func deminiaturizeWindows(for app: NSRunningApplication) -> Bool {
+  let appElement = AXUIElementCreateApplication(app.processIdentifier)
+  var restored = false
+  for window in axElementArray(appElement, kAXWindowsAttribute as String) {
+    if axBool(window, kAXMinimizedAttribute as String) == true,
+      AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, false as CFTypeRef) == .success
+    {
+      restored = true
+    }
+  }
+  return restored
 }
 
 func mouseButton(from rawValue: String?) -> CGMouseButton {
