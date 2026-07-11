@@ -128,12 +128,10 @@ final class OverlayCursorView: NSView {
 final class OverlayCursorController {
   static let shared = OverlayCursorController()
 
-  // The activity cursor is a decorative overlay drawn on top of the real cursor,
-  // but CGEvent clicks warp the real system cursor to the target anyway — so it's
-  // redundant with the pointer the user already sees, and its per-action
-  // animation only adds latency. Disabled until it becomes a true synthetic
-  // cursor (one that acts without moving the real pointer); flip to re-enable.
-  private let enabled = false
+  // The agent's synthetic pointer. Events are injected via CGEventPostToPid, so
+  // the real cursor never moves — this overlay is what the user sees the agent
+  // acting with, and lets them keep using their own mouse meanwhile.
+  private let enabled = true
 
   private let size = CGSize(width: 96, height: 96)
   private let hotspot = CGPoint(x: 30.35, y: 48.31)
@@ -2179,6 +2177,10 @@ func withActivatedApp<T>(
 ) -> T {
   let previousFrontmost = NSWorkspace.shared.frontmostApplication
   let targetApp = resolveApp(appRef)
+  // Route this action's synthesized events to the target pid so the real cursor
+  // stays put; cleared when the action returns.
+  injectionTargetPid = targetApp?.processIdentifier
+  defer { injectionTargetPid = nil }
   let targetEntry = resolvedWindowInfo(appRef: appRef)
 
   if activate, let targetApp {
@@ -2206,6 +2208,24 @@ func withActivatedApp<T>(
   return result
 }
 
+// The process to deliver synthesized events to. When set (inside
+// withActivatedApp), events go straight to that pid via CGEventPostToPid: the
+// target app receives the click/keystroke but the user's real cursor never
+// moves, so they can keep working while the agent operates. The on-screen
+// activity cursor is what shows where the agent is acting. nil → post to the
+// global HID tap (moves the real cursor), the fallback for any out-of-scope post.
+var injectionTargetPid: pid_t?
+
+extension CGEvent {
+  func dispatch() {
+    if let pid = injectionTargetPid {
+      postToPid(pid)
+    } else {
+      post(tap: .cghidEventTap)
+    }
+  }
+}
+
 func mouseEventTypes(for button: CGMouseButton) -> (down: CGEventType, up: CGEventType) {
   switch button {
   case .right:
@@ -2228,8 +2248,8 @@ func postClick(at location: CGPoint, button: CGMouseButton = .left, clickCount: 
 
     downEvent.setIntegerValueField(.mouseEventClickState, value: Int64(clickCount))
     upEvent.setIntegerValueField(.mouseEventClickState, value: Int64(clickCount))
-    downEvent.post(tap: .cghidEventTap)
-    upEvent.post(tap: .cghidEventTap)
+    downEvent.dispatch()
+    upEvent.dispatch()
     usleep(clickIntervalDelayMicros)
   }
   return true
@@ -2351,9 +2371,9 @@ func dragResult(params: [String: JSONValue]) -> ResultPayload {
       return false
     }
 
-    moveEvent.post(tap: .cghidEventTap)
+    moveEvent.dispatch()
     usleep(clickIntervalDelayMicros)
-    downEvent.post(tap: .cghidEventTap)
+    downEvent.dispatch()
     usleep(clickIntervalDelayMicros)
 
     for index in 1...steps {
@@ -2366,14 +2386,14 @@ func dragResult(params: [String: JSONValue]) -> ResultPayload {
       guard let dragEvent = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged, mouseCursorPosition: point, mouseButton: .left) else {
         return false
       }
-      dragEvent.post(tap: .cghidEventTap)
+      dragEvent.dispatch()
       RunLoop.current.run(until: Date().addingTimeInterval(0.02))
     }
 
     guard let upEvent = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: toScreen, mouseButton: .left) else {
       return false
     }
-    upEvent.post(tap: .cghidEventTap)
+    upEvent.dispatch()
     OverlayCursorController.shared.pulse()
     OverlayCursorController.shared.extendVisibility()
     return true
@@ -2398,8 +2418,8 @@ func unicodeKeyPair(text: String, flags: CGEventFlags = []) -> Bool {
   keyUp.flags = flags
   keyDown.keyboardSetUnicodeString(stringLength: text.utf16.count, unicodeString: Array(text.utf16))
   keyUp.keyboardSetUnicodeString(stringLength: text.utf16.count, unicodeString: Array(text.utf16))
-  keyDown.post(tap: .cghidEventTap)
-  keyUp.post(tap: .cghidEventTap)
+  keyDown.dispatch()
+  keyUp.dispatch()
   return true
 }
 
@@ -2550,8 +2570,8 @@ func postKeyCode(_ keyCode: CGKeyCode, flags: CGEventFlags) -> Bool {
 
   keyDown.flags = flags
   keyUp.flags = flags
-  keyDown.post(tap: .cghidEventTap)
-  keyUp.post(tap: .cghidEventTap)
+  keyDown.dispatch()
+  keyUp.dispatch()
   return true
 }
 
@@ -2808,7 +2828,7 @@ func scrollResult(params: [String: JSONValue]) -> ResultPayload {
     guard let mouseMove = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: center, mouseButton: .left) else {
       return false
     }
-    mouseMove.post(tap: .cghidEventTap)
+    mouseMove.dispatch()
     usleep(scrollFocusDelayMicros)
 
     guard let event = CGEvent(
@@ -2844,7 +2864,7 @@ func scrollResult(params: [String: JSONValue]) -> ResultPayload {
       return false
     }
 
-    event.post(tap: .cghidEventTap)
+    event.dispatch()
     OverlayCursorController.shared.pulse()
     OverlayCursorController.shared.extendVisibility()
     return true
