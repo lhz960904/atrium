@@ -7,6 +7,7 @@ import {
   type Subagent,
   type SubagentStatus,
   type Tool,
+  type ToolResultImage,
   type ToolStatus,
   type TraceSegment,
 } from '@shared/chat-types';
@@ -40,6 +41,11 @@ export type ImageSegment = {
   url: string;
   mediaType: string;
   filename?: string;
+  /** A tool screenshot (computer/browser), not a generated deliverable. */
+  fromTool?: boolean;
+  /** Folded — its image lives on the step's tool marker; only the latest tool
+   *  screenshot renders inline. */
+  collapsed?: boolean;
 };
 
 /** Trace segments as the renderer sees them — the shared clarify variant
@@ -127,9 +133,17 @@ export function buildAssistantView(parts: AtriumUIMessage['parts'], t: TFunction
         url: img.dataUrl,
         mediaType: img.mediaType,
         filename: img.filename,
+        fromTool: true,
       });
     }
   }
+
+  // Only the latest tool screenshot renders inline; fold the earlier ones — each
+  // is still reachable by expanding that step's tool marker (which carries it).
+  const toolShots = work.filter(
+    (s): s is ImageSegment => s.kind === 'image' && s.fromTool === true,
+  );
+  for (const shot of toolShots.slice(0, -1)) shot.collapsed = true;
 
   // The answer is the work's trailing text after the last tool call (or all of
   // it when no tool ran); everything up to the last tool is process.
@@ -179,7 +193,15 @@ function toToolModel(part: AtriumToolPart, name: MarkerToolName, t: TFunction): 
     typeLabel: p.typeLabel(input, t),
     command: p.command?.(input),
     output: toOutput(part),
+    screenshot: toolScreenshot(part),
   };
+}
+
+/** The first result screenshot of a tool call, carried on the marker so it can
+ *  be revealed on expand once its inline copy has been folded away. */
+function toolScreenshot(part: AtriumToolPart | DynamicToolUIPart): ToolResultImage | undefined {
+  if (part.state !== 'output-available' || !isImageToolOutput(part.output)) return undefined;
+  return part.output.images[0];
 }
 
 /**
@@ -206,6 +228,7 @@ function toDynamicToolModel(part: DynamicToolUIPart, t: TFunction): Tool {
     status: toStatus(part),
     typeLabel: t('tool.type.agent', { name: part.toolName }),
     output: toOutput(part),
+    screenshot: toolScreenshot(part),
   };
 }
 
