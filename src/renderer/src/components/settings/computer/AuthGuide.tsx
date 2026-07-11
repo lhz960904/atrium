@@ -1,5 +1,5 @@
 import { COMPUTER_USE_OVERLAY_CLOSED_CHANNEL, type PrivacyPane } from '@shared/computer-use';
-import { Accessibility, Check, Video } from 'lucide-react';
+import { Check, Keyboard, Video } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
@@ -37,7 +37,7 @@ function GrantRow({
   grantLabel,
   onGrant,
 }: {
-  icon: typeof Accessibility;
+  icon: typeof Keyboard;
   accent?: boolean;
   title: string;
   desc: string;
@@ -177,8 +177,7 @@ export function AuthGuide({
 
       <div className="divide-y divide-border-default rounded-xl border border-border-default bg-surface">
         <GrantRow
-          icon={Accessibility}
-          accent
+          icon={Keyboard}
           title={t('settings.computer.accessibility')}
           desc={t('settings.computer.accessibilityDesc')}
           granted={accessibility}

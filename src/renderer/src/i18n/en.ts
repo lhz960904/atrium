@@ -488,7 +488,7 @@ export const en: typeof zh = {
         'While the agent is active you’ll see a “… is debugging this browser” banner in Chrome. That’s expected — nothing to worry about.',
     },
     computer: {
-      lede: 'Let the AI see the screen and click and type in native macOS apps — desktop tasks the browser can’t do. Web tasks stay with Browser control.',
+      lede: 'Let the AI see the screen and click and type in native macOS apps — desktop tasks the browser can’t do.',
       enable: 'Enable Computer Use',
       enableDesc:
         'When on, the AI can click and type in granted apps. You can turn this off anytime.',
