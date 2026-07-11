@@ -5,8 +5,10 @@ import CoreServices
 import Foundation
 
 final class OverlayCursorView: NSView {
-  private let drawingInset = CGPoint(x: 30, y: 30)
-  private let scaleAnchor = CGPoint(x: 30.35, y: 48.31)
+  // The arrow's tip within the window; equals OverlayCursorController.hotspot so
+  // the tip lands exactly on the target point.
+  static let tip = CGPoint(x: 30.35, y: 48.31)
+  private let unit: CGFloat = 1.2
 
   var pulseAlpha: CGFloat = 0 {
     didSet {
@@ -20,11 +22,9 @@ final class OverlayCursorView: NSView {
     }
   }
 
-  var cursorAngle: CGFloat = 0 {
-    didSet {
-      needsDisplay = true
-    }
-  }
+  // Kept for source compatibility with the controller; a real pointer keeps a
+  // fixed orientation, so the arrow no longer rotates and this is unused.
+  var cursorAngle: CGFloat = 0
 
   var pressed: Bool = false {
     didSet {
@@ -38,89 +38,72 @@ final class OverlayCursorView: NSView {
     super.draw(dirtyRect)
 
     NSGraphicsContext.saveGraphicsState()
+    // A brief press "bounce" scales from the tip — no rotation.
     let transform = NSAffineTransform()
-    transform.translateX(by: scaleAnchor.x, yBy: scaleAnchor.y)
-    transform.rotate(byRadians: cursorAngle)
+    transform.translateX(by: Self.tip.x, yBy: Self.tip.y)
     transform.scale(by: cursorScale)
-    transform.translateX(by: -scaleAnchor.x, yBy: -scaleAnchor.y)
+    transform.translateX(by: -Self.tip.x, yBy: -Self.tip.y)
     transform.concat()
 
-    let pulseRect = NSRect(x: 2 + drawingInset.x, y: 5 + drawingInset.y, width: 28, height: 28)
     if pulseAlpha > 0.01 {
-      let pulse = NSBezierPath(ovalIn: pulseRect.insetBy(dx: -3, dy: -3))
-      NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: pulseAlpha * 0.18).setFill()
-      pulse.fill()
-
-      NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: pulseAlpha * 0.45).setStroke()
-      pulse.lineWidth = 1.2
-      pulse.stroke()
+      let center = NSPoint(x: Self.tip.x + 7 * unit, y: Self.tip.y - 11 * unit)
+      let radius: CGFloat = 16
+      let ring = NSBezierPath(
+        ovalIn: NSRect(
+          x: center.x - radius,
+          y: center.y - radius,
+          width: radius * 2,
+          height: radius * 2
+        )
+      )
+      NSColor(calibratedWhite: 1.0, alpha: pulseAlpha * 0.16).setFill()
+      ring.fill()
+      NSColor(calibratedWhite: 1.0, alpha: pulseAlpha * 0.40).setStroke()
+      ring.lineWidth = 1.2
+      ring.stroke()
     }
 
-    let shadowPath = roundedPointerPath(inset: 1.0)
+    let arrow = arrowPath()
 
+    // Soft outer glow keeps the cursor legible on any background.
     NSGraphicsContext.saveGraphicsState()
     let glow = NSShadow()
-    glow.shadowBlurRadius = pressed ? 9 : 10
+    glow.shadowBlurRadius = 5
     glow.shadowOffset = NSSize(width: 0, height: 0)
-    glow.shadowColor = NSColor(calibratedWhite: 0.0, alpha: pressed ? 0.38 : 0.28)
+    glow.shadowColor = NSColor(calibratedWhite: 0.0, alpha: 0.35)
     glow.set()
-    NSColor(calibratedWhite: 1.0, alpha: 0.7).setStroke()
-    shadowPath.lineWidth = 4.2
-    shadowPath.lineJoinStyle = .round
-    shadowPath.lineCapStyle = .round
-    shadowPath.stroke()
+    NSColor(calibratedWhite: 1.0, alpha: 0.95).setStroke()
+    arrow.lineWidth = 3.0
+    arrow.lineJoinStyle = .round
+    arrow.stroke()
     NSGraphicsContext.restoreGraphicsState()
 
-    let arrow = roundedPointerPath(inset: 0)
-
-    let fillAlpha: CGFloat = pressed ? 0.68 : 0.54
-    NSColor(calibratedWhite: 0.10, alpha: fillAlpha).setFill()
+    // Standard black arrow with a thin white outline.
+    NSColor(calibratedWhite: 0.0, alpha: pressed ? 1.0 : 0.9).setFill()
     arrow.fill()
-
-    NSColor(calibratedWhite: 1.0, alpha: pressed ? 0.94 : 0.86).setStroke()
-    arrow.lineWidth = pressed ? 2.2 : 2.0
+    NSColor(calibratedWhite: 1.0, alpha: 0.95).setStroke()
+    arrow.lineWidth = 1.2
     arrow.lineJoinStyle = .round
-    arrow.lineCapStyle = .round
     arrow.stroke()
+
     NSGraphicsContext.restoreGraphicsState()
   }
 
-  private func roundedPointerPath(inset: CGFloat) -> NSBezierPath {
-    let path = NSBezierPath()
-    let scale = (22.0 - (inset * 2.0)) / 39.0
-    let offsetX = drawingInset.x + inset
-    let offsetY = drawingInset.y + inset
-    func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
-      NSPoint(x: offsetX + (x * scale), y: offsetY + ((39.0 - y) * scale))
+  // Classic arrow pointer: tip at top-left, pointing up-left. Local coordinates
+  // are points down/right from the tip, mapped into AppKit (y-up).
+  private func arrowPath() -> NSBezierPath {
+    func p(_ dx: CGFloat, _ dy: CGFloat) -> NSPoint {
+      NSPoint(x: Self.tip.x + dx * unit, y: Self.tip.y - dy * unit)
     }
-
-    path.move(to: point(6.5338, 33.7802))
-    path.line(to: point(0.617737, 6.56569))
-    path.curve(
-      to: point(6.53598, 0.611297),
-      controlPoint1: point(-0.152622, 3.02196),
-      controlPoint2: point(2.98763, -0.137475)
-    )
-    path.line(to: point(33.93, 6.39198))
-    path.curve(
-      to: point(35.1843, 15.7308),
-      controlPoint1: point(38.5345, 7.36361),
-      controlPoint2: point(39.3692, 13.5787)
-    )
-    path.line(to: point(23.7471, 21.6122))
-    path.curve(
-      to: point(21.5782, 23.7895),
-      controlPoint1: point(22.8135, 22.0923),
-      controlPoint2: point(22.0547, 22.854)
-    )
-    path.line(to: point(15.8751, 34.9872))
-    path.curve(
-      to: point(6.5338, 33.7802),
-      controlPoint1: point(13.7419, 39.1757),
-      controlPoint2: point(7.53229, 38.3733)
-    )
+    let path = NSBezierPath()
+    path.move(to: p(0, 0))
+    path.line(to: p(0, 16.94))
+    path.line(to: p(4.05, 13.5))
+    path.line(to: p(6.83, 20.35))
+    path.line(to: p(9.06, 19.4))
+    path.line(to: p(6.3, 12.6))
+    path.line(to: p(11.6, 12.6))
     path.close()
-
     return path
   }
 }
