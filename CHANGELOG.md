@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.11.1](https://github.com/lhz960904/atrium/compare/v0.11.0...v0.11.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **models:** carry vendor model metadata in the provider manifest ([#78](https://github.com/lhz960904/atrium/issues/78)) ([6f083f2](https://github.com/lhz960904/atrium/commit/6f083f267eaa2daa6919c7be416ca4a732f3c665))
+
+## [0.11.0](https://github.com/lhz960904/atrium/compare/v0.10.4...v0.11.0) (2026-07-09)
+
+
+### Features
+
+* **providers:** add volcengine agent plan and coding plan providers ([#76](https://github.com/lhz960904/atrium/issues/76)) ([69aecaf](https://github.com/lhz960904/atrium/commit/69aecafcf9c26a783e41b1181259b2d2e6eca70f))
+
+## [0.10.4](https://github.com/lhz960904/atrium/compare/v0.10.3...v0.10.4) (2026-07-09)
+
+
+### Bug Fixes
+
+* **chat:** fall through blank favicon.ico to the page-declared icon ([#74](https://github.com/lhz960904/atrium/issues/74)) ([364ddda](https://github.com/lhz960904/atrium/commit/364ddda499241532382f9619e991e075ff32d7c4))
+* **update:** pre-stage update for instant restart, add pending button state ([#72](https://github.com/lhz960904/atrium/issues/72)) ([245f726](https://github.com/lhz960904/atrium/commit/245f726aa682b4ac66a5e6691225d6ef596dea41))
+
 ## [0.10.3](https://github.com/lhz960904/atrium/compare/v0.10.2...v0.10.3) (2026-07-08)
 
 

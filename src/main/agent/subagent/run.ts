@@ -2,9 +2,16 @@ import type { ToolName } from '@shared/tools';
 import { convertToModelMessages, generateId, stepCountIs, streamText, type UIMessage } from 'ai';
 import { recordUsage, tokenCountsOf } from '../../db/usage';
 import { createLogger } from '../../log';
-import { compactionMiddleware, composeBeforeStep, type RunContext } from '../middleware';
+import { MODEL_CALL_MAX_RETRIES } from '../errors';
+import {
+  compactionMiddleware,
+  composeBeforeStep,
+  loopDetectionMiddleware,
+  type RunContext,
+} from '../middleware';
 import { injectSystemReminder } from '../middleware/shared/reminder';
 import type { ModelPricing } from '../models/types';
+import { stampCacheBreakpoints, usesAnthropicPromptCache } from '../prompt-cache';
 import { currentDateNote, workspaceGuidance } from '../prompts';
 import { todoPreserver } from '../tools/builtins/todo';
 import { filterToolsForSubagent, type SubagentDef } from './defs';
@@ -96,6 +103,7 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
       persist: () => {},
       preservers: [todoPreserver],
     }),
+    loopDetectionMiddleware(),
   ];
   const beforeStep = composeBeforeStep(subCtx, middlewares);
 
@@ -109,7 +117,13 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
     messages: await convertToModelMessages(messages, { tools }),
     tools,
     stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
-    prepareStep: ({ stepNumber, messages }) => beforeStep({ stepNumber, messages }),
+    maxRetries: MODEL_CALL_MAX_RETRIES,
+    // Same post-middleware cache stamping as the parent loop (see agent/run.ts).
+    prepareStep: async ({ stepNumber, messages }) => {
+      const override = await beforeStep({ stepNumber, messages });
+      if (!usesAnthropicPromptCache(providerId)) return override;
+      return { ...override, messages: stampCacheBreakpoints(override.messages ?? messages) };
+    },
     abortSignal: opts.abortSignal,
     // Bubble each step's completed tool calls up to the parent so its task card
     // shows a live activity list. todo_write is a plan-panel concern, not trace.

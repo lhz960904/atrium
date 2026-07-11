@@ -673,6 +673,8 @@ export const en: typeof zh = {
         moonshot: 'Kimi family (Moonshot AI). Long context.',
         kimiCoding: 'Moonshot · Coding subscription (Anthropic-compatible).',
         zaiCoding: 'Zhipu GLM Coding subscription (Anthropic-compatible).',
+        volcengineAgent: 'Volcengine Ark · Agent Plan subscription (Anthropic-compatible).',
+        volcengineCoding: 'Volcengine Ark · Coding Plan subscription (Anthropic-compatible).',
         openrouter: 'One API that routes to 300+ models.',
         aihubmix: 'One-stop LLM aggregator — one key, many models.',
         claudeCode:

@@ -1,4 +1,4 @@
-import type { CloudApiProtocol } from './manifest';
+import { anthropicApiBase, type CloudApiProtocol } from './manifest';
 
 /**
  * Fetch the available model id list from a cloud provider's `/models`-style
@@ -26,7 +26,7 @@ export async function fetchModelIds(args: {
 }
 
 async function fetchAnthropic(baseUrl: string, apiKey: string): Promise<string[]> {
-  const res = await fetch(`${baseUrl}/v1/models`, {
+  const res = await fetch(`${anthropicApiBase(baseUrl)}/models`, {
     headers: {
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',

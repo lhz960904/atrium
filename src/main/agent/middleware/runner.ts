@@ -34,7 +34,10 @@ export function composeBeforeStep(ctx: RunContext, mws: AgentMiddleware[]) {
   return async (step: StepInfo): Promise<StepOverride> => {
     const merged: StepOverride = {};
     for (const m of mws) {
-      const o = await m.beforeStep?.(ctx, step);
+      // Each middleware sees the merged-so-far message view, so an appender
+      // composes with an upstream rewrite instead of clobbering it. Scalar
+      // fields stay last-wins.
+      const o = await m.beforeStep?.(ctx, { ...step, messages: merged.messages ?? step.messages });
       if (o) Object.assign(merged, o);
     }
     return merged;

@@ -13,6 +13,7 @@ import {
   compactThread,
   dateMiddleware,
   instructionsMiddleware,
+  loopDetectionMiddleware,
   memoryMiddleware,
   metadataMiddleware,
   persistenceMiddleware,
@@ -266,6 +267,10 @@ export function startHttpServer(deps: {
           persist: persistMessage,
           preservers: [todoPreserver, skillPreserver],
         }),
+        // After compaction: both override the step's messages, and the runner
+        // pipelines them in list order, so the loop reminder lands on the
+        // folded view instead of being clobbered by it.
+        loopDetectionMiddleware(),
         skillsMiddleware({ skills }),
         // Run skills → memory → instructions so the injected blocks end up ordered
         // custom-instructions → memory → skills after each prepend.

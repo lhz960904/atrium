@@ -8,7 +8,12 @@ import { isImageModel, modelCapabilities } from '../agent/models/catalog';
 import type { Db } from '../db';
 import { providers } from '../db/schema';
 import { decryptCredentials } from './credentials';
-import { getProviderManifest, type LocalServiceManifest, type ProviderManifest } from './manifest';
+import {
+  anthropicApiBase,
+  getProviderManifest,
+  type LocalServiceManifest,
+  type ProviderManifest,
+} from './manifest';
 
 type CloudManifest = Extract<ProviderManifest, { kind: 'cloud-api' }>;
 type ProviderConn = { manifest: CloudManifest; apiKey: string; baseURL: string };
@@ -61,7 +66,7 @@ export function resolveModel(db: Db, providerId: string, modelId: string): Langu
   const { manifest, apiKey, baseURL } = providerConn(db, providerId);
   switch (manifest.protocol) {
     case 'anthropic':
-      return createAnthropic({ apiKey, baseURL })(modelId);
+      return createAnthropic({ apiKey, baseURL: anthropicApiBase(baseURL) })(modelId);
     case 'openai-compatible':
       return createOpenAICompatible({ name: providerId, apiKey, baseURL })(modelId);
     case 'google-gemini':

@@ -1,4 +1,17 @@
-import { APICallError } from 'ai';
+import { APICallError, RetryError } from 'ai';
+
+/**
+ * Retries for agent-loop model calls. The SDK default (2, exponential backoff
+ * from 2s) gives up within ~6 seconds — too brief to outlive the per-minute
+ * TPM throttles subscription providers enforce, where a 429 clears only once
+ * the minute window slides. Ten attempts back off exponentially from 2s
+ * (deferring to the server's Retry-After when present), which is enough
+ * patience for even stubborn multi-minute throttles; a waiting retry is
+ * still cancelled instantly by the turn's abort signal, and genuinely
+ * non-retryable errors (auth, validation) surface immediately — the SDK
+ * only retries errors it marks retryable.
+ */
+export const MODEL_CALL_MAX_RETRIES = 10;
 
 /**
  * A human-readable message for the client. createUIMessageStream masks errors
@@ -10,6 +23,12 @@ import { APICallError } from 'ai';
  * rate-limit or exhausted quota), so the original message is the honest signal.
  */
 export function readableError(error: unknown): string {
+  // A retry-exhausted failure only carries the HTTP status text ("Too Many
+  // Requests"); the provider's actual explanation sits in the last underlying
+  // error's response body, so unwrap and dig there.
+  if (RetryError.isInstance(error) && error.lastError !== undefined) {
+    return `Failed after ${error.errors.length} attempts. Last error: ${readableError(error.lastError)}`;
+  }
   if (APICallError.isInstance(error)) {
     if (error.responseBody) {
       try {
