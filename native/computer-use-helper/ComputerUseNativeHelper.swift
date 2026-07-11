@@ -5,8 +5,12 @@ import CoreServices
 import Foundation
 
 final class OverlayCursorView: NSView {
-  private let drawingInset = CGPoint(x: 30, y: 30)
-  private let scaleAnchor = CGPoint(x: 30.35, y: 48.31)
+  // The arrow's tip within the window; equals OverlayCursorController.hotspot so
+  // the tip lands exactly on the target point.
+  static let tip = CGPoint(x: 30.35, y: 48.31)
+  private let unit: CGFloat = 1.0
+  // Indigo, shown translucent — distinct from the user's own (black) pointer.
+  private let fillColor = NSColor(calibratedRed: 0.388, green: 0.400, blue: 0.945, alpha: 1.0)
 
   var pulseAlpha: CGFloat = 0 {
     didSet {
@@ -20,11 +24,9 @@ final class OverlayCursorView: NSView {
     }
   }
 
-  var cursorAngle: CGFloat = 0 {
-    didSet {
-      needsDisplay = true
-    }
-  }
+  // Kept for source compatibility with the controller; a real pointer keeps a
+  // fixed orientation, so the arrow no longer rotates and this is unused.
+  var cursorAngle: CGFloat = 0
 
   var pressed: Bool = false {
     didSet {
@@ -38,89 +40,66 @@ final class OverlayCursorView: NSView {
     super.draw(dirtyRect)
 
     NSGraphicsContext.saveGraphicsState()
+    // A brief press "bounce" scales from the tip — no rotation.
     let transform = NSAffineTransform()
-    transform.translateX(by: scaleAnchor.x, yBy: scaleAnchor.y)
-    transform.rotate(byRadians: cursorAngle)
+    transform.translateX(by: Self.tip.x, yBy: Self.tip.y)
     transform.scale(by: cursorScale)
-    transform.translateX(by: -scaleAnchor.x, yBy: -scaleAnchor.y)
+    transform.translateX(by: -Self.tip.x, yBy: -Self.tip.y)
     transform.concat()
 
-    let pulseRect = NSRect(x: 2 + drawingInset.x, y: 5 + drawingInset.y, width: 28, height: 28)
     if pulseAlpha > 0.01 {
-      let pulse = NSBezierPath(ovalIn: pulseRect.insetBy(dx: -3, dy: -3))
-      NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: pulseAlpha * 0.18).setFill()
-      pulse.fill()
-
-      NSColor(calibratedRed: 1.0, green: 1.0, blue: 1.0, alpha: pulseAlpha * 0.45).setStroke()
-      pulse.lineWidth = 1.2
-      pulse.stroke()
+      let center = NSPoint(x: Self.tip.x + 5 * unit, y: Self.tip.y - 8 * unit)
+      let radius: CGFloat = 13
+      let ring = NSBezierPath(
+        ovalIn: NSRect(
+          x: center.x - radius,
+          y: center.y - radius,
+          width: radius * 2,
+          height: radius * 2
+        )
+      )
+      fillColor.withAlphaComponent(pulseAlpha * 0.22).setFill()
+      ring.fill()
+      fillColor.withAlphaComponent(pulseAlpha * 0.50).setStroke()
+      ring.lineWidth = 1.4
+      ring.stroke()
     }
 
-    let shadowPath = roundedPointerPath(inset: 1.0)
+    let arrow = arrowPath()
 
+    // Translucent indigo fill with a soft drop shadow so it stays legible on any
+    // background, then a thin white border drawn without the shadow.
     NSGraphicsContext.saveGraphicsState()
-    let glow = NSShadow()
-    glow.shadowBlurRadius = pressed ? 9 : 10
-    glow.shadowOffset = NSSize(width: 0, height: 0)
-    glow.shadowColor = NSColor(calibratedWhite: 0.0, alpha: pressed ? 0.38 : 0.28)
-    glow.set()
-    NSColor(calibratedWhite: 1.0, alpha: 0.7).setStroke()
-    shadowPath.lineWidth = 4.2
-    shadowPath.lineJoinStyle = .round
-    shadowPath.lineCapStyle = .round
-    shadowPath.stroke()
+    let shadow = NSShadow()
+    shadow.shadowBlurRadius = 3.5
+    shadow.shadowOffset = NSSize(width: 0, height: -0.5)
+    shadow.shadowColor = NSColor(calibratedWhite: 0.0, alpha: 0.35)
+    shadow.set()
+    fillColor.withAlphaComponent(pressed ? 0.70 : 0.52).setFill()
+    arrow.fill()
     NSGraphicsContext.restoreGraphicsState()
 
-    let arrow = roundedPointerPath(inset: 0)
-
-    let fillAlpha: CGFloat = pressed ? 0.68 : 0.54
-    NSColor(calibratedWhite: 0.10, alpha: fillAlpha).setFill()
-    arrow.fill()
-
-    NSColor(calibratedWhite: 1.0, alpha: pressed ? 0.94 : 0.86).setStroke()
-    arrow.lineWidth = pressed ? 2.2 : 2.0
+    NSColor(calibratedWhite: 1.0, alpha: 0.9).setStroke()
+    arrow.lineWidth = 1.2
     arrow.lineJoinStyle = .round
-    arrow.lineCapStyle = .round
     arrow.stroke()
+
     NSGraphicsContext.restoreGraphicsState()
   }
 
-  private func roundedPointerPath(inset: CGFloat) -> NSBezierPath {
-    let path = NSBezierPath()
-    let scale = (22.0 - (inset * 2.0)) / 39.0
-    let offsetX = drawingInset.x + inset
-    let offsetY = drawingInset.y + inset
-    func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
-      NSPoint(x: offsetX + (x * scale), y: offsetY + ((39.0 - y) * scale))
+  // A triangle arrowhead with a concave base (the tail notches inward), tip at
+  // top-left. Local coordinates are points down/right from the tip, mapped into
+  // AppKit (y-up).
+  private func arrowPath() -> NSBezierPath {
+    func p(_ dx: CGFloat, _ dy: CGFloat) -> NSPoint {
+      NSPoint(x: Self.tip.x + dx * unit, y: Self.tip.y - dy * unit)
     }
-
-    path.move(to: point(6.5338, 33.7802))
-    path.line(to: point(0.617737, 6.56569))
-    path.curve(
-      to: point(6.53598, 0.611297),
-      controlPoint1: point(-0.152622, 3.02196),
-      controlPoint2: point(2.98763, -0.137475)
-    )
-    path.line(to: point(33.93, 6.39198))
-    path.curve(
-      to: point(35.1843, 15.7308),
-      controlPoint1: point(38.5345, 7.36361),
-      controlPoint2: point(39.3692, 13.5787)
-    )
-    path.line(to: point(23.7471, 21.6122))
-    path.curve(
-      to: point(21.5782, 23.7895),
-      controlPoint1: point(22.8135, 22.0923),
-      controlPoint2: point(22.0547, 22.854)
-    )
-    path.line(to: point(15.8751, 34.9872))
-    path.curve(
-      to: point(6.5338, 33.7802),
-      controlPoint1: point(13.7419, 39.1757),
-      controlPoint2: point(7.53229, 38.3733)
-    )
+    let path = NSBezierPath()
+    path.move(to: p(0, 0))
+    path.line(to: p(0, 15.5))
+    path.line(to: p(4.2, 10.4))
+    path.line(to: p(11, 11))
     path.close()
-
     return path
   }
 }
@@ -128,12 +107,10 @@ final class OverlayCursorView: NSView {
 final class OverlayCursorController {
   static let shared = OverlayCursorController()
 
-  // The activity cursor is a decorative overlay drawn on top of the real cursor,
-  // but CGEvent clicks warp the real system cursor to the target anyway — so it's
-  // redundant with the pointer the user already sees, and its per-action
-  // animation only adds latency. Disabled until it becomes a true synthetic
-  // cursor (one that acts without moving the real pointer); flip to re-enable.
-  private let enabled = false
+  // The agent's synthetic pointer. Events are injected via CGEventPostToPid, so
+  // the real cursor never moves — this overlay is what the user sees the agent
+  // acting with, and lets them keep using their own mouse meanwhile.
+  private let enabled = true
 
   private let size = CGSize(width: 96, height: 96)
   private let hotspot = CGPoint(x: 30.35, y: 48.31)
@@ -393,36 +370,31 @@ final class OverlayCursorController {
   }
 }
 
-func desktopFrame() -> CGRect {
-  let screenFrame = NSScreen.screens.map(\.frame).reduce(into: CGRect.null) { result, frame in
-    result = result.union(frame)
+// Height of the primary (menu-bar) display — the reference for flipping between
+// CoreGraphics display coordinates (top-left origin, anchored at the primary
+// display) and AppKit coordinates (bottom-left origin). The flip MUST use the
+// primary display's height, not the union of all screens: with a second monitor
+// the union's maxY is taller, so an overlay point would land on the wrong screen.
+func primaryDisplayHeight() -> CGFloat {
+  let height = CGDisplayBounds(CGMainDisplayID()).height
+  if height > 0, height.isFinite {
+    return height
   }
-  if !screenFrame.isNull, !screenFrame.isEmpty, isFiniteRect(screenFrame) {
-    return screenFrame
-  }
-
-  let mainDisplayFrame = CGDisplayBounds(CGMainDisplayID())
-  if !mainDisplayFrame.isNull, !mainDisplayFrame.isEmpty, isFiniteRect(mainDisplayFrame) {
-    return mainDisplayFrame
-  }
-
-  return CGRect(x: 0, y: 0, width: 1, height: 1)
+  return NSScreen.main?.frame.height ?? 1
 }
 
 func appKitPoint(fromDisplayPoint point: CGPoint) -> CGPoint {
   guard isFinitePoint(point) else {
     return point
   }
-  let frame = desktopFrame()
-  return CGPoint(x: point.x, y: frame.maxY - point.y)
+  return CGPoint(x: point.x, y: primaryDisplayHeight() - point.y)
 }
 
 func displayPoint(fromAppKitPoint point: CGPoint) -> CGPoint {
   guard isFinitePoint(point) else {
     return point
   }
-  let frame = desktopFrame()
-  return CGPoint(x: point.x, y: frame.maxY - point.y)
+  return CGPoint(x: point.x, y: primaryDisplayHeight() - point.y)
 }
 
 func isFinitePoint(_ point: CGPoint) -> Bool {
@@ -2170,40 +2142,69 @@ func mouseButton(from rawValue: String?) -> CGMouseButton {
   }
 }
 
+/*
+ * Hybrid foreground/background driving. Mouse events carry a location, so
+ * postToPid delivers them to the target no matter what's frontmost — clicks run
+ * entirely in the background and never touch the user's focus. Keystrokes carry
+ * no location: the OS routes them to the FRONTMOST app's first responder, so a
+ * background app receives nothing. Actions that type therefore pass
+ * needsKeyFocus, which briefly activates the target (types), then hands focus
+ * back to the user's app — the only moment focus is stolen.
+ */
 func withActivatedApp<T>(
   appRef: String,
   activate: Bool = true,
   restorePreviousFocus: Bool = true,
   stackTargetBehindPrevious: Bool = false,
+  needsKeyFocus: Bool = false,
   action: () -> T
 ) -> T {
   let previousFrontmost = NSWorkspace.shared.frontmostApplication
   let targetApp = resolveApp(appRef)
+  // Route this action's synthesized events to the target pid so the real cursor
+  // stays put; cleared when the action returns.
+  injectionTargetPid = targetApp?.processIdentifier
+  defer { injectionTargetPid = nil }
   let targetEntry = resolvedWindowInfo(appRef: appRef)
 
-  if activate, let targetApp {
-    let previousIsTarget = previousFrontmost?.processIdentifier == targetApp.processIdentifier
-    if stackTargetBehindPrevious, !previousIsTarget {
-      _ = raiseTargetWindow(for: targetApp)
-      usleep(appActivationDelayMicros)
-    } else {
-      targetApp.activate()
-      usleep(appActivationDelayMicros)
-    }
+  let mustFocus = activate && needsKeyFocus
+  if mustFocus, let targetApp {
+    targetApp.activate()
+    usleep(appActivationDelayMicros)
   }
 
   OverlayCursorController.shared.configure(for: targetEntry)
-  if activate, let targetEntry {
+  if let targetEntry {
     OverlayCursorController.shared.showActivity(at: windowCenter(targetEntry), wiggle: false)
   }
   let result = action()
 
-  if restorePreviousFocus, let previousFrontmost, previousFrontmost.processIdentifier != targetApp?.processIdentifier {
+  if mustFocus, restorePreviousFocus, let previousFrontmost,
+    previousFrontmost.processIdentifier != targetApp?.processIdentifier
+  {
     previousFrontmost.activate()
     usleep(appActivationDelayMicros)
   }
 
   return result
+}
+
+// The process to deliver synthesized events to. When set (inside
+// withActivatedApp), events go straight to that pid via CGEventPostToPid: the
+// target app receives the click/keystroke but the user's real cursor never
+// moves, so they can keep working while the agent operates. The on-screen
+// activity cursor is what shows where the agent is acting. nil → post to the
+// global HID tap (moves the real cursor), the fallback for any out-of-scope post.
+var injectionTargetPid: pid_t?
+
+extension CGEvent {
+  func dispatch() {
+    if let pid = injectionTargetPid {
+      postToPid(pid)
+    } else {
+      post(tap: .cghidEventTap)
+    }
+  }
 }
 
 func mouseEventTypes(for button: CGMouseButton) -> (down: CGEventType, up: CGEventType) {
@@ -2228,8 +2229,8 @@ func postClick(at location: CGPoint, button: CGMouseButton = .left, clickCount: 
 
     downEvent.setIntegerValueField(.mouseEventClickState, value: Int64(clickCount))
     upEvent.setIntegerValueField(.mouseEventClickState, value: Int64(clickCount))
-    downEvent.post(tap: .cghidEventTap)
-    upEvent.post(tap: .cghidEventTap)
+    downEvent.dispatch()
+    upEvent.dispatch()
     usleep(clickIntervalDelayMicros)
   }
   return true
@@ -2351,9 +2352,9 @@ func dragResult(params: [String: JSONValue]) -> ResultPayload {
       return false
     }
 
-    moveEvent.post(tap: .cghidEventTap)
+    moveEvent.dispatch()
     usleep(clickIntervalDelayMicros)
-    downEvent.post(tap: .cghidEventTap)
+    downEvent.dispatch()
     usleep(clickIntervalDelayMicros)
 
     for index in 1...steps {
@@ -2366,14 +2367,14 @@ func dragResult(params: [String: JSONValue]) -> ResultPayload {
       guard let dragEvent = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged, mouseCursorPosition: point, mouseButton: .left) else {
         return false
       }
-      dragEvent.post(tap: .cghidEventTap)
+      dragEvent.dispatch()
       RunLoop.current.run(until: Date().addingTimeInterval(0.02))
     }
 
     guard let upEvent = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: toScreen, mouseButton: .left) else {
       return false
     }
-    upEvent.post(tap: .cghidEventTap)
+    upEvent.dispatch()
     OverlayCursorController.shared.pulse()
     OverlayCursorController.shared.extendVisibility()
     return true
@@ -2398,8 +2399,8 @@ func unicodeKeyPair(text: String, flags: CGEventFlags = []) -> Bool {
   keyUp.flags = flags
   keyDown.keyboardSetUnicodeString(stringLength: text.utf16.count, unicodeString: Array(text.utf16))
   keyUp.keyboardSetUnicodeString(stringLength: text.utf16.count, unicodeString: Array(text.utf16))
-  keyDown.post(tap: .cghidEventTap)
-  keyUp.post(tap: .cghidEventTap)
+  keyDown.dispatch()
+  keyUp.dispatch()
   return true
 }
 
@@ -2550,8 +2551,8 @@ func postKeyCode(_ keyCode: CGKeyCode, flags: CGEventFlags) -> Bool {
 
   keyDown.flags = flags
   keyUp.flags = flags
-  keyDown.post(tap: .cghidEventTap)
-  keyUp.post(tap: .cghidEventTap)
+  keyDown.dispatch()
+  keyUp.dispatch()
   return true
 }
 
@@ -2563,7 +2564,7 @@ func typeTextResult(params: [String: JSONValue]) -> ResultPayload {
     return makeErrorResult(toolName: "type_text", code: "internal_error", message: "Missing text parameter")
   }
 
-  let success = withActivatedApp(appRef: appRef, restorePreviousFocus: true) {
+  let success = withActivatedApp(appRef: appRef, restorePreviousFocus: true, needsKeyFocus: true) {
     if let point = focusPoint(for: appRef), !revealInteractionPoint(point, clickToFocus: true) {
       return false
     }
@@ -2612,7 +2613,7 @@ func pressKeyResult(params: [String: JSONValue]) -> ResultPayload {
   }
 
   let flags = modifierFlags(from: parts.dropLast()[...])
-  let success = withActivatedApp(appRef: appRef, activate: true, restorePreviousFocus: true) {
+  let success = withActivatedApp(appRef: appRef, activate: true, restorePreviousFocus: true, needsKeyFocus: true) {
     if let point = focusPoint(for: appRef) {
       let shouldClickToFocus = flags.isEmpty && (rawKey.count == 1 || rawKey.lowercased() == "space")
       if !revealInteractionPoint(point, clickToFocus: shouldClickToFocus) {
@@ -2808,7 +2809,7 @@ func scrollResult(params: [String: JSONValue]) -> ResultPayload {
     guard let mouseMove = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: center, mouseButton: .left) else {
       return false
     }
-    mouseMove.post(tap: .cghidEventTap)
+    mouseMove.dispatch()
     usleep(scrollFocusDelayMicros)
 
     guard let event = CGEvent(
@@ -2844,7 +2845,7 @@ func scrollResult(params: [String: JSONValue]) -> ResultPayload {
       return false
     }
 
-    event.post(tap: .cghidEventTap)
+    event.dispatch()
     OverlayCursorController.shared.pulse()
     OverlayCursorController.shared.extendVisibility()
     return true

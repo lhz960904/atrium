@@ -28,7 +28,7 @@ export const computerListAppsTool = (ctx: ToolCtx) =>
     description:
       'List the apps currently running (and recently used) on the Mac, so you can pick one to drive.',
     inputSchema: z.object({}),
-    execute: () => runComputerAction(ctx, 'list_apps', {}),
+    execute: (_input, { abortSignal }) => runComputerAction(ctx, 'list_apps', {}, abortSignal),
     toModelOutput: modelOutput(ctx),
   });
 
@@ -39,7 +39,8 @@ export const computerGetAppStateTool = (ctx: ToolCtx) =>
       'interactive elements (each with an index) plus a window screenshot. Call this before ' +
       'acting, and again after an action to see the result.',
     inputSchema: z.object({ app: appField }),
-    execute: ({ app }) => runComputerAction(ctx, 'get_app_state', { app }),
+    execute: ({ app }, { abortSignal }) =>
+      runComputerAction(ctx, 'get_app_state', { app }, abortSignal),
     toModelOutput: modelOutput(ctx),
   });
 
@@ -56,7 +57,7 @@ export const computerClickTool = (ctx: ToolCtx) =>
       mouse_button: z.enum(['left', 'right', 'middle']).optional(),
       click_count: z.number().int().min(1).optional().describe('e.g. 2 for a double-click.'),
     }),
-    execute: (input) => runComputerAction(ctx, 'click', input),
+    execute: (input, { abortSignal }) => runComputerAction(ctx, 'click', input, abortSignal),
     toModelOutput: modelOutput(ctx),
   });
 
@@ -64,7 +65,7 @@ export const computerTypeTextTool = (ctx: ToolCtx) =>
   tool({
     description: 'Type literal text into the focused field of an app.',
     inputSchema: z.object({ app: appField, text: z.string() }),
-    execute: (input) => runComputerAction(ctx, 'type_text', input),
+    execute: (input, { abortSignal }) => runComputerAction(ctx, 'type_text', input, abortSignal),
     toModelOutput: modelOutput(ctx),
   });
 
@@ -73,7 +74,7 @@ export const computerPressKeyTool = (ctx: ToolCtx) =>
     description:
       'Press a key or key combination (xdotool syntax): e.g. "cmd+s", "Return", "space", "ctrl+shift+t".',
     inputSchema: z.object({ app: appField, key: z.string() }),
-    execute: (input) => runComputerAction(ctx, 'press_key', input),
+    execute: (input, { abortSignal }) => runComputerAction(ctx, 'press_key', input, abortSignal),
     toModelOutput: modelOutput(ctx),
   });
 
@@ -86,7 +87,7 @@ export const computerScrollTool = (ctx: ToolCtx) =>
       direction: z.enum(['up', 'down', 'left', 'right']),
       pages: z.number().int().min(1).optional(),
     }),
-    execute: (input) => runComputerAction(ctx, 'scroll', input),
+    execute: (input, { abortSignal }) => runComputerAction(ctx, 'scroll', input, abortSignal),
     toModelOutput: modelOutput(ctx),
   });
 
@@ -100,7 +101,7 @@ export const computerDragTool = (ctx: ToolCtx) =>
       to_x: z.number(),
       to_y: z.number(),
     }),
-    execute: (input) => runComputerAction(ctx, 'drag', input),
+    execute: (input, { abortSignal }) => runComputerAction(ctx, 'drag', input, abortSignal),
     toModelOutput: modelOutput(ctx),
   });
 
@@ -109,7 +110,7 @@ export const computerSetValueTool = (ctx: ToolCtx) =>
     description:
       "Set an element's value directly (a slider, stepper, or text field) — faster than typing character by character.",
     inputSchema: z.object({ app: appField, element_index: elementIndex, value: z.string() }),
-    execute: (input) => runComputerAction(ctx, 'set_value', input),
+    execute: (input, { abortSignal }) => runComputerAction(ctx, 'set_value', input, abortSignal),
     toModelOutput: modelOutput(ctx),
   });
 
@@ -123,6 +124,7 @@ export const computerPerformActionTool = (ctx: ToolCtx) =>
       element_index: elementIndex,
       action: z.string(),
     }),
-    execute: (input) => runComputerAction(ctx, 'perform_secondary_action', input),
+    execute: (input, { abortSignal }) =>
+      runComputerAction(ctx, 'perform_secondary_action', input, abortSignal),
     toModelOutput: modelOutput(ctx),
   });
