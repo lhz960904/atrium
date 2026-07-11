@@ -2142,6 +2142,13 @@ func mouseButton(from rawValue: String?) -> CGMouseButton {
   }
 }
 
+// Drive the target entirely in the background: events reach it via postToPid, so
+// it's never brought to the front and the user's keyboard focus is never stolen —
+// they keep reading/typing in their own window while the agent works. Flip to
+// false to restore the old "activate the target, then restore focus" behavior,
+// which native apps that only take keyboard input while key would need.
+let backgroundMode = true
+
 func withActivatedApp<T>(
   appRef: String,
   activate: Bool = true,
@@ -2157,7 +2164,7 @@ func withActivatedApp<T>(
   defer { injectionTargetPid = nil }
   let targetEntry = resolvedWindowInfo(appRef: appRef)
 
-  if activate, let targetApp {
+  if activate, !backgroundMode, let targetApp {
     let previousIsTarget = previousFrontmost?.processIdentifier == targetApp.processIdentifier
     if stackTargetBehindPrevious, !previousIsTarget {
       _ = raiseTargetWindow(for: targetApp)
@@ -2169,12 +2176,14 @@ func withActivatedApp<T>(
   }
 
   OverlayCursorController.shared.configure(for: targetEntry)
-  if activate, let targetEntry {
+  if let targetEntry {
     OverlayCursorController.shared.showActivity(at: windowCenter(targetEntry), wiggle: false)
   }
   let result = action()
 
-  if restorePreviousFocus, let previousFrontmost, previousFrontmost.processIdentifier != targetApp?.processIdentifier {
+  if restorePreviousFocus, !backgroundMode, let previousFrontmost,
+    previousFrontmost.processIdentifier != targetApp?.processIdentifier
+  {
     previousFrontmost.activate()
     usleep(appActivationDelayMicros)
   }
