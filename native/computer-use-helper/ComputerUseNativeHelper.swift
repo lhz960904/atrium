@@ -589,6 +589,10 @@ let actionSettleDelayMicros: useconds_t = 60_000
 let revealSettleDelayMicros: useconds_t = 35_000
 let keyRepeatDelayMicros: useconds_t = 15_000
 let scrollFocusDelayMicros: useconds_t = 30_000
+// Cmd+V is delivered asynchronously, so wait this long before restoring the
+// user's clipboard — restoring too early makes the target app paste the old
+// contents instead of the text we just placed.
+let pasteSettleDelayMicros: useconds_t = 200_000
 
 var cachedWindowEntries: [WindowEntry] = []
 var cachedWindowEntriesAt: Date?
@@ -2407,6 +2411,55 @@ func typeCharacter(_ character: Character) -> Bool {
   return unicodeKeyPair(text: text)
 }
 
+/*
+ * Enter text by pasting it (Cmd+V) rather than synthesizing key events. This is
+ * the reliable path for CJK/emoji: Chromium/Electron inputs drop synthetic
+ * Unicode key events, and non-Latin keyboard layouts turn keycodes into the
+ * wrong characters. The user's clipboard is snapshotted (every representation,
+ * so images/rich content survive) and restored afterward.
+ */
+func pasteText(_ text: String) -> Bool {
+  let pasteboard = NSPasteboard.general
+  let snapshot: [[NSPasteboard.PasteboardType: Data]] = (pasteboard.pasteboardItems ?? []).map {
+    item in
+    var typed: [NSPasteboard.PasteboardType: Data] = [:]
+    for type in item.types {
+      if let data = item.data(forType: type) {
+        typed[type] = data
+      }
+    }
+    return typed
+  }
+
+  pasteboard.clearContents()
+  pasteboard.setString(text, forType: .string)
+
+  guard let vKey = keyCode(for: "v"), postKeyCode(vKey, flags: .maskCommand) else {
+    restorePasteboard(snapshot)
+    return false
+  }
+
+  usleep(pasteSettleDelayMicros)
+  restorePasteboard(snapshot)
+  return true
+}
+
+func restorePasteboard(_ snapshot: [[NSPasteboard.PasteboardType: Data]]) {
+  let pasteboard = NSPasteboard.general
+  pasteboard.clearContents()
+  guard !snapshot.isEmpty else {
+    return
+  }
+  let items = snapshot.map { typed -> NSPasteboardItem in
+    let item = NSPasteboardItem()
+    for (type, data) in typed {
+      item.setData(data, forType: type)
+    }
+    return item
+  }
+  pasteboard.writeObjects(items)
+}
+
 func modifierFlags(from parts: ArraySlice<String>) -> CGEventFlags {
   var flags: CGEventFlags = []
   for part in parts {
@@ -2513,6 +2566,15 @@ func typeTextResult(params: [String: JSONValue]) -> ResultPayload {
   let success = withActivatedApp(appRef: appRef, restorePreviousFocus: true) {
     if let point = focusPoint(for: appRef), !revealInteractionPoint(point, clickToFocus: true) {
       return false
+    }
+
+    // Non-ASCII text (CJK, emoji) can't be produced reliably by synthetic key
+    // events, so paste it. Pure ASCII keeps the character-by-character path,
+    // which reads as real typing and needs no clipboard round-trip.
+    if text.contains(where: { !$0.isASCII }) {
+      let pasted = pasteText(text)
+      OverlayCursorController.shared.extendVisibility()
+      return pasted
     }
 
     for (index, character) in text.enumerated() {
