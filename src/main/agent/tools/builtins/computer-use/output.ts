@@ -126,6 +126,7 @@ export async function runComputerAction(
   ctx: ToolCtx,
   method: string,
   params: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<string | ImageToolOutput> {
   if (!ctx.computerUse) {
     return 'Error: Computer use is only available on macOS.';
@@ -138,7 +139,7 @@ export async function runComputerAction(
     promptPermissionGrant(perms);
     return "Computer use needs Accessibility and Screen Recording permission — they aren't both granted right now. I've opened the grant prompt for the user; ask them to complete it, then try the action again.";
   }
-  const res = await ctx.computerUse.call(method, params);
+  const res = await ctx.computerUse.call(method, params, { signal });
   const output = await toToolOutput(res, ctx.workspaceRoot);
   if (
     method === 'get_app_state' &&

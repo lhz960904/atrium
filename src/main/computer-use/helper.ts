@@ -16,6 +16,18 @@ interface Pending {
   reject: (error: Error) => void;
 }
 
+export interface CallOptions {
+  /** Reject (and reset the helper) if no response arrives within this many ms. */
+  timeoutMs?: number;
+  /** Reject as soon as this fires, so a chat abort can interrupt a live action. */
+  signal?: AbortSignal;
+}
+
+// The helper serves one request at a time on its main thread, so a single hung
+// request wedges every future one. Bound each call; on timeout kill the child
+// (it respawns on the next call) rather than leaving the whole bridge stuck.
+const DEFAULT_CALL_TIMEOUT_MS = 30_000;
+
 /**
  * Long-lived bridge to the native "Atrium Computer Use" helper. One request
  * per line on stdin (`{id, method, params}`), one response per line on stdout
@@ -34,11 +46,52 @@ export class ComputerUseHelper {
 
   constructor(private readonly binaryPath: string) {}
 
-  call(method: string, params: Record<string, unknown> = {}): Promise<HelperResponse> {
+  call(
+    method: string,
+    params: Record<string, unknown> = {},
+    options: CallOptions = {},
+  ): Promise<HelperResponse> {
     const child = this.ensureChild();
     const id = `r${++this.seq}`;
+    const timeoutMs = options.timeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
+    const { signal } = options;
     return new Promise<HelperResponse>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      let timer: ReturnType<typeof setTimeout>;
+      const cleanup = (): void => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        this.pending.delete(id);
+      };
+      const onAbort = (): void => {
+        cleanup();
+        reject(new Error('Computer use action aborted.'));
+      };
+      timer = setTimeout(() => {
+        cleanup();
+        // A hung request (e.g. a slow accessibility walk on System Settings)
+        // blocks the single-threaded helper's next request too, so kill the
+        // child — ensureChild respawns it on the following call.
+        this.child?.kill();
+        this.child = null;
+        reject(new Error(`Computer use action timed out after ${timeoutMs}ms.`));
+      }, timeoutMs);
+      this.pending.set(id, {
+        resolve: (response) => {
+          cleanup();
+          resolve(response);
+        },
+        reject: (error) => {
+          cleanup();
+          reject(error);
+        },
+      });
+      if (signal) {
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
       child.stdin.write(`${JSON.stringify({ id, method, params })}\n`);
     });
   }
