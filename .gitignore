@@ -32,3 +32,7 @@ src/renderer/src/lib/dev/real-message.json
 *.swp
 .tanstack
 .playwright-mcp
+
+# claude code: skills are shared, local state (worktrees etc.) is not
+.claude/*
+!.claude/skills/
