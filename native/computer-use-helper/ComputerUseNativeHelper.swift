@@ -391,36 +391,31 @@ final class OverlayCursorController {
   }
 }
 
-func desktopFrame() -> CGRect {
-  let screenFrame = NSScreen.screens.map(\.frame).reduce(into: CGRect.null) { result, frame in
-    result = result.union(frame)
+// Height of the primary (menu-bar) display — the reference for flipping between
+// CoreGraphics display coordinates (top-left origin, anchored at the primary
+// display) and AppKit coordinates (bottom-left origin). The flip MUST use the
+// primary display's height, not the union of all screens: with a second monitor
+// the union's maxY is taller, so an overlay point would land on the wrong screen.
+func primaryDisplayHeight() -> CGFloat {
+  let height = CGDisplayBounds(CGMainDisplayID()).height
+  if height > 0, height.isFinite {
+    return height
   }
-  if !screenFrame.isNull, !screenFrame.isEmpty, isFiniteRect(screenFrame) {
-    return screenFrame
-  }
-
-  let mainDisplayFrame = CGDisplayBounds(CGMainDisplayID())
-  if !mainDisplayFrame.isNull, !mainDisplayFrame.isEmpty, isFiniteRect(mainDisplayFrame) {
-    return mainDisplayFrame
-  }
-
-  return CGRect(x: 0, y: 0, width: 1, height: 1)
+  return NSScreen.main?.frame.height ?? 1
 }
 
 func appKitPoint(fromDisplayPoint point: CGPoint) -> CGPoint {
   guard isFinitePoint(point) else {
     return point
   }
-  let frame = desktopFrame()
-  return CGPoint(x: point.x, y: frame.maxY - point.y)
+  return CGPoint(x: point.x, y: primaryDisplayHeight() - point.y)
 }
 
 func displayPoint(fromAppKitPoint point: CGPoint) -> CGPoint {
   guard isFinitePoint(point) else {
     return point
   }
-  let frame = desktopFrame()
-  return CGPoint(x: point.x, y: frame.maxY - point.y)
+  return CGPoint(x: point.x, y: primaryDisplayHeight() - point.y)
 }
 
 func isFinitePoint(_ point: CGPoint) -> Bool {
