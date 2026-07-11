@@ -24,6 +24,10 @@ export type Tool = {
   typeLabel?: string;
   command?: string;
   output?: string;
+  /** A result screenshot (computer-use / browser), shown when the row expands.
+   *  Only the latest step's screenshot renders inline in the trace; the rest fold
+   *  here so a long run doesn't stack a dozen full images. */
+  screenshot?: ToolResultImage;
 };
 
 /** Image a tool returned inline (MCP image blocks, view_image). dataUrl feeds

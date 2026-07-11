@@ -17,9 +17,9 @@ export function ToolMarker({ tool }: { tool: Tool }): React.JSX.Element {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="group flex w-full items-center gap-3 py-1 text-fg-secondary text-md hover:text-fg-primary"
+        className="group/tool flex w-full items-center gap-3 py-1 text-fg-secondary text-md hover:text-fg-primary"
       >
-        <Icon className="size-4 shrink-0 text-fg-tertiary group-hover:text-fg-secondary" />
+        <Icon className="size-4 shrink-0 text-fg-tertiary group-hover/tool:text-fg-secondary" />
         <span className="min-w-0 flex-1 truncate text-left">
           <span className="text-fg-tertiary">{tool.verb}</span> <span>{tool.target}</span>
         </span>
@@ -32,7 +32,7 @@ export function ToolMarker({ tool }: { tool: Tool }): React.JSX.Element {
           </span>
         )}
         <ChevronDown
-          className={`size-3.5 shrink-0 text-fg-tertiary opacity-0 transition group-hover:opacity-100 ${
+          className={`size-3.5 shrink-0 text-fg-tertiary opacity-0 transition group-hover/tool:opacity-100 ${
             open ? 'rotate-180 opacity-100' : ''
           }`}
         />

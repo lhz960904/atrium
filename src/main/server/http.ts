@@ -18,6 +18,7 @@ import {
   metadataMiddleware,
   persistenceMiddleware,
   profileMiddleware,
+  screenshotTrimMiddleware,
   skillsMiddleware,
   titleMiddleware,
   toolCallSealerMiddleware,
@@ -262,6 +263,10 @@ export function startHttpServer(deps: {
         ...(getSettings('general.autoGenerateTitle') ? [titleMiddleware(setThreadTitle)] : []),
         metadataMiddleware({ providerId, modelId }),
         usageMiddleware(modelPricing),
+        // Before compaction: drop stale screenshots from the step view so its
+        // token accounting already reflects the trim (and the model isn't paying
+        // for a dozen past screenshots it no longer needs).
+        screenshotTrimMiddleware(),
         compactionMiddleware({
           maxContextTokens,
           persist: persistMessage,

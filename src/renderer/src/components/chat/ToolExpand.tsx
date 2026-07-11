@@ -2,6 +2,7 @@ import type { Tool, ToolStatus } from '@shared/chat-types';
 import type { ParseKeys } from 'i18next';
 import { Ban, CheckCircle2, Loader2, TriangleAlert, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { openAttachment } from '../../state/attachment-viewer-store';
 
 export function ToolExpand({ tool }: { tool: Tool }): React.JSX.Element {
   const { t } = useTranslation();
@@ -26,6 +27,26 @@ export function ToolExpand({ tool }: { tool: Tool }): React.JSX.Element {
       ) : isShell ? (
         <div className="mb-3 text-fg-disabled italic opacity-85">{t('tool.noOutput')}</div>
       ) : null}
+
+      {tool.screenshot && (
+        <button
+          type="button"
+          onClick={() =>
+            openAttachment({
+              filename: tool.screenshot?.filename ?? 'screenshot.png',
+              mediaType: tool.screenshot?.mediaType ?? 'image/png',
+              url: tool.screenshot?.dataUrl ?? '',
+            })
+          }
+          className="mb-3 block overflow-hidden rounded-lg border border-border-default"
+        >
+          <img
+            src={tool.screenshot.dataUrl}
+            alt=""
+            className="max-h-[220px] w-auto max-w-full object-contain"
+          />
+        </button>
+      )}
 
       <ToolStatusRow status={tool.status} />
     </div>

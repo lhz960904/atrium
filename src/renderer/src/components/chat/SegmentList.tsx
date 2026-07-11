@@ -32,6 +32,9 @@ export function SegmentList({
           return <SubagentCard key={seg.subagent.id} subagent={seg.subagent} />;
         }
         if (seg.kind === 'image') {
+          // Folded tool screenshots live on their step's tool marker (expand to
+          // see); only the latest one — and any generated image — renders inline.
+          if (seg.collapsed) return null;
           return (
             <GeneratedImage
               key={seg.id}
