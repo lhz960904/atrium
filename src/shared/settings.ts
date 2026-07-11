@@ -126,12 +126,8 @@ const computerUseShape = z.object({
   /** Master switch for desktop automation (macOS only). Off by default: the
    *  user opts in, and it needs Accessibility + Screen Recording grants. */
   enabled: z.boolean().default(false),
-  /** Show a menu-bar status (target app + cursor) while the AI is acting. */
-  menubarStatus: z.boolean().default(true),
-  /** Pause the agent the moment the user touches the keyboard or mouse. */
-  pauseOnInput: z.boolean().default(true),
-  /** Confirm before irreversible actions (submit / pay / delete). */
-  confirmSensitive: z.boolean().default(true),
+  /** Overlay a virtual cursor on the target window while the AI is acting. */
+  showVirtualCursor: z.boolean().default(true),
 });
 
 // zod v4's `.default` takes the resolved output (not an input run through the

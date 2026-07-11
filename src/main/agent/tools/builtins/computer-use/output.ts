@@ -2,6 +2,7 @@ import type { ImageToolOutput } from '@shared/chat-types';
 import type { HelperResponse } from '../../../../computer-use';
 import { computerPermissions, promptPermissionGrant } from '../../../../computer-use/permissions';
 import { captureWindow } from '../../../../computer-use/screenshot';
+import { getSettings } from '../../../../settings/conf';
 import { spillOversizedImages } from '../../../mcp/spill';
 import type { ToolCtx } from '../../context';
 
@@ -139,7 +140,14 @@ export async function runComputerAction(
     promptPermissionGrant(perms);
     return "Computer use needs Accessibility and Screen Recording permission — they aren't both granted right now. I've opened the grant prompt for the user; ask them to complete it, then try the action again.";
   }
-  const res = await ctx.computerUse.call(method, params, { signal });
+  // The cursor preference rides on every request (read live, so a mid-turn
+  // toggle applies) — a one-shot set would be lost when a timed-out helper is
+  // killed and respawned.
+  const res = await ctx.computerUse.call(
+    method,
+    { ...params, show_cursor: getSettings('computerUse').showVirtualCursor },
+    { signal },
+  );
   const output = await toToolOutput(res, ctx.workspaceRoot);
   if (
     method === 'get_app_state' &&

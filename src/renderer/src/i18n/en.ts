@@ -514,14 +514,10 @@ export const en: typeof zh = {
       runtimeDesc:
         'The AI wants to operate an app but is missing the permissions below. Grant them and it can continue.',
       runtimeLater: 'Later',
-      behaviorTitle: 'Behavior & safety',
-      menubar: 'Show status in the menu bar',
-      menubarDesc:
-        'While the AI acts, a menu-bar icon (target app + cursor) shows what it’s doing; click to stop.',
-      pause: 'Pause when I use the keyboard or mouse',
-      pauseDesc: 'The moment you move the mouse or type, the AI pauses so it doesn’t interfere.',
-      confirm: 'Confirm sensitive actions',
-      confirmDesc: 'Ask before irreversible actions like submit, pay, or delete.',
+      behaviorTitle: 'Behavior',
+      showCursor: 'Show the virtual cursor while acting',
+      showCursorDesc:
+        'Overlay a virtual cursor on the target window to mark where the AI is clicking. Turning it off doesn’t affect the actions.',
     },
     about: {
       description:

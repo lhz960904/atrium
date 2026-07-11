@@ -31,9 +31,7 @@ export function ComputerUseSection(): React.JSX.Element {
   const { t } = useTranslation();
   const perms = trpc.computer.permissions.useQuery(undefined, { refetchInterval: 2000 });
   const { value: enabled, set: setEnabled } = useSetting('computerUse.enabled');
-  const { value: menubarStatus, set: setMenubar } = useSetting('computerUse.menubarStatus');
-  const { value: pauseOnInput, set: setPause } = useSetting('computerUse.pauseOnInput');
-  const { value: confirmSensitive, set: setConfirm } = useSetting('computerUse.confirmSensitive');
+  const { value: showCursor, set: setShowCursor } = useSetting('computerUse.showVirtualCursor');
 
   // Off macOS the feature can't run; show a coming-soon note instead of controls.
   if (perms.data && !perms.data.supported) {
@@ -69,43 +67,18 @@ export function ComputerUseSection(): React.JSX.Element {
             <h2 className="mb-3 font-semibold text-fg-primary text-sm">
               {t('settings.computer.behaviorTitle')}
             </h2>
-            <div className="divide-y divide-border-default rounded-xl border border-border-default bg-surface">
+            <div className="rounded-xl border border-border-default bg-surface">
               <div className="flex items-center justify-between gap-6 px-4 py-3.5">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 font-medium text-fg-primary text-sm">
                     <MousePointerClick className="size-3.5 text-fg-tertiary" />
-                    {t('settings.computer.menubar')}
+                    {t('settings.computer.showCursor')}
                   </div>
                   <div className="mt-0.5 text-fg-tertiary text-xs">
-                    {t('settings.computer.menubarDesc')}
+                    {t('settings.computer.showCursorDesc')}
                   </div>
                 </div>
-                <EnableSwitch on={menubarStatus} onToggle={() => setMenubar(!menubarStatus)} />
-              </div>
-              <div className="flex items-center justify-between gap-6 px-4 py-3.5">
-                <div className="min-w-0">
-                  <div className="font-medium text-fg-primary text-sm">
-                    {t('settings.computer.pause')}
-                  </div>
-                  <div className="mt-0.5 text-fg-tertiary text-xs">
-                    {t('settings.computer.pauseDesc')}
-                  </div>
-                </div>
-                <EnableSwitch on={pauseOnInput} onToggle={() => setPause(!pauseOnInput)} />
-              </div>
-              <div className="flex items-center justify-between gap-6 px-4 py-3.5">
-                <div className="min-w-0">
-                  <div className="font-medium text-fg-primary text-sm">
-                    {t('settings.computer.confirm')}
-                  </div>
-                  <div className="mt-0.5 text-fg-tertiary text-xs">
-                    {t('settings.computer.confirmDesc')}
-                  </div>
-                </div>
-                <EnableSwitch
-                  on={confirmSensitive}
-                  onToggle={() => setConfirm(!confirmSensitive)}
-                />
+                <EnableSwitch on={showCursor} onToggle={() => setShowCursor(!showCursor)} />
               </div>
             </div>
           </section>
