@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.13.0](https://github.com/lhz960904/atrium/compare/v0.12.0...v0.13.0) (2026-07-11)
+
+
+### Features
+
+* **chat:** trim computer-use screenshots in render + model context ([b4e7b8e](https://github.com/lhz960904/atrium/commit/b4e7b8e4dc4bbd80aca4ce03ccd8044cc2d6ce95))
+* **computer-use:** drive apps in the background with a virtual cursor ([780b89e](https://github.com/lhz960904/atrium/commit/780b89eb8dc8b2a19dbe9061f95324dc19e57a6d))
+
+
+### Bug Fixes
+
+* **computer-use:** paste non-ascii text so cjk input works ([7757b43](https://github.com/lhz960904/atrium/commit/7757b43ae18a3b83f9d3ab9e6cacfc9891477bbf))
+
 ## [0.12.0](https://github.com/lhz960904/atrium/compare/v0.11.1...v0.12.0) (2026-07-11)
 
 
