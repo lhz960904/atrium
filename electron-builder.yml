@@ -36,6 +36,10 @@ asarUnpack:
 # stay valid. Doing it in afterSign breaks the app's resource seal and the staple
 # ticket. electron-builder doesn't deep-sign extraResources, so this signature sticks.
 afterPack: scripts/after-pack.cjs
+# electron-builder notarizes + staples the app but not the dmg container, so a
+# downloaded (quarantined) dmg is rejected by Gatekeeper. Notarize the dmg here,
+# after it's built.
+afterAllArtifactBuild: scripts/after-all-artifact-build.cjs
 mac:
   # Signed + notarized with a real Developer ID (Team 43PH2NJ5C4). Hardened
   # Runtime is mandatory for notarization, and it makes dyld enforce Library
