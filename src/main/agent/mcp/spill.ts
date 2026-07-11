@@ -21,13 +21,24 @@ function extensionOf(mediaType: string): string {
   return subtype === 'jpeg' ? 'jpg' : subtype;
 }
 
-async function writeImage(image: ToolResultImage, workspaceRoot: string): Promise<string> {
+/** Write raw base64 image bytes under the workspace's media dir; returns the
+ *  absolute path. Shared by the oversized-image spill and the screenshot-trim
+ *  middleware (which spills stale screenshots the model can re-read). */
+export async function persistToolImage(
+  base64: string,
+  mediaType: string,
+  workspaceRoot: string,
+): Promise<string> {
   const dir = join(workspaceRoot, MEDIA_DIR);
   await mkdir(dir, { recursive: true });
-  const name = `tool-image-${randomUUID().slice(0, 8)}.${extensionOf(image.mediaType)}`;
+  const name = `tool-image-${randomUUID().slice(0, 8)}.${extensionOf(mediaType)}`;
   const path = join(dir, name);
-  await writeFile(path, Buffer.from(base64Of(image.dataUrl), 'base64'));
+  await writeFile(path, Buffer.from(base64, 'base64'));
   return path;
+}
+
+function writeImage(image: ToolResultImage, workspaceRoot: string): Promise<string> {
+  return persistToolImage(base64Of(image.dataUrl), image.mediaType, workspaceRoot);
 }
 
 /**
