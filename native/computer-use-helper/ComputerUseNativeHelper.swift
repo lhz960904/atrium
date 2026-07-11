@@ -8,7 +8,9 @@ final class OverlayCursorView: NSView {
   // The arrow's tip within the window; equals OverlayCursorController.hotspot so
   // the tip lands exactly on the target point.
   static let tip = CGPoint(x: 30.35, y: 48.31)
-  private let unit: CGFloat = 1.2
+  private let unit: CGFloat = 1.0
+  // Indigo, shown translucent — distinct from the user's own (black) pointer.
+  private let fillColor = NSColor(calibratedRed: 0.388, green: 0.400, blue: 0.945, alpha: 1.0)
 
   var pulseAlpha: CGFloat = 0 {
     didSet {
@@ -46,8 +48,8 @@ final class OverlayCursorView: NSView {
     transform.concat()
 
     if pulseAlpha > 0.01 {
-      let center = NSPoint(x: Self.tip.x + 7 * unit, y: Self.tip.y - 11 * unit)
-      let radius: CGFloat = 16
+      let center = NSPoint(x: Self.tip.x + 5 * unit, y: Self.tip.y - 8 * unit)
+      let radius: CGFloat = 13
       let ring = NSBezierPath(
         ovalIn: NSRect(
           x: center.x - radius,
@@ -56,32 +58,28 @@ final class OverlayCursorView: NSView {
           height: radius * 2
         )
       )
-      NSColor(calibratedWhite: 1.0, alpha: pulseAlpha * 0.16).setFill()
+      fillColor.withAlphaComponent(pulseAlpha * 0.22).setFill()
       ring.fill()
-      NSColor(calibratedWhite: 1.0, alpha: pulseAlpha * 0.40).setStroke()
-      ring.lineWidth = 1.2
+      fillColor.withAlphaComponent(pulseAlpha * 0.50).setStroke()
+      ring.lineWidth = 1.4
       ring.stroke()
     }
 
     let arrow = arrowPath()
 
-    // Soft outer glow keeps the cursor legible on any background.
+    // Translucent indigo fill with a soft drop shadow so it stays legible on any
+    // background, then a thin white border drawn without the shadow.
     NSGraphicsContext.saveGraphicsState()
-    let glow = NSShadow()
-    glow.shadowBlurRadius = 5
-    glow.shadowOffset = NSSize(width: 0, height: 0)
-    glow.shadowColor = NSColor(calibratedWhite: 0.0, alpha: 0.35)
-    glow.set()
-    NSColor(calibratedWhite: 1.0, alpha: 0.95).setStroke()
-    arrow.lineWidth = 3.0
-    arrow.lineJoinStyle = .round
-    arrow.stroke()
+    let shadow = NSShadow()
+    shadow.shadowBlurRadius = 3.5
+    shadow.shadowOffset = NSSize(width: 0, height: -0.5)
+    shadow.shadowColor = NSColor(calibratedWhite: 0.0, alpha: 0.35)
+    shadow.set()
+    fillColor.withAlphaComponent(pressed ? 0.70 : 0.52).setFill()
+    arrow.fill()
     NSGraphicsContext.restoreGraphicsState()
 
-    // Standard black arrow with a thin white outline.
-    NSColor(calibratedWhite: 0.0, alpha: pressed ? 1.0 : 0.9).setFill()
-    arrow.fill()
-    NSColor(calibratedWhite: 1.0, alpha: 0.95).setStroke()
+    NSColor(calibratedWhite: 1.0, alpha: 0.9).setStroke()
     arrow.lineWidth = 1.2
     arrow.lineJoinStyle = .round
     arrow.stroke()
@@ -89,20 +87,18 @@ final class OverlayCursorView: NSView {
     NSGraphicsContext.restoreGraphicsState()
   }
 
-  // Classic arrow pointer: tip at top-left, pointing up-left. Local coordinates
-  // are points down/right from the tip, mapped into AppKit (y-up).
+  // A triangle arrowhead with a concave base (the tail notches inward), tip at
+  // top-left. Local coordinates are points down/right from the tip, mapped into
+  // AppKit (y-up).
   private func arrowPath() -> NSBezierPath {
     func p(_ dx: CGFloat, _ dy: CGFloat) -> NSPoint {
       NSPoint(x: Self.tip.x + dx * unit, y: Self.tip.y - dy * unit)
     }
     let path = NSBezierPath()
     path.move(to: p(0, 0))
-    path.line(to: p(0, 16.94))
-    path.line(to: p(4.05, 13.5))
-    path.line(to: p(6.83, 20.35))
-    path.line(to: p(9.06, 19.4))
-    path.line(to: p(6.3, 12.6))
-    path.line(to: p(11.6, 12.6))
+    path.line(to: p(0, 15.5))
+    path.line(to: p(4.2, 10.4))
+    path.line(to: p(11, 11))
     path.close()
     return path
   }
