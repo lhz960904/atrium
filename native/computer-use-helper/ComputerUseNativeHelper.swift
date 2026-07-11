@@ -2142,18 +2142,21 @@ func mouseButton(from rawValue: String?) -> CGMouseButton {
   }
 }
 
-// Drive the target entirely in the background: events reach it via postToPid, so
-// it's never brought to the front and the user's keyboard focus is never stolen —
-// they keep reading/typing in their own window while the agent works. Flip to
-// false to restore the old "activate the target, then restore focus" behavior,
-// which native apps that only take keyboard input while key would need.
-let backgroundMode = true
-
+/*
+ * Hybrid foreground/background driving. Mouse events carry a location, so
+ * postToPid delivers them to the target no matter what's frontmost — clicks run
+ * entirely in the background and never touch the user's focus. Keystrokes carry
+ * no location: the OS routes them to the FRONTMOST app's first responder, so a
+ * background app receives nothing. Actions that type therefore pass
+ * needsKeyFocus, which briefly activates the target (types), then hands focus
+ * back to the user's app — the only moment focus is stolen.
+ */
 func withActivatedApp<T>(
   appRef: String,
   activate: Bool = true,
   restorePreviousFocus: Bool = true,
   stackTargetBehindPrevious: Bool = false,
+  needsKeyFocus: Bool = false,
   action: () -> T
 ) -> T {
   let previousFrontmost = NSWorkspace.shared.frontmostApplication
@@ -2164,15 +2167,10 @@ func withActivatedApp<T>(
   defer { injectionTargetPid = nil }
   let targetEntry = resolvedWindowInfo(appRef: appRef)
 
-  if activate, !backgroundMode, let targetApp {
-    let previousIsTarget = previousFrontmost?.processIdentifier == targetApp.processIdentifier
-    if stackTargetBehindPrevious, !previousIsTarget {
-      _ = raiseTargetWindow(for: targetApp)
-      usleep(appActivationDelayMicros)
-    } else {
-      targetApp.activate()
-      usleep(appActivationDelayMicros)
-    }
+  let mustFocus = activate && needsKeyFocus
+  if mustFocus, let targetApp {
+    targetApp.activate()
+    usleep(appActivationDelayMicros)
   }
 
   OverlayCursorController.shared.configure(for: targetEntry)
@@ -2181,7 +2179,7 @@ func withActivatedApp<T>(
   }
   let result = action()
 
-  if restorePreviousFocus, !backgroundMode, let previousFrontmost,
+  if mustFocus, restorePreviousFocus, let previousFrontmost,
     previousFrontmost.processIdentifier != targetApp?.processIdentifier
   {
     previousFrontmost.activate()
@@ -2566,7 +2564,7 @@ func typeTextResult(params: [String: JSONValue]) -> ResultPayload {
     return makeErrorResult(toolName: "type_text", code: "internal_error", message: "Missing text parameter")
   }
 
-  let success = withActivatedApp(appRef: appRef, restorePreviousFocus: true) {
+  let success = withActivatedApp(appRef: appRef, restorePreviousFocus: true, needsKeyFocus: true) {
     if let point = focusPoint(for: appRef), !revealInteractionPoint(point, clickToFocus: true) {
       return false
     }
@@ -2615,7 +2613,7 @@ func pressKeyResult(params: [String: JSONValue]) -> ResultPayload {
   }
 
   let flags = modifierFlags(from: parts.dropLast()[...])
-  let success = withActivatedApp(appRef: appRef, activate: true, restorePreviousFocus: true) {
+  let success = withActivatedApp(appRef: appRef, activate: true, restorePreviousFocus: true, needsKeyFocus: true) {
     if let point = focusPoint(for: appRef) {
       let shouldClickToFocus = flags.isEmpty && (rawKey.count == 1 || rawKey.lowercased() == "space")
       if !revealInteractionPoint(point, clickToFocus: shouldClickToFocus) {
