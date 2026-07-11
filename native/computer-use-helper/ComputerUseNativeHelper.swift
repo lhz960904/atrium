@@ -109,8 +109,17 @@ final class OverlayCursorController {
 
   // The agent's synthetic pointer. Events are injected via CGEventPostToPid, so
   // the real cursor never moves — this overlay is what the user sees the agent
-  // acting with, and lets them keep using their own mouse meanwhile.
-  private let enabled = true
+  // acting with, and lets them keep using their own mouse meanwhile. The app
+  // can turn it off (a per-request `show_cursor` flag); actions still run.
+  private var enabled = true
+
+  func setEnabled(_ value: Bool) {
+    guard value != enabled else { return }
+    enabled = value
+    if !value {
+      hide()
+    }
+  }
 
   private let size = CGSize(width: 96, height: 96)
   private let hotspot = CGPoint(x: 30.35, y: 48.31)
@@ -2935,6 +2944,10 @@ while let line = readLine() {
   do {
     let request = try decoder.decode(Request.self, from: Data(line.utf8))
     let result: ResultPayload
+
+    if case .bool(let showCursor)? = request.params["show_cursor"] {
+      OverlayCursorController.shared.setEnabled(showCursor)
+    }
 
     switch request.method {
     case "list_apps":

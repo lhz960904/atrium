@@ -504,13 +504,10 @@ export const zh = {
       runtimeTitle: '电脑操作需要授权',
       runtimeDesc: 'AI 想操作应用，但还缺少下面的权限。授权后它就能继续。',
       runtimeLater: '稍后',
-      behaviorTitle: '行为与安全',
-      menubar: '在菜单栏显示操作状态',
-      menubarDesc: 'AI 操作时，菜单栏出现「目标应用 + 鼠标」图标显示它在做什么，点击可停止。',
-      pause: '我操作键鼠时立即暂停',
-      pauseDesc: '检测到你在动鼠标或键盘，立刻暂停 AI，避免互相干扰。',
-      confirm: '敏感操作需二次确认',
-      confirmDesc: '提交、支付、删除等不可逆动作执行前，先弹出确认。',
+      behaviorTitle: '行为',
+      showCursor: '执行中显示虚拟鼠标',
+      showCursorDesc:
+        'AI 操作时，在目标窗口上显示一个虚拟光标，标出它正在点击的位置。关闭不影响执行。',
     },
     about: {
       description:
