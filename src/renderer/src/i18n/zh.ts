@@ -506,7 +506,8 @@ export const zh = {
       runtimeLater: '稍后',
       behaviorTitle: '行为',
       showCursor: '执行中显示虚拟鼠标',
-      showCursorDesc: 'AI 操作时，在目标窗口上显示一个虚拟光标，标出它正在点击的位置。关闭不影响执行。',
+      showCursorDesc:
+        'AI 操作时，在目标窗口上显示一个虚拟光标，标出它正在点击的位置。关闭不影响执行。',
     },
     about: {
       description:
