@@ -144,6 +144,19 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
 
+      # electron-builder uploads the dmg the instant it's built — before the
+      # afterAllArtifactBuild hook signs, notarizes, and staples it — so the
+      # published dmg is the un-notarized copy and Gatekeeper blocks a download.
+      # The hook still staples the local dmg, so re-upload that over the published
+      # one. (The zip that feeds auto-update is unaffected: its app is notarized,
+      # and it's never Gatekeeper-assessed as a container.)
+      - name: Re-upload notarized dmg
+        if: matrix.platform == 'mac' && needs.release-please.outputs.release_created == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" dist/*.dmg --clobber
+
       # Each mac runner writes a single-arch latest-mac.yml; stash both so
       # merge-mac-yml can combine them. electron-builder's --publish uploads one
       # too, but the two runners race and only the last survives — the merge job
