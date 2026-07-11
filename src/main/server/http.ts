@@ -31,6 +31,7 @@ import { getSkills } from '../agent/skills/registry';
 import { getTools } from '../agent/tools';
 import { skillPreserver } from '../agent/tools/builtins/skill';
 import { todoPreserver } from '../agent/tools/builtins/todo';
+import { getComputerUseHelper } from '../computer-use';
 import type { Db } from '../db';
 import { createLogger } from '../log';
 import { resolveAcpSpec } from '../providers/acp-spec';
@@ -204,6 +205,10 @@ export function startHttpServer(deps: {
     const skills = getSkills();
     const mode = permissionMode ?? DEFAULT_PERMISSION_MODE;
     const supportsImages = supportsImageToolResults(providerId, modelId);
+    const computerUse =
+      process.platform === 'darwin' && getSettings('computerUse.enabled')
+        ? getComputerUseHelper()
+        : undefined;
     const agentStream = await runAgent({
       model: resolveModel(deps.db, providerId, modelId),
       providerId,
@@ -222,6 +227,7 @@ export function startHttpServer(deps: {
         skills,
         bgShells,
         supportsImageToolResults: supportsImages,
+        computerUse,
         mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
           supportsImageToolResults: supportsImages,
           workspaceRoot,
@@ -239,6 +245,7 @@ export function startHttpServer(deps: {
           abortSignal: abort.signal,
         },
       }),
+      onSettled: () => computerUse?.hideOverlay(),
       // skills and instructions must run after compaction: compaction may fold the
       // original first user message into a summary, and their injected blocks have
       // to land on whatever the post-compaction first user message is.

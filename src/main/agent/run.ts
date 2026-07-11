@@ -42,6 +42,8 @@ export type RunAgentOptions = {
   /** Active permission mode, surfaced in the system prompt so the model knows how approvals behave. */
   permissionMode: PermissionMode;
   abortSignal?: AbortSignal;
+  /** Fires once when the turn settles (finished or aborted) — e.g. to collapse UI the run left on screen. */
+  onSettled?: () => void;
 };
 
 /**
@@ -89,8 +91,13 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
     // Surface the real failure to the client (default masks it). The renderer
     // reads useChat's `error` and shows it instead of silently stalling.
     onError: readableError,
-    onFinish: ({ responseMessage, isAborted }) =>
-      runAfterRun(ctx, { message: responseMessage, aborted: isAborted }, opts.middlewares),
+    onFinish: async ({ responseMessage, isAborted }) => {
+      try {
+        await runAfterRun(ctx, { message: responseMessage, aborted: isAborted }, opts.middlewares);
+      } finally {
+        opts.onSettled?.();
+      }
+    },
     execute: async ({ writer }) => {
       ctx.emit = (event) => writer.write(event);
       await runBeforeRun(ctx, opts.middlewares);

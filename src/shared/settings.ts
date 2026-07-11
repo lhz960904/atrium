@@ -122,6 +122,18 @@ const browserShape = z.object({
   extensionToken: z.string().default(''),
 });
 
+const computerUseShape = z.object({
+  /** Master switch for desktop automation (macOS only). Off by default: the
+   *  user opts in, and it needs Accessibility + Screen Recording grants. */
+  enabled: z.boolean().default(false),
+  /** Show a menu-bar status (target app + cursor) while the AI is acting. */
+  menubarStatus: z.boolean().default(true),
+  /** Pause the agent the moment the user touches the keyboard or mouse. */
+  pauseOnInput: z.boolean().default(true),
+  /** Confirm before irreversible actions (submit / pay / delete). */
+  confirmSensitive: z.boolean().default(true),
+});
+
 // zod v4's `.default` takes the resolved output (not an input run through the
 // schema), so seed each scope's default from its own all-defaults parse.
 export const SettingsSchema = z.object({
@@ -130,6 +142,7 @@ export const SettingsSchema = z.object({
   keyboard: keyboardShape.default(keyboardShape.parse({})),
   permissions: permissionsShape.default(permissionsShape.parse({})),
   browser: browserShape.default(browserShape.parse({})),
+  computerUse: computerUseShape.default(computerUseShape.parse({})),
 });
 
 /**
@@ -154,6 +167,7 @@ export const SettingsPatchSchema = z.object({
   keyboard: patchShape(keyboardShape).optional(),
   permissions: patchShape(permissionsShape).optional(),
   browser: patchShape(browserShape).optional(),
+  computerUse: patchShape(computerUseShape).optional(),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;

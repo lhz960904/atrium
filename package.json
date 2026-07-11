@@ -32,9 +32,10 @@
     "db:reset-chat": "bash scripts/reset-chat.sh",
     "sync:models": "bun run scripts/sync-models.ts",
     "build": "bun run typecheck && electron-vite build",
+    "build:helper": "bash native/computer-use-helper/build.sh",
     "postinstall": "electron-builder install-app-deps",
-    "build:unpack": "bun run build && electron-builder --dir",
-    "build:mac": "bun run build && APPLE_KEYCHAIN_PROFILE=atrium-notary electron-builder --mac",
+    "build:unpack": "bun run build:helper && bun run build && electron-builder --dir",
+    "build:mac": "bun run build:helper && bun run build && APPLE_KEYCHAIN_PROFILE=atrium-notary electron-builder --mac",
     "build:win": "bun run build && electron-builder --win",
     "build:linux": "bun run build && electron-builder --linux"
   },

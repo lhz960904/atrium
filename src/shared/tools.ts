@@ -29,6 +29,15 @@ export const TOOL_NAMES = [
   'schedule_list',
   'schedule_update',
   'schedule_cancel',
+  'computer_list_apps',
+  'computer_get_app_state',
+  'computer_click',
+  'computer_type_text',
+  'computer_press_key',
+  'computer_scroll',
+  'computer_drag',
+  'computer_set_value',
+  'computer_perform_action',
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];

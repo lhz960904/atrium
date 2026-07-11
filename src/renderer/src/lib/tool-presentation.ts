@@ -13,10 +13,17 @@ import {
   Globe,
   Handshake,
   Image as ImageIcon,
+  Keyboard,
+  LayoutGrid,
   type LucideIcon,
+  MousePointer2,
+  MousePointerClick,
+  Move,
   OctagonX,
+  ScanEye,
   ScrollText,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Terminal,
   TextSearch,
@@ -45,6 +52,7 @@ export type ToolInput = {
   pattern?: string;
   title?: string;
   id?: string;
+  app?: string;
 };
 
 const hostname = (u?: string): string => {
@@ -230,6 +238,69 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
     verbActiveKey: 'tool.verbActive.cancel',
     target: (i) => i.title ?? '',
     typeLabel: (_i, t) => t('tool.type.scheduled'),
+  },
+  computer_list_apps: {
+    icon: LayoutGrid,
+    verbKey: 'tool.verb.computerListApps',
+    verbActiveKey: 'tool.verbActive.computerListApps',
+    target: () => '',
+    typeLabel: (_i, t) => t('tool.type.computer', { app: 'Mac' }),
+  },
+  computer_get_app_state: {
+    icon: ScanEye,
+    verbKey: 'tool.verb.computerInspect',
+    verbActiveKey: 'tool.verbActive.computerInspect',
+    target: (i) => i.app ?? '',
+    typeLabel: (i, t) => t('tool.type.computer', { app: i.app ?? '' }),
+  },
+  computer_click: {
+    icon: MousePointerClick,
+    verbKey: 'tool.verb.computerClick',
+    verbActiveKey: 'tool.verbActive.computerClick',
+    target: (i) => i.app ?? '',
+    typeLabel: (i, t) => t('tool.type.computer', { app: i.app ?? '' }),
+  },
+  computer_type_text: {
+    icon: Keyboard,
+    verbKey: 'tool.verb.computerType',
+    verbActiveKey: 'tool.verbActive.computerType',
+    target: (i) => i.app ?? '',
+    typeLabel: (i, t) => t('tool.type.computer', { app: i.app ?? '' }),
+  },
+  computer_press_key: {
+    icon: Keyboard,
+    verbKey: 'tool.verb.computerKey',
+    verbActiveKey: 'tool.verbActive.computerKey',
+    target: (i) => i.app ?? '',
+    typeLabel: (i, t) => t('tool.type.computer', { app: i.app ?? '' }),
+  },
+  computer_scroll: {
+    icon: MousePointer2,
+    verbKey: 'tool.verb.computerScroll',
+    verbActiveKey: 'tool.verbActive.computerScroll',
+    target: (i) => i.app ?? '',
+    typeLabel: (i, t) => t('tool.type.computer', { app: i.app ?? '' }),
+  },
+  computer_drag: {
+    icon: Move,
+    verbKey: 'tool.verb.computerDrag',
+    verbActiveKey: 'tool.verbActive.computerDrag',
+    target: (i) => i.app ?? '',
+    typeLabel: (i, t) => t('tool.type.computer', { app: i.app ?? '' }),
+  },
+  computer_set_value: {
+    icon: SlidersHorizontal,
+    verbKey: 'tool.verb.computerSet',
+    verbActiveKey: 'tool.verbActive.computerSet',
+    target: (i) => i.app ?? '',
+    typeLabel: (i, t) => t('tool.type.computer', { app: i.app ?? '' }),
+  },
+  computer_perform_action: {
+    icon: MousePointer2,
+    verbKey: 'tool.verb.computerAction',
+    verbActiveKey: 'tool.verbActive.computerAction',
+    target: (i) => i.app ?? '',
+    typeLabel: (i, t) => t('tool.type.computer', { app: i.app ?? '' }),
   },
 };
 

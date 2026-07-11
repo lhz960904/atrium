@@ -31,6 +31,15 @@ asarUnpack:
   # jieba-wasm reads its .wasm via fs.readFileSync(__dirname/...); unpack it so
   # the file resolves on disk rather than from inside the asar archive.
   - node_modules/jieba-wasm/**
+# Sign the nested Computer Use helper BEFORE electron-builder signs the app, so
+# the app-level signature seals its final signature and the notarize + staple
+# stay valid. Doing it in afterSign breaks the app's resource seal and the staple
+# ticket. electron-builder doesn't deep-sign extraResources, so this signature sticks.
+afterPack: scripts/after-pack.cjs
+# electron-builder notarizes + staples the app but not the dmg container, so a
+# downloaded (quarantined) dmg is rejected by Gatekeeper. Notarize the dmg here,
+# after it's built.
+afterAllArtifactBuild: scripts/after-all-artifact-build.cjs
 mac:
   # Signed + notarized with a real Developer ID (Team 43PH2NJ5C4). Hardened
   # Runtime is mandatory for notarization, and it makes dyld enforce Library
@@ -62,6 +71,16 @@ mac:
     - NSDocumentsFolderUsageDescription: Atrium 需要访问"文稿"文件夹以读写工作区文件。
     - NSDownloadsFolderUsageDescription: Atrium 需要访问"下载"文件夹以保存生成的产物。
   notarize: true
+  # The signed Computer Use helper ships inside Resources. It's macOS-only, so it
+  # lives under mac.extraResources (appended to the common list) rather than the
+  # top-level one — Windows/Linux builds never carry it. electron-builder won't
+  # deep-sign nested extraResources, so the afterPack hook signs it (Team
+  # 43PH2NJ5C4 + hardened runtime) before the app-level sign seals it.
+  extraResources:
+    - from: native/computer-use-helper/build/Atrium Computer Use.app
+      to: Atrium Computer Use.app
+      filter:
+        - '**/*'
 dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
 win:

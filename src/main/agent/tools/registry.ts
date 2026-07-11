@@ -7,6 +7,17 @@ import { listSubagentDefs } from '../subagent/defs';
 import { askClarificationTool } from './builtins/ask-clarification';
 import { bashTool } from './builtins/bash';
 import { bashOutputTool } from './builtins/bash-output';
+import {
+  computerClickTool,
+  computerDragTool,
+  computerGetAppStateTool,
+  computerListAppsTool,
+  computerPerformActionTool,
+  computerPressKeyTool,
+  computerScrollTool,
+  computerSetValueTool,
+  computerTypeTextTool,
+} from './builtins/computer-use';
 import { editFileTool } from './builtins/edit-file';
 import { globTool } from './builtins/glob';
 import { grepTool } from './builtins/grep';
@@ -56,6 +67,19 @@ function gateMcpTools(
 }
 
 export function getTools(ctx: ToolCtx): Record<string, Tool> {
+  // macOS desktop-automation tools, grouped so getTools can drop them wholesale
+  // when the helper is unavailable (see the ctx.computerUse guard below).
+  const computerBuiltins = {
+    computer_list_apps: computerListAppsTool(ctx),
+    computer_get_app_state: computerGetAppStateTool(ctx),
+    computer_click: computerClickTool(ctx),
+    computer_type_text: computerTypeTextTool(ctx),
+    computer_press_key: computerPressKeyTool(ctx),
+    computer_scroll: computerScrollTool(ctx),
+    computer_drag: computerDragTool(ctx),
+    computer_set_value: computerSetValueTool(ctx),
+    computer_perform_action: computerPerformActionTool(ctx),
+  } satisfies Partial<Record<ToolName, Tool>>;
   const builtins: Record<ToolName, Tool> = {
     read_file: readFileTool(ctx),
     write_file: gate('write_file', ctx, writeFileTool(ctx)),
@@ -84,7 +108,15 @@ export function getTools(ctx: ToolCtx): Record<string, Tool> {
     schedule_list: scheduleListTool(),
     schedule_update: scheduleUpdateTool(),
     schedule_cancel: scheduleCancelTool(),
+    ...computerBuiltins,
   };
   // MCP tools first so a built-in can never be shadowed by a server tool.
-  return { ...gateMcpTools(ctx.mcpTools, ctx), ...builtins };
+  const merged = { ...gateMcpTools(ctx.mcpTools, ctx), ...builtins };
+  // Computer Use is macOS-only and rides on the helper's availability; when it
+  // is absent (non-mac, or later disabled in settings) don't advertise its
+  // tools to the model at all, rather than failing them at call time.
+  if (!ctx.computerUse) {
+    for (const name of Object.keys(computerBuiltins)) delete merged[name];
+  }
+  return merged;
 }
