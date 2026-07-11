@@ -128,6 +128,13 @@ final class OverlayCursorView: NSView {
 final class OverlayCursorController {
   static let shared = OverlayCursorController()
 
+  // The activity cursor is a decorative overlay drawn on top of the real cursor,
+  // but CGEvent clicks warp the real system cursor to the target anyway — so it's
+  // redundant with the pointer the user already sees, and its per-action
+  // animation only adds latency. Disabled until it becomes a true synthetic
+  // cursor (one that acts without moving the real pointer); flip to re-enable.
+  private let enabled = false
+
   private let size = CGSize(width: 96, height: 96)
   private let hotspot = CGPoint(x: 30.35, y: 48.31)
   private let idleHideDelay: TimeInterval = 8
@@ -153,7 +160,7 @@ final class OverlayCursorController {
   }
 
   func showActivity(at point: CGPoint, wiggle: Bool = true) {
-    guard isFinitePoint(point) else {
+    guard enabled, isFinitePoint(point) else {
       return
     }
     animate(to: point, duration: 0.22, settle: false)
@@ -175,7 +182,7 @@ final class OverlayCursorController {
   }
 
   private func animate(to point: CGPoint, duration: TimeInterval, settle: Bool) {
-    guard isFinitePoint(point) else {
+    guard enabled, isFinitePoint(point) else {
       return
     }
     cancelHide()
@@ -210,7 +217,7 @@ final class OverlayCursorController {
   }
 
   func move(to point: CGPoint) {
-    guard isFinitePoint(point) else {
+    guard enabled, isFinitePoint(point) else {
       return
     }
     cancelHide()
@@ -271,6 +278,7 @@ final class OverlayCursorController {
   }
 
   func pulse() {
+    guard enabled else { return }
     _ = ensureWindow()
     view?.pressed = true
     view?.pulseAlpha = 1
