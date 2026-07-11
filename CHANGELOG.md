@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.0](https://github.com/lhz960904/atrium/compare/v0.11.1...v0.12.0) (2026-07-11)
+
+
+### Features
+
+* **agent:** add retry backoff and anthropic prompt caching for plan providers ([#81](https://github.com/lhz960904/atrium/issues/81)) ([d3ca792](https://github.com/lhz960904/atrium/commit/d3ca79259f7eb059c780d27c805392c2667fad6c))
+* **agent:** detect and break repetitive tool-call loops ([#80](https://github.com/lhz960904/atrium/issues/80)) ([6edc9fb](https://github.com/lhz960904/atrium/commit/6edc9fb2fff368e616568e4ec8573ebeb93603cf))
+* **computer-use:** macOS desktop automation ([7662e84](https://github.com/lhz960904/atrium/commit/7662e8474b8cab5a60d5fe1c6885e16127bd45de))
+
+
+### Bug Fixes
+
+* **agent:** surface the provider message behind retry failures ([#83](https://github.com/lhz960904/atrium/issues/83)) ([509ff2b](https://github.com/lhz960904/atrium/commit/509ff2b7f5ff63580c0a4e9aba975fc701e06332))
+
 ## [0.11.1](https://github.com/lhz960904/atrium/compare/v0.11.0...v0.11.1) (2026-07-09)
 
 
