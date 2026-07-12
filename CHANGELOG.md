@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.14.0](https://github.com/lhz960904/atrium/compare/v0.13.0...v0.14.0) (2026-07-11)
+
+
+### Features
+
+* **computer-use:** add a setting to hide the virtual cursor ([#91](https://github.com/lhz960904/atrium/issues/91)) ([4e461ee](https://github.com/lhz960904/atrium/commit/4e461ee6b6817788c59dea031b2b065a7054a71c))
+
+
+### Bug Fixes
+
+* **computer-use:** use keyboard icon for accessibility grant and trim lede ([#90](https://github.com/lhz960904/atrium/issues/90)) ([ca7d33c](https://github.com/lhz960904/atrium/commit/ca7d33c840065bc889cddeac8437dc27adaf184f))
+
 ## [0.13.0](https://github.com/lhz960904/atrium/compare/v0.12.0...v0.13.0) (2026-07-11)
 
 
