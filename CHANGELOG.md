@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/lhz960904/atrium/compare/v0.14.1...v0.14.2) (2026-07-13)
+
+
+### Bug Fixes
+
+* **computer-use:** make the virtual cursor show and hide deterministic ([#96](https://github.com/lhz960904/atrium/issues/96)) ([6a0a3ea](https://github.com/lhz960904/atrium/commit/6a0a3eadc9611e7a016b73e7fbabb7438f6c6c14))
+
 ## [0.14.1](https://github.com/lhz960904/atrium/compare/v0.14.0...v0.14.1) (2026-07-13)
 
 
