@@ -16,7 +16,12 @@ echo "→ Compiling…"
 rm -rf "$APP"
 mkdir -p "$MACOS"
 cp "$HERE/Info.plist" "$APP/Contents/Info.plist"
-swiftc -O "$HERE/ComputerUseNativeHelper.swift" -o "$MACOS/AtriumComputerUse"
+# Without an explicit -target, swiftc inherits the build machine's OS as the
+# deployment target (CI runners are macOS 15), and the binary then refuses to
+# load on older systems. Pin it to the floor Info.plist promises
+# (LSMinimumSystemVersion 13.0) so the helper runs everywhere the app does.
+swiftc -O -target "$(uname -m)-apple-macos13.0" \
+  "$HERE/ComputerUseNativeHelper.swift" -o "$MACOS/AtriumComputerUse"
 
 # Developer ID when it's reachable (a dev machine's login keychain). In CI the
 # signing keychain isn't imported yet at compile time, so ad-hoc sign instead —
