@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/lhz960904/atrium/compare/v0.14.0...v0.14.1) (2026-07-13)
+
+
+### Bug Fixes
+
+* **computer-use:** run the helper on macOS 13/14 and add a grant-bar fallback placement ([#93](https://github.com/lhz960904/atrium/issues/93)) ([c6c8b11](https://github.com/lhz960904/atrium/commit/c6c8b11375d057eebed0ac745b81929f1f1ae88c))
+
 ## [0.14.0](https://github.com/lhz960904/atrium/compare/v0.13.0...v0.14.0) (2026-07-11)
 
 
