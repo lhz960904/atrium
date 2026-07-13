@@ -15,6 +15,9 @@ const HEIGHT = 104;
 const FALLBACK_WIDTH = 380;
 const GAP = 12;
 const POLL_MS = 250;
+// Failed Settings lookups tolerated (~2s) before anchored placement is deemed
+// unavailable and the bar shows at a fixed spot instead.
+const FALLBACK_MISSES = 8;
 // System Settings' sidebar is a fixed width; the overlay aligns to the content
 // column on its right, not the whole window, so it never spans the menu.
 const SIDEBAR_WIDTH = 220;
@@ -41,6 +44,11 @@ async function loadIcon(): Promise<void> {
 // while a Space switch is settling so the overlay lands in one hop, not several.
 let appliedKey: string | null = null;
 let pendingKey: string | null = null;
+// Lookup misses since showDragOverlay, and whether Settings was ever located
+// this round — distinguishes "Settings is on another Space" (hide and wait)
+// from "the helper can't find it at all" (fall back to a fixed spot).
+let misses = 0;
+let placedOnce = false;
 
 export interface OverlayTexts {
   heading: string;
@@ -163,11 +171,31 @@ async function syncOverlay(win: BrowserWindow, immediate = false): Promise<void>
   const settings = await settingsBounds();
   if (win.isDestroyed()) return;
   if (!settings) {
-    if (win.isVisible()) win.hide();
-    appliedKey = null;
-    pendingKey = null;
+    if (placedOnce) {
+      if (win.isVisible()) win.hide();
+      appliedKey = null;
+      pendingKey = null;
+      return;
+    }
+    // Settings never located this round: that's not a Space switch, it's the
+    // lookup itself failing (e.g. the helper can't run on this machine). The
+    // drag needs no helper, so after enough misses show the bar bottom-center
+    // of the cursor's display rather than leaving the grant flow invisible.
+    misses += 1;
+    if (misses >= FALLBACK_MISSES && !win.isVisible()) {
+      const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+      win.setBounds({
+        x: Math.round(area.x + (area.width - FALLBACK_WIDTH) / 2),
+        y: area.y + area.height - HEIGHT,
+        width: FALLBACK_WIDTH,
+        height: HEIGHT,
+      });
+      win.showInactive();
+    }
     return;
   }
+  placedOnce = true;
+  misses = 0;
   const target = place(settings);
   const key = `${target.x},${target.y},${target.width}`;
   const reveal = () => {
@@ -248,6 +276,8 @@ export async function showDragOverlay(texts: OverlayTexts): Promise<void> {
   if (process.platform !== 'darwin') return;
   appliedKey = null;
   pendingKey = null;
+  misses = 0;
+  placedOnce = false;
   const win = ensureOverlay();
   void win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildHtml(texts))}`);
   // Get the main window out of the way so System Settings comes to the front:
@@ -256,7 +286,8 @@ export async function showDragOverlay(texts: OverlayTexts): Promise<void> {
   // always-on-top window, so it stays visible; hideDragOverlay brings it back.
   parkMainWindow(true);
   // syncOverlay reveals it only if Settings is already on this Space; otherwise
-  // the follow loop shows it the moment Settings appears here.
+  // the follow loop shows it the moment Settings appears here — or at a fixed
+  // fallback spot once the lookup has clearly failed for good.
   await syncOverlay(win, true);
   startFollow(win);
 }
@@ -265,6 +296,8 @@ export function hideDragOverlay(): void {
   stopFollow();
   appliedKey = null;
   pendingKey = null;
+  misses = 0;
+  placedOnce = false;
   overlay?.hide();
   parkMainWindow(false);
 }
