@@ -986,11 +986,11 @@ func isLikelyUserFacingApp(_ app: NSRunningApplication, visiblePIDs: Set<pid_t>,
   return true
 }
 
+// No cursor here: listing apps is pure observation of nothing in particular,
+// and revealing the overlay at the FRONTMOST window's center made it pop up
+// over whatever the user was doing before the agent had touched any target.
+// The cursor first appears once a request actually addresses an app.
 func listAppsResult() -> ResultPayload {
-  if let target = frontmostActivityTarget() {
-    revealObservationPoint(entry: target.entry, point: target.point)
-  }
-
   let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
   let visiblePIDs = Set(windowEntries().map(\.pid))
   let metadataByBundleId = appMetadataIndex()
@@ -1146,7 +1146,7 @@ func listAppsResult() -> ResultPayload {
     return "\(name) — \(bundleText) [\(flags.joined(separator: ", "))]"
   }.joined(separator: "\n")
 
-  let result = ResultPayload(
+  return ResultPayload(
     ok: true,
     toolName: "list_apps",
     app: nil,
@@ -1157,8 +1157,6 @@ func listAppsResult() -> ResultPayload {
     meta: MetaPayload(observedShape: "text", rawText: rawText),
     error: nil
   )
-  OverlayCursorController.shared.extendVisibility()
-  return result
 }
 
 func resolveApp(_ ref: String) -> NSRunningApplication? {
@@ -1203,17 +1201,6 @@ func resolvedWindowInfo(appRef: String) -> WindowEntry? {
 
 func windowCenter(_ entry: WindowEntry) -> CGPoint {
   CGPoint(x: entry.bounds.midX, y: entry.bounds.midY)
-}
-
-func frontmostActivityTarget() -> (entry: WindowEntry?, point: CGPoint)? {
-  if let frontmost = NSWorkspace.shared.frontmostApplication,
-    let entry = windowInfo(for: frontmost.processIdentifier)
-  {
-    return (entry, windowCenter(entry))
-  }
-
-  let mouse = displayPoint(fromAppKitPoint: NSEvent.mouseLocation)
-  return (nil, mouse)
 }
 
 func revealObservationPoint(entry: WindowEntry?, point: CGPoint, wiggle: Bool = true) {
