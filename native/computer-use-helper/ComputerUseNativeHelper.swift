@@ -222,14 +222,12 @@ final class OverlayCursorController {
     } else {
       window.orderFront(nil)
     }
-    if window.alphaValue < 0.98 {
-      NSAnimationContext.runAnimationGroup { context in
-        context.duration = 0.12
-        window.animator().alphaValue = 1
-      }
-    } else {
-      window.alphaValue = 1
-    }
+    // Direct write, never an animator fade: animator-driven alpha only advances
+    // on runloop ticks, which this process can't guarantee (the main thread
+    // blocks on readLine between requests). A stalled fade leaves the cursor
+    // invisible at alpha 0, and one still in flight when hide() runs can tick
+    // afterwards and resurrect a dismissed cursor.
+    window.alphaValue = 1
     currentPoint = point
   }
 
@@ -243,23 +241,29 @@ final class OverlayCursorController {
         self.view?.pulseAlpha = 0
         self.view?.pressed = false
         window.alphaValue = 0
-        window.orderOut(nil)
       }
     }
     hideWorkItem = workItem
     overlayQueue.asyncAfter(deadline: .now() + (delay ?? idleHideDelay), execute: workItem)
   }
 
-  // Collapse the overlay right now, synchronously on the caller's thread. The
-  // idle-hide work item can't do this once a turn ends: it hops to the main
-  // queue, which never drains while the helper blocks on readLine with no
-  // runloop — so the app hides the overlay explicitly at turn end instead.
+  // Collapse the overlay right now, on the caller's thread. The idle-hide work
+  // item can't do this once a turn ends: it hops to the main queue, which never
+  // drains while the helper blocks on readLine with no runloop — so the app
+  // hides the overlay explicitly at turn end instead.
+  //
+  // Alpha-only, no orderOut: after an orderOut, re-ordering the window back in
+  // silently fails in this runloop-less process, leaving every later cursor
+  // invisible. And the alpha write itself only reaches the window server once
+  // the runloop turns — action handlers flush incidentally through their
+  // animation spins, but hide() has none, so it must spin briefly or the write
+  // sits unflushed and the dismissed cursor ghosts on screen indefinitely.
   func hide() {
     cancelHide()
     view?.pulseAlpha = 0
     view?.pressed = false
     window?.alphaValue = 0
-    window?.orderOut(nil)
+    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     currentPoint = nil
   }
 
@@ -2936,7 +2940,31 @@ func windowBoundsResult(bundleId: String) -> ResultPayload {
   )
 }
 
+// Self-terminate after prolonged idleness. The cursor overlay lives and dies
+// with this process, so even when the app never delivers a hide (crash, forced
+// quit, an update relaunch mid-turn), a stray cursor outlives the last request
+// by at most this window; the app respawns the helper on the next action. This
+// must be a dedicated thread: the main thread blocks on readLine, so nothing
+// scheduled on its queue or runloop would ever fire.
+let idleExitInterval: TimeInterval = 300
+var lastRequestAt = Date()
+let lastRequestLock = NSLock()
+Thread.detachNewThread {
+  while true {
+    Thread.sleep(forTimeInterval: 30)
+    lastRequestLock.lock()
+    let idle = Date().timeIntervalSince(lastRequestAt)
+    lastRequestLock.unlock()
+    if idle > idleExitInterval {
+      exit(0)
+    }
+  }
+}
+
 while let line = readLine() {
+  lastRequestLock.lock()
+  lastRequestAt = Date()
+  lastRequestLock.unlock()
   if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
     continue
   }

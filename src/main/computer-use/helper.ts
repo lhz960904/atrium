@@ -70,8 +70,10 @@ export class ComputerUseHelper {
         cleanup();
         // A hung request (e.g. a slow accessibility walk on System Settings)
         // blocks the single-threaded helper's next request too, so kill the
-        // child — ensureChild respawns it on the following call.
-        this.child?.kill();
+        // child — ensureChild respawns it on the following call. SIGKILL, not
+        // SIGTERM: a process wedged in a Mach call can defer SIGTERM and live
+        // on (cursor overlay included) after `child` is nulled here.
+        this.child?.kill('SIGKILL');
         this.child = null;
         reject(new Error(`Computer use action timed out after ${timeoutMs}ms.`));
       }, timeoutMs);
@@ -98,7 +100,7 @@ export class ComputerUseHelper {
 
   dispose(): void {
     if (this.child) {
-      this.child.kill();
+      this.child.kill('SIGKILL');
       this.child = null;
     }
     this.rejectAll(new Error('Computer Use helper disposed.'));
@@ -114,7 +116,9 @@ export class ComputerUseHelper {
     if (!this.child) {
       return;
     }
-    void this.call('hide_overlay').catch(() => {});
+    void this.call('hide_overlay').catch((error) => {
+      log.warn('hide_overlay failed', error);
+    });
   }
 
   private ensureChild(): ChildProcessWithoutNullStreams {

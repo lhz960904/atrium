@@ -1,6 +1,7 @@
 import { PRIVACY_PANES } from '@shared/computer-use';
 import { app, shell } from 'electron';
 import { z } from 'zod';
+import { disposeComputerUseHelper } from '../../computer-use';
 import { hideDragOverlay, showDragOverlay } from '../../computer-use/drag-overlay';
 import { computerPermissions } from '../../computer-use/permissions';
 import { publicProcedure, router } from '../trpc';
@@ -26,6 +27,10 @@ export const computerRouter = router({
    * the app restarts, so the drag-to-grant flow calls this once both grants land.
    */
   relaunch: publicProcedure.mutation(() => {
+    // app.exit skips before-quit, so kill the helper here — the grant flow's
+    // overlay was polling it moments ago, and an orphaned child would keep
+    // its cursor overlay on screen across the relaunch.
+    disposeComputerUseHelper();
     app.relaunch();
     app.exit(0);
   }),
