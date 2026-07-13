@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.3](https://github.com/lhz960904/atrium/compare/v0.14.2...v0.14.3) (2026-07-13)
+
+
+### Bug Fixes
+
+* **computer-use:** don't show the cursor for list_apps ([#98](https://github.com/lhz960904/atrium/issues/98)) ([93df293](https://github.com/lhz960904/atrium/commit/93df2933f52a9b743f52b940775a290faf30ac28))
+
 ## [0.14.2](https://github.com/lhz960904/atrium/compare/v0.14.1...v0.14.2) (2026-07-13)
 
 
