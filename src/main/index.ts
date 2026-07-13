@@ -12,6 +12,7 @@ import { runDream, startDreamScheduler } from './agent/memory';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
 import { scheduledManager, startScheduledTasks } from './agent/scheduled';
 import { refreshSkills } from './agent/skills/registry';
+import { disposeComputerUseHelper } from './computer-use';
 import { registerComputerUseDrag } from './computer-use/drag';
 import { registerDragOverlay } from './computer-use/drag-overlay';
 import { registerPermissionBridge } from './computer-use/permissions';
@@ -159,6 +160,9 @@ app.whenReady().then(async () => {
     getWindow: () => mainWindow,
     onBeforeInstall: () => {
       isQuitting = true;
+      // Kill the helper before the update relaunch: a mid-request child would
+      // survive the swap as an orphan still showing its cursor overlay.
+      disposeComputerUseHelper();
     },
   });
   updaterManager.startAutoCheck();
@@ -270,5 +274,6 @@ app.on('before-quit', () => {
   scheduledManager.dispose();
   void mcpManager.dispose();
   updaterManager.dispose();
+  disposeComputerUseHelper();
   closeDb();
 });
