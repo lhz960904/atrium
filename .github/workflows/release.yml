@@ -130,8 +130,15 @@ jobs:
         if: matrix.platform == 'mac'
         run: bun run build:helper
 
+      # mac never self-publishes: electron-builder would upload artifacts as they
+      # are built — the dmg before afterAllArtifactBuild staples it, and a
+      # single-arch latest-mac.yml that an updater polling mid-release could see
+      # and serve the wrong arch (an arm64 app falls back to the x64 zip and ends
+      # up under Rosetta). The mac steps below upload the finished installers
+      # explicitly, and merge-mac-yml publishes the one and only manifest at the
+      # very end.
       - name: Package and publish
-        run: bunx electron-builder --${{ matrix.platform }} ${{ matrix.archFlag }} --publish ${{ needs.release-please.outputs.release_created == 'true' && 'always' || 'never' }}
+        run: bunx electron-builder --${{ matrix.platform }} ${{ matrix.archFlag }} --publish ${{ needs.release-please.outputs.release_created == 'true' && matrix.platform != 'mac' && 'always' || 'never' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS signing + notarization. These are only populated on the mac
@@ -144,23 +151,21 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
 
-      # electron-builder uploads the dmg the instant it's built — before the
-      # afterAllArtifactBuild hook signs, notarizes, and staples it — so the
-      # published dmg is the un-notarized copy and Gatekeeper blocks a download.
-      # The hook still staples the local dmg, so re-upload that over the published
-      # one. (The zip that feeds auto-update is unaffected: its app is notarized,
-      # and it's never Gatekeeper-assessed as a container.)
-      - name: Re-upload notarized dmg
+      # Runs after electron-builder fully finishes, so afterAllArtifactBuild has
+      # already signed, notarized, and stapled the dmg — the published copy is
+      # the final one. No latest-mac.yml goes up here: until merge-mac-yml lands
+      # the combined manifest, updaters see the previous release and can't grab
+      # a half-published one.
+      - name: Upload mac installers
         if: matrix.platform == 'mac' && needs.release-please.outputs.release_created == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" dist/*.dmg --clobber
+        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" dist/*.dmg dist/*-mac.zip dist/*.blockmap --clobber
 
       # Each mac runner writes a single-arch latest-mac.yml; stash both so
-      # merge-mac-yml can combine them. electron-builder's --publish uploads one
-      # too, but the two runners race and only the last survives — the merge job
-      # overwrites it with a manifest that lists both arches.
+      # merge-mac-yml can combine them into the only manifest this workflow
+      # ever publishes.
       - name: Stash mac update manifest
         if: matrix.platform == 'mac' && needs.release-please.outputs.release_created == 'true'
         uses: actions/upload-artifact@v7
@@ -169,9 +174,10 @@ jobs:
           path: dist/latest-mac.yml
           if-no-files-found: error
 
-  # Combine the two single-arch mac manifests into one listing both arches, then
-  # overwrite latest-mac.yml on the Release so electron-updater serves Intel and
-  # Apple Silicon the build that matches. Only runs for a real release cut.
+  # Combine the two single-arch mac manifests into one listing both arches and
+  # publish it — the release's first and only latest-mac.yml, so electron-updater
+  # serves Intel and Apple Silicon the build that matches and never sees the
+  # release until every installer is up. Only runs for a real release cut.
   merge-mac-yml:
     needs: [release-please, release]
     if: needs.release-please.outputs.release_created == 'true'
