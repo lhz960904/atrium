@@ -45,6 +45,13 @@ https://github.com/user-attachments/assets/49af7cb9-f11c-4cce-8fd8-c45e3dcbbd8f
 - **Scheduled tasks:** let the agent create scheduled tasks that run on a schedule to
   automate recurring work — daily reports, weekly research, monthly analysis, and more.
 
+- **Browser control:** let the agent browse and act in your Chrome — reusing the sites
+  you're already signed in to, and working in the background without taking over your
+  browser.
+
+- **Computer use (currently macOS only):** let the AI see the screen and click and type
+  in native macOS apps — desktop tasks the browser can't do.
+
 ## Architecture
 
 The renderer talks to the main process two ways: tRPC over Electron IPC for CRUD and config,
