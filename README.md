@@ -49,8 +49,8 @@ https://github.com/user-attachments/assets/49af7cb9-f11c-4cce-8fd8-c45e3dcbbd8f
   you're already signed in to, and working in the background without taking over your
   browser.
 
-- **Computer use:** let the AI see the screen and click and type in native macOS apps —
-  desktop tasks the browser can't do (currently macOS only).
+- **Computer use (currently macOS only):** let the AI see the screen and click and type
+  in native macOS apps — desktop tasks the browser can't do.
 
 ## Architecture
 
