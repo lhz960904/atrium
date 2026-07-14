@@ -29,6 +29,13 @@ https://github.com/user-attachments/assets/49af7cb9-f11c-4cce-8fd8-c45e3dcbbd8f
   third-party services right inside a conversation. Import directly from popular tools, with
   OAuth authorization for third-party services.
 
+- **Browser control:** let the agent browse and act in your Chrome — reusing the sites
+  you're already signed in to, and working in the background without taking over your
+  browser.
+
+- **Computer use:** let the AI see the screen and click and type in native macOS apps —
+  desktop tasks the browser can't do (currently macOS only).
+
 - **Skills:** package reusable procedures into skill bundles (`SKILL.md` and friends) that
   are progressively disclosed to the agent. Read existing skills from multiple sources —
   Claude Code, Codex, .agents — and automatically track usage frequency to filter out

@@ -24,6 +24,10 @@ https://github.com/user-attachments/assets/49af7cb9-f11c-4cce-8fd8-c45e3dcbbd8f
 
 - **MCP：** 连接 Model Context Protocol 服务器（stdio / HTTP / SSE），在对话里直接使用第三方服务提供的工具。支持从主流工具直接导入，支持第三方服务 Oauth 授权。
 
+- **浏览器控制：** 让 AI 在你的 Chrome 里浏览和操作，并且复用你已经登录的网站，在后台工作而不抢占你的浏览器。
+
+- **电脑操作：** 让 AI 像人一样看屏幕、点击和输入，直接操作 Mac 上的原生应用。完成网页做不到的桌面任务。（目前仅支持 macOS）
+
 - **Skills：** 把可复用的流程打包成技能包（SKILL.md 等）渐进式披露给 Agent。支持从 Claude Code、Codex、.Agents 多数据源读取已有技能，自动统计使用频率过滤无用 Skill 描述。
 
 - **Subagents：** 将大任务拆成子任务委派给专注的 Agent，在隔离的上下文中执行子任务并汇报结果，不污染主Agent 的上下文。支持创建和删除子Agent。
