@@ -36,3 +36,4 @@ src/renderer/src/lib/dev/real-message.json
 # claude code: skills are shared, local state (worktrees etc.) is not
 .claude/*
 !.claude/skills/
+docs/product/*
