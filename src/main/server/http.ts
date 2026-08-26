@@ -50,6 +50,7 @@ import {
   upsertMessage,
   writeAcpBinding,
 } from './persist';
+import { attachPiEventTrack, subscribePiEvents } from './pi-events';
 import { abortThreadRun, resumeThreadStream, startThreadStream } from './resumable';
 
 export type ChatEndpoint = { port: number; token: string; dispose: () => void };
@@ -181,7 +182,11 @@ export function startHttpServer(deps: {
         // the message as-is so the trace's "Worked for Xs" survives a reload.
         onFinish: (m) => upsertMessage(deps.db, threadId, m),
       });
-      const sse = await startThreadStream(threadId, acpStream, abort);
+      const sse = await startThreadStream(
+        threadId,
+        attachPiEventTrack({ threadId, provider: providerId, model: modelId }, acpStream),
+        abort,
+      );
       return new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS });
     }
 
@@ -198,7 +203,11 @@ export function startHttpServer(deps: {
         onFinish: (m) =>
           upsertMessage(deps.db, threadId, { ...m, metadata: { createdAt: Date.now() } }),
       });
-      const sse = await startThreadStream(threadId, imageStream, abort);
+      const sse = await startThreadStream(
+        threadId,
+        attachPiEventTrack({ threadId, provider: providerId, model: modelId }, imageStream),
+        abort,
+      );
       return new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS });
     }
 
@@ -293,7 +302,11 @@ export function startHttpServer(deps: {
         persistenceMiddleware(upsertMessage),
       ],
     });
-    const sse = await startThreadStream(threadId, agentStream, abort);
+    const sse = await startThreadStream(
+      threadId,
+      attachPiEventTrack({ threadId, provider: providerId, model: modelId }, agentStream),
+      abort,
+    );
     return new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS });
   });
 
@@ -349,6 +362,22 @@ export function startHttpServer(deps: {
   app.get('/api/chat/:threadId/stream', async (c) => {
     const sse = await resumeThreadStream(c.req.param('threadId'));
     return sse ? new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS }) : c.body(null, 204);
+  });
+
+  // The pi-event track: replay the thread's envelope log from `from`
+  // (exclusive) and tail live. 204 when the thread has no buffered run.
+  app.get('/api/chat/:threadId/pi-events', (c) => {
+    const raw = Number(c.req.query('from') ?? '-1');
+    const sse = subscribePiEvents(c.req.param('threadId'), Number.isFinite(raw) ? raw : -1);
+    return sse
+      ? new Response(sse, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+          },
+        })
+      : c.body(null, 204);
   });
 
   // serve() binds asynchronously; the real port arrives in the listening
