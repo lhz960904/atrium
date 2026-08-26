@@ -24,6 +24,9 @@ export type ToolExecutionResult = {
  * - `turn_end` drops `message`/`toolResults` (both already delivered via
  *   message_end / tool_execution_end);
  * - `agent_end` drops the messages array and carries a willRetry annotation;
+ * - `message_start`/`message_end` carry an Atrium `messageId` (pi messages have
+ *   no id; renderers and persistence reconcile live streams against stored
+ *   rows by it);
  * - Atrium-owned events (approval_*, notice) extend the union in the same
  *   snake_case style.
  * Reducers must ignore unknown event types — new ones may appear.
@@ -50,9 +53,9 @@ export type AssistantMessageEvent =
 export type AgentSessionEvent =
   | { type: 'agent_start' }
   | { type: 'turn_start' }
-  | { type: 'message_start'; message: Message }
+  | { type: 'message_start'; message: Message; messageId: string }
   | { type: 'message_update'; assistantMessageEvent: AssistantMessageEvent }
-  | { type: 'message_end'; message: Message }
+  | { type: 'message_end'; message: Message; messageId: string }
   | { type: 'tool_execution_start'; toolCallId: string; toolName: string; args: unknown }
   | {
       type: 'tool_execution_update';
@@ -71,7 +74,7 @@ export type AgentSessionEvent =
   | { type: 'turn_end' }
   | { type: 'agent_end'; willRetry: boolean }
   // Atrium extensions
-  | { type: 'approval_requested'; approvalId: string; toolCallId: string; reason: string }
+  | { type: 'approval_requested'; approvalId: string; toolCallId: string }
   | { type: 'approval_resolved'; approvalId: string; approved: boolean }
   | { type: 'notice'; name: string; payload: unknown };
 
