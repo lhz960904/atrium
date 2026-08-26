@@ -50,6 +50,10 @@ export function getRunningThreadIds(): string[] {
   return [...runningThreads];
 }
 
+export function isThreadRunning(threadId: string): boolean {
+  return runningThreads.has(threadId);
+}
+
 /**
  * Abort a thread's in-flight run, if any. Aborting the agent's signal ends
  * streamText, which finalizes the stream (persisting whatever was generated).

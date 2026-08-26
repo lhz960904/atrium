@@ -1,4 +1,3 @@
-import { type Chat, useChat } from '@ai-sdk/react';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
 import { sealDanglingToolCalls } from '@shared/seal-tool-calls';
@@ -8,7 +7,9 @@ import { useTranslation } from 'react-i18next';
 import { ChatThread } from '../../../components/chat/ChatThread';
 import type { Attachment } from '../../../components/chat/composer/AttachmentChip';
 import { useCompactCommand } from '../../../components/chat/use-compact-command';
-import { getThreadChat } from '../../../lib/chat-store';
+import { getThreadChat } from '../../../lib/pi-chat/chats';
+import type { PiChat } from '../../../lib/pi-chat/store';
+import { usePiChat } from '../../../lib/pi-chat/use-pi-chat';
 import { getActivePlan } from '../../../lib/plan';
 import { trpc } from '../../../lib/trpc';
 import { useApprovals } from '../../../lib/use-approvals';
@@ -83,12 +84,12 @@ function ChatRunner({
   model: SelectedModel | null;
   endpoint: { baseUrl: string; token: string };
 }): React.JSX.Element {
-  // The Chat persists across thread switches (see chat-store). Resolve it once
+  // The chat persists across thread switches (see pi-chat/chats). Resolve it once
   // per mount via a ref guard — not useMemo, whose factory StrictMode may
   // double-invoke and flip `isNew` to false. initialMessages only seeds a
   // brand-new Chat; an existing one keeps its in-memory state. ChatRunner is
   // keyed on threadId, so each thread gets its own fresh ref.
-  const resolved = useRef<{ chat: Chat<AtriumUIMessage>; resume: boolean } | null>(null);
+  const resolved = useRef<{ chat: PiChat; resume: boolean } | null>(null);
   if (resolved.current === null) {
     const { chat, isNew } = getThreadChat(threadId, {
       messages: initialMessages,
@@ -114,7 +115,7 @@ function ChatRunner({
     addToolApprovalResponse,
     stop,
     error,
-  } = useChat<AtriumUIMessage>({ chat, resume, experimental_throttle: 50 });
+  } = usePiChat(chat, { resume });
 
   // Stopping: detach this client immediately, then tell main to abort the run
   // (the producer is decoupled for resume, so stop() alone won't reach it).

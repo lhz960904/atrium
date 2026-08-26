@@ -52,6 +52,22 @@ export class RunAssembler {
   private toolParts = new Map<string, number>();
   private approvalByTool = new Map<string, string>();
 
+  /** A continuation run extends an existing assistant message: seed its parts
+   *  so streamed events append after them, and index its tool parts — the
+   *  just-approved call executes now under its original toolCallId. */
+  constructor(seed?: { id: string; parts: Part[] }) {
+    if (!seed) return;
+    this.id = seed.id;
+    this.parts = [...seed.parts];
+    this.started = true;
+    seed.parts.forEach((part, index) => {
+      const toolCallId = (part as { toolCallId?: unknown }).toolCallId;
+      if (typeof toolCallId === 'string') this.toolParts.set(toolCallId, index);
+      const approvalId = (part as { approval?: { id?: unknown } }).approval?.id;
+      if (typeof approvalId === 'string') this.approvalByTool.set(toolCallId as string, approvalId);
+    });
+  }
+
   apply(event: AgentSessionEvent): void {
     switch (event.type) {
       case 'message_start': {
