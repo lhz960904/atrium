@@ -19,6 +19,8 @@ export type ToolExecutionResult = {
  * - assistant stream events drop pi's cumulative `partial`, and
  *   `message_update` drops the partial `message` (deltas only — message_end
  *   is authoritative), keeping frames O(delta) instead of O(message²);
+ *   `toolcall_start` inlines the toolCallId/toolName pi carries via `partial`,
+ *   so renderers can show the call while its arguments stream;
  * - `done` drops the final message for the same reason and carries usage;
  *   `error` likewise drops pi's error AssistantMessage payload;
  * - `turn_end` drops `message`/`toolResults` (both already delivered via
@@ -40,7 +42,7 @@ export type AssistantMessageEvent =
   | { type: 'thinking_start'; contentIndex: number }
   | { type: 'thinking_delta'; contentIndex: number; delta: string }
   | { type: 'thinking_end'; contentIndex: number; content: string }
-  | { type: 'toolcall_start'; contentIndex: number }
+  | { type: 'toolcall_start'; contentIndex: number; toolCallId: string; toolName: string }
   | { type: 'toolcall_delta'; contentIndex: number; delta: string }
   | { type: 'toolcall_end'; contentIndex: number; toolCall: ToolCall }
   | {

@@ -187,6 +187,9 @@ export function createProtocolBridge(init: {
         messageId = chunk.messageId ?? '';
         agentStarted = true;
         out.push({ type: 'agent_start' });
+        if (chunk.messageMetadata != null) {
+          out.push({ type: 'notice', name: 'message-metadata', payload: chunk.messageMetadata });
+        }
         break;
       }
       case 'start-step': {
@@ -288,7 +291,12 @@ export function createProtocolBridge(init: {
         });
         out.push({
           type: 'message_update',
-          assistantMessageEvent: { type: 'toolcall_start', contentIndex: index },
+          assistantMessageEvent: {
+            type: 'toolcall_start',
+            contentIndex: index,
+            toolCallId: chunk.toolCallId,
+            toolName: chunk.toolName,
+          },
         });
         break;
       }
@@ -322,7 +330,12 @@ export function createProtocolBridge(init: {
           });
           out.push({
             type: 'message_update',
-            assistantMessageEvent: { type: 'toolcall_start', contentIndex: call.index },
+            assistantMessageEvent: {
+              type: 'toolcall_start',
+              contentIndex: call.index,
+              toolCallId: chunk.toolCallId,
+              toolName: chunk.toolName,
+            },
           });
         }
         call.args = asArgs(chunk.input);
