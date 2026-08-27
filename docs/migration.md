@@ -1,6 +1,6 @@
 ---
-Status: Active
-Last updated: 2026-08-25
+Status: Active — 阶段 1 完成，停在阶段 2（引擎换 pi）门口
+Last updated: 2026-08-27
 Branch: feat/protocol-isolation（基于 main@4ca74fd）
 ---
 
@@ -19,14 +19,14 @@ Branch: feat/protocol-isolation（基于 main@4ca74fd）
 3. **服务端业务架构重思**——Workspace→Task→Run 产品重塑、会话存储选型、模块结构（v2 分支的 interfaces / routers-are-domain 实验是候选形态）。
 4. **Renderer 整体优化**。
 
-## 阶段 1 子步
+## 阶段 1 子步（全部完成）
 
-- **1a. 协议模块落库**：`src/shared/protocol/` 放 pi 词汇冻结副本（事件 + 消息内容），参考 `docs/research/v2-spec-reference.md` 的事件节与偏差表。不接线，纯类型 + 单测。
-- **1b. 线协议 + 渲染端消费**：服务端在 SSE 边缘 `UIMessageChunk → pi 事件` 转换；渲染端自建 store + reducer 替换 useChat/chat-store/transport；保住 `shared/message-parts.ts` 的 NormalizedPart 形状（把它的输入换成 pi 词汇），组件层少动。断线重连语义不回退（resumable 等价物）。
-- **1c. DB 格式翻转**：`messages.parts` 写入侧改 pi 词汇；旧行读取时转换（text/reasoning/tool part 机械映射），历史数据不迁移不丢失。
-- **1d. 其余发射源改词汇**：`run-image.ts`、ACP `chunk-emitter`、scheduled 链路。
+- **1a. 协议模块落库** ✅（`991a7b1`）：`src/shared/protocol/` pi 词汇冻结副本，对真实 0.84.2 `.d.ts` 逐字段核过；偏离表在 events.ts 头部。
+- **1b. 线协议 + 渲染端消费** ✅（`ad32bac`→`bc90cdc`）：protocol-bridge（UIMessageChunk→pi 事件，闭合保证）；pi-events 信封日志（seq 重放 + 实时尾随）；RunAssembler + PiChat 替换 useChat/transport，组件层零改动；auto-resume/审批/澄清/停止/重连语义逐项对齐并真机回归。
+- **1c. DB 格式翻转** ✅（`84d136e`→`f79f83b`）：行粒度 pi 原生（user / 每 turn assistant / toolResult 单行，run_id 分组）；写侧 split、读侧 merge，旧行（run_id 空）原样透传不迁移；FTS 触发器双形态；编辑删除/scheduled 归因按 run 寻址。
+- **1d. 单轨化 + 渲染端脱 SDK** ✅（`ce134d5`→`c53f6ce`）：旧 UIMessage SSE 轨/resumable store/`/stream` 端点退役，pi 事件日志成为唯一传输（assistant-stream、@ai-sdk/react 依赖移除）；`shared/ui-message.ts` 自持 UI 词汇，renderer 可达模块零 `ai` import。run-image/ACP 发射器仍产 UIMessageChunk 经 bridge 转换——它们随阶段 2 引擎一起换。
 
-每子步收口条件：回归清单（`docs/feature-inventory.md`）相关段 + CDP 实测，行为与迁移前一致。
+每子步收口条件（已执行）：回归清单相关段 + CDP 实测 + DB 对账，行为与迁移前一致。
 
 ## 纪律
 
