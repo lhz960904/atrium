@@ -1,7 +1,15 @@
+import type { AtriumUIMessage } from '@shared/chat';
 import type { UIMessage } from 'ai';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, or } from 'drizzle-orm';
 import type { Db } from '../db';
 import { messages, projects, providers, threads } from '../db/schema';
+import {
+  mergeAssistantMessage,
+  mergeUserMessage,
+  type PiRow,
+  splitAssistantMessage,
+  splitUserMessage,
+} from './persist-convert';
 
 /**
  * The workspace root a thread runs in: its project's directory, or the
@@ -23,20 +31,162 @@ export function resolveThreadWorkspace(db: Db, threadId: string, projectlessRoot
   return project?.path ?? projectlessRoot;
 }
 
-/** Load a thread's messages from the DB as UIMessages, oldest first. */
+type MessageRow = typeof messages.$inferSelect;
+
+const toPiRow = (row: MessageRow): PiRow => ({
+  id: row.id,
+  runId: row.runId as string,
+  role: row.role as PiRow['role'],
+  message: row.parts as PiRow['message'],
+  metadata: (row.metadata as Record<string, unknown> | null) ?? null,
+});
+
+/**
+ * Load a thread's messages from the DB as UIMessages, oldest first. Rows come
+ * in two generations: pi-native rows (runId set — one pi message each, a run's
+ * assistant + toolResult rows contiguous by createdAt) merge back into the
+ * run-shaped message, and legacy rows (runId null) pass through verbatim.
+ */
 export function loadThreadMessages(db: Db, threadId: string): UIMessage[] {
-  return db
+  const rows = db
     .select()
     .from(messages)
     .where(eq(messages.threadId, threadId))
     .orderBy(asc(messages.createdAt))
-    .all()
-    .map((m) => ({
-      id: m.id,
-      role: m.role,
-      parts: m.parts as UIMessage['parts'],
-      metadata: m.metadata ?? undefined,
-    }));
+    .all();
+
+  const out: UIMessage[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    const row = rows[i];
+    if (!row.runId) {
+      out.push({
+        id: row.id,
+        role: row.role as UIMessage['role'],
+        parts: row.parts as UIMessage['parts'],
+        metadata: row.metadata ?? undefined,
+      });
+      i++;
+      continue;
+    }
+    const runId = row.runId;
+    const group: PiRow[] = [];
+    while (i < rows.length && rows[i].runId === runId) group.push(toPiRow(rows[i++]));
+    out.push(
+      group[0].role === 'user' ? mergeUserMessage(group[0]) : mergeAssistantMessage(runId, group),
+    );
+  }
+  return out;
+}
+
+/**
+ * Wire shape of a thread message on the tRPC surface. Deliberately loose:
+ * exposing the full UIMessage generic to tRPC's output inference blows the
+ * type-instantiation budget, and the renderer casts parts at its boundary
+ * anyway.
+ */
+export type ThreadMessageDto = {
+  id: string;
+  role: 'system' | 'user' | 'assistant';
+  parts: unknown;
+  metadata: unknown;
+};
+
+export function loadThreadMessageDtos(db: Db, threadId: string): ThreadMessageDto[] {
+  return loadThreadMessages(db, threadId) as ThreadMessageDto[];
+}
+
+/** Whether any stored row belongs to this message (either generation). */
+function messageExists(db: Db, id: string): boolean {
+  return (
+    db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(or(eq(messages.runId, id), eq(messages.id, id)))
+      .limit(1)
+      .get() !== undefined
+  );
+}
+
+/** The original wall-clock position of a stored message, for rewrites. */
+function messageBaseCreatedAt(db: Db, id: string): number | undefined {
+  return db
+    .select({ createdAt: messages.createdAt })
+    .from(messages)
+    .where(or(eq(messages.runId, id), eq(messages.id, id)))
+    .orderBy(asc(messages.createdAt))
+    .limit(1)
+    .get()
+    ?.createdAt?.getTime();
+}
+
+/**
+ * Write one run-shaped message as pi-native rows. An assistant run rewrites
+ * atomically (delete the run's rows — including a legacy-generation row under
+ * the same id — and reinsert), keeping its original chronological position;
+ * per-row createdAt offsets preserve in-run order under the createdAt sort.
+ */
+function writePiMessage(db: Db, threadId: string, msg: UIMessage, overwrite: boolean): void {
+  if (msg.role === 'user') {
+    const row = splitUserMessage(msg as AtriumUIMessage);
+    const values = {
+      id: row.id,
+      threadId,
+      role: 'user' as const,
+      parts: row.message,
+      metadata: row.metadata,
+      runId: row.runId,
+    };
+    const insert = db.insert(messages).values(values);
+    if (overwrite) {
+      insert
+        .onConflictDoUpdate({
+          target: messages.id,
+          set: { parts: row.message, metadata: row.metadata, runId: row.runId },
+        })
+        .run();
+    } else {
+      insert.onConflictDoNothing({ target: messages.id }).run();
+    }
+    return;
+  }
+
+  if (msg.role !== 'assistant') {
+    // System rows have no pi vocabulary; store them as legacy rows unchanged.
+    db.insert(messages)
+      .values({
+        id: msg.id,
+        threadId,
+        role: msg.role,
+        parts: msg.parts,
+        metadata: msg.metadata ?? null,
+      })
+      .onConflictDoNothing({ target: messages.id })
+      .run();
+    return;
+  }
+
+  if (!overwrite && messageExists(db, msg.id)) return;
+  const base = messageBaseCreatedAt(db, msg.id) ?? Date.now();
+  const rows = splitAssistantMessage(msg as AtriumUIMessage);
+  db.transaction((tx) => {
+    tx.delete(messages)
+      .where(or(eq(messages.runId, msg.id), eq(messages.id, msg.id)))
+      .run();
+    rows.forEach((row, index) => {
+      tx.insert(messages)
+        .values({
+          id: row.id,
+          threadId,
+          role: row.role,
+          parts: row.message,
+          metadata: row.metadata,
+          runId: row.runId,
+          createdAt: new Date(base + index),
+        })
+        .run();
+    });
+  });
 }
 
 /**
@@ -45,16 +195,7 @@ export function loadThreadMessages(db: Db, threadId: string): UIMessage[] {
  * don't duplicate. Bumps the thread's updatedAt so the sidebar re-sorts.
  */
 export function persistMessage(db: Db, threadId: string, msg: UIMessage): void {
-  db.insert(messages)
-    .values({
-      id: msg.id,
-      threadId,
-      role: msg.role,
-      parts: msg.parts,
-      metadata: msg.metadata ?? null,
-    })
-    .onConflictDoNothing({ target: messages.id })
-    .run();
+  writePiMessage(db, threadId, msg, false);
   const now = new Date();
   // Sending counts as reading: stamp lastReadAt = updatedAt for the user's own
   // message so a thread never flashes "unread" from your own send (only a later
@@ -77,19 +218,7 @@ export function upsertMessage(
   msg: UIMessage,
   opts?: { markRead?: boolean },
 ): void {
-  db.insert(messages)
-    .values({
-      id: msg.id,
-      threadId,
-      role: msg.role,
-      parts: msg.parts,
-      metadata: msg.metadata ?? null,
-    })
-    .onConflictDoUpdate({
-      target: messages.id,
-      set: { parts: msg.parts, metadata: msg.metadata ?? null },
-    })
-    .run();
+  writePiMessage(db, threadId, msg, true);
   const now = new Date();
   // markRead stamps lastReadAt = updatedAt so this write can't trip the sidebar's
   // unread dot — used when the user stops a turn, since the partial message is

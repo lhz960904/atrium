@@ -50,13 +50,21 @@ export const messages = sqliteTable(
     threadId: text('thread_id')
       .notNull()
       .references(() => threads.id, { onDelete: 'cascade' }),
-    role: text({ enum: ['system', 'user', 'assistant'] }).notNull(),
+    role: text({ enum: ['system', 'user', 'assistant', 'toolResult'] }).notNull(),
+    /** pi-native rows store the full pi message JSON here; legacy rows (runId
+     *  null) still hold the flat UIMessage part array. */
     parts: text({ mode: 'json' }).notNull(),
     /** Per-message observability: tokens, model name, finish reason, latency, … */
     metadata: text({ mode: 'json' }),
+    /** Groups one agent run's rows (per-step assistant + tool results) under
+     *  the run id the renderer and edit/delete flows address. Null = legacy row. */
+    runId: text('run_id'),
     createdAt: timestamp(),
   },
-  (table) => [index('messages_thread_created_at_idx').on(table.threadId, table.createdAt)],
+  (table) => [
+    index('messages_thread_created_at_idx').on(table.threadId, table.createdAt),
+    index('messages_run_id_idx').on(table.runId),
+  ],
 );
 
 export const artifacts = sqliteTable('artifacts', {

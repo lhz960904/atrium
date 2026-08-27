@@ -46,15 +46,16 @@ function lastCompletedRunAt(db: Db, taskId: string): Date | undefined {
     .get()?.startedAt;
 }
 
-/** Id of the newest assistant message in a thread, or undefined. */
+/** Run-level id of the newest assistant message in a thread, or undefined. */
 function latestAssistantId(db: Db, threadId: string): string | undefined {
-  return db
-    .select({ id: messages.id })
+  const row = db
+    .select({ id: messages.id, runId: messages.runId })
     .from(messages)
     .where(and(eq(messages.threadId, threadId), eq(messages.role, 'assistant')))
     .orderBy(desc(messages.createdAt))
     .limit(1)
-    .get()?.id;
+    .get();
+  return row?.runId ?? row?.id;
 }
 
 /**

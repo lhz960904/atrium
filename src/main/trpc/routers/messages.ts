@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { messages, threads } from '../../db/schema';
+import { loadThreadMessageDtos } from '../../server/persist';
 import { publicProcedure, router } from '../trpc';
 
 export const messagesRouter = router({
@@ -12,14 +13,7 @@ export const messagesRouter = router({
    */
   listByThread: publicProcedure
     .input(z.object({ threadId: z.string() }))
-    .query(({ ctx, input }) => {
-      return ctx.db
-        .select()
-        .from(messages)
-        .where(eq(messages.threadId, input.threadId))
-        .orderBy(asc(messages.createdAt))
-        .all();
-    }),
+    .query(({ ctx, input }) => loadThreadMessageDtos(ctx.db, input.threadId)),
 
   /**
    * Append a message. parts / metadata are arbitrary JSON; runtime callers
@@ -70,9 +64,16 @@ export const messagesRouter = router({
   deleteMany: publicProcedure
     .input(z.object({ threadId: z.string(), ids: z.array(z.string()).min(1) }))
     .mutation(({ ctx, input }) => {
+      // Client ids are run-shaped; a pi-native run spans several rows keyed by
+      // run_id, so the delete matches either generation.
       const res = ctx.db
         .delete(messages)
-        .where(and(eq(messages.threadId, input.threadId), inArray(messages.id, input.ids)))
+        .where(
+          and(
+            eq(messages.threadId, input.threadId),
+            or(inArray(messages.id, input.ids), inArray(messages.runId, input.ids)),
+          ),
+        )
         .run();
       return { deleted: res.changes };
     }),
