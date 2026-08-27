@@ -72,8 +72,12 @@ export function loadThreadMessages(db: Db, threadId: string): UIMessage[] {
     const runId = row.runId;
     const group: PiRow[] = [];
     while (i < rows.length && rows[i].runId === runId) group.push(toPiRow(rows[i++]));
+    // The vendored AtriumUIMessage and the SDK's UIMessage are structurally
+    // interchangeable; the engine boundary keeps the SDK type until phase 2.
     out.push(
-      group[0].role === 'user' ? mergeUserMessage(group[0]) : mergeAssistantMessage(runId, group),
+      (group[0].role === 'user'
+        ? mergeUserMessage(group[0])
+        : mergeAssistantMessage(runId, group)) as unknown as UIMessage,
     );
   }
   return out;

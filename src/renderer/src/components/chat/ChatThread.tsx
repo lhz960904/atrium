@@ -1,7 +1,7 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult, Todo } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
-import { type ChatStatus, getStaticToolName, isStaticToolUIPart } from 'ai';
+import { type ChatStatus, getStaticToolName, isStaticToolUIPart } from '@shared/ui-message';
 import { ArrowDown, TriangleAlert } from 'lucide-react';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';

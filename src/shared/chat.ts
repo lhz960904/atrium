@@ -1,6 +1,6 @@
 import type { PermissionOptionKind } from '@agentclientprotocol/sdk';
-import type { UIMessage } from 'ai';
 import type { AtriumTools, ToolName } from './tools';
+import type { UIMessage } from './ui-message';
 
 /** One tool call a subagent made, bubbled up live for its card's activity list
  *  (shown as a static "verb + target" line; no output/expansion). */

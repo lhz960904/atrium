@@ -2,7 +2,7 @@ import type { AtriumUIMessage } from '@shared/chat';
 import { isMcpToolName, parseMcpToolName } from '@shared/mcp';
 import { analyzeBash, type Crossing, describeWriteEscape } from '@shared/permissions/analyze';
 import { deriveRule, type TrustRule } from '@shared/permissions/rules';
-import { getToolName, isToolOrDynamicToolUIPart } from 'ai';
+import { getToolName, isToolOrDynamicToolUIPart } from '@shared/ui-message';
 import type { AcpPendingApproval } from '../state/acp-approval-store';
 
 /** A tool call paused for user approval, with its crossing reason for display. */

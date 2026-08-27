@@ -1,5 +1,5 @@
 import type { AcpPermissionDecision, AtriumUIMessage } from '@shared/chat';
-import type { ChatAddToolApproveResponseFunction, ChatStatus } from 'ai';
+import type { ChatStatus } from '@shared/ui-message';
 import { useCallback, useEffect, useMemo } from 'react';
 import { useAcpApprovalStore } from '../state/acp-approval-store';
 import { acpToPendingApproval, getPendingApprovals, type PendingApproval } from './approvals';
@@ -10,8 +10,8 @@ type UseApprovalsOptions = {
   messages: AtriumUIMessage[];
   status: ChatStatus;
   endpoint: { baseUrl: string; token: string };
-  /** useChat's addToolApprovalResponse — the native answer path. */
-  addToolApprovalResponse: ChatAddToolApproveResponseFunction;
+  /** The native answer path (ends the turn; the chat auto-resumes). */
+  addToolApprovalResponse: (input: { id: string; approved: boolean; reason?: string }) => void;
 };
 
 /**

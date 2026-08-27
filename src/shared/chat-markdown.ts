@@ -1,5 +1,5 @@
-import type { UIMessage } from 'ai';
 import { normalizedParts } from './message-parts';
+import type { UIMessage } from './ui-message';
 
 /**
  * Render a conversation as clean, reader-facing markdown — the copy/export

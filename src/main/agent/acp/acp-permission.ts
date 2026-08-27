@@ -1,7 +1,7 @@
 import type { RequestPermissionRequest, RequestPermissionResponse } from '@agentclientprotocol/sdk';
-import type { AtriumUIMessage } from '@shared/chat';
+import type { AtriumDataParts } from '@shared/chat';
 import type { PermissionMode } from '@shared/permissions';
-import type { InferUIMessageChunk, LanguageModel } from 'ai';
+import type { LanguageModel, UIMessageChunk } from 'ai';
 import { reviewBoundaryCrossing } from '../permissions/reviewer';
 import { describeAcpToolCall } from './describe';
 import type { AcpPermissionBroker } from './permission-broker';
@@ -14,10 +14,10 @@ type Deps = {
   reviewerModel?: LanguageModel;
   /** The turn's abort signal, so a stopped turn also cancels an in-flight review. */
   abortSignal?: AbortSignal;
-  // Typed against AtriumUIMessage (not the bare UIMessageChunk, whose data
-  // variant degrades to `data-${string}`/unknown) so the emitted payload is
-  // checked against the permissionRequest data-part shape.
-  write: (chunk: InferUIMessageChunk<AtriumUIMessage>) => void;
+  // Typed against Atrium's data-part map (not the bare UIMessageChunk, whose
+  // data variant degrades to `data-${string}`/unknown) so the emitted payload
+  // is checked against the permissionRequest data-part shape.
+  write: (chunk: UIMessageChunk<unknown, AtriumDataParts>) => void;
 };
 
 /**

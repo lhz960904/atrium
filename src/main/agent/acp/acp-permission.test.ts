@@ -1,13 +1,13 @@
 import { expect, test } from 'bun:test';
 import type { PermissionOption, RequestPermissionRequest } from '@agentclientprotocol/sdk';
-import type { AtriumUIMessage } from '@shared/chat';
-import type { InferUIMessageChunk, LanguageModel } from 'ai';
+import type { AtriumDataParts } from '@shared/chat';
+import type { LanguageModel, UIMessageChunk } from 'ai';
 import { MockLanguageModelV3 } from 'ai/test';
 import { makeAcpOnPermission } from './acp-permission';
 import { describeAcpToolCall } from './describe';
 import { AcpPermissionBroker } from './permission-broker';
 
-type Chunk = InferUIMessageChunk<AtriumUIMessage>;
+type Chunk = UIMessageChunk<unknown, AtriumDataParts>;
 type PermissionChunk = Extract<Chunk, { type: 'data-permissionRequest' }>;
 
 const opt = (kind: PermissionOption['kind'], optionId: string): PermissionOption => ({

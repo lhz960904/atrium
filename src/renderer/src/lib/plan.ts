@@ -1,7 +1,7 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import type { Todo } from '@shared/chat-types';
 import type { AtriumTools } from '@shared/tools';
-import { getStaticToolName, isStaticToolUIPart } from 'ai';
+import { getStaticToolName, isStaticToolUIPart } from '@shared/ui-message';
 
 /** The thread's active plan = the most recent settled `todo_write`, or null. */
 export function getActivePlan(messages: AtriumUIMessage[]): Todo[] | null {

@@ -2,16 +2,13 @@ import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
 import type { PermissionMode } from '@shared/permissions';
 import type { EventEnvelope } from '@shared/protocol';
-import type { AtriumTools } from '@shared/tools';
 import {
   type ChatStatus,
   generateId,
-  getStaticToolName,
+  getToolName,
   isStaticToolUIPart,
   isToolOrDynamicToolUIPart,
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-  lastAssistantMessageIsCompleteWithToolCalls,
-} from 'ai';
+} from '@shared/ui-message';
 import { RunAssembler } from './reduce';
 
 /**
@@ -64,9 +61,32 @@ function lastClarifyCancelled(messages: AtriumUIMessage[]): boolean {
   return last.parts.some(
     (p) =>
       isStaticToolUIPart(p) &&
-      getStaticToolName<AtriumTools>(p) === 'ask_clarification' &&
+      getToolName(p) === 'ask_clarification' &&
       p.state === 'output-available' &&
       (p.output as ClarifyResult | undefined)?.cancelled === true,
+  );
+}
+
+/** The last message's final-step tool parts — the ones a resume decision reads. */
+function lastStepToolParts(messages: AtriumUIMessage[]) {
+  const last = messages.at(-1);
+  if (!last || last.role !== 'assistant') return [];
+  const stepStart = last.parts.findLastIndex((p) => p.type === 'step-start');
+  return last.parts.slice(stepStart + 1).filter(isToolOrDynamicToolUIPart);
+}
+
+/** Every tool call of the last step has its result — the turn can continue. */
+function toolRoundComplete(messages: AtriumUIMessage[]): boolean {
+  const tools = lastStepToolParts(messages);
+  return tools.length > 0 && tools.every((p) => p.state === 'output-available');
+}
+
+/** Every pending approval got its answer — the turn can continue and execute. */
+function approvalsAnswered(messages: AtriumUIMessage[]): boolean {
+  const tools = lastStepToolParts(messages);
+  return (
+    tools.some((p) => p.state === 'approval-responded') &&
+    tools.every((p) => p.state !== 'approval-requested')
   );
 }
 
@@ -181,9 +201,7 @@ export class PiChat {
     const messages = this.merged();
     const last = messages.at(-1);
     if (!last || last.role !== 'assistant') return;
-    const complete =
-      lastAssistantMessageIsCompleteWithToolCalls({ messages }) ||
-      lastAssistantMessageIsCompleteWithApprovalResponses({ messages });
+    const complete = toolRoundComplete(messages) || approvalsAnswered(messages);
     if (complete && !lastClarifyCancelled(messages)) void this.post(last);
   }
 
