@@ -127,9 +127,9 @@ export async function runScheduledTask(
       return { status: 'error', error: `chat endpoint ${res.status}: ${body}`.trim() };
     }
 
-    // Drain the SSE to EOF; the turn is done when the stream closes. Scan the
-    // decoded bytes for an error chunk so a model/tool failure counts as a failed
-    // run rather than a silent success.
+    // Drain the pi event SSE to EOF; the turn is done when the stream closes.
+    // Scan the decoded bytes for a stream-error notice so a model/tool failure
+    // counts as a failed run rather than a silent success.
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let streamError: string | undefined;
@@ -138,7 +138,7 @@ export async function runScheduledTask(
       if (done) break;
       if (streamError) continue;
       const text = decoder.decode(value, { stream: true });
-      const match = text.match(/"type":"error"[^}]*?"errorText":"((?:[^"\\]|\\.)*)"/);
+      const match = text.match(/"name":"stream-error".*?"errorText":"((?:[^"\\]|\\.)*)"/);
       if (match) streamError = match[1] ? JSON.parse(`"${match[1]}"`) : 'The scheduled run failed.';
     }
 

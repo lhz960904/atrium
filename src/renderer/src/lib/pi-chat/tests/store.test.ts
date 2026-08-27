@@ -57,7 +57,7 @@ describe('sending', () => {
     chat.sendMessage({ text: '你好' });
     await untilIdle(chat);
     const snap = chat.getSnapshot();
-    expect(calls[0].url).toBe('http://test/api/chat?track=pi');
+    expect(calls[0].url).toBe('http://test/api/chat');
     const body = JSON.parse(String(calls[0].init?.body));
     expect(body).toMatchObject({ threadId: 't1', providerId: 'deepseek' });
     expect(body.message.role).toBe('user');

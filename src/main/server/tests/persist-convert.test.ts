@@ -204,7 +204,10 @@ describe('assistant runs', () => {
         { type: 'step-start' },
         { type: 'text', text: '生成了' },
         { type: 'file', url: 'data:image/png;base64,BB', mediaType: 'image/png' },
-        { type: 'data-artifact', data: { path: 'out.html' } } as unknown as AtriumUIMessage['parts'][number],
+        {
+          type: 'data-artifact',
+          data: { path: 'out.html' },
+        } as unknown as AtriumUIMessage['parts'][number],
       ],
       metadata: { createdAt: 1 },
     };

@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
-import { type LanguageModel, UI_MESSAGE_STREAM_HEADERS, type UIMessage } from 'ai';
+import type { LanguageModel, UIMessage } from 'ai';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { AcpPermissionBroker, isAcpDecision } from '../agent/acp/permission-broker';
@@ -50,13 +50,8 @@ import {
   upsertMessage,
   writeAcpBinding,
 } from './persist';
-import { attachPiEventTrack, subscribePiEvents } from './pi-events';
-import {
-  abortThreadRun,
-  isThreadRunning,
-  resumeThreadStream,
-  startThreadStream,
-} from './resumable';
+import { subscribePiEvents } from './pi-events';
+import { abortThreadRun, isThreadRunning, startThreadRun } from './resumable';
 
 export type ChatEndpoint = { port: number; token: string; dispose: () => void };
 
@@ -66,19 +61,8 @@ const PI_SSE_HEADERS = {
   Connection: 'keep-alive',
 } as const;
 
-/**
- * Respond to /api/chat on the requested track: the legacy UIMessage SSE, or
- * (track=pi) the run's pi envelope stream. The legacy reader is cancelled in
- * that case — the resumable store drains the run to completion regardless, so
- * persistence and abort semantics are unchanged.
- */
-function trackResponse(
-  track: string | undefined,
-  threadId: string,
-  legacy: ReadableStream<Uint8Array>,
-): Response {
-  if (track !== 'pi') return new Response(legacy, { headers: UI_MESSAGE_STREAM_HEADERS });
-  void legacy.cancel();
+/** The POST response is the just-started run's event stream from seq 0. */
+function runResponse(threadId: string): Response {
   const sse = subscribePiEvents(threadId, -1);
   return sse
     ? new Response(sse, { headers: PI_SSE_HEADERS })
@@ -212,12 +196,8 @@ export function startHttpServer(deps: {
         // the message as-is so the trace's "Worked for Xs" survives a reload.
         onFinish: (m) => upsertMessage(deps.db, threadId, m),
       });
-      const sse = await startThreadStream(
-        threadId,
-        attachPiEventTrack({ threadId, provider: providerId, model: modelId }, acpStream),
-        abort,
-      );
-      return trackResponse(c.req.query('track'), threadId, sse);
+      startThreadRun({ threadId, provider: providerId, model: modelId }, acpStream, abort);
+      return runResponse(threadId);
     }
 
     // use  run image gen if current model is image model
@@ -233,12 +213,8 @@ export function startHttpServer(deps: {
         onFinish: (m) =>
           upsertMessage(deps.db, threadId, { ...m, metadata: { createdAt: Date.now() } }),
       });
-      const sse = await startThreadStream(
-        threadId,
-        attachPiEventTrack({ threadId, provider: providerId, model: modelId }, imageStream),
-        abort,
-      );
-      return trackResponse(c.req.query('track'), threadId, sse);
+      startThreadRun({ threadId, provider: providerId, model: modelId }, imageStream, abort);
+      return runResponse(threadId);
     }
 
     const sandbox = new LocalSandbox(workspaceRoot);
@@ -332,12 +308,8 @@ export function startHttpServer(deps: {
         persistenceMiddleware(upsertMessage),
       ],
     });
-    const sse = await startThreadStream(
-      threadId,
-      attachPiEventTrack({ threadId, provider: providerId, model: modelId }, agentStream),
-      abort,
-    );
-    return trackResponse(c.req.query('track'), threadId, sse);
+    startThreadRun({ threadId, provider: providerId, model: modelId }, agentStream, abort);
+    return runResponse(threadId);
   });
 
   // Stop a thread's in-flight generation. Aborts the agent loop server-side
@@ -385,19 +357,10 @@ export function startHttpServer(deps: {
     return c.json({ compacted });
   });
 
-  // Reconnect endpoint. If a run is still streaming (or just finished and still
-  // buffered) for this thread, hand back its replay-from-start + live-tail
-  // stream so a remounted client (thread switch, window reload) rejoins it.
-  // 204 when nothing is buffered — the client then shows its loaded messages.
-  app.get('/api/chat/:threadId/stream', async (c) => {
-    const sse = await resumeThreadStream(c.req.param('threadId'));
-    return sse ? new Response(sse, { headers: UI_MESSAGE_STREAM_HEADERS }) : c.body(null, 204);
-  });
-
-  // The pi-event track's reconnect endpoint: replay the thread's envelope log
-  // from `from` (exclusive) and tail live. 204 when nothing is running — a
-  // finished run's message is already in the DB the client seeds from, so
-  // replaying its log would duplicate the content.
+  // Reconnect endpoint: replay the thread's envelope log from `from`
+  // (exclusive) and tail live. 204 when nothing is running — a finished run's
+  // message is already in the DB the client seeds from, so replaying its log
+  // would duplicate the content.
   app.get('/api/chat/:threadId/pi-events', (c) => {
     if (!isThreadRunning(c.req.param('threadId'))) return c.body(null, 204);
     const raw = Number(c.req.query('from') ?? '-1');

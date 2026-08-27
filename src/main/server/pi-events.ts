@@ -4,16 +4,14 @@ import { createLogger } from '../log';
 import { createProtocolBridge } from './protocol-bridge';
 
 /**
- * The pi-event side track for the dual-track phase: every run's UIMessageChunk
- * stream is teed, and the side branch is folded through the protocol bridge
- * into a per-thread envelope log. Readers replay the buffer from any seq and
- * tail live. The old UIMessage SSE track stays the authoritative one the
- * renderer consumes; this log exists so the new protocol can be verified
- * against real traffic before anything switches over.
+ * The wire's event store: every run's UIMessageChunk stream is folded through
+ * the protocol bridge into a per-thread envelope log, and readers replay the
+ * buffer from any seq then tail live. This IS the chat transport now — the
+ * POST response and every reconnect serve slices of this log.
  *
  * Memory bounds: one log per thread, superseded by the thread's next run, and
  * ended logs beyond a fixed count are evicted oldest-first. A single log holds
- * one run — the same per-run bound the resumable store already accepts.
+ * one run — the same per-run bound the old resumable store accepted.
  */
 
 const log = createLogger('pi-events');
@@ -41,16 +39,16 @@ function beginLog(threadId: string): ThreadLog {
 }
 
 /**
- * Tee the run's chunk stream and drain the side branch through the bridge into
- * the thread's log. Returns the main branch for the existing SSE pipeline.
- * The drain owns closure: whether the source ends, aborts, or errors, the
- * bridge's finalize seals the event sequence and the log ends.
+ * Drain the run's chunk stream through the bridge into the thread's log,
+ * consuming the source to completion (which is what fires the engine's
+ * onFinish persistence). The drain owns closure: whether the source ends,
+ * aborts, or errors, the bridge's finalize seals the event sequence and the
+ * log ends.
  */
-export function attachPiEventTrack(
+export async function drainRunToEventLog(
   run: { threadId: string; provider: string; model: string },
   stream: ReadableStream<UIMessageChunk>,
-): ReadableStream<UIMessageChunk> {
-  const [main, side] = stream.tee();
+): Promise<void> {
   const threadLog = beginLog(run.threadId);
   const bridge = createProtocolBridge({ provider: run.provider, model: run.model });
 
@@ -60,26 +58,22 @@ export function attachPiEventTrack(
     for (const listener of threadLog.listeners) listener(envelope);
   };
 
-  void (async () => {
-    const reader = side.getReader();
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        for (const event of bridge.push(value)) append(event);
-      }
-    } catch (err) {
-      log.warn(`run stream failed mid-flight: ${err}`);
-    } finally {
-      for (const event of bridge.finalize()) append(event);
-      threadLog.ended = true;
-      for (const fn of threadLog.onEnd) fn();
-      threadLog.listeners.clear();
-      threadLog.onEnd.clear();
+  const reader = stream.getReader();
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const event of bridge.push(value)) append(event);
     }
-  })();
-
-  return main;
+  } catch (err) {
+    log.warn(`run stream failed mid-flight: ${err}`);
+  } finally {
+    for (const event of bridge.finalize()) append(event);
+    threadLog.ended = true;
+    for (const fn of threadLog.onEnd) fn();
+    threadLog.listeners.clear();
+    threadLog.onEnd.clear();
+  }
 }
 
 /**

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { EventEnvelope } from '@shared/protocol';
 import type { UIMessageChunk } from 'ai';
-import { attachPiEventTrack, subscribePiEvents } from '../pi-events';
+import { drainRunToEventLog, subscribePiEvents } from '../pi-events';
 
 const textTurn: UIMessageChunk[] = [
   { type: 'start', messageId: 'm1' },
@@ -38,13 +38,6 @@ function gatedStream(chunks: UIMessageChunk[]) {
   return { stream, open };
 }
 
-async function drain(stream: ReadableStream<unknown>) {
-  const reader = stream.getReader();
-  while (!(await reader.read()).done) {
-    // discard; the side track observes via tee
-  }
-}
-
 async function readEnvelopes(sse: ReadableStream<Uint8Array>): Promise<EventEnvelope[]> {
   const text = await new Response(sse).text();
   return text
@@ -53,24 +46,12 @@ async function readEnvelopes(sse: ReadableStream<Uint8Array>): Promise<EventEnve
     .map((line) => JSON.parse(line.slice('data: '.length)) as EventEnvelope);
 }
 
-const attach = (threadId: string, chunks: UIMessageChunk[]) =>
-  attachPiEventTrack({ threadId, provider: 'deepseek', model: 'deepseek-chat' }, streamOf(chunks));
+const drain = (threadId: string, chunks: UIMessageChunk[]) =>
+  drainRunToEventLog({ threadId, provider: 'deepseek', model: 'deepseek-chat' }, streamOf(chunks));
 
-describe('pi event track', () => {
-  test('main branch passes chunks through untouched', async () => {
-    const main = attach('t-pass', textTurn);
-    const seen: unknown[] = [];
-    const reader = main.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      seen.push(value);
-    }
-    expect(seen).toEqual(textTurn);
-  });
-
+describe('pi event log', () => {
   test('an ended log replays fully with contiguous seq and closes', async () => {
-    await drain(attach('t-replay', textTurn));
+    await drain('t-replay', textTurn);
     const sse = subscribePiEvents('t-replay', -1);
     expect(sse).not.toBeNull();
     const envelopes = await readEnvelopes(sse as ReadableStream<Uint8Array>);
@@ -80,7 +61,7 @@ describe('pi event track', () => {
   });
 
   test('replay from a seq skips everything at or before it', async () => {
-    await drain(attach('t-from', textTurn));
+    await drain('t-from', textTurn);
     const all = await readEnvelopes(subscribePiEvents('t-from', -1) as ReadableStream<Uint8Array>);
     const tail = await readEnvelopes(subscribePiEvents('t-from', 4) as ReadableStream<Uint8Array>);
     expect(tail).toEqual(all.filter((e) => e.seq > 4));
@@ -88,24 +69,21 @@ describe('pi event track', () => {
 
   test('a mid-run subscriber gets replay plus live tail with no gap', async () => {
     const { stream, open } = gatedStream(textTurn);
-    const main = attachPiEventTrack(
+    const draining = drainRunToEventLog(
       { threadId: 't-live', provider: 'deepseek', model: 'deepseek-chat' },
       stream,
     );
-    const drained = drain(main);
     // Subscribe while the run is parked before its first chunk, then let it flow.
     const sse = subscribePiEvents('t-live', -1);
     expect(sse).not.toBeNull();
     open();
-    await drained;
+    await draining;
     const envelopes = await readEnvelopes(sse as ReadableStream<Uint8Array>);
     expect(envelopes.map((e) => e.seq)).toEqual(envelopes.map((_, i) => i));
     expect(envelopes.at(-1)?.event.type).toBe('agent_end');
   });
 
-  test('a source error still seals the log with an aborted closure', async () => {
-    // Erroring a stream discards queued chunks, so let both tee branches
-    // consume the prefix before the source blows up.
+  test('a source error still seals the log', async () => {
     const broken = new ReadableStream<UIMessageChunk>({
       async start(controller) {
         controller.enqueue({ type: 'start', messageId: 'm1' });
@@ -114,28 +92,25 @@ describe('pi event track', () => {
         controller.error(new Error('engine exploded'));
       },
     });
-    const main = attachPiEventTrack(
+    await drainRunToEventLog(
       { threadId: 't-err', provider: 'deepseek', model: 'deepseek-chat' },
       broken,
     );
-    await drain(main).catch(() => {});
     const envelopes = await readEnvelopes(
       subscribePiEvents('t-err', -1) as ReadableStream<Uint8Array>,
     );
     expect(envelopes.at(-1)?.event.type).toBe('agent_end');
-    const ended = envelopes.filter((e) => e.event.type === 'message_end');
-    expect(ended).toHaveLength(1);
+    expect(envelopes.filter((e) => e.event.type === 'message_end')).toHaveLength(1);
   });
 
   test('a new run supersedes the thread log', async () => {
-    await drain(attach('t-super', textTurn));
-    const second: UIMessageChunk[] = [
+    await drain('t-super', textTurn);
+    await drain('t-super', [
       { type: 'start', messageId: 'm2' },
       { type: 'start-step' },
       { type: 'finish-step' },
       { type: 'finish', finishReason: 'stop' },
-    ];
-    await drain(attach('t-super', second));
+    ]);
     const envelopes = await readEnvelopes(
       subscribePiEvents('t-super', -1) as ReadableStream<Uint8Array>,
     );

@@ -16,9 +16,9 @@ import { RunAssembler } from './reduce';
 
 /**
  * The chat data plane over the pi event track, replacing useChat + its
- * transport: sends go to /api/chat?track=pi and the response is the run's pi
- * event SSE; reconnects replay the envelope log from seq 0. Messages are
- * assembled by RunAssembler in the part shape the components already consume.
+ * transport: a send POSTs /api/chat and the response is the run's pi event
+ * SSE; reconnects replay the envelope log from seq 0. Messages are assembled
+ * by RunAssembler in the part shape the components already consume.
  *
  * Continuations (a clarify answered, an approval decided) re-send the
  * assistant message and seed the assembler with its parts — the new run's
@@ -194,7 +194,7 @@ export class PiChat {
     const seed =
       message.role === 'assistant' ? { id: message.id, parts: message.parts } : undefined;
     try {
-      const res = await this.fetchFn(`${this.init.baseUrl}/api/chat?track=pi`, {
+      const res = await this.fetchFn(`${this.init.baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-atrium-token': this.init.token },
         body: JSON.stringify({ ...this.init.getExtras(), message }),
