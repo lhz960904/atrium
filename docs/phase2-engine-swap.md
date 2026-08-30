@@ -1,8 +1,13 @@
 ---
-Status: Draft — 待 Haoze review
+Status: Approved — 决策点已定（2026-08-28），按子步执行
 Last updated: 2026-08-28
 Scope: 迁移阶段 2 —— 主进程 agent 引擎从 Vercel AI SDK 换到 pi-agent-core 0.84.2
 ---
+
+> 决策记录（Haoze，2026-08-28）：
+> **D1 HITL** = 复刻 end-turn 语义（block+terminate+行重写+continue）。
+> **D2 Compaction** = 自家算法移植，借 pi 导出的独立 compaction 原语；harness 整套留待后续阶段评估。
+> **D3 图像生成** = 采用 pi images API 合同（`ImagesFunction`），自写 provider 模块，见 §9。
 
 # 阶段 2 技术方案：引擎换 pi-agent-core
 
@@ -177,7 +182,7 @@ http.ts /api/chat
 ## 9. ACP 发射器与 run-image
 
 - **ACP**（外部 CLI 整轮接管，不经引擎）：`ChunkEmitter` 从产 UIMessageChunk 改为**直接产 `AgentSessionEvent` 写入事件日志**（text/thinking/tool 三元组 + message_end；权限卡片仍走 notice('permissionRequest'/'permissionResolved')，parked-ask 端点不变）。持久化：ACP 轮次的 onFinish 消息按 pi 行直写。这是 1d 递延项的收口。
-- **run-image**（决策点 D3）：pi 无图像生成 API（仅 openrouter-images）。**推荐**：图像生成模块暂留 AI SDK（`ai` 依赖因此保留到本阶段末，模块已隔离），事件侧同 ACP 直接产 pi 事件；后续用 provider 原生 HTTP 重写后再摘 `ai` 依赖（记 debt）。若你倾向本阶段一步到位，加一个子步做 aihubmix/openai images 的裸 HTTP 客户端。
+- **run-image**（D3 已定）：pi-ai 有独立的 images API 合同——`ImagesFunction = (ImagesModel, ImagesContext{input: (Text|Image)[]}, options) → AssistantImages{output, usage, stopReason}`，每个图像 api 模块导出一个 `generateImages`；但内置实现仅 `openrouter-images`，`ImagesApi` 是开放 union。方案：**按此合同自写我们 provider 的模块**（aihubmix 的 gemini / gpt-image 端点，一次 HTTP + 响应映射，体量小），`isImageModel` 判定改挂 `ImagesModel.output` 含 `'image'`；run-image.ts 改为调用 `generateImages` + 直接产 pi 事件（file 部件沿用 notice 通道）。AI SDK 依赖随本阶段 2h 一并摘除，不留 debt。
 
 ---
 
@@ -201,7 +206,7 @@ http.ts /api/chat
 | **2e** | compaction 移植（轮内折叠 + 检查点 + /compact） | 压缩回归段 + 长对话实测 |
 | **2f** | HITL/permission + ask_clarification + auto-review | 审批/拒绝/always/澄清/取消全流程 CDP |
 | **2g** | subagent + ACP 发射器原生化 + scheduled 回归 | task 工具嵌套轮 + Claude Code ACP 轮实测 |
-| **2h** | run-image 处置 + `ai` 依赖收尾（按 D3 决定）+ split 等陪葬删除 + 全量回归清单过一遍 | feature-inventory 全绿 |
+| **2h** | run-image 迁 pi images 合同（自写 generateImages 模块）+ `ai` 依赖摘除 + split 等陪葬删除 + 全量回归清单过一遍 | 图像生成实测出图；feature-inventory 全绿；`ai` 不在依赖里 |
 
 ---
 
@@ -212,7 +217,7 @@ http.ts /api/chat
 3. **流式重试语义**：pi 流中断的内建重试行为与 `MODEL_CALL_MAX_RETRIES` 的等价性需实测（429 用例）。
 4. **打字节奏**：无 smoothStream 后 delta 更粗——低风险，renderer 侧兜底。
 5. **工具 schema 漂移**：zod→TypeBox 手抄 33 个易错——快照测试硬防。
-6. **决策点汇总**：D1 HITL 复刻 vs park（推荐复刻）；D2 compaction 自家算法 vs pi harness（推荐自家）；D3 run-image 留 AI SDK vs 本阶段裸 HTTP（推荐暂留）。
+6. **自写 images 模块的响应映射**（aihubmix gemini/gpt-image 的返回格式差异）——2h 实测出图为准。
 
 ---
 
