@@ -14,7 +14,7 @@ Branch: feat/protocol-isolation（基于 main@4ca74fd）
 
 1. **协议隔离**——线协议 / DB parts 格式 / 渲染端消费层脱离 Vercel AI SDK 的 UIMessage，换成自有协议（pi 词汇冻结副本）。引擎仍是 AI SDK，在边缘做转换（转换器与旧引擎同生共死）。
 2. **AI 层换 pi**——引擎 / 33 个工具（TypeBox）/ HITL（beforeToolCall）/ subagent / compaction 重接。业务层与 DB 不动；不引入 pi Session 账本（那是阶段 3 议题）。
-   - 开头两件事：① 装上 pi 后把 `src/shared/protocol/` 冻结副本对真实 `.d.ts` 复核；② 加**类型一致性测试**（仅测试文件 import pi 类型，断言冻结副本是 pi 协议的严格子集——pi 消息可赋值给我们的、事件负载是 pi 对应事件的投影），此后协议漂移直接 typecheck 失败。
+   - 开头两件事：① 装上 pi 后把 `src/shared/protocol/` 冻结副本对真实 `.d.ts` 复核（已执行，一次性类型断言验证为严格子集后移除）；② 此后每次 pi 升版本，手工复核冻结副本是固定动作。
    - 协议与 pi 的关系定为：**pi 词汇的严格子集 + 扩展事件（approval_*、notice）**。wire 上省略 `partial`/`turn_end.toolResults`/`agent_end.messages` 等重负载字段是序列化边界的职责（pi 的 AgentEvent 是进程内协议，靠引用共享才免费；跨 SSE 逐帧带累积消息在写大文件 / computer-use 截图场景是 MB~几十 MB 级浪费），不随引擎切换回收。进程内（persistence/hooks）阶段 2 起直接消费 pi 原生事件。pi 升版本时同步复核冻结副本是固定动作。
 3. **服务端业务架构重思**——Workspace→Task→Run 产品重塑、会话存储选型、模块结构（v2 分支的 interfaces / routers-are-domain 实验是候选形态）。
 4. **Renderer 整体优化**。

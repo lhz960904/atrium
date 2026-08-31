@@ -4,10 +4,12 @@ Last updated: 2026-08-28
 Scope: 迁移阶段 2 —— 主进程 agent 引擎从 Vercel AI SDK 换到 pi-agent-core 0.84.2
 ---
 
-> 决策记录（Haoze，2026-08-28）：
+> 决策记录（Haoze，2026-08-28 / 08-31）：
 > **D1 HITL** = 复刻 end-turn 语义（block+terminate+行重写+continue）。
 > **D2 Compaction** = 自家算法移植，借 pi 导出的独立 compaction 原语；harness 整套留待后续阶段评估。
 > **D3 图像生成** = 采用 pi images API 合同（`ImagesFunction`），自写 provider 模块，见 §9。
+> **D4 订阅模型走 OAuth 直连取代 ACP**（08-31）：Claude/Codex 订阅经 pi 原生 OAuth 登录成为一等 provider，跑 Atrium 自己的 agent loop（体验统一、全能力可用）；ACP 通道冻结不再投入（2g 不移植发射器），是否删除待阶段 3 按使用情况定。ToS 风险已知情：订阅 OAuth token 官方仅承诺给官方客户端，第三方使用有账号受限先例。
+> **模型元数据与计价全部取自 pi 内置目录**（08-31）：litellm 拉取管线退役，见 §3。
 
 # 阶段 2 技术方案：引擎换 pi-agent-core
 
@@ -92,15 +94,19 @@ http.ts /api/chat
 | `anthropic` | `anthropic-messages` | 官方 | cache 断点 pi 内建 |
 | `openai` | `openai-responses`（或 completions，按现状对齐） | 官方 | |
 | `deepseek` | `openai-completions` | `api.deepseek.com` | pi KnownProvider 有 deepseek |
-| `volcengine-agent` / `volcengine-coding` | `openai-completions` | ark 端点 | doubao thinking 参数：ark 的 openai 兼容层是否吃 pi 的 reasoning 选项——2a 冒烟验证项 |
+| `volcengine-agent` / `volcengine-coding` | `anthropic-messages`（manifest protocol 即 anthropic） | ark `/api/plan` | **2a 冒烟已通**：真实 ark 端点完整事件序列 + 正确回复；thinking 走 anthropic 原生通道，openai 兼容层风险不存在 |
 | `aihubmix`（openai 面） | `openai-completions` | aihubmix | |
 | `aihubmix`（claude 模型） | `anthropic-messages` | aihubmix 原生 anthropic 端点 | 复用现状"anthropic 原生直通"的判定逻辑；beta header 直通已验证过 |
-| local-cli（claude-code/codex/gemini） | 不进引擎 | — | ACP 整轮接管，见 §9 |
+| Claude 订阅（OAuth） | `anthropic-messages`（authToken Bearer——pi 客户端本就 OAuth-first） | 官方 | `Models.login('anthropic','oauth',…)` + safeStorage 垫底的 CredentialStore，token 自动刷新 |
+| Codex 订阅（OAuth） | `openai-codex-responses`（KnownApi 内置） | 官方 | provider `openai-codex` pi 内置 |
+| local-cli（claude-code/codex/gemini） | 不进引擎 | — | ACP 通道冻结（D4），订阅路径由上两行取代 |
 
-- **manifest 即 Model 工厂**：manifest 的模型条目 + `models/catalog.ts` 的 contextWindow/pricing 合成 pi `Model` 对象（`createProvider`/自定义对象皆可，倾向直接构造对象——模型即数据，与 llm-space 调研结论一致）。
+- **模型元数据全部来自 pi，litellm 管线退役**（Haoze 决定，2026-08-31）：pi 的 Model 条目自带 cost/contextWindow/maxTokens/input(视觉)/reasoning/compat，且上游维护。解析顺序：① 内置条目精确命中（deepseek/anthropic/openai/google 直连）→ ② **跨目录按模型 id 借条目**（aihubmix 等聚合商跑 gpt/claude/gemini 时借对应官方条目的元数据；compat/thinking 映射仅在 api 相同才随借）→ ③ manifest 模型条目的声明字段（`contextTokens/vision/reasoning` 早已存在——模型即数据在自家层）→ ④ 硬默认（128k/8192/cost 0）。litellm 的 snapshot(5MB)+磁盘缓存+后台刷新（`models/catalog.ts` + `lookup.ts`）在 2h 随其余消费方一并删除；usage/models 两个 tRPC 路由届时改读 pi 元数据。manifest 本体保留——它是 provider 注册表（kind/protocol/baseUrl/UI 模型底单），只是不再喂价格表。图像模型判定（isImageModel）改为 manifest 模型条目上的显式标注。
+- **注册表静态装配**（Haoze 设计，2026-08-31）：pi 的 Models 注册表只服务已注册 provider（未注册直接拒绝，实测验证）。装配在模块加载时一次完成、集合确定：内置四家（anthropic/openai/deepseek/google）**单独 import 各自的 provider 工厂**（不全量装载 38 家目录）；manifest 其余条目（中转站 aihubmix/volcengine、local-service ollama 等）用 `createProvider` 构造**同协议** provider 注册（空模型列表，密钥逐调用经 getApiKey 注入）。不做运行时动态注册。跨目录借元数据的搜索范围因此收敛为四家官方目录，转录条目噪音自然消失。
+- **baseUrl 遵循 pi 惯例**（不带 `/v1` 等路径尾缀，api 模块自拼）：后端不做尾缀兜底；用户输入的校验放**设置面板渲染层**（提示/剥离尾缀——记为 2g 设置页小项）。存量 `/v1` 数据不做读侧兼容（Haoze 决定；本机既有一条已手工归一）。
 - **视觉门控**：`Model.input` 含 `'image'` 与否取代 `supportsImageToolResults`（工具结果是否带 ImageContent、computer-use 非视觉刹车沿用此判定）。
 - `getApiKey(provider)` ← 现有加密密钥读取，逐调用解析（顺带解决密钥轮换）。
-- 计价：**保留自家 usage 账本与 litellm 价格表**（连续性），pi `calculateCost` 仅作交叉校验；pi Model.cost 填我们的价格。
+- **计价直接用 pi 内置**（Haoze 决定，2026-08-31）：pi 在流式中按 `Model.cost` 算好 `usage.cost`，账本直接记录该结果；自家 `modelPricing`/`costMicros` 计算链路随 litellm 管线一并退役。pi 不认识的模型（订阅制的 ark plan、别名 id）cost 为 0——订阅制本就无单价，如需补录在 manifest 条目声明，不自算。
 
 ---
 
@@ -147,7 +153,7 @@ http.ts /api/chat
 | date | `transformContext` ⑦ | 锚在最后一条用户消息（保缓存前缀），逻辑照搬 |
 | title | run 装配期（首轮触发，独立模型调用） | 引擎无关，重挂 |
 | metadata | run 包装层 | createdAt/durationMs 自算；tokens 直接取 pi `AssistantMessage.usage`（**每 turn 原生精确**，比现在的 run 总量更细）；仍发 notice('message-metadata') 喂渲染端 |
-| usage（账本） | `subscribe` message_end | 同上，自家价格表计价不变 |
+| usage（账本） | `subscribe` message_end | tokens 与 **cost 都取 pi 算好的 `usage`/`usage.cost`**，账本不再自行计价 |
 | persistence | `subscribe` message_end / tool_execution_end | pi 消息直写行（split 退役）；continuation 重写语义沿用 run_id 事务 |
 | seal-tool-calls（中止时） | `handleRunFailure`/abort 路径 + 读侧修复 | pi 中止本身会产 stopReason aborted 的规范收尾 |
 | prompt-cache（非 middleware） | 删除 | anthropic 断点 pi 内建（2a 复核） |
@@ -181,7 +187,7 @@ http.ts /api/chat
 
 ## 9. ACP 发射器与 run-image
 
-- **ACP**（外部 CLI 整轮接管，不经引擎）：`ChunkEmitter` 从产 UIMessageChunk 改为**直接产 `AgentSessionEvent` 写入事件日志**（text/thinking/tool 三元组 + message_end；权限卡片仍走 notice('permissionRequest'/'permissionResolved')，parked-ask 端点不变）。持久化：ACP 轮次的 onFinish 消息按 pi 行直写。这是 1d 递延项的收口。
+- **ACP（D4 后冻结）**：不再投入移植——`ChunkEmitter` 等通道代码原样保留但不改造为 pi 事件（local-cli 入口可在设置里隐藏或标记 legacy），订阅场景由 OAuth 直连 provider 取代；阶段 3 按使用情况决定删除。若冻结期间 ACP 轮次仍被触发，走既有 UIMessageChunk 通道经 protocol-bridge——**因此 bridge 的删除从 2c 挪到 ACP 处置定案时**。
 - **run-image**（D3 已定）：pi-ai 有独立的 images API 合同——`ImagesFunction = (ImagesModel, ImagesContext{input: (Text|Image)[]}, options) → AssistantImages{output, usage, stopReason}`，每个图像 api 模块导出一个 `generateImages`；但内置实现仅 `openrouter-images`，`ImagesApi` 是开放 union。方案：**按此合同自写我们 provider 的模块**（aihubmix 的 gemini / gpt-image 端点，一次 HTTP + 响应映射，体量小），`isImageModel` 判定改挂 `ImagesModel.output` 含 `'image'`；run-image.ts 改为调用 `generateImages` + 直接产 pi 事件（file 部件沿用 notice 通道）。AI SDK 依赖随本阶段 2h 一并摘除，不留 debt。
 
 ---
@@ -191,7 +197,7 @@ http.ts /api/chat
 - 写侧：subscribe 持久器按事件直写 pi 行（assistant 每 turn 一行、toolResult 单行，复用 run_id 事务与重写语义）；`splitUserMessage/splitAssistantMessage` 退役。
 - 读侧：新增 `rowsToAgentMessages`（行 → pi AgentMessage[]，引擎历史直读，**不再经 UIMessage 往返**）；`merge*`（行 → AtriumUIMessage）仅服务 renderer DTO，阶段 4 退役。
 - 旧代（run_id 空）行进引擎历史：读时经现有 merge → 再走"UI→pi"一次性转换？**不**——直接写"旧 UI parts → pi 消息"的读侧适配（split 的镜像早已存在于 persist-convert，保留其映射逻辑作为 legacy 读路径）。
-- **冻结协议一致性测试**（承诺过的阶段 2 第一件事）：测试文件（仅测试 import pi 类型）断言冻结副本是 pi 词汇的严格子集——pi `AssistantMessage` 可赋值给我们的、事件负载是 pi 对应事件的投影;漂移即 typecheck 失败。
+- **冻结协议复核**：装库后已对真实 0.84.2 类型逐项验证冻结副本为严格子集（一次性类型断言，验证后移除——Haoze 决定不留常驻测试）；此后每次 pi 升版本，手工对 `.d.ts` 复核冻结副本是固定动作。
 
 ---
 
@@ -199,20 +205,20 @@ http.ts /api/chat
 
 | 子步 | 内容 | 验收 |
 |---|---|---|
-| **2a** | 锁版本装库；协议一致性测试；Model/Provider 层（manifest→pi Model、getApiKey）；streamFn 对 deepseek/volcengine/aihubmix-anthropic 各冒烟一轮（含 thinking、cache 断点复核、429 重试观察） | 一致性测试绿；三 provider 冒烟脚本通过 |
+| **2a** | 锁版本装库；冻结协议对 pi 类型一次性复核；Model/Provider 层（pi 元数据解析、getApiKey）；streamFn 真流量冒烟 | 复核通过；已配置 provider 冒烟通过 |
 | **2b** | 工具层：33 工具 TypeBox 化 + throw 语义 + MCP 适配器；JSON Schema 快照测试钉不变 | 快照全对齐；工具单测绿 |
 | **2c** | 引擎装配：runAgent 内部换 Agent + 事件投影器 + 持久器 + metadata/usage/title；transformContext 先接 seal+date 最小集 | 文本轮/工具轮 CDP+DB 全对账；bridge 删除 |
 | **2d** | transformContext 全管线（screenshotTrim/skills/memory/instructions/profile）+ loopDetection + 步数上限 | 注入顺序对拍（dump 首条消息对比迁移前）；loop 刹车用例 |
 | **2e** | compaction 移植（轮内折叠 + 检查点 + /compact） | 压缩回归段 + 长对话实测 |
 | **2f** | HITL/permission + ask_clarification + auto-review | 审批/拒绝/always/澄清/取消全流程 CDP |
-| **2g** | subagent + ACP 发射器原生化 + scheduled 回归 | task 工具嵌套轮 + Claude Code ACP 轮实测 |
-| **2h** | run-image 迁 pi images 合同（自写 generateImages 模块）+ `ai` 依赖摘除 + split 等陪葬删除 + 全量回归清单过一遍 | 图像生成实测出图；feature-inventory 全绿；`ai` 不在依赖里 |
+| **2g** | subagent + **OAuth 订阅 provider**（Claude/Codex：pi login 流 + safeStorage CredentialStore + 设置页登录 UI，取代 ACP 通道移植）+ scheduled 回归 | task 工具嵌套轮实测；OAuth 登录→订阅模型完整对话实测 |
+| **2h** | run-image 迁 pi images 合同（自写 generateImages 模块）+ `ai` 依赖摘除 + split/litellm 目录管线等陪葬删除（usage/models 路由改读 pi 元数据、isImageModel 改 manifest 标注）+ 全量回归清单过一遍 | 图像生成实测出图；feature-inventory 全绿；`ai` 与 litellm snapshot 均不在包里 |
 
 ---
 
 ## 12. 风险与开放问题
 
-1. **volcengine ark 的 openai 兼容度**（thinking 参数、usage 字段、SSE 细节）——2a 冒烟首要目标；不兼容则给 ark 写自定义 api 模块（pi `Api` 是开放 string union，`createProvider` 支持）。
+1. ~~volcengine ark 的 openai 兼容度~~ **已消解**（2a）：ark agent plan 走 anthropic-messages，冒烟全通。遗留观察项：aihubmix 待账户充值后补验（403 quota，管线本身已验证正确）；anthropic cache 命中率与 ark plan 对 cache_control 的支持在 2c 真实多轮里观测。
 2. **anthropic cache 断点策略差异**：pi 自动管理 vs 我们手工 stampCacheBreakpoints 的位置可能不同 → 缓存命中率变化，2a 用真实请求对比 cacheRead 指标。
 3. **流式重试语义**：pi 流中断的内建重试行为与 `MODEL_CALL_MAX_RETRIES` 的等价性需实测（429 用例）。
 4. **打字节奏**：无 smoothStream 后 delta 更粗——低风险，renderer 侧兜底。
