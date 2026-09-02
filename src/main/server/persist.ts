@@ -1,6 +1,8 @@
 import type { AtriumUIMessage } from '@shared/chat';
+import type { Message } from '@shared/protocol';
 import type { UIMessage } from 'ai';
 import { asc, eq, or } from 'drizzle-orm';
+import { sealDanglingToolCalls } from '../agent/pi/history';
 import type { Db } from '../db';
 import { messages, projects, providers, threads } from '../db/schema';
 import {
@@ -81,6 +83,41 @@ export function loadThreadMessages(db: Db, threadId: string): UIMessage[] {
     );
   }
   return out;
+}
+
+/**
+ * A thread's transcript as pi messages — what the engine actually runs on, read
+ * straight from the rows with no UIMessage round-trip. Rows written before the
+ * format flip still hold UI parts, so those pass through the split converters
+ * on the way out. Dangling tool calls are sealed here rather than at write time
+ * too: a row group can also be left half-written by a crash, and a provider
+ * rejects the whole request over one unpaired tool call.
+ */
+export function loadThreadAgentMessages(db: Db, threadId: string): Message[] {
+  const rows = db
+    .select()
+    .from(messages)
+    .where(eq(messages.threadId, threadId))
+    .orderBy(asc(messages.createdAt))
+    .all();
+
+  const out: Message[] = [];
+  for (const row of rows) {
+    if (row.runId) {
+      out.push(row.parts as Message);
+      continue;
+    }
+    const legacy = {
+      id: row.id,
+      role: row.role as UIMessage['role'],
+      parts: row.parts as UIMessage['parts'],
+      metadata: row.metadata ?? undefined,
+    } as AtriumUIMessage;
+    if (legacy.role === 'user') out.push(splitUserMessage(legacy).message);
+    else if (legacy.role === 'assistant')
+      for (const piRow of splitAssistantMessage(legacy)) out.push(piRow.message);
+  }
+  return sealDanglingToolCalls(out);
 }
 
 /**
@@ -191,6 +228,59 @@ function writePiMessage(db: Db, threadId: string, msg: UIMessage, overwrite: boo
         .run();
     });
   });
+}
+
+/**
+ * One pi message a run produced, ready to become a row. `id` is the row key:
+ * `<runId>:<turn>` for an assistant turn, the tool call id for its results —
+ * the same keys the split converters have always written.
+ */
+export type RunRow = {
+  id: string;
+  role: 'assistant' | 'toolResult';
+  message: Message;
+  metadata?: Record<string, unknown> | null;
+};
+
+/**
+ * Write a run's pi messages as its rows, replacing whatever the run had before.
+ * The whole run lands in one transaction so a reader never sees half a turn,
+ * and the group keeps its original chronological position: a continuation (the
+ * model resuming the same run after a client-side tool answer) must stay where
+ * the run started, not jump to the end of the thread. Per-row createdAt offsets
+ * preserve in-run order under the createdAt sort.
+ */
+export function persistRun(
+  db: Db,
+  threadId: string,
+  runId: string,
+  rows: RunRow[],
+  opts?: { markRead?: boolean },
+): void {
+  const base = messageBaseCreatedAt(db, runId) ?? Date.now();
+  db.transaction((tx) => {
+    tx.delete(messages)
+      .where(or(eq(messages.runId, runId), eq(messages.id, runId)))
+      .run();
+    rows.forEach((row, index) => {
+      tx.insert(messages)
+        .values({
+          id: row.id,
+          threadId,
+          role: row.role,
+          parts: row.message,
+          metadata: row.metadata ?? null,
+          runId,
+          createdAt: new Date(base + index),
+        })
+        .run();
+    });
+  });
+  const now = new Date();
+  // markRead stamps lastReadAt = updatedAt so a stopped turn's partial write
+  // can't trip the sidebar's unread dot on the thread the user is watching.
+  const bump = opts?.markRead ? { updatedAt: now, lastReadAt: now } : { updatedAt: now };
+  db.update(threads).set(bump).where(eq(threads.id, threadId)).run();
 }
 
 /**

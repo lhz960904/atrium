@@ -4,10 +4,13 @@ import { createLogger } from '../log';
 import { createProtocolBridge } from './protocol-bridge';
 
 /**
- * The wire's event store: every run's UIMessageChunk stream is folded through
- * the protocol bridge into a per-thread envelope log, and readers replay the
- * buffer from any seq then tail live. This IS the chat transport now — the
- * POST response and every reconnect serve slices of this log.
+ * The wire's event store: a run appends its events to the thread's envelope
+ * log, and readers replay the buffer from any seq then tail live. This IS the
+ * chat transport — the POST response and every reconnect serve slices of it.
+ *
+ * The agent loop appends pi events directly; the paths still producing AI SDK
+ * chunks (an external ACP agent, image generation) fold theirs through the
+ * protocol bridge on the way in.
  *
  * Memory bounds: one log per thread, superseded by the thread's next run, and
  * ended logs beyond a fixed count are evicted oldest-first. A single log holds
@@ -38,41 +41,57 @@ function beginLog(threadId: string): ThreadLog {
   return fresh;
 }
 
-/**
- * Drain the run's chunk stream through the bridge into the thread's log,
- * consuming the source to completion (which is what fires the engine's
- * onFinish persistence). The drain owns closure: whether the source ends,
- * aborts, or errors, the bridge's finalize seals the event sequence and the
- * log ends.
- */
-export async function drainRunToEventLog(
-  run: { threadId: string; provider: string; model: string },
-  stream: ReadableStream<UIMessageChunk>,
-): Promise<void> {
-  const threadLog = beginLog(run.threadId);
-  const bridge = createProtocolBridge({ provider: run.provider, model: run.model });
+/** A run's write end of its thread's log. */
+export type RunLog = { append: (event: AgentSessionEvent) => void };
 
+/**
+ * Run one producer against a fresh log for the thread, and close the log
+ * whatever the producer did. Closure is the point: a reader tailing the log
+ * must always see it end, so a producer that throws still seals the stream.
+ */
+export async function withRunLog(
+  threadId: string,
+  produce: (log: RunLog) => Promise<void>,
+): Promise<void> {
+  const threadLog = beginLog(threadId);
   const append = (event: AgentSessionEvent) => {
     const envelope: EventEnvelope = { v: 1, seq: threadLog.envelopes.length, event };
     threadLog.envelopes.push(envelope);
     for (const listener of threadLog.listeners) listener(envelope);
   };
+  try {
+    await produce({ append });
+  } catch (err) {
+    log.warn(`run failed mid-flight: ${err}`);
+  } finally {
+    threadLog.ended = true;
+    for (const fn of threadLog.onEnd) fn();
+    threadLog.listeners.clear();
+    threadLog.onEnd.clear();
+  }
+}
 
+/**
+ * Fold an AI SDK chunk stream into the log through the protocol bridge — the
+ * shape the ACP and image-generation turns still produce. The source is drained
+ * to completion (which is what fires their own persistence), and the bridge's
+ * finalize seals the event sequence however the source ended.
+ */
+export async function drainChunkStream(
+  target: RunLog,
+  init: { provider: string; model: string },
+  stream: ReadableStream<UIMessageChunk>,
+): Promise<void> {
+  const bridge = createProtocolBridge(init);
   const reader = stream.getReader();
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      for (const event of bridge.push(value)) append(event);
+      for (const event of bridge.push(value)) target.append(event);
     }
-  } catch (err) {
-    log.warn(`run stream failed mid-flight: ${err}`);
   } finally {
-    for (const event of bridge.finalize()) append(event);
-    threadLog.ended = true;
-    for (const fn of threadLog.onEnd) fn();
-    threadLog.listeners.clear();
-    threadLog.onEnd.clear();
+    for (const event of bridge.finalize()) target.append(event);
   }
 }
 

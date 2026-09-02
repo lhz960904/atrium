@@ -3,7 +3,7 @@ import type { LanguageModel, UIMessage } from 'ai';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { Db } from '../../../db';
 import type { RunContext } from '../types';
-import { titleMiddleware } from './title';
+import { generateThreadTitle } from './title';
 
 function modelReturning(text: string): LanguageModel {
   return new MockLanguageModelV3({
@@ -40,15 +40,15 @@ function makeCtx(messages: UIMessage[], model: LanguageModel, emitted: unknown[]
   };
 }
 
-// beforeRun fires title generation without awaiting it; let the microtasks run.
+// title generation is fire-and-forget; let the microtasks run.
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 5));
 
 test('generates and persists a title on the first turn', async () => {
   const titles: string[] = [];
   const emitted: unknown[] = [];
-  const mw = titleMiddleware((_db, _id, title) => titles.push(title));
-  await mw.beforeRun?.(
+  generateThreadTitle(
     makeCtx([userMsg('Help me fix the login bug')], modelReturning('Fix login bug'), emitted),
+    (_db, _id, title) => titles.push(title),
   );
   await flush();
   expect(titles).toEqual(['Fix login bug']);
@@ -57,17 +57,19 @@ test('generates and persists a title on the first turn', async () => {
 
 test('strips wrapping quotes and a trailing period the model adds', async () => {
   const titles: string[] = [];
-  const mw = titleMiddleware((_db, _id, title) => titles.push(title));
-  await mw.beforeRun?.(makeCtx([userMsg('write a sort')], modelReturning('"Sort an array."'), []));
+  generateThreadTitle(
+    makeCtx([userMsg('write a sort')], modelReturning('"Sort an array."'), []),
+    (_db, _id, title) => titles.push(title),
+  );
   await flush();
   expect(titles).toEqual(['Sort an array']);
 });
 
 test('skips generation when the turn is not the first (assistant present)', async () => {
   const titles: string[] = [];
-  const mw = titleMiddleware((_db, _id, title) => titles.push(title));
-  await mw.beforeRun?.(
+  generateThreadTitle(
     makeCtx([userMsg('hi'), assistantMsg(), userMsg('next')], modelReturning('Nope'), []),
+    (_db, _id, title) => titles.push(title),
   );
   await flush();
   expect(titles).toEqual([]);
@@ -75,8 +77,9 @@ test('skips generation when the turn is not the first (assistant present)', asyn
 
 test('skips generation when the first user message has no text', async () => {
   const titles: string[] = [];
-  const mw = titleMiddleware((_db, _id, title) => titles.push(title));
-  await mw.beforeRun?.(makeCtx([userMsg('   ')], modelReturning('X'), []));
+  generateThreadTitle(makeCtx([userMsg('   ')], modelReturning('X'), []), (_db, _id, title) =>
+    titles.push(title),
+  );
   await flush();
   expect(titles).toEqual([]);
 });

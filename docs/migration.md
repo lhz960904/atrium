@@ -33,6 +33,10 @@ Branch: feat/protocol-isolation（基于 main@4ca74fd）
 - **2a. 模型/Provider 层换 pi** ✅（`a7de9ab`）：`resolvePiModel` 把 manifest 映射成 pi `Model`，元数据与计价取自 pi 内置目录（内置命中 → 跨目录借条目 → manifest 声明 → 硬默认），注册表模块加载期静态装配，密钥逐调用解析；ark agent plan 真流量冒烟通过。
 - **2b. 工具层 TypeBox 化** ✅：33 个工具 + MCP 适配器改成 pi `AgentTool`（TypeBox 参数、`execute(toolCallId, params, signal)`、`content`/`details` 双通道），失败路径由返回 `Error: …` 字符串翻成 throw；RunContext 从 `experimental_context` 改为构造时闭包，工具集在 run 上下文就绪后装配。JSON Schema 快照测试钉住每个工具的 name/description/schema 与 zod 时代一致。旧引擎期间由一层 AI SDK 适配器承接（用 pi 自己的 `validateToolArguments` 校验参数），随引擎切换退役。
 
+- **2c. 引擎装配** ✅：`runAgent` 内部由 `streamText` 换成 pi `Agent`——事件投影器（pi AgentEvent → 冻结词汇，按偏差表裁剪）+ 持久器（run 结束时把 pi 消息整体写成行）两个 subscriber；metadata/usage/title/persistence/seal/date 六个 middleware 退出链条，分别落到 run 装配、事件订阅、读侧和 `transformContext`；事件日志由「拉流」翻成「写入端」（`withRunLog` + `RunLog.append`），ACP / 图像生成两条仍产 UIMessageChunk 的路径经 `drainChunkStream` 走 bridge 汇入同一日志；历史改为 `loadThreadAgentMessages` 直接读行成 pi 消息（旧行经 split 转换），悬空 toolCall 在读侧封口。真机验证：文本轮 / 三工具并行轮 / 工具失败 / 停止（partial 落库 + markRead）/ 中途切走再回来续流 / MCP / 子智能体 全通。
+
+**2c 期间暂时熄灯的能力**（2d/2f 接回，已在 PR 里标注）：skills / memory / instructions / profile 注入、compaction、loop-detection（`beforeStep` 管线随引擎一起退役，2d 用 `transformContext` 重接）；审批与 ask_clarification 的往返（2f）——过渡期用 `beforeToolCall` **失败关闭**：越界调用与客户端工具一律拒绝并终止本轮，绝不静默放行。
+
 ## 纪律
 
 - main 迁移期冻结新功能，只收 fix。

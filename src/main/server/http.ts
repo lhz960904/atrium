@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { serve } from '@hono/node-server';
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
 import type { LanguageModel, UIMessage } from 'ai';
@@ -8,23 +9,9 @@ import { AcpSessionRegistry } from '../agent/acp/registry';
 import { runExternalAgentTurn } from '../agent/acp/run-external-agent';
 import { mcpManager } from '../agent/mcp/manager';
 import { buildMcpTools } from '../agent/mcp/tool-adapter';
-import {
-  compactionMiddleware,
-  compactThread,
-  dateMiddleware,
-  instructionsMiddleware,
-  loopDetectionMiddleware,
-  memoryMiddleware,
-  metadataMiddleware,
-  persistenceMiddleware,
-  profileMiddleware,
-  screenshotTrimMiddleware,
-  skillsMiddleware,
-  titleMiddleware,
-  toolCallSealerMiddleware,
-  usageMiddleware,
-} from '../agent/middleware';
-import { isImageModel, maxContextTokens, modelPricing } from '../agent/models/catalog';
+import { compactThread, generateThreadTitle } from '../agent/middleware';
+import { isImageModel, modelPricing } from '../agent/models/catalog';
+import { needsApprovalFor } from '../agent/permissions';
 import { runAgent } from '../agent/run';
 import { runImageTurn } from '../agent/run-image';
 import { BackgroundShells, LocalSandbox } from '../agent/sandbox';
@@ -34,14 +21,18 @@ import { skillPreserver } from '../agent/tools/builtins/skill';
 import { todoPreserver } from '../agent/tools/builtins/todo';
 import { getComputerUseHelper } from '../computer-use';
 import type { Db } from '../db';
+import { recordUsage } from '../db/usage';
 import { createLogger } from '../log';
 import { resolveAcpSpec } from '../providers/acp-spec';
 import { getProviderManifest } from '../providers/manifest';
+import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
 import { resolveModel, supportsImageToolResults } from '../providers/resolve';
 import { getSettings } from '../settings/conf';
 import {
+  loadThreadAgentMessages,
   loadThreadMessages,
   persistMessage,
+  persistRun,
   readAcpBinding,
   readAcpConfig,
   resolveThreadWorkspace,
@@ -50,7 +41,7 @@ import {
   upsertMessage,
   writeAcpBinding,
 } from './persist';
-import { subscribePiEvents } from './pi-events';
+import { drainChunkStream, subscribePiEvents } from './pi-events';
 import { abortThreadRun, isThreadRunning, startThreadRun } from './resumable';
 
 export type ChatEndpoint = { port: number; token: string; dispose: () => void };
@@ -196,7 +187,11 @@ export function startHttpServer(deps: {
         // the message as-is so the trace's "Worked for Xs" survives a reload.
         onFinish: (m) => upsertMessage(deps.db, threadId, m),
       });
-      startThreadRun({ threadId, provider: providerId, model: modelId }, acpStream, abort);
+      startThreadRun(
+        threadId,
+        (piLog) => drainChunkStream(piLog, { provider: providerId, model: modelId }, acpStream),
+        abort,
+      );
       return runResponse(threadId);
     }
 
@@ -213,7 +208,11 @@ export function startHttpServer(deps: {
         onFinish: (m) =>
           upsertMessage(deps.db, threadId, { ...m, metadata: { createdAt: Date.now() } }),
       });
-      startThreadRun({ threadId, provider: providerId, model: modelId }, imageStream, abort);
+      startThreadRun(
+        threadId,
+        (piLog) => drainChunkStream(piLog, { provider: providerId, model: modelId }, imageStream),
+        abort,
+      );
       return runResponse(threadId);
     }
 
@@ -225,93 +224,77 @@ export function startHttpServer(deps: {
       process.platform === 'darwin' && getSettings('computerUse.enabled')
         ? getComputerUseHelper()
         : undefined;
-    const agentStream = await runAgent({
-      model: resolveModel(deps.db, providerId, modelId),
-      providerId,
-      modelId,
-      messages: history,
-      workspaceRoot,
+    // A continuation resumes the run the client is answering (its assistant
+    // message id), so the model's next turns extend that same stored run
+    // instead of opening a second one.
+    const runId = message.role === 'assistant' ? message.id : randomUUID();
+    startThreadRun(
       threadId,
-      db: deps.db,
-      sandbox,
-      permissionMode: mode,
-      abortSignal: abort.signal,
-      buildTools: (run) => {
-        const toolCtx = {
-          sandbox,
+      (piLog) =>
+        runAgent({
+          runId,
+          providerId,
+          modelId,
+          model: resolveModel(deps.db, providerId, modelId),
+          piModel: resolvePiModel(deps.db, providerId, modelId),
+          streamFn: piStreamFn,
+          getApiKey: makeGetApiKey(deps.db),
+          messages: loadThreadAgentMessages(deps.db, threadId),
+          uiMessages: history,
           workspaceRoot,
-          run,
-          skills,
-          bgShells,
-          supportsImageToolResults: supportsImages,
-          computerUse,
-          mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
-            supportsImageToolResults: supportsImages,
-            workspaceRoot,
-          }),
-          permission: {
-            mode,
-            rules: getSettings('permissions.trustRules'),
-            // Resolve the reviewer only when auto-review can actually use it; a
-            // misconfigured/removed model resolves to undefined, so auto-review
-            // simply falls back to prompting rather than failing the turn.
-            reviewerModel:
-              mode === 'auto-review'
-                ? resolveReviewerModel(deps.db, { providerId, modelId })
-                : undefined,
-            abortSignal: abort.signal,
+          threadId,
+          db: deps.db,
+          sandbox,
+          permissionMode: mode,
+          abortSignal: abort.signal,
+          emit: piLog.append,
+          persist: (rows, opts) => persistRun(deps.db, threadId, runId, rows, opts),
+          recordUsage: (u) =>
+            recordUsage(deps.db, { threadId, kind: 'chat', ...u }, modelPricing(u.modelId)),
+          generateTitle: getSettings('general.autoGenerateTitle')
+            ? (run) => generateThreadTitle(run, setThreadTitle)
+            : undefined,
+          onSettled: () => computerUse?.hideOverlay(),
+          guardToolCall: ({ name, input }) =>
+            needsApprovalFor(
+              name,
+              input,
+              mode,
+              workspaceRoot,
+              getSettings('permissions.trustRules'),
+            ),
+          buildTools: (run) => {
+            const toolCtx = {
+              sandbox,
+              workspaceRoot,
+              run,
+              skills,
+              bgShells,
+              supportsImageToolResults: supportsImages,
+              computerUse,
+              mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
+                supportsImageToolResults: supportsImages,
+                workspaceRoot,
+              }),
+              permission: {
+                mode,
+                rules: getSettings('permissions.trustRules'),
+                // Resolve the reviewer only when auto-review can actually use it; a
+                // misconfigured/removed model resolves to undefined, so auto-review
+                // simply falls back to prompting rather than failing the turn.
+                reviewerModel:
+                  mode === 'auto-review'
+                    ? resolveReviewerModel(deps.db, { providerId, modelId })
+                    : undefined,
+                abortSignal: abort.signal,
+              },
+            };
+            const tools = getTools(toolCtx);
+            return { tools, aiSdk: toAiSdkTools(tools, toolCtx) };
           },
-        };
-        return toAiSdkTools(getTools(toolCtx), toolCtx);
-      },
-      onSettled: () => computerUse?.hideOverlay(),
-      // skills and instructions must run after compaction: compaction may fold the
-      // original first user message into a summary, and their injected blocks have
-      // to land on whatever the post-compaction first user message is.
-      middlewares: [
-        // Backstop first: seal any dangling tool call an interrupted earlier turn
-        // left in the history, before compaction or convertToModelMessages sees it
-        // — a tool_use with no tool_result would otherwise fail the whole request.
-        toolCallSealerMiddleware(),
-        // Title is generated from the first user message, so it must run before
-        // the skills middleware injects its index into that message (and before
-        // compaction could fold it) — otherwise the title summarizes the skill
-        // index instead of the user's prompt. Omitted entirely when the user has
-        // turned auto-titling off.
-        ...(getSettings('general.autoGenerateTitle') ? [titleMiddleware(setThreadTitle)] : []),
-        metadataMiddleware({ providerId, modelId }),
-        usageMiddleware(modelPricing),
-        // Before compaction: drop stale screenshots from the step view so its
-        // token accounting already reflects the trim (and the model isn't paying
-        // for a dozen past screenshots it no longer needs).
-        screenshotTrimMiddleware(),
-        compactionMiddleware({
-          maxContextTokens,
-          persist: persistMessage,
-          preservers: [todoPreserver, skillPreserver],
         }),
-        // After compaction: both override the step's messages, and the runner
-        // pipelines them in list order, so the loop reminder lands on the
-        // folded view instead of being clobbered by it.
-        loopDetectionMiddleware(),
-        skillsMiddleware({ skills }),
-        // Run skills → memory → instructions so the injected blocks end up ordered
-        // custom-instructions → memory → skills after each prepend.
-        memoryMiddleware(),
-        instructionsMiddleware(),
-        // Last injector → its block lands on top: <user-profile> above the rest.
-        profileMiddleware(),
-        // Anchors today on the current turn's user message (its own anchor, the
-        // last user turn), so it stays off the cached prefix the others share and
-        // refreshes every turn — keeping a cross-midnight conversation current.
-        dateMiddleware(),
-        // Upsert, not insert-ignore: when a turn resumes after an
-        // ask_clarification answer, the model extends the SAME assistant message
-        // (reused id), and that continuation must overwrite the stored copy.
-        persistenceMiddleware(upsertMessage),
-      ],
-    });
-    startThreadRun({ threadId, provider: providerId, model: modelId }, agentStream, abort);
+      abort,
+    );
     return runResponse(threadId);
   });
 

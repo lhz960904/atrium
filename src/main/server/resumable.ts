@@ -1,13 +1,11 @@
-import type { UIMessageChunk } from 'ai';
-import { drainRunToEventLog } from './pi-events';
+import { type RunLog, withRunLog } from './pi-events';
 
 /**
- * Run lifetime registry — the producer side of a turn. The engine's chunk
- * stream is drained to completion through the protocol bridge into the
- * thread's event log, decoupled from any client: a renderer disconnect can't
- * cancel generation, and persistence (which fires once the engine stream is
- * fully consumed) always completes. Reconnecting clients replay the event log
- * (see pi-events), which replaced the old resumable UIMessage SSE store.
+ * Run lifetime registry — the producer side of a turn. A run writes into the
+ * thread's event log decoupled from any client: a renderer disconnect can't
+ * cancel generation, and persistence always completes. Reconnecting clients
+ * replay the event log (see pi-events), which replaced the old resumable
+ * UIMessage SSE store.
  */
 
 type Run = { abort: AbortController };
@@ -23,9 +21,9 @@ export function isThreadRunning(threadId: string): boolean {
 }
 
 /**
- * Abort a thread's in-flight run, if any. Aborting the agent's signal ends
- * the engine stream, which seals the event log and persists whatever was
- * generated. Returns whether a live run was found to abort.
+ * Abort a thread's in-flight run, if any. Aborting the run's signal ends the
+ * loop, which seals the event log and persists whatever was generated. Returns
+ * whether a live run was found to abort.
  */
 export function abortThreadRun(threadId: string): boolean {
   const run = runByThread.get(threadId);
@@ -35,15 +33,15 @@ export function abortThreadRun(threadId: string): boolean {
 }
 
 /** Start a thread's run; a newer run on the same thread supersedes this one's
- *  registry slot without cancelling its drain. */
+ *  registry slot without cancelling it. */
 export function startThreadRun(
-  run: { threadId: string; provider: string; model: string },
-  stream: ReadableStream<UIMessageChunk>,
+  threadId: string,
+  produce: (log: RunLog) => Promise<void>,
   abort: AbortController,
 ): void {
   const token: Run = { abort };
-  runByThread.set(run.threadId, token);
-  void drainRunToEventLog(run, stream).finally(() => {
-    if (runByThread.get(run.threadId) === token) runByThread.delete(run.threadId);
+  runByThread.set(threadId, token);
+  void withRunLog(threadId, produce).finally(() => {
+    if (runByThread.get(threadId) === token) runByThread.delete(threadId);
   });
 }

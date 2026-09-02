@@ -1,7 +1,7 @@
 import { textOfMessage } from '@shared/message-parts';
 import { generateText, type UIMessage } from 'ai';
 import type { Db } from '../../../db';
-import type { AgentMiddleware, RunContext } from '../types';
+import type { RunContext } from '../types';
 
 export type SetTitleFn = (db: Db, threadId: string, title: string) => void;
 
@@ -24,7 +24,7 @@ function cleanTitle(raw: string): string {
     .slice(0, 60);
 }
 
-async function generateTitle(ctx: RunContext, seed: string, setTitle: SetTitleFn): Promise<void> {
+async function summarizeTitle(ctx: RunContext, seed: string, setTitle: SetTitleFn): Promise<void> {
   try {
     const { text } = await generateText({
       model: ctx.model,
@@ -46,19 +46,14 @@ async function generateTitle(ctx: RunContext, seed: string, setTitle: SetTitleFn
 
 /**
  * On a thread's first turn, summarize the opening user message into a short
- * title with the run's own model, persist it, and push a transient title part
+ * title with the run's own model, persist it, and push a transient title notice
  * so an open chat updates live. Fire-and-forget — it never blocks the reply,
  * and any failure leaves the fallback title set at thread creation in place.
  */
-export function titleMiddleware(setTitle: SetTitleFn): AgentMiddleware {
-  return {
-    name: 'title',
-    beforeRun(ctx) {
-      // First turn only: no assistant message exists in the history yet.
-      if (ctx.request.messages.some((m) => m.role === 'assistant')) return;
-      const seed = firstUserText(ctx.request.messages);
-      if (!seed) return;
-      void generateTitle(ctx, seed, setTitle);
-    },
-  };
+export function generateThreadTitle(ctx: RunContext, setTitle: SetTitleFn): void {
+  // First turn only: no assistant message exists in the history yet.
+  if (ctx.request.messages.some((m) => m.role === 'assistant')) return;
+  const seed = firstUserText(ctx.request.messages);
+  if (!seed) return;
+  void summarizeTitle(ctx, seed, setTitle);
 }

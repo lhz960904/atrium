@@ -14,7 +14,7 @@ export { type ProfileOptions, profileMiddleware } from './builtins/profile';
 export { screenshotTrimMiddleware } from './builtins/screenshot-trim';
 export { toolCallSealerMiddleware } from './builtins/seal-tool-calls';
 export { type SkillsOptions, skillsMiddleware } from './builtins/skills';
-export { type SetTitleFn, titleMiddleware } from './builtins/title';
+export { generateThreadTitle, type SetTitleFn } from './builtins/title';
 export { usageMiddleware } from './builtins/usage';
 export {
   composeAfterStep,

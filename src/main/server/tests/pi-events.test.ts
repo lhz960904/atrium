@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { EventEnvelope } from '@shared/protocol';
 import type { UIMessageChunk } from 'ai';
-import { drainRunToEventLog, subscribePiEvents } from '../pi-events';
+import { drainChunkStream, subscribePiEvents, withRunLog } from '../pi-events';
 
 const textTurn: UIMessageChunk[] = [
   { type: 'start', messageId: 'm1' },
@@ -46,8 +46,12 @@ async function readEnvelopes(sse: ReadableStream<Uint8Array>): Promise<EventEnve
     .map((line) => JSON.parse(line.slice('data: '.length)) as EventEnvelope);
 }
 
-const drain = (threadId: string, chunks: UIMessageChunk[]) =>
-  drainRunToEventLog({ threadId, provider: 'deepseek', model: 'deepseek-chat' }, streamOf(chunks));
+const MODEL = { provider: 'deepseek', model: 'deepseek-chat' };
+
+const drainInto = (threadId: string, stream: ReadableStream<UIMessageChunk>) =>
+  withRunLog(threadId, (log) => drainChunkStream(log, MODEL, stream));
+
+const drain = (threadId: string, chunks: UIMessageChunk[]) => drainInto(threadId, streamOf(chunks));
 
 describe('pi event log', () => {
   test('an ended log replays fully with contiguous seq and closes', async () => {
@@ -69,10 +73,7 @@ describe('pi event log', () => {
 
   test('a mid-run subscriber gets replay plus live tail with no gap', async () => {
     const { stream, open } = gatedStream(textTurn);
-    const draining = drainRunToEventLog(
-      { threadId: 't-live', provider: 'deepseek', model: 'deepseek-chat' },
-      stream,
-    );
+    const draining = drainInto('t-live', stream);
     // Subscribe while the run is parked before its first chunk, then let it flow.
     const sse = subscribePiEvents('t-live', -1);
     expect(sse).not.toBeNull();
@@ -92,10 +93,7 @@ describe('pi event log', () => {
         controller.error(new Error('engine exploded'));
       },
     });
-    await drainRunToEventLog(
-      { threadId: 't-err', provider: 'deepseek', model: 'deepseek-chat' },
-      broken,
-    );
+    await drainInto('t-err', broken);
     const envelopes = await readEnvelopes(
       subscribePiEvents('t-err', -1) as ReadableStream<Uint8Array>,
     );

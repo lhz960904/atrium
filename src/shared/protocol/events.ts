@@ -28,7 +28,9 @@ export type ToolExecutionResult = {
  * - `agent_end` drops the messages array and carries a willRetry annotation;
  * - `message_start`/`message_end` carry an Atrium `messageId` (pi messages have
  *   no id; renderers and persistence reconcile live streams against stored
- *   rows by it);
+ *   rows by it), and are carried only for assistant turns — pi announces every
+ *   appended message, while the user's message arrived in the POST body and a
+ *   tool result already comes through tool_execution_end;
  * - Atrium-owned events (approval_*, notice) extend the union in the same
  *   snake_case style.
  * Reducers must ignore unknown event types — new ones may appear.
