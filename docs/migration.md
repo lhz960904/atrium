@@ -28,6 +28,11 @@ Branch: feat/protocol-isolation（基于 main@4ca74fd）
 
 每子步收口条件（已执行）：回归清单相关段 + CDP 实测 + DB 对账，行为与迁移前一致。
 
+## 阶段 2 子步进度
+
+- **2a. 模型/Provider 层换 pi** ✅（`a7de9ab`）：`resolvePiModel` 把 manifest 映射成 pi `Model`，元数据与计价取自 pi 内置目录（内置命中 → 跨目录借条目 → manifest 声明 → 硬默认），注册表模块加载期静态装配，密钥逐调用解析；ark agent plan 真流量冒烟通过。
+- **2b. 工具层 TypeBox 化** ✅：33 个工具 + MCP 适配器改成 pi `AgentTool`（TypeBox 参数、`execute(toolCallId, params, signal)`、`content`/`details` 双通道），失败路径由返回 `Error: …` 字符串翻成 throw；RunContext 从 `experimental_context` 改为构造时闭包，工具集在 run 上下文就绪后装配。JSON Schema 快照测试钉住每个工具的 name/description/schema 与 zod 时代一致。旧引擎期间由一层 AI SDK 适配器承接（用 pi 自己的 `validateToolArguments` 校验参数），随引擎切换退役。
+
 ## 纪律
 
 - main 迁移期冻结新功能，只收 fix。

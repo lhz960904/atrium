@@ -38,14 +38,14 @@ async function toToolOutput(
   workspaceRoot: string,
 ): Promise<string | ImageToolOutput> {
   if (!res.ok) {
-    return `Error: ${res.error ?? 'Computer Use helper failed.'}`;
+    throw new Error(res.error ?? 'Computer Use helper failed.');
   }
   const result = res.result as HelperResult | undefined;
   if (!result) {
-    return 'Error: Computer Use helper returned no result.';
+    throw new Error('Computer Use helper returned no result.');
   }
   if (result.error) {
-    return `Error: ${result.error.message}`;
+    throw new Error(result.error.message);
   }
 
   const text = result.meta?.rawText ?? result.snapshot?.treeText ?? `${result.toolName} completed.`;
@@ -130,7 +130,7 @@ export async function runComputerAction(
   signal?: AbortSignal,
 ): Promise<string | ImageToolOutput> {
   if (!ctx.computerUse) {
-    return 'Error: Computer use is only available on macOS.';
+    throw new Error('Computer use is only available on macOS.');
   }
   // Both grants are needed to act (Accessibility) and to see (Screen Recording).
   // If either is missing, prompt the user via the renderer instead of failing

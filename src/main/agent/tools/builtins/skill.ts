@@ -1,15 +1,17 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { type ModelMessage, tool, type UIMessage } from 'ai';
-import { z } from 'zod';
+import type { ModelMessage, UIMessage } from 'ai';
 import { stripFrontmatter } from '../../../shared/frontmatter';
 import type { CompactionPreserver } from '../../compaction/preserver';
-import type { RunContext } from '../../middleware';
+import type { RunContext } from '../../middleware/types';
 import { type ActiveSkill, SKILL_FILE, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
+import { defineTool, Type, textResult } from '../define';
 
 export type SkillToolDeps = {
   /** The discovered skills, resolved by name when the model loads one. */
   skills: Skill[];
+  /** The turn's context — activation is recorded in its scratch. */
+  run: RunContext;
 };
 
 /**
@@ -23,22 +25,25 @@ export type SkillToolDeps = {
  */
 export const skillTool = (deps: SkillToolDeps) => {
   const byName = new Map(deps.skills.map((s) => [s.name, s]));
-  return tool({
+  return defineTool({
+    name: 'skill',
+    label: 'Load skill',
     description:
       'Load the full instructions for an available skill (listed in the available_skills reminder) so you can carry out its procedure. Call this with the skill name the moment a request matches one, then follow the instructions it returns. Pass any user-supplied specifics as args.',
-    inputSchema: z.object({
-      name: z.string().describe('The name of the skill to load, exactly as listed.'),
-      args: z
-        .string()
-        .optional()
-        .describe('Optional specifics to hand the skill (e.g. the concrete subject or target).'),
+    parameters: Type.Object({
+      name: Type.String({ description: 'The name of the skill to load, exactly as listed.' }),
+      args: Type.Optional(
+        Type.String({
+          description:
+            'Optional specifics to hand the skill (e.g. the concrete subject or target).',
+        }),
+      ),
     }),
-    execute: async ({ name, args }, { experimental_context }) => {
-      const ctx = experimental_context as RunContext;
+    execute: async (_id, { name, args }) => {
       const skill = byName.get(name);
       if (!skill) {
         const names = [...byName.keys()].join(', ') || '(none)';
-        return `Error: unknown skill '${name}'. Available skills: ${names}.`;
+        throw new Error(`unknown skill '${name}'. Available skills: ${names}.`);
       }
 
       let body: string;
@@ -51,10 +56,10 @@ export const skillTool = (deps: SkillToolDeps) => {
           .replaceAll('${SKILL_DIR}', skill.dir)
           .replaceAll('$SKILL_DIR', skill.dir);
       } catch (err) {
-        return `Error: could not read skill '${name}': ${(err as Error).message}`;
+        throw new Error(`could not read skill '${name}': ${(err as Error).message}`);
       }
 
-      ctx.scratch.set(SKILL_SCRATCH_KEY, {
+      deps.run.scratch.set(SKILL_SCRATCH_KEY, {
         name: skill.name,
         allowedTools: skill.allowedTools,
       } satisfies ActiveSkill);
@@ -63,7 +68,7 @@ export const skillTool = (deps: SkillToolDeps) => {
       // can reference its bundled scripts/templates by relative path.
       const header = `Base directory for this skill: ${skill.dir}`;
       const withArgs = args ? `${body}\n\n---\nArguments for this run: ${args}` : body;
-      return `${header}\n\n${withArgs}`;
+      return textResult(`${header}\n\n${withArgs}`);
     },
   });
 };

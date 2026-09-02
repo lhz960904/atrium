@@ -1,31 +1,33 @@
-import { tool } from 'ai';
-import { z } from 'zod';
 import { resolveAbsolute } from '../../sandbox/paths';
 import type { ToolCtx } from '../context';
-import { fsErrorMessage } from '../output';
+import { defineTool, Type, textResult } from '../define';
+import { fsError } from '../output';
 
 export const writeFileTool = (ctx: ToolCtx) =>
-  tool({
+  defineTool({
+    name: 'write_file',
+    label: 'Write file',
     description:
       'Write text content to a file. Overwrites by default; set append to add to the end instead. Parent directories are created as needed.',
-    inputSchema: z.object({
-      description: z
-        .string()
-        .describe('Why you are writing this file, in short words. ALWAYS PROVIDE THIS FIRST.'),
-      path: z.string().describe('Absolute path to the file (under the workspace root).'),
-      content: z.string().describe('The full content to write.'),
-      append: z
-        .boolean()
-        .optional()
-        .describe('Append to the end instead of overwriting. Defaults to false.'),
+    parameters: Type.Object({
+      description: Type.String({
+        description: 'Why you are writing this file, in short words. ALWAYS PROVIDE THIS FIRST.',
+      }),
+      path: Type.String({ description: 'Absolute path to the file (under the workspace root).' }),
+      content: Type.String({ description: 'The full content to write.' }),
+      append: Type.Optional(
+        Type.Boolean({
+          description: 'Append to the end instead of overwriting. Defaults to false.',
+        }),
+      ),
     }),
-    execute: async ({ path, content, append }) => {
+    execute: async (_id, { path, content, append }) => {
       try {
         const abs = resolveAbsolute(ctx.workspaceRoot, path);
         const { bytes } = await ctx.sandbox.writeFile(abs, content, append ?? false);
-        return `Wrote ${bytes} bytes to ${path}.`;
+        return textResult(`Wrote ${bytes} bytes to ${path}.`);
       } catch (err) {
-        return fsErrorMessage(err, path, 'writing to');
+        throw fsError(err, path, 'writing to');
       }
     },
   });

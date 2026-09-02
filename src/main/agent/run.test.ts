@@ -4,7 +4,7 @@ import type { UIMessage } from 'ai';
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
 import type { Db } from '../db';
 import type { AgentMiddleware } from './middleware';
-import { type RunAgentOptions, runAgent } from './run';
+import { runAgent } from './run';
 import type { Sandbox } from './sandbox/types';
 
 function textModel(text: string) {
@@ -43,7 +43,7 @@ async function collectAssistants(text: string): Promise<UIMessage[]> {
     threadId: 't1',
     db: {} as Db,
     sandbox: {} as Sandbox,
-    tools: {} as RunAgentOptions['tools'],
+    buildTools: () => ({}),
     middlewares: [capture],
     permissionMode: 'default',
   });

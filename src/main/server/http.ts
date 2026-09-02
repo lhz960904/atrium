@@ -29,7 +29,7 @@ import { runAgent } from '../agent/run';
 import { runImageTurn } from '../agent/run-image';
 import { BackgroundShells, LocalSandbox } from '../agent/sandbox';
 import { getSkills } from '../agent/skills/registry';
-import { getTools } from '../agent/tools';
+import { getTools, toAiSdkTools } from '../agent/tools';
 import { skillPreserver } from '../agent/tools/builtins/skill';
 import { todoPreserver } from '../agent/tools/builtins/todo';
 import { getComputerUseHelper } from '../computer-use';
@@ -236,31 +236,34 @@ export function startHttpServer(deps: {
       sandbox,
       permissionMode: mode,
       abortSignal: abort.signal,
-      tools: getTools({
-        sandbox,
-        workspaceRoot,
-        db: deps.db,
-        skills,
-        bgShells,
-        supportsImageToolResults: supportsImages,
-        computerUse,
-        mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
-          supportsImageToolResults: supportsImages,
+      buildTools: (run) => {
+        const toolCtx = {
+          sandbox,
           workspaceRoot,
-        }),
-        permission: {
-          mode,
-          rules: getSettings('permissions.trustRules'),
-          // Resolve the reviewer only when auto-review can actually use it; a
-          // misconfigured/removed model resolves to undefined, so auto-review
-          // simply falls back to prompting rather than failing the turn.
-          reviewerModel:
-            mode === 'auto-review'
-              ? resolveReviewerModel(deps.db, { providerId, modelId })
-              : undefined,
-          abortSignal: abort.signal,
-        },
-      }),
+          run,
+          skills,
+          bgShells,
+          supportsImageToolResults: supportsImages,
+          computerUse,
+          mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
+            supportsImageToolResults: supportsImages,
+            workspaceRoot,
+          }),
+          permission: {
+            mode,
+            rules: getSettings('permissions.trustRules'),
+            // Resolve the reviewer only when auto-review can actually use it; a
+            // misconfigured/removed model resolves to undefined, so auto-review
+            // simply falls back to prompting rather than failing the turn.
+            reviewerModel:
+              mode === 'auto-review'
+                ? resolveReviewerModel(deps.db, { providerId, modelId })
+                : undefined,
+            abortSignal: abort.signal,
+          },
+        };
+        return toAiSdkTools(getTools(toolCtx), toolCtx);
+      },
       onSettled: () => computerUse?.hideOverlay(),
       // skills and instructions must run after compaction: compaction may fold the
       // original first user message into a summary, and their injected blocks have

@@ -1,20 +1,20 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tool } from 'ai';
-import { z } from 'zod';
 import { profileDir, SOUL_FILE, USER_FILE } from '../../profile/paths';
+import { defineTool, StringEnum, Type, textResult } from '../define';
 
 const DESCRIPTION = `Read and write the two identity files.
 soul = who you are: your name, persona, and how you relate to this user. user = who the user is: their name, background, and preferences.
 Use this to establish or refine either identity — during a get-acquainted conversation, or whenever the user asks you to adjust how you act or what you know about them. Write the FULL file each time (it replaces the old one). Keep each concise and in a dense, telegraphic style. The user's name lives in USER.md frontmatter as \`name:\`.`;
 
-export const profileInputSchema = z.object({
-  command: z.enum(['view', 'write']),
-  target: z.enum(['soul', 'user']),
-  content: z
-    .string()
-    .optional()
-    .describe('the full markdown to write (replaces the file) when command=write'),
+export const profileParameters = Type.Object({
+  command: StringEnum(['view', 'write']),
+  target: StringEnum(['soul', 'user']),
+  content: Type.Optional(
+    Type.String({
+      description: 'the full markdown to write (replaces the file) when command=write',
+    }),
+  ),
 });
 
 type ProfileCommand = { command: 'view' | 'write'; target: 'soul' | 'user'; content?: string };
@@ -37,9 +37,11 @@ export async function dispatchProfile(dir: string, cmd: ProfileCommand): Promise
 }
 
 export function profileTool() {
-  return tool({
+  return defineTool({
+    name: 'profile',
+    label: 'Profile',
     description: DESCRIPTION,
-    inputSchema: profileInputSchema,
-    execute: (input) => dispatchProfile(profileDir(), input),
+    parameters: profileParameters,
+    execute: async (_id, input) => textResult(await dispatchProfile(profileDir(), input)),
   });
 }

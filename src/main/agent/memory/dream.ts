@@ -1,5 +1,6 @@
 import { generateText, type LanguageModel, stepCountIs } from 'ai';
 import { createLogger } from '../../log';
+import { toAiSdkTool } from '../tools/ai-sdk-adapter';
 import { memoryDirTool } from '../tools/builtins/memory';
 import { clearSnapshot, rollback, snapshot } from './backup';
 import { DREAM_SYSTEM_PROMPT } from './dream-prompt';
@@ -20,7 +21,7 @@ export async function runDream(dir: string, model: LanguageModel): Promise<void>
       model,
       system: DREAM_SYSTEM_PROMPT,
       prompt: `Consolidate the memory in ${dir}. Start by viewing the index.`,
-      tools: { memory: memoryDirTool(dir) },
+      tools: { memory: toAiSdkTool(memoryDirTool(dir), { supportsImages: false }) },
       stopWhen: stepCountIs(40),
     });
     await markConsolidated(dir, Date.now());

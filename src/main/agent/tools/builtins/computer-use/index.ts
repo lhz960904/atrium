@@ -1,7 +1,5 @@
-import { tool } from 'ai';
-import { z } from 'zod';
 import type { ToolCtx } from '../../context';
-import { imageOutputToModelOutput } from '../../output';
+import { defineTool, imageResult, StringEnum, Type } from '../../define';
 import { runComputerAction } from './output';
 
 /**
@@ -11,120 +9,142 @@ import { runComputerAction } from './output';
  * model sees the result of what it just did. Elements are addressed by the
  * `element_index` from the latest get_app_state; indices are re-numbered each
  * snapshot, so re-read on `invalid_element`.
+ *
+ * Driving a screen is inherently one-at-a-time — a batch of clicks fired in
+ * parallel would race over the same window — so every tool here runs
+ * sequentially even when the model calls several at once.
  */
 
-const modelOutput =
-  (ctx: ToolCtx) =>
-  ({ output }: { output: unknown }) =>
-    imageOutputToModelOutput(output, ctx.supportsImageToolResults ?? false);
+const act =
+  (ctx: ToolCtx, method: string) => async (_id: string, input: object, signal?: AbortSignal) =>
+    imageResult(
+      await runComputerAction(ctx, method, input as Record<string, unknown>, signal),
+      ctx.supportsImageToolResults ?? false,
+    );
 
-const appField = z.string().describe('Target app: bundle id (e.g. "com.apple.Music") or its name.');
-const elementIndex = z
-  .string()
-  .describe('Element index from the most recent get_app_state snapshot.');
+const app = Type.String({
+  description: 'Target app: bundle id (e.g. "com.apple.Music") or its name.',
+});
+const elementIndex = Type.String({
+  description: 'Element index from the most recent get_app_state snapshot.',
+});
 
 export const computerListAppsTool = (ctx: ToolCtx) =>
-  tool({
+  defineTool({
+    name: 'computer_list_apps',
+    label: 'List apps',
+    executionMode: 'sequential',
     description:
       'List the apps currently running (and recently used) on the Mac, so you can pick one to drive.',
-    inputSchema: z.object({}),
-    execute: (_input, { abortSignal }) => runComputerAction(ctx, 'list_apps', {}, abortSignal),
-    toModelOutput: modelOutput(ctx),
+    parameters: Type.Object({}),
+    execute: act(ctx, 'list_apps'),
   });
 
 export const computerGetAppStateTool = (ctx: ToolCtx) =>
-  tool({
+  defineTool({
+    name: 'computer_get_app_state',
+    label: 'Read app state',
+    executionMode: 'sequential',
     description:
       'Open an app in the background and read its current state: an accessibility tree of ' +
       'interactive elements (each with an index) plus a window screenshot. Call this before ' +
       'acting, and again after an action to see the result.',
-    inputSchema: z.object({ app: appField }),
-    execute: ({ app }, { abortSignal }) =>
-      runComputerAction(ctx, 'get_app_state', { app }, abortSignal),
-    toModelOutput: modelOutput(ctx),
+    parameters: Type.Object({ app }),
+    execute: act(ctx, 'get_app_state'),
   });
 
 export const computerClickTool = (ctx: ToolCtx) =>
-  tool({
+  defineTool({
+    name: 'computer_click',
+    label: 'Click',
+    executionMode: 'sequential',
     description:
       'Click an element (by index) or a pixel coordinate. Prefer element_index; fall back to ' +
       'x/y (screenshot pixels) when the app exposes no usable tree.',
-    inputSchema: z.object({
-      app: appField,
-      element_index: elementIndex.optional(),
-      x: z.number().optional().describe('Screenshot x, if clicking by coordinate.'),
-      y: z.number().optional().describe('Screenshot y, if clicking by coordinate.'),
-      mouse_button: z.enum(['left', 'right', 'middle']).optional(),
-      click_count: z.number().int().min(1).optional().describe('e.g. 2 for a double-click.'),
+    parameters: Type.Object({
+      app,
+      element_index: Type.Optional(elementIndex),
+      x: Type.Optional(Type.Number({ description: 'Screenshot x, if clicking by coordinate.' })),
+      y: Type.Optional(Type.Number({ description: 'Screenshot y, if clicking by coordinate.' })),
+      mouse_button: Type.Optional(StringEnum(['left', 'right', 'middle'])),
+      click_count: Type.Optional(
+        Type.Integer({ minimum: 1, description: 'e.g. 2 for a double-click.' }),
+      ),
     }),
-    execute: (input, { abortSignal }) => runComputerAction(ctx, 'click', input, abortSignal),
-    toModelOutput: modelOutput(ctx),
+    execute: act(ctx, 'click'),
   });
 
 export const computerTypeTextTool = (ctx: ToolCtx) =>
-  tool({
+  defineTool({
+    name: 'computer_type_text',
+    label: 'Type text',
+    executionMode: 'sequential',
     description: 'Type literal text into the focused field of an app.',
-    inputSchema: z.object({ app: appField, text: z.string() }),
-    execute: (input, { abortSignal }) => runComputerAction(ctx, 'type_text', input, abortSignal),
-    toModelOutput: modelOutput(ctx),
+    parameters: Type.Object({ app, text: Type.String() }),
+    execute: act(ctx, 'type_text'),
   });
 
 export const computerPressKeyTool = (ctx: ToolCtx) =>
-  tool({
+  defineTool({
+    name: 'computer_press_key',
+    label: 'Press key',
+    executionMode: 'sequential',
     description:
       'Press a key or key combination (xdotool syntax): e.g. "cmd+s", "Return", "space", "ctrl+shift+t".',
-    inputSchema: z.object({ app: appField, key: z.string() }),
-    execute: (input, { abortSignal }) => runComputerAction(ctx, 'press_key', input, abortSignal),
-    toModelOutput: modelOutput(ctx),
+    parameters: Type.Object({ app, key: Type.String() }),
+    execute: act(ctx, 'press_key'),
   });
 
 export const computerScrollTool = (ctx: ToolCtx) =>
-  tool({
+  defineTool({
+    name: 'computer_scroll',
+    label: 'Scroll',
+    executionMode: 'sequential',
     description: 'Scroll a scrollable element up/down/left/right by a number of pages.',
-    inputSchema: z.object({
-      app: appField,
+    parameters: Type.Object({
+      app,
       element_index: elementIndex,
-      direction: z.enum(['up', 'down', 'left', 'right']),
-      pages: z.number().int().min(1).optional(),
+      direction: StringEnum(['up', 'down', 'left', 'right']),
+      pages: Type.Optional(Type.Integer({ minimum: 1 })),
     }),
-    execute: (input, { abortSignal }) => runComputerAction(ctx, 'scroll', input, abortSignal),
-    toModelOutput: modelOutput(ctx),
+    execute: act(ctx, 'scroll'),
   });
 
 export const computerDragTool = (ctx: ToolCtx) =>
-  tool({
+  defineTool({
+    name: 'computer_drag',
+    label: 'Drag',
+    executionMode: 'sequential',
     description: 'Drag from one screenshot coordinate to another (e.g. move a window or a file).',
-    inputSchema: z.object({
-      app: appField,
-      from_x: z.number(),
-      from_y: z.number(),
-      to_x: z.number(),
-      to_y: z.number(),
+    parameters: Type.Object({
+      app,
+      from_x: Type.Number(),
+      from_y: Type.Number(),
+      to_x: Type.Number(),
+      to_y: Type.Number(),
     }),
-    execute: (input, { abortSignal }) => runComputerAction(ctx, 'drag', input, abortSignal),
-    toModelOutput: modelOutput(ctx),
+    execute: act(ctx, 'drag'),
   });
 
 export const computerSetValueTool = (ctx: ToolCtx) =>
-  tool({
+  defineTool({
+    name: 'computer_set_value',
+    label: 'Set value',
+    executionMode: 'sequential',
     description:
       "Set an element's value directly (a slider, stepper, or text field) — faster than typing character by character.",
-    inputSchema: z.object({ app: appField, element_index: elementIndex, value: z.string() }),
-    execute: (input, { abortSignal }) => runComputerAction(ctx, 'set_value', input, abortSignal),
-    toModelOutput: modelOutput(ctx),
+    parameters: Type.Object({ app, element_index: elementIndex, value: Type.String() }),
+    execute: act(ctx, 'set_value'),
   });
 
 export const computerPerformActionTool = (ctx: ToolCtx) =>
-  tool({
+  defineTool({
+    name: 'computer_perform_action',
+    label: 'Perform action',
+    executionMode: 'sequential',
     description:
       'Invoke a secondary accessibility action on an element: "raise" (bring window forward), ' +
       '"press", "showmenu" (context menu), "confirm", "cancel", "pick".',
-    inputSchema: z.object({
-      app: appField,
-      element_index: elementIndex,
-      action: z.string(),
-    }),
-    execute: (input, { abortSignal }) =>
-      runComputerAction(ctx, 'perform_secondary_action', input, abortSignal),
-    toModelOutput: modelOutput(ctx),
+    parameters: Type.Object({ app, element_index: elementIndex, action: Type.String() }),
+    execute: act(ctx, 'perform_secondary_action'),
   });

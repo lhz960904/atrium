@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { RunContext } from '../../middleware';
 import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
+import { runTool } from '../testing';
 import { latestSkillBodyModel, latestSkillBodyUI, skillPreserver, skillTool } from './skill';
 
 let tmp: string;
@@ -34,13 +35,8 @@ function fakeCtx(): RunContext {
   } as unknown as RunContext;
 }
 
-const run = (
-  skill: ReturnType<typeof skillTool>,
-  input: { name: string; args?: string },
-  ctx: RunContext,
-): Promise<string> =>
-  // biome-ignore lint/suspicious/noExplicitAny: tool.execute's options arg is loose in tests
-  skill.execute?.(input, { experimental_context: ctx } as any) as Promise<string>;
+const load = (skills: Skill[], run: RunContext, input: { name: string; args?: string }) =>
+  runTool(skillTool({ skills, run }), input);
 
 test('prepends the base directory, strips frontmatter, substitutes SKILL_DIR', async () => {
   const skill = await writeSkill(
@@ -50,7 +46,7 @@ test('prepends the base directory, strips frontmatter, substitutes SKILL_DIR', a
     'Run ${SKILL_DIR}/run.py and $SKILL_DIR/extra.py.',
   );
   const ctx = fakeCtx();
-  const out = await run(skillTool({ skills: [skill] }), { name: 'deep-research' }, ctx);
+  const out = await load([skill], ctx, { name: 'deep-research' });
 
   expect(out).toContain(`Base directory for this skill: ${skill.dir}`);
   // both ${SKILL_DIR} and $SKILL_DIR spellings resolved to the absolute dir
@@ -66,7 +62,7 @@ test('records the active skill in scratch (name + allowed-tools)', async () => {
     ['read_file', 'bash'],
   );
   const ctx = fakeCtx();
-  await run(skillTool({ skills: [skill] }), { name: 'pptx' }, ctx);
+  await load([skill], ctx, { name: 'pptx' });
 
   expect(ctx.scratch.get(SKILL_SCRATCH_KEY)).toEqual({
     name: 'pptx',
@@ -77,35 +73,27 @@ test('records the active skill in scratch (name + allowed-tools)', async () => {
 test('appends user-supplied args after the body', async () => {
   const skill = await writeSkill('x', 'name: x\ndescription: y', 'do the thing');
   const ctx = fakeCtx();
-  const out = await run(
-    skillTool({ skills: [skill] }),
-    { name: 'x', args: 'on the Q3 report' },
-    ctx,
-  );
+  const out = await load([skill], ctx, { name: 'x', args: 'on the Q3 report' });
   expect(out).toContain('do the thing');
   expect(out).toContain('Arguments for this run: on the Q3 report');
 });
 
-test('unknown skill returns an error listing the available ones', async () => {
+test('an unknown skill fails, listing the available ones', async () => {
   const skill = await writeSkill('real', 'name: real\ndescription: y', 'body');
   const ctx = fakeCtx();
-  const out = await run(skillTool({ skills: [skill] }), { name: 'ghost' }, ctx);
-  expect(out).toContain("unknown skill 'ghost'");
-  expect(out).toContain('real');
+  expect(load([skill], ctx, { name: 'ghost' })).rejects.toThrow(/unknown skill 'ghost'.*real/);
   // nothing activated on failure
   expect(ctx.scratch.get(SKILL_SCRATCH_KEY)).toBeUndefined();
 });
 
-test('a missing manifest file returns a read error, not a throw', async () => {
+test('a missing manifest file fails with a read error', async () => {
   const skill: Skill = {
     name: 'gone',
     description: 'y',
     dir: join(tmp, 'gone'), // never created
     source: 'agents',
   };
-  const ctx = fakeCtx();
-  const out = await run(skillTool({ skills: [skill] }), { name: 'gone' }, ctx);
-  expect(out).toContain("could not read skill 'gone'");
+  expect(load([skill], fakeCtx(), { name: 'gone' })).rejects.toThrow("could not read skill 'gone'");
 });
 
 // biome-ignore lint/suspicious/noExplicitAny: terse message fixtures for the preserver

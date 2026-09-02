@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
-import type { Db } from '../../../db';
 import { BackgroundShells, type ShellProc, type SpawnShell } from '../../sandbox/background-shells';
 import type { Sandbox } from '../../sandbox/types';
 import type { ToolCtx } from '../context';
+import { fakeRun, runTool } from '../testing';
 import { bashOutputTool } from './bash-output';
 
 const sandbox: Sandbox = {
@@ -12,9 +12,6 @@ const sandbox: Sandbox = {
   list: async () => [],
   exec: async () => ({ output: '', exitCode: 0 }),
 };
-// biome-ignore lint/suspicious/noExplicitAny: execute's option arg is irrelevant here
-const opts = {} as any;
-
 class FakeProc implements ShellProc {
   private d: (s: string) => void = () => {};
   private e: (x: { exitCode: number }) => void = () => {};
@@ -41,7 +38,7 @@ function harness() {
     return p;
   };
   const bgShells = new BackgroundShells(spawn);
-  const ctx: ToolCtx = { sandbox, workspaceRoot: '/ws', db: {} as Db, bgShells };
+  const ctx: ToolCtx = { sandbox, workspaceRoot: '/ws', run: fakeRun(), bgShells };
   return { ctx, bgShells, procs };
 }
 
@@ -49,7 +46,7 @@ test('formats new output with running status', async () => {
   const { ctx, bgShells, procs } = harness();
   const id = bgShells.start('npm run dev', '/ws');
   procs[0].emit('Listening on 3000\n');
-  const out = await bashOutputTool(ctx).execute?.({ shell_id: id }, opts);
+  const out = await runTool(bashOutputTool(ctx), { shell_id: id });
   expect(out).toBe('Shell bash_1 [running]\nListening on 3000\n');
 });
 
@@ -59,21 +56,19 @@ test('shows exited status with code and (no new output) after draining', async (
   procs[0].emit('done\n');
   procs[0].exit(1);
   const t = bashOutputTool(ctx);
-  await t.execute?.({ shell_id: id }, opts); // first read drains the buffer
-  const out = await t.execute?.({ shell_id: id }, opts);
+  await runTool(t, { shell_id: id }); // first read drains the buffer
+  const out = await runTool(t, { shell_id: id });
   expect(out).toBe('Shell bash_1 [exited (code 1)]\n(no new output)');
 });
 
-test('errors for an unknown shell id', async () => {
+test('fails for an unknown shell id', async () => {
   const { ctx } = harness();
-  expect(await bashOutputTool(ctx).execute?.({ shell_id: 'bash_99' }, opts)).toBe(
-    'Error: no background shell with id bash_99.',
+  expect(runTool(bashOutputTool(ctx), { shell_id: 'bash_99' })).rejects.toThrow(
+    'no background shell with id bash_99.',
   );
 });
 
-test('errors when the registry is unavailable', async () => {
-  const ctx: ToolCtx = { sandbox, workspaceRoot: '/ws', db: {} as Db };
-  expect(await bashOutputTool(ctx).execute?.({ shell_id: 'bash_1' }, opts)).toContain(
-    'unavailable',
-  );
+test('fails when the registry is unavailable', async () => {
+  const ctx: ToolCtx = { sandbox, workspaceRoot: '/ws', run: fakeRun() };
+  expect(runTool(bashOutputTool(ctx), { shell_id: 'bash_1' })).rejects.toThrow('unavailable');
 });

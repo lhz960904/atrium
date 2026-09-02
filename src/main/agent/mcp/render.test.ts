@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { imageOutputToModelOutput } from '../tools/output';
 import { renderToolResult } from './render';
 
 const result = (over: Partial<CallToolResult>): CallToolResult =>
@@ -64,47 +63,4 @@ test('prefixes a tool error and keeps error results text-only', () => {
       }),
     ),
   ).toBe('The tool reported an error:\nboom\n[image content: image/png]');
-});
-
-test('model output: plain string passes through as text', () => {
-  expect(imageOutputToModelOutput('hello', true)).toEqual({ type: 'text', value: 'hello' });
-});
-
-test('model output: images become image-data parts when supported', () => {
-  expect(
-    imageOutputToModelOutput(
-      { text: 'shot', images: [{ mediaType: 'image/png', dataUrl: 'data:image/png;base64,aGk=' }] },
-      true,
-    ),
-  ).toEqual({
-    type: 'content',
-    value: [
-      { type: 'text', text: 'shot' },
-      { type: 'image-data', data: 'aGk=', mediaType: 'image/png' },
-    ],
-  });
-});
-
-test('model output: images degrade to a note when unsupported', () => {
-  expect(
-    imageOutputToModelOutput(
-      { text: 'shot', images: [{ mediaType: 'image/png', dataUrl: 'data:image/png;base64,aGk=' }] },
-      false,
-    ),
-  ).toEqual({
-    type: 'text',
-    value: 'shot\n[1 image(s) omitted: the current model cannot view images]',
-  });
-});
-
-test('model output: image-only result omits the empty text part', () => {
-  expect(
-    imageOutputToModelOutput(
-      { text: '', images: [{ mediaType: 'image/png', dataUrl: 'data:image/png;base64,aGk=' }] },
-      true,
-    ),
-  ).toEqual({
-    type: 'content',
-    value: [{ type: 'image-data', data: 'aGk=', mediaType: 'image/png' }],
-  });
 });

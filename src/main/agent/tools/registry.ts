@@ -1,8 +1,5 @@
-import type { ToolName } from '@shared/tools';
-import type { Tool } from 'ai';
 import { listEnabledImageModels } from '../../providers/image-models';
 import { maxContextTokens, modelPricing } from '../models/catalog';
-import { makeNeedsApproval } from '../permissions';
 import { listSubagentDefs } from '../subagent/defs';
 import { askClarificationTool } from './builtins/ask-clarification';
 import { bashTool } from './builtins/bash';
@@ -41,82 +38,63 @@ import { webFetchTool } from './builtins/web-fetch';
 import { webSearchTool } from './builtins/web-search';
 import { writeFileTool } from './builtins/write-file';
 import type { ToolCtx } from './context';
+import type { AtriumTool } from './define';
 
 /**
- * Assemble the agent's toolset for a sandbox context: the built-ins (keyed by
- * ToolName, so they can't drift from the shared name contract) plus any MCP
- * server tools (keyed by their qualified mcp__<server>__<tool> name) — hence the
- * Record<string, Tool> return. Built-ins are spread last so an MCP server can
- * never shadow one. The task tool advertises the available subagents (from
- * ctx.db), resolved per call so freshly created ones show up.
+ * Assemble the agent's toolset for a run: the built-ins plus any MCP server
+ * tools (named mcp__<server>__<tool>). Built-ins come last and win on a name
+ * collision, so an MCP server can never shadow one. The task tool advertises
+ * the available subagents (from ctx.run.db), resolved per call so freshly
+ * created ones show up.
  */
-/** Gate a tool behind the permission check — it pauses for approval when the
- *  call crosses the workspace boundary under the active mode. */
-function gate(name: string, ctx: ToolCtx, t: Tool): Tool {
-  return { ...t, needsApproval: makeNeedsApproval(name, ctx) };
-}
-
-/** Gate every MCP tool — they always cross the boundary (see classifyToolCall). */
-function gateMcpTools(
-  mcpTools: Record<string, Tool> | undefined,
-  ctx: ToolCtx,
-): Record<string, Tool> {
-  const out: Record<string, Tool> = {};
-  for (const [name, t] of Object.entries(mcpTools ?? {})) out[name] = gate(name, ctx, t);
-  return out;
-}
-
-export function getTools(ctx: ToolCtx): Record<string, Tool> {
+export function getTools(ctx: ToolCtx): AtriumTool[] {
   // macOS desktop-automation tools, grouped so getTools can drop them wholesale
   // when the helper is unavailable (see the ctx.computerUse guard below).
-  const computerBuiltins = {
-    computer_list_apps: computerListAppsTool(ctx),
-    computer_get_app_state: computerGetAppStateTool(ctx),
-    computer_click: computerClickTool(ctx),
-    computer_type_text: computerTypeTextTool(ctx),
-    computer_press_key: computerPressKeyTool(ctx),
-    computer_scroll: computerScrollTool(ctx),
-    computer_drag: computerDragTool(ctx),
-    computer_set_value: computerSetValueTool(ctx),
-    computer_perform_action: computerPerformActionTool(ctx),
-  } satisfies Partial<Record<ToolName, Tool>>;
-  const builtins: Record<ToolName, Tool> = {
-    read_file: readFileTool(ctx),
-    write_file: gate('write_file', ctx, writeFileTool(ctx)),
-    edit_file: gate('edit_file', ctx, editFileTool(ctx)),
-    list_dir: listDirTool(ctx),
-    grep: grepTool(ctx),
-    glob: globTool(ctx),
-    bash: gate('bash', ctx, bashTool(ctx)),
-    bash_output: bashOutputTool(ctx),
-    kill_shell: killShellTool(ctx),
-    todo_write: todoWriteTool(),
-    web_fetch: webFetchTool(),
-    web_search: webSearchTool(),
-    task: taskTool({
+  const computerBuiltins = [
+    computerListAppsTool(ctx),
+    computerGetAppStateTool(ctx),
+    computerClickTool(ctx),
+    computerTypeTextTool(ctx),
+    computerPressKeyTool(ctx),
+    computerScrollTool(ctx),
+    computerDragTool(ctx),
+    computerSetValueTool(ctx),
+    computerPerformActionTool(ctx),
+  ];
+  const builtins: AtriumTool[] = [
+    readFileTool(ctx),
+    writeFileTool(ctx),
+    editFileTool(ctx),
+    listDirTool(ctx),
+    grepTool(ctx),
+    globTool(ctx),
+    bashTool(ctx),
+    bashOutputTool(ctx),
+    killShellTool(ctx),
+    todoWriteTool(),
+    webFetchTool(),
+    webSearchTool(),
+    taskTool({
       maxContextTokens,
       pricingOf: modelPricing,
-      subagents: listSubagentDefs(ctx.db),
+      subagents: listSubagentDefs(ctx.run.db),
+      run: ctx.run,
     }),
-    skill: skillTool({ skills: ctx.skills ?? [] }),
-    ask_clarification: askClarificationTool(),
-    image_gen: imageGenTool({ models: listEnabledImageModels(ctx.db) }),
-    view_image: viewImageTool(ctx),
-    memory: memoryTool(ctx),
-    profile: profileTool(),
-    schedule_create: scheduleCreateTool(),
-    schedule_list: scheduleListTool(),
-    schedule_update: scheduleUpdateTool(),
-    schedule_cancel: scheduleCancelTool(),
-    ...computerBuiltins,
-  };
-  // MCP tools first so a built-in can never be shadowed by a server tool.
-  const merged = { ...gateMcpTools(ctx.mcpTools, ctx), ...builtins };
-  // Computer Use is macOS-only and rides on the helper's availability; when it
-  // is absent (non-mac, or later disabled in settings) don't advertise its
-  // tools to the model at all, rather than failing them at call time.
-  if (!ctx.computerUse) {
-    for (const name of Object.keys(computerBuiltins)) delete merged[name];
-  }
-  return merged;
+    skillTool({ skills: ctx.skills ?? [], run: ctx.run }),
+    askClarificationTool(),
+    imageGenTool({ models: listEnabledImageModels(ctx.run.db), run: ctx.run }),
+    viewImageTool(ctx),
+    memoryTool(ctx),
+    profileTool(),
+    scheduleCreateTool(),
+    scheduleListTool(),
+    scheduleUpdateTool(),
+    scheduleCancelTool(),
+    // Computer Use is macOS-only and rides on the helper's availability; when it
+    // is absent (non-mac, or later disabled in settings) don't advertise its
+    // tools to the model at all, rather than failing them at call time.
+    ...(ctx.computerUse ? computerBuiltins : []),
+  ];
+  const names = new Set(builtins.map((t) => t.name));
+  return [...(ctx.mcpTools ?? []).filter((t) => !names.has(t.name)), ...builtins];
 }

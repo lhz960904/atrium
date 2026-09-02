@@ -4,6 +4,7 @@ import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
 import type { Db } from '../../../db';
 import type { RunContext } from '../../middleware';
 import type { Sandbox } from '../../sandbox/types';
+import { runTool } from '../testing';
 import { taskTool } from './task';
 
 const USAGE = {
@@ -23,7 +24,7 @@ const textModel = (text: string) => {
   });
 };
 
-const deps = { maxContextTokens: () => 200_000, subagents: [] };
+const deps = (run: RunContext) => ({ maxContextTokens: () => 200_000, subagents: [], run });
 
 function ctx(model: RunContext['model'], db: Db): RunContext {
   return {
@@ -42,21 +43,14 @@ const noRowsDb = {
   select: () => ({ from: () => ({ where: () => ({ get: () => undefined }) }) }),
 } as unknown as Db;
 
-// biome-ignore lint/suspicious/noExplicitAny: tool execute's options arg only needs experimental_context here
-const exec = (ec: RunContext): any => ({ experimental_context: ec });
-
-test('returns an error for an unknown subagent', async () => {
-  const result = await taskTool(deps).execute?.(
-    { description: 'd', prompt: 'p', subagent: 'nope' },
-    exec(ctx(textModel('x'), noRowsDb)),
+test('fails for an unknown subagent', async () => {
+  const t = taskTool(deps(ctx(textModel('x'), noRowsDb)));
+  expect(runTool(t, { description: 'd', prompt: 'p', subagent: 'nope' })).rejects.toThrow(
+    "unknown subagent 'nope'",
   );
-  expect(result).toContain("unknown subagent 'nope'");
 });
 
 test('delegates to general-purpose by default and returns the subagent final text', async () => {
-  const result = await taskTool(deps).execute?.(
-    { description: 'd', prompt: 'do it' },
-    exec(ctx(textModel('SUBAGENT ANSWER'), {} as Db)),
-  );
-  expect(result).toBe('SUBAGENT ANSWER');
+  const t = taskTool(deps(ctx(textModel('SUBAGENT ANSWER'), {} as Db)));
+  expect(await runTool(t, { description: 'd', prompt: 'do it' })).toBe('SUBAGENT ANSWER');
 });

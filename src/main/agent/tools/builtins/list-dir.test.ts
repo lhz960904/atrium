@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
-import type { Db } from '../../../db';
 import type { Sandbox } from '../../sandbox/types';
 import type { ToolCtx } from '../context';
+import { fakeRun, runTool } from '../testing';
 import { listDirTool } from './list-dir';
 
 function ctx(over: Partial<Sandbox>): ToolCtx {
@@ -12,11 +12,9 @@ function ctx(over: Partial<Sandbox>): ToolCtx {
     list: async () => [],
     exec: async () => ({ output: '', exitCode: 0 }),
   };
-  return { sandbox: { ...base, ...over }, workspaceRoot: '/ws', db: {} as Db };
+  return { sandbox: { ...base, ...over }, workspaceRoot: '/ws', run: fakeRun() };
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: tool.execute's option arg is irrelevant here
-const opts = {} as any;
 const errno = (code: string): NodeJS.ErrnoException => Object.assign(new Error(code), { code });
 
 test('joins entries with newlines and resolves the path', async () => {
@@ -29,7 +27,7 @@ test('joins entries with newlines and resolves the path', async () => {
       },
     }),
   );
-  const out = await t.execute?.({ description: 'x', path: 'src' }, opts);
+  const out = await runTool(t, { description: 'x', path: 'src' });
   expect(gotPath).toBe('/ws/src');
   expect(out).toBe('a.ts\nsub/\nsub/b.ts');
 });
@@ -44,16 +42,16 @@ test('defaults to the workspace root when path is omitted', async () => {
       },
     }),
   );
-  await t.execute?.({ description: 'x' }, opts);
+  await runTool(t, { description: 'x' });
   expect(gotPath).toBe('/ws');
 });
 
 test('reports an empty directory', async () => {
   const t = listDirTool(ctx({ list: async () => [] }));
-  expect(await t.execute?.({ description: 'x', path: '.' }, opts)).toBe('(empty)');
+  expect(await runTool(t, { description: 'x', path: '.' })).toBe('(empty)');
 });
 
-test('maps a missing directory to a friendly message', async () => {
+test('maps a missing directory to a friendly failure', async () => {
   const t = listDirTool(
     ctx({
       list: async () => {
@@ -61,8 +59,8 @@ test('maps a missing directory to a friendly message', async () => {
       },
     }),
   );
-  expect(await t.execute?.({ description: 'x', path: 'nope' }, opts)).toBe(
-    'Error: Directory not found: nope',
+  expect(runTool(t, { description: 'x', path: 'nope' })).rejects.toThrow(
+    'Directory not found: nope',
   );
 });
 
@@ -76,7 +74,7 @@ test('lists a path outside the workspace (reads are unrestricted)', async () => 
       },
     }),
   );
-  const out = await t.execute?.({ description: 'x', path: '../x' }, opts);
+  const out = await runTool(t, { description: 'x', path: '../x' });
   expect(out).toBe('out.txt');
   expect(gotPath).toBe('/x');
 });

@@ -37,7 +37,9 @@ export type RunAgentOptions = {
   threadId: string;
   db: Db;
   sandbox: Sandbox;
-  tools: Record<string, Tool>;
+  /** Built once the run's context exists: the tools that reach back into the
+   *  turn close over it (see ToolCtx.run). */
+  buildTools: (run: RunContext) => Record<string, Tool>;
   middlewares: AgentMiddleware[];
   /** Active permission mode, surfaced in the system prompt so the model knows how approvals behave. */
   permissionMode: PermissionMode;
@@ -73,7 +75,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
         mode: opts.permissionMode,
       }),
       messages: opts.messages,
-      tools: opts.tools,
+      tools: {},
     },
     model: opts.model,
     providerId: opts.providerId,
@@ -81,6 +83,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
     emit: () => {},
     scratch: new Map(),
   };
+  // The toolset closes over the context, so it can only be built once the
+  // context exists — hence the empty placeholder above.
+  ctx.request.tools = opts.buildTools(ctx);
   const messageMetadata = composeMessageMetadata(opts.middlewares);
 
   return createUIMessageStream({
@@ -128,9 +133,6 @@ export async function runAgent(opts: RunAgentOptions): Promise<ReadableStream<UI
         },
         abortSignal: opts.abortSignal,
         experimental_transform: smoothStream({ chunking: 'word', delayInMs: 12 }),
-        // Hands the run's RunContext to tool execute (the task tool reads it to
-        // spawn a subagent that reuses this run's model / sandbox / db).
-        experimental_context: ctx,
       });
       writer.merge(
         result.toUIMessageStream({ messageMetadata: ({ part }) => messageMetadata(part) }),
