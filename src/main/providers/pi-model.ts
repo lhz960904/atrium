@@ -1,5 +1,6 @@
 import {
   type Api,
+  type CredentialStore,
   createModels,
   createProvider,
   envApiKeyAuth,
@@ -8,10 +9,12 @@ import {
 import { anthropicMessagesApi } from '@earendil-works/pi-ai/api/anthropic-messages.lazy';
 import { googleGenerativeAIApi } from '@earendil-works/pi-ai/api/google-generative-ai.lazy';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
+import { registerBunOAuthFlows } from '@earendil-works/pi-ai/bun-oauth';
 import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
 import { deepseekProvider } from '@earendil-works/pi-ai/providers/deepseek';
 import { googleProvider } from '@earendil-works/pi-ai/providers/google';
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
+import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-codex';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../db';
 import { providers } from '../db/schema';
@@ -53,13 +56,43 @@ const API_STREAMS = {
  * (relays and local services — empty model list; keys arrive per call via
  * getApiKey, so the env-var auth never fires).
  */
-export const piModels = createModels();
+/**
+ * The engine's credential storage. Resolved lazily: the registry is assembled
+ * at module load (before the database is open), while a credential is only ever
+ * read when a request is actually made.
+ */
+let credentials: CredentialStore | undefined;
+
+export function useCredentialStore(store: CredentialStore): void {
+  credentials = store;
+}
+
+/**
+ * pi loads each OAuth flow through a variable specifier so bundlers can't follow
+ * it — which is exactly what breaks here: main is bundled to one file, and the
+ * flow module has no chunk to import at login time. This entry point holds
+ * static imports of every flow, so registering them up front is what makes
+ * subscription login work in a bundled app at all.
+ */
+registerBunOAuthFlows();
+
+export const piModels = createModels({
+  credentials: {
+    read: (id, o) => (credentials ? credentials.read(id, o) : Promise.resolve(undefined)),
+    list: (o) => (credentials ? credentials.list(o) : Promise.resolve([])),
+    modify: (id, fn, o) =>
+      credentials ? credentials.modify(id, fn, o) : Promise.resolve(undefined),
+    delete: (id, o) => (credentials ? credentials.delete(id, o) : Promise.resolve()),
+  },
+});
 
 for (const provider of [
   anthropicProvider(),
   openaiProvider(),
   deepseekProvider(),
   googleProvider(),
+  // Subscriptions the user signs into; their catalogs and auth are pi's.
+  openaiCodexProvider(),
 ]) {
   piModels.setProvider(provider);
 }
@@ -102,6 +135,12 @@ export function resolvePiModel(db: Db, providerId: string, modelId: string): Mod
   if (manifest.kind === 'local-service') {
     const base = (configuredBaseUrl(db, providerId) ?? manifest.defaultBaseUrl).replace(/\/+$/, '');
     return buildModel(providerId, modelId, 'openai-completions', `${base}/v1`);
+  }
+  // A subscription's catalog is entirely pi's — nothing here to merge.
+  if (manifest.kind === 'subscription') {
+    const model = piModels.getModel(providerId, modelId);
+    if (!model) throw new Error(`Model "${modelId}" is not offered by ${manifest.name}.`);
+    return model;
   }
   if (manifest.kind !== 'cloud-api') {
     throw new Error(`Provider "${providerId}" is not a model provider.`);

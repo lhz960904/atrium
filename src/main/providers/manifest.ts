@@ -93,7 +93,25 @@ export type LocalServiceManifest = {
   defaultBaseUrl: string;
 };
 
-export type ProviderManifest = CloudApiManifest | LocalCliManifest | LocalServiceManifest;
+/**
+ * A vendor subscription the user signs into instead of pasting a key. The
+ * engine owns the whole flow (authorization URL, token exchange, refresh); the
+ * manifest only says which provider offers one and where to read about it.
+ */
+export type SubscriptionManifest = {
+  id: string;
+  kind: 'subscription';
+  name: string;
+  descriptionKey: string;
+  /** Where the user manages the subscription itself. */
+  consoleUrl: string;
+};
+
+export type ProviderManifest =
+  | CloudApiManifest
+  | LocalCliManifest
+  | LocalServiceManifest
+  | SubscriptionManifest;
 
 /**
  * The Ark plans serve the doubao-seed-2.0 family under bare ids while litellm
@@ -246,6 +264,14 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
       { id: 'kimi-k2.6' },
       { id: 'kimi-k2.7-code' },
     ],
+  },
+  // ── Subscriptions (signed into, not keyed) ───────────────────────────────
+  {
+    id: 'openai-codex',
+    kind: 'subscription',
+    name: 'OpenAI Codex',
+    descriptionKey: 'settings.providers.desc.openaiCodex',
+    consoleUrl: 'https://chatgpt.com/codex',
   },
   {
     id: 'openrouter',

@@ -643,6 +643,12 @@ export const en: typeof zh = {
     providers: {
       active: 'Active',
       notConfigured: 'Not configured',
+      subscription: 'Subscription',
+      manage: 'Manage',
+      signIn: 'Sign in',
+      signOut: 'Sign out',
+      signedIn: 'Signed in.',
+      submitCode: 'Submit',
       models: 'Models',
       fetch: 'Fetch',
       enabledCount: '{{on}} / {{total}} enabled',
@@ -662,6 +668,7 @@ export const en: typeof zh = {
       localCommandHint: 'Command to launch the ACP agent; leave empty for the default.',
       localArgsHint: 'Space-separated command-line arguments; leave empty for the default.',
       desc: {
+        openaiCodex: 'Sign in with a ChatGPT Plus/Pro subscription — no API key.',
         anthropic: 'Claude models — Opus, Sonnet, Haiku. Direct API.',
         openai: 'GPT-5, GPT-4.1 and o-series via OpenAI API.',
         deepseek: 'DeepSeek-V3 / R1. Cost-effective, strong at code & reasoning.',

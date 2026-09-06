@@ -21,7 +21,13 @@ import { registerFaviconScheme, serveFavicons } from './favicons';
 import { initLogging } from './log';
 import { setupMenuBar } from './menu-bar';
 import { notifyScheduledRun } from './notifications';
-import { makeGetApiKey, piStreamFn, resolvePiModel } from './providers/pi-model';
+import { createCredentialStore } from './providers/credential-store';
+import {
+  makeGetApiKey,
+  piStreamFn,
+  resolvePiModel,
+  useCredentialStore,
+} from './providers/pi-model';
 import { firstEnabledModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
 import { getRunningThreadIds } from './server/resumable';
@@ -122,6 +128,9 @@ app.whenReady().then(async () => {
   serveFavicons();
 
   const db = openDb();
+  // The engine resolves provider credentials itself (an OAuth token is
+  // refreshed in place, so it can't be handed over once at call time).
+  useCredentialStore(createCredentialStore(db));
   openSettings();
 
   // Fallback workspace root for projectless conversations; project-scoped

@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
+import { shell } from 'electron';
 import { z } from 'zod';
 import { providers } from '../../db/schema';
 import { decryptCredentials, encryptCredentials } from '../../providers/credentials';
@@ -12,6 +13,14 @@ import {
 } from '../../providers/local-service';
 import { PROVIDER_MANIFEST, type ProviderManifest } from '../../providers/manifest';
 import { fetchModelIds } from '../../providers/model-fetcher';
+import {
+  answerLogin,
+  cancelLogin,
+  logout,
+  readLogin,
+  startLogin,
+} from '../../providers/oauth-login';
+import { piModels } from '../../providers/pi-model';
 import { type PullState, pullManager } from '../../providers/pull-manager';
 import { badRequest, internalError, preconditionFailed } from '../errors';
 import { publicProcedure, router } from '../trpc';
@@ -21,6 +30,8 @@ type ProviderView = ProviderManifest & {
   enabled: boolean;
   config: Record<string, unknown> | null;
   hasCredentials: boolean;
+  /** A subscription's catalog is the engine's, so it is filled in here. */
+  models?: readonly { id: string }[];
 };
 
 const configSchema = z.record(z.string(), z.unknown());
@@ -38,11 +49,44 @@ export const providersRouter = router({
       const row = byId.get(m.id);
       return {
         ...m,
+        ...(m.kind === 'subscription'
+          ? { models: piModels.getModels(m.id).map((model) => ({ id: model.id })) }
+          : {}),
         enabled: row?.enabled ?? false,
         config: (row?.config as Record<string, unknown> | null) ?? null,
         hasCredentials: !!row?.credentialsEncrypted,
       };
     });
+  }),
+
+  /**
+   * Subscription login. `start` kicks the flow off and opens the browser; the
+   * panel then polls `loginState` until it lands, answering `submitLogin` on
+   * the rare path where the vendor wants a pasted code.
+   */
+  startLogin: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    ctx.db
+      .insert(providers)
+      .values({ id: input.id, enabled: true })
+      .onConflictDoUpdate({ target: providers.id, set: { enabled: true } })
+      .run();
+    return startLogin(input.id, (url) => void shell.openExternal(url));
+  }),
+
+  loginState: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input }) => readLogin(input.id)),
+
+  submitLogin: publicProcedure
+    .input(z.object({ id: z.string(), value: z.string() }))
+    .mutation(({ input }) => ({ ok: answerLogin(input.id, input.value) })),
+
+  cancelLogin: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
+    cancelLogin(input.id);
+  }),
+
+  signOut: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+    await logout(input.id);
   }),
 
   setEnabled: publicProcedure
@@ -225,7 +269,8 @@ export const providersRouter = router({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }): Promise<string[]> => {
       const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind === 'local-cli') {
+      if (!manifest || manifest.kind === 'local-cli' || manifest.kind === 'subscription') {
+        // A subscription's catalog is the engine's, fixed by the vendor.
         throw badRequest('Provider has no model listing.');
       }
 

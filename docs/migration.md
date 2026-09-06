@@ -45,6 +45,9 @@ Branch: feat/protocol-isolation（基于 main@4ca74fd）
 
 - **2g. 子智能体** ✅：`runSubagent` 由 `streamText` 换成嵌套 `new Agent`，跑父轮同一套 streamFn / getApiKey（子代理钉了模型就换成它的 pi Model）。工具从 AI SDK 的 `Record<string, Tool>` 改成按名字过滤 `AtriumTool[]`——`task` 在调用时才读取同轮的完整工具表（它自己也在表里，构造期拿不到）。轮内压缩、loop 刹车、日期注入复用 pi 那套；活动冒泡改从 `message_end` 折算成既有的 `data.subagent` 通知（渲染端零改动），用量按 pi 每轮原生 usage 累加，并挂到 `AgentToolResult.usage` 上（pi 原生支持工具级用量）。定时任务走的仍是 `/api/chat` 同一条路，未受影响。ACP 按 D4 冻结，不移植。真机验证：派子智能体跑 bash 回报输出正常，账本里 `kind=subagent` 独立入账。
 
+- **2g（续）· 订阅 OAuth provider** ✅：pi 自带 Claude Pro/Max 与 ChatGPT Plus/Pro 的 OAuth 流，所以这一步做的是把它接到应用上——凭据存储复用 providers 表那块 safeStorage 加密 blob（实现 pi 的 `CredentialStore`：`modify` 是唯一写入口，因为 OAuth token 是就地刷新的，两个并发请求不能各刷一次），登录编排在主进程按状态机跑（拿到授权 URL 就开浏览器、需要粘贴时把问题递到设置页、可取消），设置页新增 `subscription` 这类 provider 的登录面板，模型目录直接取 pi 的。**一个真机才会暴露的坑**：pi 用变量 specifier 动态 import OAuth 流模块，专门躲开打包器——而 main 是打成单文件的，登录时那个 chunk 根本不存在（`Cannot find module out/main/openai-codex.js`）；pi 为此导出了 `bun-oauth` 入口（静态 import 全部流），在注册表装配处调一次 `registerBunOAuthFlows()` 才能在打包环境里登录。真机验证到「点登录 → 起流 → 开浏览器 → 停在等授权码」为止，取消能干净收尾；**最后一步的授权要 Haoze 用自己的账号完成**。
+- **2h. 引擎摘掉 AI SDK** ✅：agent 走的每一次模型调用都改走引擎自己的流。三处旁路调用（压缩摘要、会话标题、auto-review 判定）都是「一问一答」，收敛成一个 `pi/complete.ts`；记忆整理（dream）改成一个小的嵌套 Agent。没有东西需要适配之后，AI SDK 工具镜像连同整条 middleware 链一起删除，`RunContext` 瘦回「一轮是什么」——在哪跑、能写什么、怎么到 UI，引擎单独交给需要的部件。
+
 ## 纪律
 
 - main 迁移期冻结新功能，只收 fix。
