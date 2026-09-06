@@ -669,6 +669,7 @@ export const en: typeof zh = {
       localArgsHint: 'Space-separated command-line arguments; leave empty for the default.',
       desc: {
         openaiCodex: 'Sign in with a ChatGPT Plus/Pro subscription — no API key.',
+        anthropicSubscription: 'Sign in with a Claude Pro/Max subscription — no API key.',
         anthropic: 'Claude models — Opus, Sonnet, Haiku. Direct API.',
         openai: 'GPT-5, GPT-4.1 and o-series via OpenAI API.',
         deepseek: 'DeepSeek-V3 / R1. Cost-effective, strong at code & reasoning.',

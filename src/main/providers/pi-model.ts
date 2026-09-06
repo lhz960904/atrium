@@ -86,13 +86,35 @@ export const piModels = createModels({
   },
 });
 
+/** Claude Pro/Max, kept apart from the api-key entry so both credentials fit. */
+const SUBSCRIPTION_ANTHROPIC = 'anthropic-subscription';
+
+const anthropic = anthropicProvider();
+
 for (const provider of [
-  anthropicProvider(),
+  anthropic,
   openaiProvider(),
   deepseekProvider(),
   googleProvider(),
   // Subscriptions the user signs into; their catalogs and auth are pi's.
   openaiCodexProvider(),
+  /**
+   * Claude Pro/Max as its own provider, reusing Anthropic's OAuth flow, models
+   * and endpoint. pi offers both auth kinds under one provider, but a
+   * credential store holds exactly one credential per provider id — so a user
+   * who has both a key and a subscription needs two entries, or signing in
+   * would overwrite the key.
+   */
+  createProvider({
+    id: SUBSCRIPTION_ANTHROPIC,
+    name: 'Claude Pro/Max',
+    baseUrl: anthropic.baseUrl,
+    auth: { oauth: anthropic.auth.oauth },
+    // Re-stamped: a request is routed by the model's own `provider`, so a
+    // borrowed model would resolve auth against the api-key entry instead.
+    models: anthropic.getModels().map((model) => ({ ...model, provider: SUBSCRIPTION_ANTHROPIC })),
+    api: anthropicMessagesApi(),
+  }),
 ]) {
   piModels.setProvider(provider);
 }

@@ -7,7 +7,7 @@ import { EnableSwitch } from './EnableSwitch';
 import { LocalCliForm } from './LocalCliForm';
 import { LocalServiceForm } from './LocalServiceForm';
 import { ModelsBlock } from './ModelsBlock';
-import { SubscriptionForm, SubscriptionLogin } from './SubscriptionForm';
+import { SubscriptionForm } from './SubscriptionForm';
 import type { ProviderView } from './types';
 
 export function ProviderDetail({ provider }: { provider: ProviderView }): React.JSX.Element {
@@ -74,18 +74,18 @@ function CloudApiForm({
   const config = (provider.config ?? {}) as {
     baseUrl?: string;
     fetchedModels?: string[];
+    fetchedFrom?: string;
     enabledModels?: string[];
   };
   // Manifest models are the curated floor — some providers (coding/agent
   // plans) expose no listing endpoint, so fetch results only extend them.
-  const models = [
-    ...new Set([...provider.models.map((m) => m.id), ...(config.fetchedModels ?? [])]),
-  ];
+  // A listing pulled from a different endpoint than the one now configured is
+  // someone else's catalog (a relay's, typically) and is not shown.
+  const base = config.baseUrl?.trim() || provider.defaultBaseUrl;
+  const fetched = config.fetchedFrom === base ? (config.fetchedModels ?? []) : [];
+  const models = [...new Set([...provider.models.map((m) => m.id), ...fetched])];
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
-      {provider.subscription && (
-        <SubscriptionLogin providerId={provider.id} hasCredentials={provider.hasCredentials} />
-      )}
       <ApiKeyField
         providerId={provider.id}
         hasCredentials={provider.hasCredentials}

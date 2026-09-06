@@ -65,11 +65,6 @@ export type CloudApiManifest = {
   consoleUrl: string;
   /** Models Atrium knows about for this provider; user toggles a subset on. */
   models: readonly ManifestModel[];
-  /**
-   * The vendor also accepts a subscription sign-in, so the panel offers it
-   * alongside the key field. Either credential works; the last one stored wins.
-   */
-  subscription?: true;
 };
 
 export type LocalCliManifest = {
@@ -148,7 +143,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     name: 'Anthropic',
     descriptionKey: 'settings.providers.desc.anthropic',
     protocol: 'anthropic',
-    subscription: true,
     defaultBaseUrl: 'https://api.anthropic.com',
     consoleUrl: 'https://console.anthropic.com/settings/keys',
     models: [{ id: 'claude-opus-4-7' }, { id: 'claude-sonnet-4-6' }, { id: 'claude-haiku-4-5' }],
@@ -272,6 +266,16 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     ],
   },
   // ── Subscriptions (signed into, not keyed) ───────────────────────────────
+  // A vendor that sells both a key and a subscription gets one row per
+  // credential, not one row with two: the engine stores exactly one credential
+  // per provider id, so the two cannot coexist under the same entry.
+  {
+    id: 'anthropic-subscription',
+    kind: 'subscription',
+    name: 'Claude Pro/Max',
+    descriptionKey: 'settings.providers.desc.anthropicSubscription',
+    consoleUrl: 'https://claude.ai/settings/billing',
+  },
   {
     id: 'openai-codex',
     kind: 'subscription',

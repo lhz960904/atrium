@@ -654,6 +654,7 @@ export const zh = {
       localArgsHint: '空格分隔的命令行参数,留空用默认。',
       desc: {
         openaiCodex: '用 ChatGPT Plus/Pro 订阅登录，不需要 API key。',
+        anthropicSubscription: '用 Claude Pro/Max 订阅登录，不需要 API key。',
         anthropic: 'Claude 系列模型 — Opus、Sonnet、Haiku。官方 API 直连。',
         openai: 'GPT-5、GPT-4.1 与 o 系列,经 OpenAI API。',
         deepseek: 'DeepSeek-V3 / R1。性价比高,擅长代码与推理。',

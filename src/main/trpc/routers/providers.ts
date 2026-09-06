@@ -25,6 +25,26 @@ import { type PullState, pullManager } from '../../providers/pull-manager';
 import { badRequest, internalError, preconditionFailed } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
+/**
+ * The vendor's own catalog, where the engine maintains one. It is the better
+ * source — kept current with the vendor and carrying real cost/window data —
+ * so it leads, and the manifest supplies the rest: models the engine doesn't
+ * know (Atrium-only plans) and any field we override.
+ */
+function withEngineCatalog(
+  providerId: string,
+  declared: readonly { id: string }[],
+): { id: string }[] {
+  const ids = new Set<string>();
+  const out: { id: string }[] = [];
+  for (const model of [...piModels.getModels(providerId), ...declared]) {
+    if (ids.has(model.id)) continue;
+    ids.add(model.id);
+    out.push({ id: model.id });
+  }
+  return out;
+}
+
 /** A user-friendly view of a provider that merges manifest + DB row. */
 type ProviderView = ProviderManifest & {
   enabled: boolean;
@@ -49,8 +69,8 @@ export const providersRouter = router({
       const row = byId.get(m.id);
       return {
         ...m,
-        ...(m.kind === 'subscription'
-          ? { models: piModels.getModels(m.id).map((model) => ({ id: model.id })) }
+        ...(m.kind === 'cloud-api' || m.kind === 'subscription'
+          ? { models: withEngineCatalog(m.id, 'models' in m ? m.models : []) }
           : {}),
         enabled: row?.enabled ?? false,
         config: (row?.config as Record<string, unknown> | null) ?? null,
@@ -298,7 +318,9 @@ export const providersRouter = router({
         throw internalError(err instanceof Error ? err.message : 'Fetch failed.');
       }
 
-      const mergedConfig = { ...config, fetchedModels: modelIds };
+      // Tie the listing to the endpoint it came from: point a provider at a
+      // relay and back, and the relay's catalog must not linger as its own.
+      const mergedConfig = { ...config, fetchedModels: modelIds, fetchedFrom: baseUrl };
       ctx.db
         .insert(providers)
         .values({ id: input.id, config: mergedConfig })
