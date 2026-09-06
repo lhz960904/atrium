@@ -2,10 +2,11 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { Message } from '@shared/protocol';
 import type { RunContext } from '../../middleware';
 import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
 import { runTool } from '../testing';
-import { latestSkillBodyModel, latestSkillBodyUI, skillPreserver, skillTool } from './skill';
+import { latestSkillBody, preserveActiveSkill, skillTool } from './skill';
 
 let tmp: string;
 beforeEach(async () => {
@@ -96,42 +97,29 @@ test('a missing manifest file fails with a read error', async () => {
   expect(load([skill], fakeCtx(), { name: 'gone' })).rejects.toThrow("could not read skill 'gone'");
 });
 
-// biome-ignore lint/suspicious/noExplicitAny: terse message fixtures for the preserver
-const uiSkill = (output: string): any => ({
-  parts: [{ type: 'tool-skill', state: 'output-available', output }],
-});
-// biome-ignore lint/suspicious/noExplicitAny: terse message fixtures for the preserver
-const modelSkillResult = (output: unknown): any => ({
-  role: 'tool',
-  content: [{ type: 'tool-result', toolName: 'skill', output }],
+const skillResult = (text: string): Message =>
+  ({
+    role: 'toolResult',
+    toolCallId: '1',
+    toolName: 'skill',
+    content: [{ type: 'text', text }],
+    isError: false,
+    timestamp: 0,
+  }) as Message;
+
+test('latestSkillBody returns the most recent loaded body', () => {
+  expect(latestSkillBody([skillResult('first'), skillResult('second')])).toBe('second');
+  expect(latestSkillBody([{ role: 'user', content: 'hi', timestamp: 0 }])).toBeNull();
 });
 
-test('latestSkillBodyUI returns the most recent loaded body', () => {
-  expect(latestSkillBodyUI([uiSkill('first'), uiSkill('second')])).toBe('second');
-  expect(latestSkillBodyUI([{ parts: [] } as never])).toBeNull();
-});
-
-test('latestSkillBodyModel reads text and string tool-result outputs', () => {
-  expect(latestSkillBodyModel([modelSkillResult('plain')])).toBe('plain');
-  expect(latestSkillBodyModel([modelSkillResult({ type: 'text', value: 'wrapped' })])).toBe(
-    'wrapped',
-  );
-});
-
-test('preserver carries the body only when it is being folded away', () => {
+test('the body is carried only when it is being folded away', () => {
   // loaded body sits in the fold, not the kept window → carry it
-  const carried = skillPreserver.fromUI([uiSkill('SOP')], []);
+  const carried = preserveActiveSkill([skillResult('SOP')], []);
   expect(carried).toContain('Active skill instructions');
   expect(carried).toContain('SOP');
 
   // already in the kept window → nothing to carry
-  expect(skillPreserver.fromUI([uiSkill('SOP')], [uiSkill('SOP')])).toBeNull();
+  expect(preserveActiveSkill([skillResult('SOP')], [skillResult('SOP')])).toBeNull();
   // no skill anywhere → nothing to carry
-  expect(skillPreserver.fromUI([], [])).toBeNull();
-});
-
-test('preserver works on the within-turn (ModelMessage) fold', () => {
-  const carried = skillPreserver.fromModel([modelSkillResult('SOP')], []);
-  expect(carried).toContain('SOP');
-  expect(skillPreserver.fromModel([modelSkillResult('SOP')], [modelSkillResult('SOP')])).toBeNull();
+  expect(preserveActiveSkill([], [])).toBeNull();
 });

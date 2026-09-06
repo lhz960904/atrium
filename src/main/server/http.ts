@@ -9,16 +9,18 @@ import { AcpSessionRegistry } from '../agent/acp/registry';
 import { runExternalAgentTurn } from '../agent/acp/run-external-agent';
 import { mcpManager } from '../agent/mcp/manager';
 import { buildMcpTools } from '../agent/mcp/tool-adapter';
-import { compactThread, generateThreadTitle } from '../agent/middleware';
+import { generateThreadTitle } from '../agent/middleware';
 import { isImageModel, modelPricing } from '../agent/models/catalog';
 import { needsApprovalFor } from '../agent/permissions';
+import { foldToCheckpoint } from '../agent/pi/compaction';
+import { createSummarizer } from '../agent/pi/summarize';
 import { runAgent } from '../agent/run';
 import { runImageTurn } from '../agent/run-image';
 import { BackgroundShells, LocalSandbox } from '../agent/sandbox';
 import { getSkills } from '../agent/skills/registry';
 import { getTools, toAiSdkTools } from '../agent/tools';
-import { skillPreserver } from '../agent/tools/builtins/skill';
-import { todoPreserver } from '../agent/tools/builtins/todo';
+import { preserveActiveSkill } from '../agent/tools/builtins/skill';
+import { preserveTodos } from '../agent/tools/builtins/todo';
 import { getComputerUseHelper } from '../computer-use';
 import type { Db } from '../db';
 import { recordUsage } from '../db/usage';
@@ -29,8 +31,9 @@ import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model
 import { resolveModel, supportsImageToolResults } from '../providers/resolve';
 import { getSettings } from '../settings/conf';
 import {
-  loadThreadAgentMessages,
+  loadThreadHistory,
   loadThreadMessages,
+  persistCheckpoint,
   persistMessage,
   persistRun,
   readAcpBinding,
@@ -228,6 +231,9 @@ export function startHttpServer(deps: {
     // message id), so the model's next turns extend that same stored run
     // instead of opening a second one.
     const runId = message.role === 'assistant' ? message.id : randomUUID();
+    // The engine runs on pi messages; the entries keep each one's row id so a
+    // compaction checkpoint can name the last row it folded away.
+    const entries = loadThreadHistory(deps.db, threadId);
     startThreadRun(
       threadId,
       (piLog) =>
@@ -239,7 +245,7 @@ export function startHttpServer(deps: {
           piModel: resolvePiModel(deps.db, providerId, modelId),
           streamFn: piStreamFn,
           getApiKey: makeGetApiKey(deps.db),
-          messages: loadThreadAgentMessages(deps.db, threadId),
+          messages: entries.map((entry) => entry.message),
           uiMessages: history,
           workspaceRoot,
           threadId,
@@ -250,6 +256,8 @@ export function startHttpServer(deps: {
           abortSignal: abort.signal,
           emit: piLog.append,
           persist: (rows, opts) => persistRun(deps.db, threadId, runId, rows, opts),
+          persistCheckpoint: (checkpoint) =>
+            persistCheckpoint(deps.db, threadId, checkpoint, entries[checkpoint.coveredThrough].id),
           recordUsage: (u) =>
             recordUsage(deps.db, { threadId, kind: 'chat', ...u }, modelPricing(u.modelId)),
           generateTitle: getSettings('general.autoGenerateTitle')
@@ -333,15 +341,33 @@ export function startHttpServer(deps: {
   app.post('/api/chat/:threadId/compact', async (c) => {
     const threadId = c.req.param('threadId');
     const { providerId, modelId } = await c.req.json<{ providerId: string; modelId: string }>();
-    const compacted = await compactThread({
-      db: deps.db,
-      threadId,
-      messages: loadThreadMessages(deps.db, threadId),
-      model: resolveModel(deps.db, providerId, modelId),
-      persist: persistMessage,
-      preservers: [todoPreserver, skillPreserver],
+    const history = loadThreadHistory(deps.db, threadId);
+    // Force-compact is aggressive on purpose: the automatic path keeps a quarter
+    // of the window (so a short chat folds nothing), but the user asked to
+    // compact now — keep only the recent floor and fold everything before it.
+    const piModel = resolvePiModel(deps.db, providerId, modelId);
+    const folded = await foldToCheckpoint({
+      messages: history.map((entry) => entry.message),
+      summarize: createSummarizer({
+        model: piModel,
+        streamFn: piStreamFn,
+        getApiKey: makeGetApiKey(deps.db),
+      }),
+      contextWindow: piModel.contextWindow,
+      preservers: [preserveTodos, preserveActiveSkill],
+      keepRecentTokens: 0,
     });
-    return c.json({ compacted });
+    if (!folded) return c.json({ compacted: false });
+    persistCheckpoint(
+      deps.db,
+      threadId,
+      folded.checkpoint,
+      history[folded.checkpoint.coveredThrough].id,
+    );
+    log.info(
+      `forced compaction folded ${folded.checkpoint.coveredThrough + 1} of ${history.length} messages`,
+    );
+    return c.json({ compacted: true });
   });
 
   // Reconnect endpoint: replay the thread's envelope log from `from`

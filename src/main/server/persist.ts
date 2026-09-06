@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { Message } from '@shared/protocol';
 import type { UIMessage } from 'ai';
 import { asc, eq, or } from 'drizzle-orm';
+import type { Checkpoint } from '../agent/pi/compaction';
 import { sealDanglingToolCalls } from '../agent/pi/history';
 import type { Db } from '../db';
 import { messages, projects, providers, threads } from '../db/schema';
@@ -33,7 +35,7 @@ export function resolveThreadWorkspace(db: Db, threadId: string, projectlessRoot
   return project?.path ?? projectlessRoot;
 }
 
-type MessageRow = typeof messages.$inferSelect;
+export type MessageRow = typeof messages.$inferSelect;
 
 const toPiRow = (row: MessageRow): PiRow => ({
   id: row.id,
@@ -85,26 +87,87 @@ export function loadThreadMessages(db: Db, threadId: string): UIMessage[] {
   return out;
 }
 
+const kindOf = (row: MessageRow): string | undefined =>
+  (row.metadata as { kind?: string } | null)?.kind;
+
+const isCheckpointRow = (row: MessageRow): boolean => {
+  const kind = kindOf(row);
+  return kind === 'compaction' || kind === 'compaction-ack';
+};
+
+/**
+ * Collapse the stored rows at the latest compaction checkpoint — the fold the
+ * engine runs on, while the folded rows themselves stay in the DB for the UI.
+ *
+ * Reconstructed by id, not by position: a checkpoint is written with the
+ * current timestamp so it always sorts newest and can never sit between the
+ * folded region and the kept tail. We locate the last folded row through
+ * `coveredThroughId`, keep everything after it, and put the checkpoint pair in
+ * front — order-independent.
+ */
+export function applyCheckpoint(rows: MessageRow[]): MessageRow[] {
+  let checkpoint: MessageRow | undefined;
+  let ack: MessageRow | undefined;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const kind = kindOf(rows[i]);
+    if (!checkpoint && kind === 'compaction') checkpoint = rows[i];
+    if (!ack && kind === 'compaction-ack') ack = rows[i];
+  }
+  if (!checkpoint) return rows;
+
+  const coveredThroughId = (checkpoint.metadata as { coveredThroughId?: string })?.coveredThroughId;
+  const covered = rows.findIndex((r) => r.id === coveredThroughId);
+  // The covered row is gone (the message was edited away). Fall back to the
+  // checkpoint's own stored position: everything written after it still stands,
+  // and what came before is what the summary was for anyway.
+  if (covered < 0) return rows.slice(rows.indexOf(checkpoint));
+  const tail = rows.slice(covered + 1).filter((r) => !isCheckpointRow(r));
+  return ack ? [checkpoint, ack, ...tail] : [checkpoint, ...tail];
+}
+
+/** One stored row's worth of transcript, keeping the row id the checkpoint addresses it by. */
+export type HistoryEntry = { id: string; message: Message };
+
+/**
+ * Re-attach row ids after sealing, which only ever inserts. The originals come
+ * back by identity; a synthesized result inherits the id of the row whose
+ * unanswered call it closes — it has no row of its own, and a checkpoint that
+ * folded through it has to name something the next read can still find.
+ */
+function sealHistory(entries: HistoryEntry[]): HistoryEntry[] {
+  const sealed = sealDanglingToolCalls(entries.map((e) => e.message));
+  const out: HistoryEntry[] = [];
+  let i = 0;
+  for (const message of sealed) {
+    if (entries[i]?.message === message) out.push(entries[i++]);
+    else out.push({ id: out[out.length - 1].id, message });
+  }
+  return out;
+}
+
 /**
  * A thread's transcript as pi messages — what the engine actually runs on, read
- * straight from the rows with no UIMessage round-trip. Rows written before the
- * format flip still hold UI parts, so those pass through the split converters
- * on the way out. Dangling tool calls are sealed here rather than at write time
- * too: a row group can also be left half-written by a crash, and a provider
- * rejects the whole request over one unpaired tool call.
+ * straight from the rows with no UIMessage round-trip, folded at its latest
+ * compaction checkpoint. Rows written before the format flip still hold UI
+ * parts, so those pass through the split converters on the way out. Dangling
+ * tool calls are sealed here rather than at write time too: a row group can
+ * also be left half-written by a crash, and a provider rejects the whole
+ * request over one unpaired tool call.
  */
-export function loadThreadAgentMessages(db: Db, threadId: string): Message[] {
-  const rows = db
-    .select()
-    .from(messages)
-    .where(eq(messages.threadId, threadId))
-    .orderBy(asc(messages.createdAt))
-    .all();
+export function loadThreadHistory(db: Db, threadId: string): HistoryEntry[] {
+  const rows = applyCheckpoint(
+    db
+      .select()
+      .from(messages)
+      .where(eq(messages.threadId, threadId))
+      .orderBy(asc(messages.createdAt))
+      .all(),
+  );
 
-  const out: Message[] = [];
+  const out: HistoryEntry[] = [];
   for (const row of rows) {
     if (row.runId) {
-      out.push(row.parts as Message);
+      out.push({ id: row.id, message: row.parts as Message });
       continue;
     }
     const legacy = {
@@ -113,11 +176,58 @@ export function loadThreadAgentMessages(db: Db, threadId: string): Message[] {
       parts: row.parts as UIMessage['parts'],
       metadata: row.metadata ?? undefined,
     } as AtriumUIMessage;
-    if (legacy.role === 'user') out.push(splitUserMessage(legacy).message);
+    if (legacy.role === 'user') out.push({ id: row.id, message: splitUserMessage(legacy).message });
     else if (legacy.role === 'assistant')
-      for (const piRow of splitAssistantMessage(legacy)) out.push(piRow.message);
+      for (const piRow of splitAssistantMessage(legacy))
+        out.push({ id: row.id, message: piRow.message });
   }
-  return sealDanglingToolCalls(out);
+  return sealHistory(out);
+}
+
+export function loadThreadAgentMessages(db: Db, threadId: string): Message[] {
+  return loadThreadHistory(db, threadId).map((e) => e.message);
+}
+
+/**
+ * Store a compaction checkpoint: the summary the model reads in place of the
+ * folded history, and the ack that keeps the roles alternating after it. Both
+ * are ordinary rows — the transcript keeps its full history, and the reader
+ * folds at them.
+ */
+export function persistCheckpoint(
+  db: Db,
+  threadId: string,
+  checkpoint: Checkpoint,
+  coveredThroughId: string,
+): void {
+  const now = Date.now();
+  const summaryId = randomUUID();
+  const ackRunId = randomUUID();
+  db.transaction((tx) => {
+    tx.insert(messages)
+      .values({
+        id: summaryId,
+        threadId,
+        role: 'user',
+        parts: checkpoint.summary,
+        metadata: { kind: 'compaction', coveredThroughId, createdAt: now },
+        runId: summaryId,
+        createdAt: new Date(now),
+      })
+      .run();
+    tx.insert(messages)
+      .values({
+        id: `${ackRunId}:0`,
+        threadId,
+        role: 'assistant',
+        parts: checkpoint.ack,
+        metadata: { kind: 'compaction-ack', createdAt: now + 1 },
+        runId: ackRunId,
+        createdAt: new Date(now + 1),
+      })
+      .run();
+  });
+  db.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
 }
 
 /**

@@ -1,10 +1,4 @@
-export {
-  type CompactionOptions,
-  type CompactThreadOptions,
-  compactionMiddleware,
-  compactThread,
-  type PersistFn,
-} from './builtins/compaction';
+export { type CompactionOptions, compactionMiddleware } from './builtins/compaction';
 export { type LoopDetectionOptions, loopDetectionMiddleware } from './builtins/loop-detection';
 export { generateThreadTitle, type SetTitleFn } from './builtins/title';
 export {

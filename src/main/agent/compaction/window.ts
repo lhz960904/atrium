@@ -1,16 +1,5 @@
-import type { ModelMessage, UIMessage } from 'ai';
-import { tokensOfModelMessage, tokensOfUIMessage } from './tokens';
-
-export type Checkpoint = { index: number; message: UIMessage };
-
-/** Latest persisted compaction checkpoint (the summary `user` message). */
-export function findLatestCheckpoint(messages: UIMessage[]): Checkpoint | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const kind = (messages[i].metadata as { kind?: unknown } | undefined)?.kind;
-    if (kind === 'compaction') return { index: i, message: messages[i] };
-  }
-  return undefined;
-}
+import type { ModelMessage } from 'ai';
+import { tokensOfModelMessage } from './tokens';
 
 export type WindowOptions = { keepRecentTokens: number; minKeepMessages: number };
 
@@ -24,20 +13,6 @@ function keptCount(sizeAt: (i: number) => number, length: number, opts: WindowOp
     if (tokens >= opts.keepRecentTokens && kept >= opts.minKeepMessages) break;
   }
   return kept;
-}
-
-/**
- * Recent window to keep un-summarized. UIMessages are self-contained — a tool
- * call and its result live within one assistant message's parts — so no pair
- * can be split. The cut then walks back to a user turn so a prepended
- * [summary(user), ack(assistant)] checkpoint keeps strict role alternation.
- */
-export function pickRecentWindow(messages: UIMessage[], opts: WindowOptions): UIMessage[] {
-  if (messages.length <= opts.minKeepMessages) return messages.slice();
-  const kept = keptCount((i) => tokensOfUIMessage(messages[i]), messages.length, opts);
-  let cut = messages.length - kept;
-  while (cut > 0 && messages[cut].role !== 'user') cut--;
-  return messages.slice(cut);
 }
 
 /**

@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ModelMessage, UIMessage } from 'ai';
+import type { Message, TextContent, ToolResultMessage } from '@shared/protocol';
 import { stripFrontmatter } from '../../../shared/frontmatter';
-import type { CompactionPreserver } from '../../compaction/preserver';
 import type { RunContext } from '../../middleware/types';
+import type { ContextPreserver } from '../../pi/compaction';
 import { type ActiveSkill, SKILL_FILE, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
 import { defineTool, Type, textResult } from '../define';
 
@@ -73,46 +73,6 @@ export const skillTool = (deps: SkillToolDeps) => {
   });
 };
 
-/** Latest loaded skill body in a UIMessage slice (cross-turn), or null. */
-export function latestSkillBodyUI(messages: UIMessage[]): string | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const parts = messages[i].parts ?? [];
-    for (let j = parts.length - 1; j >= 0; j--) {
-      const p = parts[j] as { type?: string; state?: string; output?: unknown };
-      if (
-        p.type === 'tool-skill' &&
-        p.state === 'output-available' &&
-        typeof p.output === 'string'
-      ) {
-        return p.output;
-      }
-    }
-  }
-  return null;
-}
-
-function resultText(output: unknown): string | null {
-  if (typeof output === 'string') return output;
-  const o = output as { type?: string; value?: unknown };
-  return o?.type === 'text' && typeof o.value === 'string' ? o.value : null;
-}
-
-/** Latest loaded skill body in a ModelMessage slice (within-turn), or null. */
-export function latestSkillBodyModel(messages: ModelMessage[]): string | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const content = messages[i].content;
-    if (!Array.isArray(content)) continue;
-    for (let j = content.length - 1; j >= 0; j--) {
-      const p = content[j] as { type?: string; toolName?: string; output?: unknown };
-      if (p.type === 'tool-result' && p.toolName === 'skill') {
-        const text = resultText(p.output);
-        if (text) return text;
-      }
-    }
-  }
-  return null;
-}
-
 const SKILL_CARRY = 'Active skill instructions (carry forward — keep following them):';
 
 function carrySkill(inRecent: string | null, inFold: string | null): string | null {
@@ -121,12 +81,21 @@ function carrySkill(inRecent: string | null, inFold: string | null): string | nu
   return `${SKILL_CARRY}\n${inFold}`;
 }
 
-/**
- * Rescues the most-recently-loaded skill's body across a compaction fold, so the
- * model keeps the SOP it's executing instead of having it summarized away. Only
- * the latest load is carried (one active skill), bounding the carried text.
- */
-export const skillPreserver: CompactionPreserver = {
-  fromUI: (fold, recent) => carrySkill(latestSkillBodyUI(recent), latestSkillBodyUI(fold)),
-  fromModel: (fold, recent) => carrySkill(latestSkillBodyModel(recent), latestSkillBodyModel(fold)),
-};
+/** Latest loaded skill body in a slice of the engine's transcript, or null. */
+export function latestSkillBody(messages: Message[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== 'toolResult') continue;
+    const result = message as ToolResultMessage;
+    if (result.toolName !== 'skill') continue;
+    const text = result.content
+      .filter((c): c is TextContent => c.type === 'text')
+      .map((c) => c.text)
+      .join('\n');
+    if (text) return text;
+  }
+  return null;
+}
+
+export const preserveActiveSkill: ContextPreserver = (fold, recent) =>
+  carrySkill(latestSkillBody(recent), latestSkillBody(fold));

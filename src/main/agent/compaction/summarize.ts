@@ -5,6 +5,7 @@ import {
   stringifyUnknown,
 } from '@shared/message-parts';
 import { generateText, type LanguageModel, type ModelMessage } from 'ai';
+import { SUMMARY_SYSTEM, summaryPrompt } from '../pi/summarize';
 
 /**
  * Summarize a folded slice of conversation into a structured digest that
@@ -16,23 +17,6 @@ import { generateText, type LanguageModel, type ModelMessage } from 'ai';
  * Callers pass ModelMessages: the within-turn path already has them; the
  * cross-turn path converts its UIMessages with convertToModelMessages first.
  */
-
-const SUMMARY_SYSTEM =
-  'You compress a coding-agent conversation so work can continue in a fresh ' +
-  'context window. Capture every detail needed to resume without re-reading the ' +
-  'original. Do not call tools. Write the summary in the same language as the ' +
-  'conversation. Preserve code snippets, file paths, and identifiers verbatim.';
-
-const SUMMARY_INSTRUCTION = `Summarize the conversation below using exactly these sections:
-
-1. User intent — every original user request and goal, in order, nothing dropped.
-2. Key technical concepts, frameworks, and decisions.
-3. Files touched — paths plus the relevant code snippets.
-4. Errors hit and how they were fixed, including user feedback.
-5. Problems solved and problems still open.
-6. Pending tasks the user explicitly asked for.
-7. Current work in progress (most recent first).
-8. Next step, aligned with the user's most recent request.`;
 
 /**
  * Inline images (base64) must never reach the summarizer — they'd bloat the
@@ -69,17 +53,29 @@ export function renderTranscript(messages: ModelMessage[]): string {
 
 export type SummarizeOptions = { abortSignal?: AbortSignal; maxOutputTokens?: number };
 
-export async function summarize(
-  messages: ModelMessage[],
+/**
+ * The summarizer itself, over an already-flattened transcript. Each message
+ * family renders its own transcript and shares this call.
+ */
+export async function summarizeTranscript(
+  transcript: string,
   model: LanguageModel,
   opts: SummarizeOptions = {},
 ): Promise<string> {
   const { text } = await generateText({
     model,
     system: SUMMARY_SYSTEM,
-    prompt: `${SUMMARY_INSTRUCTION}\n\n<conversation>\n${renderTranscript(messages)}\n</conversation>`,
+    prompt: summaryPrompt(transcript),
     abortSignal: opts.abortSignal,
     maxOutputTokens: opts.maxOutputTokens,
   });
   return text.trim();
+}
+
+export async function summarize(
+  messages: ModelMessage[],
+  model: LanguageModel,
+  opts: SummarizeOptions = {},
+): Promise<string> {
+  return summarizeTranscript(renderTranscript(messages), model, opts);
 }

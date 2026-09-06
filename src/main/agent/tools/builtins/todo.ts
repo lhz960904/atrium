@@ -1,6 +1,8 @@
 import type { Todo, TodoStatus } from '@shared/chat-types';
-import type { ModelMessage, UIMessage } from 'ai';
+import type { AssistantMessage, Message } from '@shared/protocol';
+import type { ModelMessage } from 'ai';
 import type { CompactionPreserver } from '../../compaction/preserver';
+import type { ContextPreserver } from '../../pi/compaction';
 
 /**
  * The todo domain: how a plan renders as text, how to find the active plan in a
@@ -22,21 +24,6 @@ export function renderTodos(todos: Todo[]): string {
 function asTodos(input: unknown): Todo[] | null {
   const todos = (input as { todos?: Todo[] } | undefined)?.todos;
   return todos && todos.length > 0 ? todos : null;
-}
-
-/** Latest settled todo_write plan in a UIMessage slice (cross-turn), or null. */
-export function latestTodosUI(messages: UIMessage[]): Todo[] | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    for (const part of messages[i].parts ?? []) {
-      // Static tool UI parts are typed `tool-<name>`; skip a still-streaming call.
-      const p = part as { type?: string; state?: string; input?: unknown };
-      if (p.type === 'tool-todo_write' && p.state !== 'input-streaming') {
-        const todos = asTodos(p.input);
-        if (todos) return todos;
-      }
-    }
-  }
-  return null;
 }
 
 /** Latest todo_write plan in a ModelMessage slice (within-turn), or null. */
@@ -64,7 +51,24 @@ function carry(inRecent: Todo[] | null, inFold: Todo[] | null): string | null {
 }
 
 /** Carries the active plan across a compaction fold so the model keeps its exact list. */
-export const todoPreserver: CompactionPreserver = {
-  fromUI: (fold, recent) => carry(latestTodosUI(recent), latestTodosUI(fold)),
-  fromModel: (fold, recent) => carry(latestTodosModel(recent), latestTodosModel(fold)),
-};
+export const todoPreserver: CompactionPreserver = (fold, recent) =>
+  carry(latestTodosModel(recent), latestTodosModel(fold));
+
+/** Latest todo_write plan in a slice of the engine's transcript, or null. */
+export function latestTodos(messages: Message[]): Todo[] | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== 'assistant') continue;
+    for (const content of (message as AssistantMessage).content) {
+      const part = content as { type?: string; name?: string; arguments?: unknown };
+      if (part.type === 'toolCall' && part.name === 'todo_write') {
+        const todos = asTodos(part.arguments);
+        if (todos) return todos;
+      }
+    }
+  }
+  return null;
+}
+
+export const preserveTodos: ContextPreserver = (fold, recent) =>
+  carry(latestTodos(recent), latestTodos(fold));

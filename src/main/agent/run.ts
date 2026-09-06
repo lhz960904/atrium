@@ -1,9 +1,4 @@
-import {
-  Agent,
-  type AgentEvent,
-  type AgentMessage,
-  type StreamFn,
-} from '@earendil-works/pi-agent-core';
+import { Agent, type AgentEvent, type StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model, Message as PiMessage } from '@earendil-works/pi-ai';
 import type { PermissionMode } from '@shared/permissions';
 import type {
@@ -18,19 +13,25 @@ import type { Db } from '../db';
 import { createLogger } from '../log';
 import { recordTurn } from './memory/state';
 import type { RunContext } from './middleware';
+import { type Checkpoint, compactForTurn, withinTurnFold } from './pi/compaction';
 import { composeContext } from './pi/context';
 import { injectSystemReminder } from './pi/history';
 import { injectContextBlocks, loadContextBlocks } from './pi/injectors';
 import { createLoopDetector } from './pi/loop-detection';
 import { projectAgentEvent } from './pi/projector';
 import { screenshotTrim } from './pi/screenshot-trim';
+import { createSummarizer } from './pi/summarize';
+import { estimateTokens } from './pi/tokens';
 import { withErrorText } from './pi/tool-result';
 import { scopeToolsToSkill } from './pi/tool-scope';
+import { asPi, storedMessage } from './pi/vocabulary';
 import { readSoul } from './profile/paths';
 import { buildSystemPrompt, currentDateNote } from './prompts';
 import type { Sandbox } from './sandbox/types';
 import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from './skills/types';
 import type { AtriumTool } from './tools';
+import { preserveActiveSkill } from './tools/builtins/skill';
+import { preserveTodos } from './tools/builtins/todo';
 
 const log = createLogger('agent');
 
@@ -91,6 +92,12 @@ export type RunAgentOptions = {
   /** Store the run's messages as its rows; injected so the agent layer stays
    *  independent of the server's persistence. */
   persist: (rows: RunRow[], opts: { markRead: boolean }) => void;
+  /**
+   * Record a compaction checkpoint covering `messages[0..coveredThrough]`.
+   * Cross-turn folding only runs when this is supplied: a summary nobody stores
+   * would be paid for again on every turn.
+   */
+  persistCheckpoint?: (checkpoint: Checkpoint) => void;
   /** Append the turn to the usage ledger. */
   recordUsage?: (usage: RunUsage) => void;
   /** Summarize the thread's opening message into a title (fire-and-forget). */
@@ -120,14 +127,9 @@ const NEEDS_APPROVAL =
 
 const isAssistant = (m: Message): m is AssistantMessage => m.role === 'assistant';
 
-/**
- * pi messages as the stored vocabulary sees them. The frozen copy widens
- * assistant content to keep unknown block types round-tripping, so the two
- * types are structurally compatible but not mutually assignable — the cast
- * marks the one boundary where that matters.
- */
-const asStored = (m: AgentMessage): Message => m as unknown as Message;
-const asPi = (messages: Message[]): AgentMessage[] => messages as unknown as AgentMessage[];
+/** What a finished turn actually put in front of the model, cached parts included. */
+const contextSizeOf = (usage: AssistantMessage['usage']): number =>
+  usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
 
 /**
  * The agent loop: pi's `Agent` drives model→tool→model until it stops, and two
@@ -199,6 +201,29 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
     skills: opts.skills,
     workspaceRoot: opts.workspaceRoot,
   });
+  // The standing blocks are injected downstream of the fold, so they aren't in
+  // the messages it measures — but they are in every real prompt.
+  const overheadTokens = estimateTokens(blocks.join('\n'));
+  const preservers = [preserveTodos, preserveActiveSkill];
+  const contextWindow = opts.piModel.contextWindow;
+  const summarize = createSummarizer({
+    model: opts.piModel,
+    streamFn: opts.streamFn,
+    getApiKey: opts.getApiKey,
+  });
+  const announceCompaction = (phase: 'start' | 'done'): void =>
+    ctx.emit({ type: 'data-compaction', data: { phase }, transient: true });
+
+  const messages = opts.persistCheckpoint
+    ? await compactForTurn({
+        messages: opts.messages,
+        summarize,
+        contextWindow,
+        preservers,
+        emit: announceCompaction,
+        persist: opts.persistCheckpoint,
+      })
+    : opts.messages;
 
   // A run that tripped the loop brake is offered nothing, so the model has to
   // answer in text; otherwise the active skill decides how wide the set is.
@@ -220,7 +245,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
       systemPrompt: ctx.request.system,
       model: opts.piModel,
       tools: built.tools,
-      messages: asPi(opts.messages),
+      messages: asPi(messages),
     },
     streamFn: opts.streamFn,
     getApiKey: opts.getApiKey,
@@ -230,13 +255,15 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
     /**
      * Everything the model sees beyond the stored transcript, rebuilt for each
      * request and thrown away after it. Order is the contract: the trim runs
-     * first so later stages account for the smaller view; the standing blocks
+     * first so the fold measures the smaller view, and the fold before the
+     * standing blocks so it can never summarize them away; the blocks then
      * land on the first user turn (so they ride inside the cached prefix); the
      * date lands on the current one before any notice can claim that spot; and
      * the loop notice goes last, closest to what the model is about to answer.
      */
     transformContext: composeContext([
       screenshotTrim(opts.workspaceRoot),
+      withinTurnFold({ summarize, contextWindow, overheadTokens, preservers }),
       injectContextBlocks(blocks),
       (messages) => injectSystemReminder(messages, currentDateNote(new Date()), { anchor: 'last' }),
       loop.transform,
@@ -287,7 +314,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
 
   agent.subscribe((event: AgentEvent) => {
     if (event.type !== 'message_end') return;
-    const message = asStored(event.message);
+    const message = storedMessage(event.message);
     if (isAssistant(message)) {
       const usage = message.usage;
       totals.input += usage.input;
@@ -297,7 +324,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
       totals.total += usage.totalTokens;
       // The prompt at turn end — the honest base for compaction's threshold,
       // where the cumulative figure would count a tool loop many times over.
-      contextTokens = usage.input + usage.output;
+      // Not `input + output`: a cached prompt bills only its uncached part to
+      // `input`, so that pair reads as a fraction of what was actually sent.
+      contextTokens = contextSizeOf(usage);
       rows.push({
         id: `${opts.runId}:${rows.filter((r) => r.role === 'assistant').length}`,
         role: 'assistant',

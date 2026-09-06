@@ -97,10 +97,6 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   const middlewares = [
     compactionMiddleware({
       maxContextTokens: opts.maxContextTokens,
-      // Never actually invoked: the child opens with only its task prompt, so
-      // the cross-turn pass can't fold a single message and persists nothing.
-      // Only within-turn folding (as the loop grows) ever fires.
-      persist: () => {},
       preservers: [todoPreserver],
     }),
     loopDetectionMiddleware(),
