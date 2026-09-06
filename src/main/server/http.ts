@@ -245,6 +245,7 @@ export function startHttpServer(deps: {
           threadId,
           db: deps.db,
           sandbox,
+          skills,
           permissionMode: mode,
           abortSignal: abort.signal,
           emit: piLog.append,

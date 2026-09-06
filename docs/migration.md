@@ -35,7 +35,9 @@ Branch: feat/protocol-isolation（基于 main@4ca74fd）
 
 - **2c. 引擎装配** ✅：`runAgent` 内部由 `streamText` 换成 pi `Agent`——事件投影器（pi AgentEvent → 冻结词汇，按偏差表裁剪）+ 持久器（run 结束时把 pi 消息整体写成行）两个 subscriber；metadata/usage/title/persistence/seal/date 六个 middleware 退出链条，分别落到 run 装配、事件订阅、读侧和 `transformContext`；事件日志由「拉流」翻成「写入端」（`withRunLog` + `RunLog.append`），ACP / 图像生成两条仍产 UIMessageChunk 的路径经 `drainChunkStream` 走 bridge 汇入同一日志；历史改为 `loadThreadAgentMessages` 直接读行成 pi 消息（旧行经 split 转换），悬空 toolCall 在读侧封口。真机验证：文本轮 / 三工具并行轮 / 工具失败 / 停止（partial 落库 + markRead）/ 中途切走再回来续流 / MCP / 子智能体 全通。
 
-**2c 期间暂时熄灯的能力**（2d/2f 接回，已在 PR 里标注）：skills / memory / instructions / profile 注入、compaction、loop-detection（`beforeStep` 管线随引擎一起退役，2d 用 `transformContext` 重接）；审批与 ask_clarification 的往返（2f）——过渡期用 `beforeToolCall` **失败关闭**：越界调用与客户端工具一律拒绝并终止本轮，绝不静默放行。
+**引擎切换期熄灯的能力**：`beforeStep` 管线随引擎一起退役，skills / memory / instructions / profile 注入、screenshot-trim、loop-detection 已由 2d 用 `transformContext` 重接；仍熄着的是 compaction（2e）与审批 / ask_clarification 的往返（2f）——过渡期用 `beforeToolCall` **失败关闭**：越界调用与客户端工具一律拒绝并终止本轮，绝不静默放行。
+
+- **2d. 上下文管线** ✅：`transformContext` 接回全部注入与改写，按序为 截图裁剪 → 常驻块（skills / memory / instructions / profile）→ 日期 → 循环提示；每次请求重算、只作用于副本，落不到存储。常驻块每轮读一次盘后纯函数注入，锚在首条用户消息上以留在缓存前缀里；日期锚在当轮，且排在循环提示之前，免得提示消息抢走锚点。循环刹车与技能限工具改走 `prepareNextTurnWithContext`——pi 的工具集在 context 上而不在消息里：识别到同参重复调用第 5 次即把工具集清空（等价于旧的 `toolChoice: 'none'`），技能的 allowed-tools 每轮都从全集重算，绝不逐轮收窄。记忆的会话计数移到 run 收尾。首条消息 dump 与迁移前逐字节对拍通过（同块、同序）；旧的 skills/memory/instructions/profile/screenshot-trim/date 及 2c 已退役的 metadata/usage/persistence/seal 一并删除。真机验证：四类注入模型端逐条确认可见、循环刹车在第 3 次告警第 5 次断工具（DB 恰好 5 条工具结果、提示不入库）、技能加载后下一轮工具集收窄到 allow-list、刷新重放无残留。
 
 ## 纪律
 

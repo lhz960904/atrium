@@ -16,13 +16,20 @@ import type {
 import type { LanguageModel, Tool, UIMessage } from 'ai';
 import type { Db } from '../db';
 import { createLogger } from '../log';
+import { recordTurn } from './memory/state';
 import type { RunContext } from './middleware';
+import { composeContext } from './pi/context';
 import { injectSystemReminder } from './pi/history';
+import { injectContextBlocks, loadContextBlocks } from './pi/injectors';
+import { createLoopDetector } from './pi/loop-detection';
 import { projectAgentEvent } from './pi/projector';
+import { screenshotTrim } from './pi/screenshot-trim';
 import { withErrorText } from './pi/tool-result';
+import { scopeToolsToSkill } from './pi/tool-scope';
 import { readSoul } from './profile/paths';
 import { buildSystemPrompt, currentDateNote } from './prompts';
 import type { Sandbox } from './sandbox/types';
+import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from './skills/types';
 import type { AtriumTool } from './tools';
 
 const log = createLogger('agent');
@@ -71,6 +78,9 @@ export type RunAgentOptions = {
   threadId: string;
   db: Db;
   sandbox: Sandbox;
+  /** Discovered skills: their index rides in the model's context, and an active
+   *  one narrows the tools offered on the turns that follow. */
+  skills: Skill[];
   /** Built once the run context exists — the tools that reach back into the turn
    *  close over it. `aiSdk` is the same set adapted for the subagent's loop. */
   buildTools: (run: RunContext) => { tools: AtriumTool[]; aiSdk: Record<string, Tool> };
@@ -184,6 +194,22 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
   ctx.request.tools = built.aiSdk;
   opts.generateTitle?.(ctx);
 
+  const loop = createLoopDetector();
+  const blocks = await loadContextBlocks({
+    skills: opts.skills,
+    workspaceRoot: opts.workspaceRoot,
+  });
+
+  // A run that tripped the loop brake is offered nothing, so the model has to
+  // answer in text; otherwise the active skill decides how wide the set is.
+  const toolsForNextTurn = (): AtriumTool[] =>
+    loop.stopped
+      ? []
+      : scopeToolsToSkill(
+          built.tools,
+          ctx.scratch.get(SKILL_SCRATCH_KEY) as ActiveSkill | undefined,
+        );
+
   const rows: RunRow[] = [];
   let turns = 0;
   let contextTokens: number | undefined;
@@ -201,11 +227,24 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
     // Every message in the transcript is an LLM message today; the filter earns
     // its keep once compaction checkpoints land.
     convertToLlm: (messages) => messages as PiMessage[],
-    // Anchored on the current turn's user message rather than the system prompt,
-    // so the value that changes every turn stays off the cached prefix. Applied
-    // to a copy on every call, so it never reaches the stored transcript.
-    transformContext: async (messages) =>
-      injectSystemReminder(messages, currentDateNote(new Date()), { anchor: 'last' }),
+    /**
+     * Everything the model sees beyond the stored transcript, rebuilt for each
+     * request and thrown away after it. Order is the contract: the trim runs
+     * first so later stages account for the smaller view; the standing blocks
+     * land on the first user turn (so they ride inside the cached prefix); the
+     * date lands on the current one before any notice can claim that spot; and
+     * the loop notice goes last, closest to what the model is about to answer.
+     */
+    transformContext: composeContext([
+      screenshotTrim(opts.workspaceRoot),
+      injectContextBlocks(blocks),
+      (messages) => injectSystemReminder(messages, currentDateNote(new Date()), { anchor: 'last' }),
+      loop.transform,
+    ]),
+    prepareNextTurnWithContext: async ({ message, context }) => {
+      loop.observe(message);
+      return { context: { ...context, tools: toolsForNextTurn() } };
+    },
     shouldStopAfterTurn: () => ++turns >= MAX_TURNS,
     beforeToolCall: async ({ toolCall, args }) => {
       if (clientSide.has(toolCall.name)) {
@@ -321,6 +360,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
     });
   }
 
+  await recordTurn(opts.workspaceRoot, opts.threadId);
   opts.emit({ type: 'agent_end', willRetry: false });
   opts.onSettled?.();
 }

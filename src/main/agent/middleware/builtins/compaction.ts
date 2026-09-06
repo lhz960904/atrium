@@ -17,7 +17,6 @@ import {
   type WindowOptions,
 } from '../../compaction/window';
 import type { AgentMiddleware, RunContext, StepInfo, StepOverride } from '../types';
-import type { PersistFn } from './persistence';
 
 const log = createLogger('compaction');
 
@@ -95,6 +94,14 @@ const TURN_CHECKPOINT_KEY = 'compaction:turn';
 // step's raw messages it stands in for, so each step deterministically rebuilds
 // [summary, ...live tail] and the prefix stays byte-stable for the prefix cache.
 type TurnCheckpoint = { summary: ModelMessage[]; coveredCount: number };
+
+/** Durably record a message; injected so the agent layer stays clear of the server's persistence. */
+export type PersistFn = (
+  db: Db,
+  threadId: string,
+  message: UIMessage,
+  opts?: { markRead?: boolean },
+) => void;
 
 export type CompactionOptions = {
   /** Context window per model id; see agent/models/catalog. */
