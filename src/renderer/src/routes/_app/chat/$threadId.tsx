@@ -150,10 +150,7 @@ function ChatRunner({
   const utils = trpc.useUtils();
   const compactCommand = useCompactCommand({ threadId, model, endpoint, setMessages });
   const { approvals, onApprove, onAlways, onDeny } = useApprovals({
-    threadId,
     messages,
-    status,
-    endpoint,
     addToolApprovalResponse,
   });
 

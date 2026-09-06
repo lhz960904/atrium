@@ -1,14 +1,59 @@
 import { describe, expect, test } from 'bun:test';
 import type { AtriumUIMessage } from '@shared/chat';
-import type { UIMessageChunk } from 'ai';
-import { createProtocolBridge } from '../../../../../main/server/protocol-bridge';
+import type { AgentSessionEvent, AssistantMessage, Content } from '@shared/protocol';
 import { PiChat } from '../store';
 
-function sseBody(chunks: UIMessageChunk[]): string {
-  const bridge = createProtocolBridge({ provider: 'p', model: 'm' });
-  const events = [...chunks.flatMap((c) => bridge.push(c)), ...bridge.finalize()];
+const usage = () => ({
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+});
+
+const assistant = (content: Content[]): AssistantMessage => ({
+  role: 'assistant',
+  content,
+  api: 'anthropic-messages',
+  provider: 'p',
+  model: 'm',
+  usage: usage(),
+  stopReason: 'stop',
+  timestamp: 0,
+});
+
+/** The wire as the server writes it: one envelope per line of SSE. */
+function sseBody(events: AgentSessionEvent[]): string {
   return events.map((event, seq) => `data: ${JSON.stringify({ v: 1, seq, event })}\n\n`).join('');
 }
+
+const open = (messageId: string): AgentSessionEvent[] => [
+  { type: 'agent_start' },
+  { type: 'message_start', messageId, message: assistant([]) },
+];
+
+const close = (messageId: string, content: Content[]): AgentSessionEvent[] => [
+  { type: 'message_end', messageId, message: assistant(content) },
+  { type: 'agent_end', willRetry: false },
+];
+
+const sayText = (messageId: string, value: string): AgentSessionEvent[] => [
+  ...open(messageId),
+  {
+    type: 'message_update',
+    assistantMessageEvent: { type: 'text_start', contentIndex: 0 },
+  } as AgentSessionEvent,
+  {
+    type: 'message_update',
+    assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: value },
+  } as AgentSessionEvent,
+  {
+    type: 'message_update',
+    assistantMessageEvent: { type: 'text_end', contentIndex: 0, content: value },
+  } as AgentSessionEvent,
+  ...close(messageId, [{ type: 'text', text: value }]),
+];
 
 type Call = { url: string; init?: RequestInit };
 
@@ -41,15 +86,7 @@ async function untilIdle(chat: PiChat, timeoutMs = 2000): Promise<void> {
   }
 }
 
-const textRun: UIMessageChunk[] = [
-  { type: 'start', messageId: 'a1' },
-  { type: 'start-step' },
-  { type: 'text-start', id: 'b0' },
-  { type: 'text-delta', id: 'b0', delta: '回答' },
-  { type: 'text-end', id: 'b0' },
-  { type: 'finish-step' },
-  { type: 'finish', finishReason: 'stop' },
-];
+const textRun = sayText('a1', '回答');
 
 describe('sending', () => {
   test('a send posts on the pi track and folds the run into history', async () => {
@@ -81,11 +118,9 @@ describe('sending', () => {
       () =>
         new Response(
           sseBody([
-            { type: 'start', messageId: 'a1' },
-            { type: 'data-title', data: { title: '新标题' } } as UIMessageChunk,
-            { type: 'start-step' },
-            { type: 'finish-step' },
-            { type: 'finish', finishReason: 'stop' },
+            ...open('a1'),
+            { type: 'notice', name: 'title', payload: { data: { title: '新标题' } } },
+            ...close('a1', []),
           ]),
         ),
     );
@@ -116,18 +151,7 @@ describe('continuations', () => {
 
   test('an answered clarification auto-resumes with the assistant message', async () => {
     const { chat, calls } = makeChat(
-      () =>
-        new Response(
-          sseBody([
-            { type: 'start', messageId: 'a1' },
-            { type: 'start-step' },
-            { type: 'text-start', id: 'b0' },
-            { type: 'text-delta', id: 'b0', delta: '收到' },
-            { type: 'text-end', id: 'b0' },
-            { type: 'finish-step' },
-            { type: 'finish', finishReason: 'stop' },
-          ]),
-        ),
+      () => new Response(sseBody(sayText('a1', '收到'))),
       [clarifyMessage()],
     );
     chat.addToolOutput({ tool: 'ask_clarification', toolCallId: 'c1', output: { answers: ['A'] } });
@@ -176,11 +200,15 @@ describe('continuations', () => {
       () =>
         new Response(
           sseBody([
-            { type: 'start', messageId: 'a1' },
-            { type: 'start-step' },
-            { type: 'tool-output-available', toolCallId: 'b1', output: { stdout: 'ok' } },
-            { type: 'finish-step' },
-            { type: 'finish', finishReason: 'stop' },
+            ...open('a1'),
+            {
+              type: 'tool_execution_end',
+              toolCallId: 'b1',
+              toolName: 'bash',
+              result: { content: [], details: { stdout: 'ok' } },
+              isError: false,
+            },
+            ...close('a1', []),
           ]),
         ),
       [paused],

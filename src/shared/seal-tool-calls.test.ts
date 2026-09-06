@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
-import type { UIMessage } from 'ai';
+import type { AtriumUIMessage } from './chat';
 import { sealDanglingToolCalls, sealMessageToolCalls } from './seal-tool-calls';
 
-function assistant(parts: unknown[]): UIMessage {
-  return { id: 'm1', role: 'assistant', parts } as UIMessage;
+function assistant(parts: unknown[]): AtriumUIMessage {
+  return { id: 'm1', role: 'assistant', parts } as AtriumUIMessage;
 }
 
 test('seals an input-available tool call to output-error, preserving id/input', () => {
@@ -35,7 +35,7 @@ test('leaves resolved tool calls, text, and user messages untouched (same refere
   ]);
   expect(sealMessageToolCalls(done)).toBe(done);
 
-  const user = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'q' }] } as UIMessage;
+  const user = { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'q' }] } as AtriumUIMessage;
   expect(sealMessageToolCalls(user)).toBe(user);
 });
 

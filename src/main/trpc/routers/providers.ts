@@ -289,7 +289,7 @@ export const providersRouter = router({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }): Promise<string[]> => {
       const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind === 'local-cli' || manifest.kind === 'subscription') {
+      if (!manifest || manifest.kind === 'subscription') {
         // A subscription's catalog is the engine's, fixed by the vendor.
         throw badRequest('Provider has no model listing.');
       }

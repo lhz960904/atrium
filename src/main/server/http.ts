@@ -1,12 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { serve } from '@hono/node-server';
+import type { AtriumUIMessage } from '@shared/chat';
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
-import type { UIMessage } from 'ai';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { AcpPermissionBroker, isAcpDecision } from '../agent/acp/permission-broker';
-import { AcpSessionRegistry } from '../agent/acp/registry';
-import { runExternalAgentTurn } from '../agent/acp/run-external-agent';
 import { mcpManager } from '../agent/mcp/manager';
 import { buildMcpTools } from '../agent/mcp/tool-adapter';
 
@@ -27,8 +24,6 @@ import { getComputerUseHelper } from '../computer-use';
 import type { Db } from '../db';
 import { recordUsage } from '../db/usage';
 import { createLogger } from '../log';
-import { resolveAcpSpec } from '../providers/acp-spec';
-import { getProviderManifest } from '../providers/manifest';
 import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
 import { supportsImageToolResults } from '../providers/resolve';
 import { getSettings } from '../settings/conf';
@@ -40,15 +35,11 @@ import {
   persistMessage,
   persistRun,
   type RunRow,
-  readAcpBinding,
-  readAcpConfig,
   resolveThreadWorkspace,
   resolveToolOutput,
   setThreadTitle,
-  upsertMessage,
-  writeAcpBinding,
 } from './persist';
-import { drainChunkStream, subscribePiEvents } from './pi-events';
+import { subscribePiEvents } from './pi-events';
 import { abortThreadRun, isThreadRunning, startThreadRun } from './resumable';
 
 export type ChatEndpoint = { port: number; token: string; dispose: () => void };
@@ -75,7 +66,7 @@ type ChatBody = {
   threadId: string;
   providerId: string;
   modelId: string;
-  message: UIMessage;
+  message: AtriumUIMessage;
   permissionMode?: PermissionMode;
 };
 
@@ -118,7 +109,7 @@ function resolveReviewer(
  * stored rows are the authority on which calls are still waiting; the client's
  * copy of the message carries the user's answer for each.
  */
-function resolutionsFor(message: UIMessage, resumeRows: RunRow[]): Resolution[] {
+function resolutionsFor(message: AtriumUIMessage, resumeRows: RunRow[]): Resolution[] {
   if (message.role !== 'assistant' || resumeRows.length === 0) return [];
   const answered = new Set(resumeRows.flatMap((r) => (r.role === 'toolResult' ? [r.id] : [])));
   const open = toolCallsById(resumeRows.map((r) => r.message));
@@ -156,12 +147,6 @@ export function startHttpServer(deps: {
   const bgShells = new BackgroundShells();
   // External CLI agents keep one ACP session per thread (so they remember the
   // conversation across turns), so this registry is also server-lifetime.
-  const acpSessions = new AcpSessionRegistry();
-  // Parked ACP permission asks (the agent blocks mid-turn on each one); the
-  // decision arrives on the acp-permission endpoint below, so the broker must
-  // outlive any single request.
-  const acpPermissions = new AcpPermissionBroker();
-
   // Renderer is a different origin (localhost:5173 in dev, file:// in prod);
   // CORS must run before auth so the credential-less preflight isn't 401'd.
   app.use(
@@ -195,41 +180,6 @@ export function startHttpServer(deps: {
     const workspaceRoot = resolveThreadWorkspace(deps.db, threadId, deps.projectlessRoot);
 
     const abort = new AbortController();
-
-    // An external CLI agent (Claude Code / Codex / Gemini) handles the whole
-    // turn over ACP, bypassing our own agent loop.
-    if (getProviderManifest(providerId)?.kind === 'local-cli') {
-      const spec = resolveAcpSpec(providerId, workspaceRoot, readAcpConfig(deps.db, providerId));
-      if (!spec) return c.text(`unknown local-cli provider ${providerId}`, 400);
-      log.info(`turn ${providerId} → external agent (acp)`);
-      // Resume the agent's prior session for this thread when the bound provider
-      // still matches, so a restart continues the same CLI conversation.
-      const bound = readAcpBinding(deps.db, threadId);
-      const resume = bound?.providerId === providerId ? bound.sessionId : undefined;
-      const acpMode = permissionMode ?? DEFAULT_PERMISSION_MODE;
-      const acpStream = runExternalAgentTurn({
-        registry: acpSessions,
-        threadId,
-        spec,
-        resume,
-        messages: history,
-        mode: acpMode,
-        broker: acpPermissions,
-        reviewerModel:
-          acpMode === 'auto-review' ? resolveReviewer(deps.db, { providerId, modelId }) : undefined,
-        abortSignal: abort.signal,
-        onSession: (sessionId) => writeAcpBinding(deps.db, threadId, providerId, sessionId),
-        // The stream stamps createdAt + durationMs as message metadata; persist
-        // the message as-is so the trace's "Worked for Xs" survives a reload.
-        onFinish: (m) => upsertMessage(deps.db, threadId, m),
-      });
-      startThreadRun(
-        threadId,
-        (piLog) => drainChunkStream(piLog, { provider: providerId, model: modelId }, acpStream),
-        abort,
-      );
-      return runResponse(threadId);
-    }
 
     const sandbox = new LocalSandbox(workspaceRoot);
     const skills = getSkills();
@@ -350,17 +300,6 @@ export function startHttpServer(deps: {
     return c.json({ aborted });
   });
 
-  // Deliver the user's decision to a parked ACP permission ask. The external
-  // agent is blocked mid-turn on it, so this unblocks the live turn in place —
-  // unlike native approvals, which end the turn and resume via a new /api/chat
-  // POST. `ok: false` means the ask is gone (already settled, or the turn
-  // ended); the client just drops its card.
-  app.post('/api/chat/:threadId/acp-permission', async (c) => {
-    const { requestId, decision } = await c.req.json<{ requestId: string; decision: unknown }>();
-    if (!isAcpDecision(decision)) return c.text('invalid decision', 400);
-    return c.json({ ok: acpPermissions.resolve(requestId, decision) });
-  });
-
   // Resolve a client-side tool call (a cancelled clarification) in the DB
   // without running the model — the turn only resumes on the user's next send.
   app.post('/api/chat/:threadId/resolve-clarify', async (c) => {
@@ -433,7 +372,6 @@ export function startHttpServer(deps: {
         token: deps.token,
         dispose: () => {
           bgShells.killAll();
-          acpSessions.disposeAll();
         },
       });
     });

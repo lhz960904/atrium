@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
-import type { ModelMessage, UIMessage } from 'ai';
+import type { AtriumUIMessage } from './chat';
 import { normalizedParts, normalizeToolOutput, textOfMessage } from './message-parts';
 
-const ui = (role: UIMessage['role'], parts: unknown[]): UIMessage =>
-  ({ id: 'x', role, parts }) as unknown as UIMessage;
+const ui = (role: AtriumUIMessage['role'], parts: unknown[]): AtriumUIMessage =>
+  ({ id: 'x', role, parts }) as unknown as AtriumUIMessage;
 
 test('normalizeToolOutput unwraps wire encodings', () => {
   expect(normalizeToolOutput({ type: 'text', value: 'hi' })).toEqual({ text: 'hi', images: [] });
@@ -73,36 +73,6 @@ test('a UI tool error yields an error result', () => {
   });
 });
 
-test('ModelMessage content normalizes to the same part kinds', () => {
-  const call: ModelMessage = {
-    role: 'assistant',
-    content: [{ type: 'tool-call', toolCallId: '1', toolName: 'read', input: { path: 'a.ts' } }],
-  };
-  const result = {
-    role: 'tool',
-    content: [
-      {
-        type: 'tool-result',
-        toolCallId: '1',
-        toolName: 'read',
-        output: { type: 'text', value: 'code' },
-      },
-    ],
-  } as unknown as ModelMessage;
-  expect(normalizedParts(call)).toEqual([
-    { kind: 'tool-call', name: 'read', input: { path: 'a.ts' } },
-  ]);
-  expect(normalizedParts(result)).toEqual([
-    { kind: 'tool-result', name: 'read', output: { text: 'code', images: [] } },
-  ]);
-});
-
-test('string ModelMessage content is a single text part', () => {
-  expect(normalizedParts({ role: 'user', content: 'hello' })).toEqual([
-    { kind: 'text', text: 'hello' },
-  ]);
-});
-
 test('data parts carry their payload and type', () => {
   const msg = ui('assistant', [{ type: 'data-title', data: { title: 'T' } }]);
   expect(normalizedParts(msg)).toEqual([{ kind: 'data', dataType: 'title', data: { title: 'T' } }]);
@@ -115,5 +85,4 @@ test('textOfMessage joins only text parts', () => {
     { type: 'text', text: 'b' },
   ]);
   expect(textOfMessage(msg, ' ')).toBe('a b');
-  expect(textOfMessage({ role: 'user', content: 'plain' })).toBe('plain');
 });

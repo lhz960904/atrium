@@ -1,7 +1,5 @@
 import type { AgentSessionEvent, EventEnvelope } from '@shared/protocol';
-import type { UIMessageChunk } from 'ai';
 import { createLogger } from '../log';
-import { createProtocolBridge } from './protocol-bridge';
 
 /**
  * The wire's event store: a run appends its events to the thread's envelope
@@ -68,30 +66,6 @@ export async function withRunLog(
     for (const fn of threadLog.onEnd) fn();
     threadLog.listeners.clear();
     threadLog.onEnd.clear();
-  }
-}
-
-/**
- * Fold an AI SDK chunk stream into the log through the protocol bridge — the
- * shape the ACP and image-generation turns still produce. The source is drained
- * to completion (which is what fires their own persistence), and the bridge's
- * finalize seals the event sequence however the source ended.
- */
-export async function drainChunkStream(
-  target: RunLog,
-  init: { provider: string; model: string },
-  stream: ReadableStream<UIMessageChunk>,
-): Promise<void> {
-  const bridge = createProtocolBridge(init);
-  const reader = stream.getReader();
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      for (const event of bridge.push(value)) target.append(event);
-    }
-  } finally {
-    for (const event of bridge.finalize()) target.append(event);
   }
 }
 

@@ -1,6 +1,5 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import { getQueryKey } from '@trpc/react-query';
-import { useAcpApprovalStore } from '../../state/acp-approval-store';
 import { useAutoReviewStore } from '../../state/auto-review-store';
 import { useCompactionStore } from '../../state/compaction-store';
 import { useModelStore } from '../../state/model-store';
@@ -50,10 +49,6 @@ function routeNotice(threadId: string, name: string, payload: unknown): void {
     if (d.phase === 'start') store.start(d.id);
     else if (d.phase === 'step') store.addTools(d.id, d.tools as never);
     else store.finish(d.id, d.status as never);
-  } else if (name === 'permissionRequest') {
-    useAcpApprovalStore.getState().push(threadId, data);
-  } else if (name === 'permissionResolved') {
-    useAcpApprovalStore.getState().remove(threadId, (data as { requestId: string }).requestId);
   } else if (name === 'autoReview') {
     const d = data as { toolCallId: string; subject: string };
     useAutoReviewStore.getState().mark(threadId, d.toolCallId, d.subject);

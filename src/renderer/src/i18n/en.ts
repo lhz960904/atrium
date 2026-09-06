@@ -662,11 +662,8 @@ export const en: typeof zh = {
       fetchHint: 'Click Fetch to pull the available models.',
       fetchHintNoKey: 'Add the API key, then Fetch models.',
       localNoKey: 'No API key needed — reuses your locally logged-in CLI.',
-      localInstallHint: 'First install its CLI / ACP adapter globally:',
       localAfterInstall:
         'After installing and logging in (e.g. {{login}}), enable this and pick it in the composer model menu.',
-      localCommandHint: 'Command to launch the ACP agent; leave empty for the default.',
-      localArgsHint: 'Space-separated command-line arguments; leave empty for the default.',
       desc: {
         openaiCodex: 'Sign in with a ChatGPT Plus/Pro subscription — no API key.',
         anthropicSubscription: 'Sign in with a Claude Pro/Max subscription — no API key.',
@@ -681,11 +678,6 @@ export const en: typeof zh = {
         volcengineCoding: 'Volcengine Ark · Coding Plan subscription (Anthropic-compatible).',
         openrouter: 'One API that routes to 300+ models.',
         aihubmix: 'One-stop LLM aggregator — one key, many models.',
-        claudeCode:
-          'Call your locally logged-in Claude Code over ACP (reuses the subscription, no API key).',
-        codexCli:
-          'Call your locally logged-in Codex CLI over ACP (reuses the ChatGPT subscription).',
-        geminiCli: 'Call your locally logged-in Gemini CLI over ACP (ships its own ACP).',
         ollama:
           'Run open models locally (Qwen, Gemma, DeepSeek…). Works once the service is detected — no API key.',
       },

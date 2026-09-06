@@ -41,14 +41,9 @@ export function PermissionsSection(): React.JSX.Element {
   };
   const addRule = trpc.settings.addTrustRule.useMutation({ onSuccess: refresh });
   const deleteRule = trpc.settings.deleteTrustRule.useMutation({ onSuccess: refresh });
-
-  // Reviewer must be a real, resolvable model — drop external (ACP) providers,
-  // which have no model we can drive from main.
+  // The reviewer must be a real, resolvable model.
   const providers = trpc.providers.list.useQuery();
-  const reviewerGroups = useMemo(
-    () => deriveGroups(providers.data ?? []).filter((g) => !g.external),
-    [providers.data],
-  );
+  const reviewerGroups = useMemo(() => deriveGroups(providers.data ?? []), [providers.data]);
   const { value: reviewerModel, set: setReviewerModel } = useSetting('permissions.reviewerModel');
   const onReviewerChange = (value: ModelValue): void => {
     setReviewerModel(value);

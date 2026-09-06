@@ -52,8 +52,6 @@
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "^0.25.0",
-    "@ai-sdk/google": "^3",
-    "@ai-sdk/openai-compatible": "^2",
     "@biomejs/biome": "2.4.15",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/merge": "^6.12.2",
@@ -103,7 +101,6 @@
     "@types/shell-quote": "^1.7.5",
     "@types/turndown": "^5.0.6",
     "@vitejs/plugin-react": "^5.1.1",
-    "ai": "^6",
     "cmdk": "^1.1.1",
     "codemirror": "^6.0.2",
     "croner": "^10",

@@ -10,7 +10,7 @@
  * it, keeping this main-side catalog free of localized strings.
  */
 
-export type ProviderKind = 'cloud-api' | 'local-cli' | 'local-service';
+export type ProviderKind = 'cloud-api' | 'local-service' | 'subscription';
 export type CloudApiProtocol = 'anthropic' | 'openai-compatible' | 'google-gemini';
 
 /**
@@ -25,15 +25,6 @@ export function anthropicApiBase(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, '');
   return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
 }
-
-/**
- * How to launch a local CLI as an ACP agent. Some CLIs speak ACP natively (run
- * their own binary); others need the official ACP adapter package, whose bin we
- * resolve from node_modules.
- */
-export type AcpLaunch =
-  | { via: 'binary'; command: string; args: readonly string[] }
-  | { via: 'adapter'; package: string; bin: string };
 
 /**
  * A model in a provider's curated catalog. `catalogId` maps the vendor's
@@ -68,16 +59,6 @@ export type CloudApiManifest = {
   models: readonly ManifestModel[];
 };
 
-export type LocalCliManifest = {
-  id: string;
-  kind: 'local-cli';
-  name: string;
-  descriptionKey: string;
-  acp: AcpLaunch;
-  /** npm package the user global-installs (we don't bundle it) — shown as a hint. */
-  install: string;
-};
-
 /**
  * A model server running on the user's machine (Ollama). Speaks the
  * openai-compatible protocol on a localhost port — no API key, no spawned
@@ -108,11 +89,7 @@ export type SubscriptionManifest = {
   consoleUrl: string;
 };
 
-export type ProviderManifest =
-  | CloudApiManifest
-  | LocalCliManifest
-  | LocalServiceManifest
-  | SubscriptionManifest;
+export type ProviderManifest = CloudApiManifest | LocalServiceManifest | SubscriptionManifest;
 
 /**
  * The Ark plans serve the doubao-seed-2.0 family under bare ids while litellm
@@ -303,35 +280,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     defaultBaseUrl: 'https://aihubmix.com/v1',
     consoleUrl: 'https://aihubmix.com/',
     models: [],
-  },
-  // ── Local CLI ────────────────────────────────────────────────────────────
-  {
-    id: 'claude-code',
-    kind: 'local-cli',
-    name: 'Claude Code',
-    descriptionKey: 'settings.providers.desc.claudeCode',
-    acp: {
-      via: 'adapter',
-      package: '@agentclientprotocol/claude-agent-acp',
-      bin: 'claude-agent-acp',
-    },
-    install: '@agentclientprotocol/claude-agent-acp',
-  },
-  {
-    id: 'codex-cli',
-    kind: 'local-cli',
-    name: 'Codex CLI',
-    descriptionKey: 'settings.providers.desc.codexCli',
-    acp: { via: 'adapter', package: '@agentclientprotocol/codex-acp', bin: 'codex-acp' },
-    install: '@agentclientprotocol/codex-acp',
-  },
-  {
-    id: 'gemini-cli',
-    kind: 'local-cli',
-    name: 'Gemini CLI',
-    descriptionKey: 'settings.providers.desc.geminiCli',
-    acp: { via: 'binary', command: 'gemini', args: ['--acp'] },
-    install: '@google/gemini-cli',
   },
   // ── Local services ───────────────────────────────────────────────────────
   {

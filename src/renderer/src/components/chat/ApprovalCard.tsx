@@ -84,9 +84,9 @@ export function ApprovalCard({
     ? t(REASON_KEY[crossing.code], { cmd: crossing.subject ?? '', path: crossing.subject ?? '' })
     : '';
   const rule = approval.rule;
-  // "Always" exists when there's somewhere to remember it: our trust list
-  // (native, rule derivable) or the agent's own store (ACP, option offered).
-  const showAlways = rule !== null || approval.canAlways === true;
+  // "Always" exists only when there's somewhere to remember it: a call that
+  // reduces to a trust rule.
+  const showAlways = rule !== null;
 
   return (
     // Slides up out of the composer (which paints on top, masking the lower
@@ -110,11 +110,7 @@ export function ApprovalCard({
             <Check className="size-[15px] shrink-0" />
           )}
           <span>
-            {/* An external agent persists "always" on its side, not in our trust
-                list — promise what actually happens. */}
-            {decided === 'always' && approval.source === 'acp'
-              ? t('approval.confirmedAlwaysAgent')
-              : t(CONFIRM_KEY[decided])}
+            {t(CONFIRM_KEY[decided])}
             {decided === 'always' && rule ? ` · ${rule.matcher}` : ''}
           </span>
         </div>

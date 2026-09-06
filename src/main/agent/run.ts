@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Agent, type AgentEvent, type StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model, Message as PiMessage } from '@earendil-works/pi-ai';
+import type { AtriumUIMessage } from '@shared/chat';
 import type { PermissionMode } from '@shared/permissions';
 import type {
   AgentSessionEvent,
@@ -9,7 +10,6 @@ import type {
   Message,
   ToolCall,
 } from '@shared/protocol';
-import type { UIMessage } from 'ai';
 import type { Db } from '../db';
 import { createLogger } from '../log';
 import { recordTurn } from './memory/state';
@@ -75,7 +75,7 @@ export type RunAgentOptions = {
   messages: Message[];
   /** The same history as UIMessages, for the interim consumers that still read
    *  it (image_gen's reference images, the subagent). */
-  uiMessages: UIMessage[];
+  uiMessages: AtriumUIMessage[];
   workspaceRoot: string;
   threadId: string;
   db: Db;

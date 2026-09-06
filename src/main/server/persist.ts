@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { Message } from '@shared/protocol';
-import type { UIMessage } from 'ai';
+
 import { asc, eq, or } from 'drizzle-orm';
 import type { Checkpoint } from '../agent/pi/compaction';
 import { sealDanglingToolCalls } from '../agent/pi/history';
 import type { Db } from '../db';
-import { messages, projects, providers, threads } from '../db/schema';
+import { messages, projects, threads } from '../db/schema';
 import {
   mergeAssistantMessage,
   mergeUserMessage,
@@ -51,7 +51,7 @@ const toPiRow = (row: MessageRow): PiRow => ({
  * assistant + toolResult rows contiguous by createdAt) merge back into the
  * run-shaped message, and legacy rows (runId null) pass through verbatim.
  */
-export function loadThreadMessages(db: Db, threadId: string): UIMessage[] {
+export function loadThreadMessages(db: Db, threadId: string): AtriumUIMessage[] {
   const rows = db
     .select()
     .from(messages)
@@ -59,15 +59,15 @@ export function loadThreadMessages(db: Db, threadId: string): UIMessage[] {
     .orderBy(asc(messages.createdAt))
     .all();
 
-  const out: UIMessage[] = [];
+  const out: AtriumUIMessage[] = [];
   let i = 0;
   while (i < rows.length) {
     const row = rows[i];
     if (!row.runId) {
       out.push({
         id: row.id,
-        role: row.role as UIMessage['role'],
-        parts: row.parts as UIMessage['parts'],
+        role: row.role as AtriumUIMessage['role'],
+        parts: row.parts as AtriumUIMessage['parts'],
         metadata: row.metadata ?? undefined,
       });
       i++;
@@ -76,12 +76,12 @@ export function loadThreadMessages(db: Db, threadId: string): UIMessage[] {
     const runId = row.runId;
     const group: PiRow[] = [];
     while (i < rows.length && rows[i].runId === runId) group.push(toPiRow(rows[i++]));
-    // The vendored AtriumUIMessage and the SDK's UIMessage are structurally
+    // The vendored AtriumUIMessage and the SDK's AtriumUIMessage are structurally
     // interchangeable; the engine boundary keeps the SDK type until phase 2.
     out.push(
       (group[0].role === 'user'
         ? mergeUserMessage(group[0])
-        : mergeAssistantMessage(runId, group)) as unknown as UIMessage,
+        : mergeAssistantMessage(runId, group)) as unknown as AtriumUIMessage,
     );
   }
   return out;
@@ -147,7 +147,7 @@ function sealHistory(entries: HistoryEntry[]): HistoryEntry[] {
 
 /**
  * A thread's transcript as pi messages — what the engine actually runs on, read
- * straight from the rows with no UIMessage round-trip, folded at its latest
+ * straight from the rows with no AtriumUIMessage round-trip, folded at its latest
  * compaction checkpoint. Rows written before the format flip still hold UI
  * parts, so those pass through the split converters on the way out. Dangling
  * tool calls are sealed here rather than at write time too: a row group can
@@ -172,8 +172,8 @@ export function loadThreadHistory(db: Db, threadId: string): HistoryEntry[] {
     }
     const legacy = {
       id: row.id,
-      role: row.role as UIMessage['role'],
-      parts: row.parts as UIMessage['parts'],
+      role: row.role as AtriumUIMessage['role'],
+      parts: row.parts as AtriumUIMessage['parts'],
       metadata: row.metadata ?? undefined,
     } as AtriumUIMessage;
     if (legacy.role === 'user') out.push({ id: row.id, message: splitUserMessage(legacy).message });
@@ -253,7 +253,7 @@ export function persistCheckpoint(
 
 /**
  * Wire shape of a thread message on the tRPC surface. Deliberately loose:
- * exposing the full UIMessage generic to tRPC's output inference blows the
+ * exposing the full AtriumUIMessage generic to tRPC's output inference blows the
  * type-instantiation budget, and the renderer casts parts at its boundary
  * anyway.
  */
@@ -298,7 +298,7 @@ function messageBaseCreatedAt(db: Db, id: string): number | undefined {
  * the same id — and reinsert), keeping its original chronological position;
  * per-row createdAt offsets preserve in-run order under the createdAt sort.
  */
-function writePiMessage(db: Db, threadId: string, msg: UIMessage, overwrite: boolean): void {
+function writePiMessage(db: Db, threadId: string, msg: AtriumUIMessage, overwrite: boolean): void {
   if (msg.role === 'user') {
     const row = splitUserMessage(msg as AtriumUIMessage);
     const values = {
@@ -415,11 +415,11 @@ export function persistRun(
 }
 
 /**
- * Persist one UIMessage into a thread, storing its parts verbatim (the
+ * Persist one AtriumUIMessage into a thread, storing its parts verbatim (the
  * canonical message shape). Idempotent on message id so re-sends / retries
  * don't duplicate. Bumps the thread's updatedAt so the sidebar re-sorts.
  */
-export function persistMessage(db: Db, threadId: string, msg: UIMessage): void {
+export function persistMessage(db: Db, threadId: string, msg: AtriumUIMessage): void {
   writePiMessage(db, threadId, msg, false);
   const now = new Date();
   // Sending counts as reading: stamp lastReadAt = updatedAt for the user's own
@@ -440,7 +440,7 @@ export function persistMessage(db: Db, threadId: string, msg: UIMessage): void {
 export function upsertMessage(
   db: Db,
   threadId: string,
-  msg: UIMessage,
+  msg: AtriumUIMessage,
   opts?: { markRead?: boolean },
 ): void {
   writePiMessage(db, threadId, msg, true);
@@ -450,53 +450,6 @@ export function upsertMessage(
   // persisted on a thread they're actively viewing.
   const bump = opts?.markRead ? { updatedAt: now, lastReadAt: now } : { updatedAt: now };
   db.update(threads).set(bump).where(eq(threads.id, threadId)).run();
-}
-
-/** The user's ACP launch overrides for a local-cli provider (blank = manifest default). */
-export function readAcpConfig(db: Db, providerId: string): { command?: string; args?: string } {
-  const row = db
-    .select({ config: providers.config })
-    .from(providers)
-    .where(eq(providers.id, providerId))
-    .get();
-  const cfg = (row?.config ?? null) as { command?: string; args?: string } | null;
-  return { command: cfg?.command, args: cfg?.args };
-}
-
-type AcpBinding = { providerId: string; sessionId: string };
-
-/** The external ACP session this thread is bound to (provider + agent session id). */
-export function readAcpBinding(db: Db, threadId: string): AcpBinding | null {
-  const row = db
-    .select({ metadata: threads.metadata })
-    .from(threads)
-    .where(eq(threads.id, threadId))
-    .get();
-  const meta = (row?.metadata ?? null) as { acpSession?: AcpBinding } | null;
-  return meta?.acpSession ?? null;
-}
-
-/**
- * Bind a thread to an external ACP session so a later app run can resume the
- * agent's context via session/load. Merges into existing metadata; doesn't bump
- * updatedAt (an internal binding, not a user-visible change).
- */
-export function writeAcpBinding(
-  db: Db,
-  threadId: string,
-  providerId: string,
-  sessionId: string,
-): void {
-  const row = db
-    .select({ metadata: threads.metadata })
-    .from(threads)
-    .where(eq(threads.id, threadId))
-    .get();
-  const meta = (row?.metadata ?? {}) as Record<string, unknown>;
-  db.update(threads)
-    .set({ metadata: { ...meta, acpSession: { providerId, sessionId } } })
-    .where(eq(threads.id, threadId))
-    .run();
 }
 
 /**
@@ -519,7 +472,7 @@ export function resolveToolOutput(
     (p as { toolCallId?: string }).toolCallId === toolCallId
       ? { ...p, state: 'output-available', output }
       : p,
-  ) as UIMessage['parts'];
+  ) as AtriumUIMessage['parts'];
   upsertMessage(db, threadId, { ...msg, parts });
 }
 

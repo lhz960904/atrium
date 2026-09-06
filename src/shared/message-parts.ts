@@ -2,12 +2,11 @@ import { isImageToolOutput, type ToolResultImage } from './chat-types';
 
 /**
  * Structural stand-ins for both message families. Typed loosely on purpose:
- * this shared traversal layer must accept the AI SDK's UIMessage/ModelMessage
+ * this shared traversal layer must accept the stored UIMessage
  * (main-process callers) and the self-owned AtriumUIMessage alike, without
  * carrying an SDK import into the renderer bundle.
  */
 type UIMessageLike = { parts: readonly { type: string }[] };
-type ModelMessage = { role: string; content: string | readonly { type: string }[] };
 
 /**
  * One traversal layer over both message families. UIMessages (persisted chat
@@ -114,8 +113,8 @@ function normalizeContentEntries(entries: LooseObject[]): NormalizedToolOutput {
 }
 
 /** Normalized conversation content of a message, either family. */
-export function normalizedParts(msg: UIMessageLike | ModelMessage): NormalizedPart[] {
-  return 'parts' in msg ? fromUIParts(msg.parts) : fromModelContent(msg.content);
+export function normalizedParts(msg: UIMessageLike): NormalizedPart[] {
+  return fromUIParts(msg.parts);
 }
 
 function fromUIParts(parts: UIMessageLike['parts']): NormalizedPart[] {
@@ -171,51 +170,8 @@ function fromUIParts(parts: UIMessageLike['parts']): NormalizedPart[] {
   return out;
 }
 
-function fromModelContent(content: ModelMessage['content']): NormalizedPart[] {
-  if (typeof content === 'string') return [{ kind: 'text', text: content }];
-  const out: NormalizedPart[] = [];
-  for (const raw of content) {
-    const part = raw as { type: string } & Record<string, unknown>;
-    switch (part.type) {
-      case 'text':
-      case 'reasoning':
-        out.push({ kind: part.type, text: String(part.text ?? '') });
-        break;
-      case 'tool-call':
-        out.push({ kind: 'tool-call', name: String(part.toolName ?? ''), input: part.input });
-        break;
-      case 'tool-result':
-        out.push({
-          kind: 'tool-result',
-          name: String(part.toolName ?? ''),
-          output: normalizeToolOutput(part.output),
-        });
-        break;
-      case 'image':
-        out.push({
-          kind: 'file',
-          mediaType: part.mediaType as string | undefined,
-          url: typeof part.image === 'string' ? part.image : undefined,
-        });
-        break;
-      case 'file':
-        out.push({
-          kind: 'file',
-          mediaType: part.mediaType as string | undefined,
-          url: typeof part.data === 'string' ? part.data : undefined,
-          filename: part.filename as string | undefined,
-        });
-        break;
-      default:
-        // Approval bookkeeping parts carry no conversation content.
-        break;
-    }
-  }
-  return out;
-}
-
 /** Concatenated plain text of a message's text parts. */
-export function textOfMessage(msg: UIMessageLike | ModelMessage, separator = ''): string {
+export function textOfMessage(msg: UIMessageLike, separator = ''): string {
   return normalizedParts(msg)
     .filter((p) => p.kind === 'text')
     .map((p) => p.text)

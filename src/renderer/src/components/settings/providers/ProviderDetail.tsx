@@ -4,7 +4,6 @@ import { trpc } from '../../../lib/trpc';
 import { ApiKeyField } from './ApiKeyField';
 import { BaseUrlField } from './BaseUrlField';
 import { EnableSwitch } from './EnableSwitch';
-import { LocalCliForm } from './LocalCliForm';
 import { LocalServiceForm } from './LocalServiceForm';
 import { ModelsBlock } from './ModelsBlock';
 import { SubscriptionForm } from './SubscriptionForm';
@@ -56,8 +55,6 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
         <CloudApiForm key={provider.id} provider={provider} />
       ) : provider.kind === 'subscription' ? (
         <SubscriptionForm key={provider.id} provider={provider} />
-      ) : provider.kind === 'local-cli' ? (
-        <LocalCliForm key={provider.id} provider={provider} />
       ) : (
         <LocalServiceForm key={provider.id} provider={provider} />
       )}
