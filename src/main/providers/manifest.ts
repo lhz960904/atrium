@@ -65,6 +65,11 @@ export type CloudApiManifest = {
   consoleUrl: string;
   /** Models Atrium knows about for this provider; user toggles a subset on. */
   models: readonly ManifestModel[];
+  /**
+   * The vendor also accepts a subscription sign-in, so the panel offers it
+   * alongside the key field. Either credential works; the last one stored wins.
+   */
+  subscription?: true;
 };
 
 export type LocalCliManifest = {
@@ -143,6 +148,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     name: 'Anthropic',
     descriptionKey: 'settings.providers.desc.anthropic',
     protocol: 'anthropic',
+    subscription: true,
     defaultBaseUrl: 'https://api.anthropic.com',
     consoleUrl: 'https://console.anthropic.com/settings/keys',
     models: [{ id: 'claude-opus-4-7' }, { id: 'claude-sonnet-4-6' }, { id: 'claude-haiku-4-5' }],

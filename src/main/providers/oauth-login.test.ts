@@ -112,3 +112,36 @@ test('cancelling drops the flow and rejects what it was waiting on', async () =>
   expect(rejected).toBe('login cancelled');
   expect(readLogin('p4')).toBeNull();
 });
+
+test('a choice is surfaced as options and answered by id', async () => {
+  let picked: string | undefined;
+  startLogin(
+    'p5',
+    () => {},
+    () => {},
+    async (_id: string, i: AuthInteraction) => {
+      picked = await i.prompt({
+        type: 'select',
+        message: 'pick a way in',
+        options: [
+          { id: 'browser', label: 'Browser login' },
+          { id: 'device_code', label: 'Device code' },
+        ],
+      });
+    },
+  );
+  await tick();
+  expect(readLogin('p5')).toMatchObject({
+    status: 'awaiting-input',
+    inputPrompt: 'pick a way in',
+    options: [
+      { id: 'browser', label: 'Browser login' },
+      { id: 'device_code', label: 'Device code' },
+    ],
+  });
+
+  answerLogin('p5', 'browser');
+  await tick();
+  expect(picked).toBe('browser');
+  expect(readLogin('p5')?.options).toBeUndefined();
+});

@@ -7,7 +7,7 @@ import { EnableSwitch } from './EnableSwitch';
 import { LocalCliForm } from './LocalCliForm';
 import { LocalServiceForm } from './LocalServiceForm';
 import { ModelsBlock } from './ModelsBlock';
-import { SubscriptionForm } from './SubscriptionForm';
+import { SubscriptionForm, SubscriptionLogin } from './SubscriptionForm';
 import type { ProviderView } from './types';
 
 export function ProviderDetail({ provider }: { provider: ProviderView }): React.JSX.Element {
@@ -83,6 +83,9 @@ function CloudApiForm({
   ];
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
+      {provider.subscription && (
+        <SubscriptionLogin providerId={provider.id} hasCredentials={provider.hasCredentials} />
+      )}
       <ApiKeyField
         providerId={provider.id}
         hasCredentials={provider.hasCredentials}

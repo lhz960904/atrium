@@ -21,9 +21,11 @@ export type LoginState = {
   url?: string;
   /** What the flow last said — shown verbatim under the button. */
   message?: string;
-  /** Set while the flow is waiting on something the user must paste. */
+  /** Set while the flow is waiting on the user. */
   inputPrompt?: string;
   inputPlaceholder?: string;
+  /** Present when the answer is a choice rather than something to type. */
+  options?: readonly { id: string; label: string; description?: string }[];
   error?: string;
 };
 
@@ -58,6 +60,7 @@ export function answerLogin(providerId: string, value: string): boolean {
   pending.answer = undefined;
   pending.state.status = 'finishing';
   pending.state.inputPrompt = undefined;
+  pending.state.options = undefined;
   return true;
 }
 
@@ -107,6 +110,9 @@ export function startLogin(
       pending.state.status = 'awaiting-input';
       pending.state.inputPrompt = input.message;
       pending.state.inputPlaceholder = 'placeholder' in input ? input.placeholder : undefined;
+      // A select is answered by picking, not by typing — the flow wants the
+      // option's id back, so the panel renders them as buttons.
+      pending.state.options = input.type === 'select' ? input.options : undefined;
       pending.answer = resolve;
     });
 
@@ -115,6 +121,7 @@ export function startLogin(
       pending.state.status = 'done';
       pending.state.message = undefined;
       pending.state.inputPrompt = undefined;
+      pending.state.options = undefined;
       onSuccess();
       log.info(`${providerId} subscription login complete`);
     })
