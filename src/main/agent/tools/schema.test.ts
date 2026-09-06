@@ -16,11 +16,6 @@ import type { AtriumTool } from './define';
 
 mock.module('../scheduled', () => ({ scheduledManager: {} }));
 mock.module('./builtins/computer-use/output', () => ({ runComputerAction: async () => '' }));
-mock.module('../image-generation', () => ({
-  referenceImages: () => [],
-  generateThreadImage: async () => ({}),
-  imageFileChunk: () => ({}),
-}));
 
 const { askClarificationTool } = await import('./builtins/ask-clarification');
 const { bashTool } = await import('./builtins/bash');
@@ -29,7 +24,6 @@ const cu = await import('./builtins/computer-use');
 const { editFileTool } = await import('./builtins/edit-file');
 const { globTool } = await import('./builtins/glob');
 const { grepTool } = await import('./builtins/grep');
-const { imageGenTool } = await import('./builtins/image-gen');
 const { killShellTool } = await import('./builtins/kill-shell');
 const { listDirTool } = await import('./builtins/list-dir');
 const { memoryDirTool, memoryTool } = await import('./builtins/memory');
@@ -67,7 +61,6 @@ const tools: Array<[string, AtriumTool]> = [
   ['task', taskTool({ siblings: () => [], subagents: [], run })],
   ['skill', skillTool({ skills: [], run })],
   ['ask_clarification', askClarificationTool()],
-  ['image_gen', imageGenTool({ models: [], run })],
   ['view_image', viewImageTool(ctx)],
   ['memory', memoryTool(ctx)],
   ['profile', profileTool()],

@@ -1,4 +1,3 @@
-import { listEnabledImageModels } from '../../providers/image-models';
 import { modelPricing } from '../models/catalog';
 import { listSubagentDefs } from '../subagent/defs';
 import { askClarificationTool } from './builtins/ask-clarification';
@@ -18,7 +17,6 @@ import {
 import { editFileTool } from './builtins/edit-file';
 import { globTool } from './builtins/glob';
 import { grepTool } from './builtins/grep';
-import { imageGenTool } from './builtins/image-gen';
 import { killShellTool } from './builtins/kill-shell';
 import { listDirTool } from './builtins/list-dir';
 import { memoryTool } from './builtins/memory';
@@ -86,7 +84,6 @@ export function getTools(ctx: ToolCtx): AtriumTool[] {
     }),
     skillTool({ skills: ctx.skills ?? [], run: ctx.run }),
     askClarificationTool(),
-    imageGenTool({ models: listEnabledImageModels(ctx.run.db), run: ctx.run }),
     viewImageTool(ctx),
     memoryTool(ctx),
     profileTool(),

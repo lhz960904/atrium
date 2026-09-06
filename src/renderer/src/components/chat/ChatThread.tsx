@@ -10,7 +10,6 @@ import type { PendingApproval } from '../../lib/approvals';
 import { useSetting } from '../../lib/use-setting';
 import { useAutoReviewStore } from '../../state/auto-review-store';
 import { useCompactionStore } from '../../state/compaction-store';
-import { useImageGenStore } from '../../state/image-gen-store';
 import { ApprovalCard } from './ApprovalCard';
 import { AssistantMessage } from './AssistantMessage';
 import { AutoReviewToast } from './AutoReviewToast';
@@ -21,7 +20,6 @@ import { Composer } from './composer/Composer';
 import { ProjectBadge } from './composer/ProjectBadge';
 import type { SlashCommand } from './composer/slash-menu';
 import { TokenCounter } from './composer/TokenCounter';
-import { ImageGeneratingProgress } from './ImageGeneratingProgress';
 import { PlanPanel } from './PlanPanel';
 import { TurnLoading } from './TurnLoading';
 import { UserMessage } from './UserMessage';
@@ -120,7 +118,6 @@ export function ChatThread({
   // Compaction is a live, per-thread status in a global store — read it here
   // rather than threading it through as a prop.
   const compacting = useCompactionStore((s) => s.active[threadId] ?? false);
-  const generatingImage = useImageGenStore((s) => s.active[threadId] ?? false);
   const live = status === 'submitted' || status === 'streaming';
   const pendingClarify = pendingClarifyId(messages);
   const clarifyPending = pendingClarify !== null;
@@ -134,7 +131,7 @@ export function ChatThread({
 
   // Keep the assistant side non-blank from send until the message starts
   // producing content.
-  const preloader = live && !generatingImage && !compacting && !lastAssistantHasContent(messages);
+  const preloader = live && !compacting && !lastAssistantHasContent(messages);
 
   // Esc takes back the turn (Claude Code style): aborts an in-flight generation,
   // or cancels a clarification that's waiting on the user. Bound only while one
@@ -186,7 +183,6 @@ export function ChatThread({
               );
             })}
             {compacting && <CompactionProgress />}
-            {generatingImage && <ImageGeneratingProgress />}
             {preloader && <TurnLoading />}
             {error && (
               <div className="my-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-danger text-sm">

@@ -3,7 +3,6 @@ import { getQueryKey } from '@trpc/react-query';
 import { useAcpApprovalStore } from '../../state/acp-approval-store';
 import { useAutoReviewStore } from '../../state/auto-review-store';
 import { useCompactionStore } from '../../state/compaction-store';
-import { useImageGenStore } from '../../state/image-gen-store';
 import { useModelStore } from '../../state/model-store';
 import { usePermissionStore } from '../../state/permission-store';
 import { useSubagentStore } from '../../state/subagent-store';
@@ -43,10 +42,6 @@ function routeNotice(threadId: string, name: string, payload: unknown): void {
   const data = (payload as { data?: unknown } | undefined)?.data as never;
   if (name === 'compaction') {
     useCompactionStore
-      .getState()
-      .setActive(threadId, (data as { phase?: string })?.phase === 'start');
-  } else if (name === 'imageGeneration') {
-    useImageGenStore
       .getState()
       .setActive(threadId, (data as { phase?: string })?.phase === 'start');
   } else if (name === 'subagent') {

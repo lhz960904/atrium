@@ -13,9 +13,7 @@ export type SubagentActivityTool = { id: string; name: ToolName; input: unknown 
  * indicator. Within-turn folds aren't surfaced (internal, not persisted).
  * `subagent` bubbles a delegated subagent's activity (keyed by the task tool's
  * call id) so its card can show a live nested trace; never persisted, so a
- * reloaded card shows just the result. `imageGeneration` flags a direct
- * image-model turn in progress (it streams only the image at the end, so the
- * message is empty until then) to drive a loading indicator. `permissionRequest`
+ * reloaded card shows just the result. `permissionRequest`
  * surfaces an external (ACP) agent's blocked permission ask — the agent process
  * is parked mid-turn on it, so the answer goes back over a side endpoint rather
  * than a new chat turn; a reload mid-approval replays it (the stream is still
@@ -29,7 +27,6 @@ export type AtriumDataParts = {
     | { id: string; phase: 'start' }
     | { id: string; phase: 'step'; tools: SubagentActivityTool[] }
     | { id: string; phase: 'done'; status: 'done' | 'failed' };
-  imageGeneration: { phase: 'start' | 'done' };
   permissionRequest: {
     requestId: string;
     toolCallId: string;

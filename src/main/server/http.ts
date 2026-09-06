@@ -10,7 +10,7 @@ import { runExternalAgentTurn } from '../agent/acp/run-external-agent';
 import { mcpManager } from '../agent/mcp/manager';
 import { buildMcpTools } from '../agent/mcp/tool-adapter';
 
-import { isImageModel, modelPricing } from '../agent/models/catalog';
+import { modelPricing } from '../agent/models/catalog';
 import type { Resolution } from '../agent/pi/approvals';
 import { toolCallsById } from '../agent/pi/approvals';
 import { foldToCheckpoint } from '../agent/pi/compaction';
@@ -18,7 +18,6 @@ import { type Complete, createCompleter } from '../agent/pi/complete';
 import { createSummarizer } from '../agent/pi/summarize';
 import { generateThreadTitle } from '../agent/pi/title';
 import { runAgent } from '../agent/run';
-import { runImageTurn } from '../agent/run-image';
 import { BackgroundShells, LocalSandbox } from '../agent/sandbox';
 import { getSkills } from '../agent/skills/registry';
 import { getTools } from '../agent/tools';
@@ -227,27 +226,6 @@ export function startHttpServer(deps: {
       startThreadRun(
         threadId,
         (piLog) => drainChunkStream(piLog, { provider: providerId, model: modelId }, acpStream),
-        abort,
-      );
-      return runResponse(threadId);
-    }
-
-    // use  run image gen if current model is image model
-    const imageModel = isImageModel(modelId);
-    log.info(`turn ${providerId}/${modelId} → ${imageModel ? 'image generation' : 'agent loop'}`);
-    if (imageModel) {
-      const imageStream = runImageTurn({
-        db: deps.db,
-        providerId,
-        modelId,
-        messages: history,
-        abortSignal: abort.signal,
-        onFinish: (m) =>
-          upsertMessage(deps.db, threadId, { ...m, metadata: { createdAt: Date.now() } }),
-      });
-      startThreadRun(
-        threadId,
-        (piLog) => drainChunkStream(piLog, { provider: providerId, model: modelId }, imageStream),
         abort,
       );
       return runResponse(threadId);
