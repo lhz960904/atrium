@@ -48,6 +48,12 @@ Branch: feat/protocol-isolation（基于 main@4ca74fd）
 - **2g（续）· 订阅 OAuth provider** ✅：pi 自带 Claude Pro/Max 与 ChatGPT Plus/Pro 的 OAuth 流，所以这一步做的是把它接到应用上——凭据存储复用 providers 表那块 safeStorage 加密 blob（实现 pi 的 `CredentialStore`：`modify` 是唯一写入口，因为 OAuth token 是就地刷新的，两个并发请求不能各刷一次），登录编排在主进程按状态机跑（拿到授权 URL 就开浏览器、需要粘贴时把问题递到设置页、可取消），设置页新增 `subscription` 这类 provider 的登录面板，模型目录直接取 pi 的。**一个真机才会暴露的坑**：pi 用变量 specifier 动态 import OAuth 流模块，专门躲开打包器——而 main 是打成单文件的，登录时那个 chunk 根本不存在（`Cannot find module out/main/openai-codex.js`）；pi 为此导出了 `bun-oauth` 入口（静态 import 全部流），在注册表装配处调一次 `registerBunOAuthFlows()` 才能在打包环境里登录。真机验证到「点登录 → 起流 → 开浏览器 → 停在等授权码」为止，取消能干净收尾；**最后一步的授权要 Haoze 用自己的账号完成**。
 - **2h. 引擎摘掉 AI SDK** ✅：agent 走的每一次模型调用都改走引擎自己的流。三处旁路调用（压缩摘要、会话标题、auto-review 判定）都是「一问一答」，收敛成一个 `pi/complete.ts`；记忆整理（dream）改成一个小的嵌套 Agent。没有东西需要适配之后，AI SDK 工具镜像连同整条 middleware 链一起删除，`RunContext` 瘦回「一轮是什么」——在哪跑、能写什么、怎么到 UI，引擎单独交给需要的部件。
 
+**阶段 2 收尾时仍留在 AI SDK 上的两处，及理由**（都不是漏做，是权衡后不做）：
+
+- **图像生成**（`run-image.ts` / `image-generation.ts`）。设计原打算按 pi 的 images 合同自写 provider 模块，但 pi 只内置了 `openrouter-images`，我们这两条协议（openai 兼容的 `/images/generations` + `/images/edits` 多部分上传、gemini 的 generateContent）得整段手写，**而且当前无法验证**：唯一配了图像模型的 aihubmix 余额为 0。用没跑过的手写 HTTP 换掉一条跑得好好的路，风险大于收益。另外摘不掉依赖这件事本身也不成立——见下条。
+- **`ai` 依赖本身**。D4 冻结了 ACP，而 ACP 通道（`ChunkEmitter` / `createUIMessageStream` / `UIMessageChunk`）和 protocol-bridge 都还在用它，所以包本身在 ACP 处置定案前删不掉。引擎侧已经一点不用了。
+- **litellm 目录**也保留。设计想让 usage/models 改读 pi 元数据，但实测 pi 内置目录里**没有** minimax-m3 / glm-5.2 / kimi-k2.7-code / ark-code-latest 这些 Haoze 实际在用的模型（`contextWindow` 一律落到 128k 默认值），改过去会让账本的计价直接归零。它是个数据源，不是 AI SDK 依赖，留着不影响迁移目标。
+
 ## 纪律
 
 - main 迁移期冻结新功能，只收 fix。
