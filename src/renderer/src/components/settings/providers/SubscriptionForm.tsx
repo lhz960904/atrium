@@ -1,5 +1,5 @@
 import { ExternalLink, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 import { ModelsBlock } from './ModelsBlock';
@@ -48,6 +48,12 @@ export function SubscriptionLogin({
     void state.refetch();
     void utils.providers.list.invalidate();
   };
+
+  // The credential lands in main, not here: when the flow reports it is done,
+  // the provider row is what changed, and nothing else would go re-read it.
+  useEffect(() => {
+    if (status === 'done') void utils.providers.list.invalidate();
+  }, [status, utils]);
   const start = trpc.providers.startLogin.useMutation({ onSettled: refresh });
   const submit = trpc.providers.submitLogin.useMutation({ onSettled: refresh });
   const cancel = trpc.providers.cancelLogin.useMutation({ onSettled: refresh });
