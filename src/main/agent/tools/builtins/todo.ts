@@ -1,7 +1,5 @@
 import type { Todo, TodoStatus } from '@shared/chat-types';
 import type { AssistantMessage, Message } from '@shared/protocol';
-import type { ModelMessage } from 'ai';
-import type { CompactionPreserver } from '../../compaction/preserver';
 import type { ContextPreserver } from '../../pi/compaction';
 
 /**
@@ -26,22 +24,6 @@ function asTodos(input: unknown): Todo[] | null {
   return todos && todos.length > 0 ? todos : null;
 }
 
-/** Latest todo_write plan in a ModelMessage slice (within-turn), or null. */
-export function latestTodosModel(messages: ModelMessage[]): Todo[] | null {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const content = messages[i].content;
-    if (!Array.isArray(content)) continue;
-    for (const part of content) {
-      const p = part as { type?: string; toolName?: string; input?: unknown };
-      if (p.type === 'tool-call' && p.toolName === 'todo_write') {
-        const todos = asTodos(p.input);
-        if (todos) return todos;
-      }
-    }
-  }
-  return null;
-}
-
 const PLAN_CARRY = 'Current plan (carry it forward — keep updating it with todo_write):';
 
 function carry(inRecent: Todo[] | null, inFold: Todo[] | null): string | null {
@@ -49,10 +31,6 @@ function carry(inRecent: Todo[] | null, inFold: Todo[] | null): string | null {
   if (inRecent || !inFold) return null;
   return `${PLAN_CARRY}\n${renderTodos(inFold)}`;
 }
-
-/** Carries the active plan across a compaction fold so the model keeps its exact list. */
-export const todoPreserver: CompactionPreserver = (fold, recent) =>
-  carry(latestTodosModel(recent), latestTodosModel(fold));
 
 /** Latest todo_write plan in a slice of the engine's transcript, or null. */
 export function latestTodos(messages: Message[]): Todo[] | null {
@@ -70,5 +48,6 @@ export function latestTodos(messages: Message[]): Todo[] | null {
   return null;
 }
 
+/** Carries the active plan across a compaction fold so the model keeps its exact list. */
 export const preserveTodos: ContextPreserver = (fold, recent) =>
   carry(latestTodos(recent), latestTodos(fold));

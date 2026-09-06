@@ -74,7 +74,6 @@ async function runOnce(text: string) {
     piModel: MODEL,
     streamFn: textStream(text),
     getApiKey: () => 'key',
-    model: {} as never,
     messages: [userMessage('hi')],
     uiMessages: [],
     workspaceRoot: '/ws',
@@ -84,7 +83,7 @@ async function runOnce(text: string) {
     skills: [],
     permissionMode: 'default',
     permission: { mode: 'default' },
-    buildTools: () => ({ tools: [], aiSdk: {} }),
+    buildTools: () => [],
     emit: (event) => events.push(event),
     persist: (rows, opts) => {
       stored = { rows, markRead: opts.markRead };
@@ -138,7 +137,6 @@ test('reports the turn to the usage ledger once', async () => {
     piModel: MODEL,
     streamFn: textStream('x'),
     getApiKey: () => 'key',
-    model: {} as never,
     messages: [userMessage('hi')],
     uiMessages: [],
     workspaceRoot: '/ws',
@@ -148,7 +146,7 @@ test('reports the turn to the usage ledger once', async () => {
     skills: [],
     permissionMode: 'default',
     permission: { mode: 'default' },
-    buildTools: () => ({ tools: [], aiSdk: {} }),
+    buildTools: () => [],
     emit: () => {},
     persist: () => {},
     recordUsage: (u) => seen.push(u),
@@ -214,7 +212,6 @@ async function runParking(tool: unknown, args: Record<string, unknown>, name: st
     piModel: MODEL,
     streamFn: toolCallStream(name, args),
     getApiKey: () => 'key',
-    model: {} as never,
     messages: [userMessage('go')],
     uiMessages: [],
     workspaceRoot: '/ws',
@@ -224,7 +221,7 @@ async function runParking(tool: unknown, args: Record<string, unknown>, name: st
     skills: [],
     permissionMode: 'default',
     permission: { mode: 'default' },
-    buildTools: () => ({ tools: [tool as never], aiSdk: {} }),
+    buildTools: () => [tool as never],
     emit: (event) => events.push(event),
     persist: (rows) => {
       stored = rows;
@@ -275,7 +272,6 @@ test('full access runs the same call without asking', async () => {
     piModel: MODEL,
     streamFn: toolCallStream('bash', { command: 'curl https://example.invalid' }),
     getApiKey: () => 'key',
-    model: {} as never,
     messages: [userMessage('go')],
     uiMessages: [],
     workspaceRoot: '/ws',
@@ -285,7 +281,7 @@ test('full access runs the same call without asking', async () => {
     skills: [],
     permissionMode: 'full-access',
     permission: { mode: 'full-access' },
-    buildTools: () => ({ tools: [parkTool('bash')], aiSdk: {} }),
+    buildTools: () => [parkTool('bash')],
     emit: (event) => events.push(event),
     persist: (rows) => {
       stored = rows;
@@ -326,7 +322,6 @@ test('a turn that produced nothing is not stored', async () => {
     piModel: MODEL,
     streamFn: erroringStream,
     getApiKey: () => 'key',
-    model: {} as never,
     messages: [userMessage('hi')],
     uiMessages: [],
     workspaceRoot: '/ws',
@@ -336,7 +331,7 @@ test('a turn that produced nothing is not stored', async () => {
     skills: [],
     permissionMode: 'default',
     permission: { mode: 'default' },
-    buildTools: () => ({ tools: [], aiSdk: {} }),
+    buildTools: () => [],
     emit: () => {},
     persist: (rows) => {
       stored = rows;

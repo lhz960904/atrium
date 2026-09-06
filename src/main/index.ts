@@ -21,7 +21,8 @@ import { registerFaviconScheme, serveFavicons } from './favicons';
 import { initLogging } from './log';
 import { setupMenuBar } from './menu-bar';
 import { notifyScheduledRun } from './notifications';
-import { firstEnabledModel, resolveModel } from './providers/resolve';
+import { makeGetApiKey, piStreamFn, resolvePiModel } from './providers/pi-model';
+import { firstEnabledModel } from './providers/resolve';
 import { type ChatEndpoint, startHttpServer } from './server/http';
 import { getRunningThreadIds } from './server/resumable';
 import { getSettings, openSettings } from './settings/conf';
@@ -194,7 +195,12 @@ app.whenReady().then(async () => {
     model: () => {
       try {
         const sel = getSettings('general.defaultModel');
-        return sel ? resolveModel(db, sel.providerId, sel.modelId) : null;
+        if (!sel) return null;
+        return {
+          model: resolvePiModel(db, sel.providerId, sel.modelId),
+          streamFn: piStreamFn,
+          getApiKey: makeGetApiKey(db),
+        };
       } catch {
         return null;
       }

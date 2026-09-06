@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Message } from '@shared/protocol';
-import type { RunContext } from '../../middleware';
+import type { RunContext } from '../../run-context';
 import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
 import { runTool } from '../testing';
 import { latestSkillBody, preserveActiveSkill, skillTool } from './skill';

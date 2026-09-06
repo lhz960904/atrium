@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import type { PermissionOption, RequestPermissionRequest } from '@agentclientprotocol/sdk';
 import type { AtriumDataParts } from '@shared/chat';
-import type { LanguageModel, UIMessageChunk } from 'ai';
-import { MockLanguageModelV3 } from 'ai/test';
+import type { UIMessageChunk } from 'ai';
+import type { Complete } from '../pi/complete';
 import { makeAcpOnPermission } from './acp-permission';
 import { describeAcpToolCall } from './describe';
 import { AcpPermissionBroker } from './permission-broker';
@@ -30,21 +30,12 @@ const bashRequest = (options: PermissionOption[]): RequestPermissionRequest => (
   },
 });
 
-function verdictModel(reply: string): LanguageModel {
-  return new MockLanguageModelV3({
-    doGenerate: async () => ({
-      content: [{ type: 'text', text: reply }],
-      finishReason: { unified: 'stop', raw: 'stop' },
-      usage: {
-        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-        outputTokens: { total: 1, text: 1, reasoning: 0 },
-      },
-      warnings: [],
-    }),
-  });
-}
+const verdictModel =
+  (reply: string): Complete =>
+  async () =>
+    reply;
 
-function harness(mode: 'default' | 'auto-review' | 'full-access', reviewerModel?: LanguageModel) {
+function harness(mode: 'default' | 'auto-review' | 'full-access', reviewerModel?: Complete) {
   const broker = new AcpPermissionBroker();
   const written: Chunk[] = [];
   const onPermission = makeAcpOnPermission({

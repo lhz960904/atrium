@@ -1,5 +1,5 @@
-import type { RunContext } from '../../middleware/types';
 import type { ModelPricing } from '../../models/types';
+import type { RunContext } from '../../run-context';
 import { filterToolsForSubagent, resolveSubagentDef } from '../../subagent/defs';
 import { runSubagent, type SubagentEngine } from '../../subagent/run';
 import type { AtriumTool } from '../define';

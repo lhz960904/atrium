@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { serve } from '@hono/node-server';
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
-import type { LanguageModel, UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { AcpPermissionBroker, isAcpDecision } from '../agent/acp/permission-broker';
@@ -9,17 +9,19 @@ import { AcpSessionRegistry } from '../agent/acp/registry';
 import { runExternalAgentTurn } from '../agent/acp/run-external-agent';
 import { mcpManager } from '../agent/mcp/manager';
 import { buildMcpTools } from '../agent/mcp/tool-adapter';
-import { generateThreadTitle } from '../agent/middleware';
+
 import { isImageModel, modelPricing } from '../agent/models/catalog';
 import type { Resolution } from '../agent/pi/approvals';
 import { toolCallsById } from '../agent/pi/approvals';
 import { foldToCheckpoint } from '../agent/pi/compaction';
+import { type Complete, createCompleter } from '../agent/pi/complete';
 import { createSummarizer } from '../agent/pi/summarize';
+import { generateThreadTitle } from '../agent/pi/title';
 import { runAgent } from '../agent/run';
 import { runImageTurn } from '../agent/run-image';
 import { BackgroundShells, LocalSandbox } from '../agent/sandbox';
 import { getSkills } from '../agent/skills/registry';
-import { getTools, toAiSdkTools } from '../agent/tools';
+import { getTools } from '../agent/tools';
 import { preserveActiveSkill } from '../agent/tools/builtins/skill';
 import { preserveTodos } from '../agent/tools/builtins/todo';
 import { getComputerUseHelper } from '../computer-use';
@@ -29,7 +31,7 @@ import { createLogger } from '../log';
 import { resolveAcpSpec } from '../providers/acp-spec';
 import { getProviderManifest } from '../providers/manifest';
 import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
-import { resolveModel, supportsImageToolResults } from '../providers/resolve';
+import { supportsImageToolResults } from '../providers/resolve';
 import { getSettings } from '../settings/conf';
 import {
   loadRunRows,
@@ -94,18 +96,18 @@ const log = createLogger('chat');
  * removed model, or the fallback being an external agent whose model we can't
  * drive (an ACP turn has no controllable model to inherit).
  */
-function resolveReviewerModel(
+function resolveReviewer(
   db: Db,
   fallback: { providerId: string; modelId: string },
-): LanguageModel | undefined {
+): Complete | undefined {
   const configured = getSettings('permissions.reviewerModel');
   const picked = configured ?? fallback;
   try {
-    const model = resolveModel(db, picked.providerId, picked.modelId);
+    const model = resolvePiModel(db, picked.providerId, picked.modelId);
     log.info(
       `reviewer = ${picked.providerId}/${picked.modelId}${configured ? '' : ' (inherited chat model)'}`,
     );
-    return model;
+    return createCompleter({ model, streamFn: piStreamFn, getApiKey: makeGetApiKey(db) });
   } catch (err) {
     log.info(`reviewer unresolved (${picked.providerId}/${picked.modelId}) → prompts: ${err}`);
     return undefined;
@@ -215,9 +217,7 @@ export function startHttpServer(deps: {
         mode: acpMode,
         broker: acpPermissions,
         reviewerModel:
-          acpMode === 'auto-review'
-            ? resolveReviewerModel(deps.db, { providerId, modelId })
-            : undefined,
+          acpMode === 'auto-review' ? resolveReviewer(deps.db, { providerId, modelId }) : undefined,
         abortSignal: abort.signal,
         onSession: (sessionId) => writeAcpBinding(deps.db, threadId, providerId, sessionId),
         // The stream stamps createdAt + durationMs as message metadata; persist
@@ -281,7 +281,6 @@ export function startHttpServer(deps: {
           runId,
           providerId,
           modelId,
-          model: resolveModel(deps.db, providerId, modelId),
           piModel,
           streamFn: piStreamFn,
           getApiKey: makeGetApiKey(deps.db),
@@ -299,9 +298,9 @@ export function startHttpServer(deps: {
             // Resolve the reviewer only when auto-review can actually use it; a
             // misconfigured/removed model resolves to undefined, so auto-review
             // simply falls back to prompting rather than failing the turn.
-            reviewerModel:
+            review:
               mode === 'auto-review'
-                ? resolveReviewerModel(deps.db, { providerId, modelId })
+                ? resolveReviewer(deps.db, { providerId, modelId })
                 : undefined,
           },
           resolutions,
@@ -314,7 +313,15 @@ export function startHttpServer(deps: {
           recordUsage: (u) =>
             recordUsage(deps.db, { threadId, kind: 'chat', ...u }, modelPricing(u.modelId)),
           generateTitle: getSettings('general.autoGenerateTitle')
-            ? (run) => generateThreadTitle(run, setThreadTitle)
+            ? ({ messages, complete }) =>
+                generateThreadTitle({
+                  messages,
+                  complete,
+                  onTitle: (title) => {
+                    setThreadTitle(deps.db, threadId, title);
+                    piLog.append({ type: 'notice', name: 'title', payload: { data: { title } } });
+                  },
+                })
             : undefined,
           onSettled: () => computerUse?.hideOverlay(),
           buildTools: (run) => {
@@ -342,15 +349,14 @@ export function startHttpServer(deps: {
                 // Resolve the reviewer only when auto-review can actually use it; a
                 // misconfigured/removed model resolves to undefined, so auto-review
                 // simply falls back to prompting rather than failing the turn.
-                reviewerModel:
+                review:
                   mode === 'auto-review'
-                    ? resolveReviewerModel(deps.db, { providerId, modelId })
+                    ? resolveReviewer(deps.db, { providerId, modelId })
                     : undefined,
                 abortSignal: abort.signal,
               },
             };
-            const tools = getTools(toolCtx);
-            return { tools, aiSdk: toAiSdkTools(tools, toolCtx) };
+            return getTools(toolCtx);
           },
         }),
       abort,

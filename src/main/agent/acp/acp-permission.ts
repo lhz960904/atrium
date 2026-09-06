@@ -1,8 +1,9 @@
 import type { RequestPermissionRequest, RequestPermissionResponse } from '@agentclientprotocol/sdk';
 import type { AtriumDataParts } from '@shared/chat';
 import type { PermissionMode } from '@shared/permissions';
-import type { LanguageModel, UIMessageChunk } from 'ai';
+import type { UIMessageChunk } from 'ai';
 import { reviewBoundaryCrossing } from '../permissions/reviewer';
+import type { Complete } from '../pi/complete';
 import { describeAcpToolCall } from './describe';
 import type { AcpPermissionBroker } from './permission-broker';
 
@@ -11,7 +12,7 @@ type Deps = {
   mode: PermissionMode;
   broker: AcpPermissionBroker;
   /** Reviewer for auto-review mode; absent → auto-review behaves like default. */
-  reviewerModel?: LanguageModel;
+  reviewerModel?: Complete;
   /** The turn's abort signal, so a stopped turn also cancels an in-flight review. */
   abortSignal?: AbortSignal;
   // Typed against Atrium's data-part map (not the bare UIMessageChunk, whose
@@ -39,7 +40,7 @@ export function makeAcpOnPermission(deps: Deps) {
 
     if (deps.mode === 'auto-review' && deps.reviewerModel) {
       const verdict = await reviewBoundaryCrossing({
-        model: deps.reviewerModel,
+        complete: deps.reviewerModel,
         subject: view.target,
         abortSignal: deps.abortSignal,
       });

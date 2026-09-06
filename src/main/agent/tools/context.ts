@@ -2,9 +2,9 @@ import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import type { PermissionMode } from '@shared/permissions';
 import type { TrustRule } from '@shared/permissions/rules';
-import type { LanguageModel } from 'ai';
 import type { ComputerUseHelper } from '../../computer-use';
-import type { RunContext } from '../middleware/types';
+import type { Complete } from '../pi/complete';
+import type { RunContext } from '../run-context';
 import type { BackgroundShells } from '../sandbox/background-shells';
 import type { Sandbox } from '../sandbox/types';
 import type { Skill } from '../skills/types';
@@ -50,7 +50,7 @@ export type ToolCtx = {
     mode: PermissionMode;
     rules?: TrustRule[];
     /** Reviewer for auto-review mode; absent → auto-review falls back to prompting. */
-    reviewerModel?: LanguageModel;
+    review?: Complete;
     /** The turn's abort signal, so a stopped turn also cancels an in-flight review. */
     abortSignal?: AbortSignal;
   };

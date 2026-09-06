@@ -1,5 +1,4 @@
-import type { StreamFn } from '@earendil-works/pi-agent-core';
-import type { Api, Model } from '@earendil-works/pi-ai';
+import { type Complete, type CompleteDeps, createCompleter } from './complete';
 
 /**
  * The compaction summarizer. The fold is handed over as a flat transcript
@@ -30,32 +29,11 @@ export const summaryPrompt = (transcript: string): string =>
 
 export type Summarize = (transcript: string, signal?: AbortSignal) => Promise<string>;
 
-/**
- * Summarize through the engine's own stream. The turn's provider is already
- * resolved and known to work for it — a second, non-streaming path would be one
- * more thing that can be wrong for a given model.
- */
-export function createSummarizer(deps: {
-  model: Model<Api>;
-  streamFn: StreamFn;
-  getApiKey: (provider: string) => string | undefined;
-}): Summarize {
-  return async (transcript, signal) => {
-    const stream = await deps.streamFn(
-      deps.model,
-      {
-        systemPrompt: SUMMARY_SYSTEM,
-        messages: [{ role: 'user', content: summaryPrompt(transcript), timestamp: Date.now() }],
-      },
-      { apiKey: deps.getApiKey(deps.model.provider), signal },
-    );
-    const message = await stream.result();
-    if (message.stopReason === 'error' || message.stopReason === 'aborted') {
-      throw new Error(message.errorMessage ?? `summary ${message.stopReason}`);
-    }
-    return message.content
-      .flatMap((part) => (part.type === 'text' ? [part.text] : []))
-      .join('\n')
-      .trim();
-  };
+export function summarizerFrom(complete: Complete): Summarize {
+  return (transcript, signal) =>
+    complete({ system: SUMMARY_SYSTEM, prompt: summaryPrompt(transcript), signal });
+}
+
+export function createSummarizer(deps: CompleteDeps): Summarize {
+  return summarizerFrom(createCompleter(deps));
 }

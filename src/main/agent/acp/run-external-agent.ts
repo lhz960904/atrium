@@ -1,14 +1,9 @@
 import type { ContentBlock } from '@agentclientprotocol/sdk';
 import { textOfMessage } from '@shared/message-parts';
 import type { PermissionMode } from '@shared/permissions';
-import {
-  createUIMessageStream,
-  generateId,
-  type LanguageModel,
-  type UIMessage,
-  type UIMessageChunk,
-} from 'ai';
+import { createUIMessageStream, generateId, type UIMessage, type UIMessageChunk } from 'ai';
 import { readableError } from '../errors';
+import type { Complete } from '../pi/complete';
 import { makeAcpOnPermission } from './acp-permission';
 import { ChunkEmitter } from './chunk-emitter';
 import type { AcpPermissionBroker } from './permission-broker';
@@ -27,7 +22,7 @@ export type RunExternalAgentOptions = {
   /** Parks the agent's permission requests until the user answers (see broker). */
   broker: AcpPermissionBroker;
   /** Reviewer for auto-review mode; absent → auto-review behaves like default. */
-  reviewerModel?: LanguageModel;
+  reviewerModel?: Complete;
   abortSignal?: AbortSignal;
   onFinish: (message: UIMessage) => void;
   /** Persist the (possibly new) ACP session id so the thread can resume later. */

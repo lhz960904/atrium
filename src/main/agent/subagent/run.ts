@@ -4,7 +4,6 @@ import type { AssistantMessage, Message, TextContent, Usage } from '@shared/prot
 import type { ToolName } from '@shared/tools';
 import { recordUsage } from '../../db/usage';
 import { createLogger } from '../../log';
-import type { RunContext } from '../middleware';
 import type { ModelPricing } from '../models/types';
 import { withinTurnFold } from '../pi/compaction';
 import { composeContext } from '../pi/context';
@@ -13,6 +12,7 @@ import { createLoopDetector } from '../pi/loop-detection';
 import { createSummarizer } from '../pi/summarize';
 import { asPi, storedMessage } from '../pi/vocabulary';
 import { currentDateNote, workspaceGuidance } from '../prompts';
+import type { RunContext } from '../run-context';
 import type { AtriumTool } from '../tools';
 import { preserveTodos } from '../tools/builtins/todo';
 import type { SubagentDef } from './defs';

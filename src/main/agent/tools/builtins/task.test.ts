@@ -6,7 +6,7 @@ import {
   type Model,
 } from '@earendil-works/pi-ai';
 import type { Db } from '../../../db';
-import type { RunContext } from '../../middleware';
+import type { RunContext } from '../../run-context';
 import type { Sandbox } from '../../sandbox/types';
 import { runTool } from '../testing';
 import { taskTool } from './task';
@@ -57,8 +57,8 @@ function ctx(db: Db): RunContext {
     db,
     sandbox: {} as Sandbox,
     workspaceRoot: '/ws',
-    request: { system: 's', messages: [], tools: {} as RunContext['request']['tools'] },
-    model: {} as RunContext['model'],
+    system: 's',
+    history: [],
     emit: () => {},
     scratch: new Map(),
   };

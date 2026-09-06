@@ -9,27 +9,28 @@ import type {
   Message,
   ToolCall,
 } from '@shared/protocol';
-import type { LanguageModel, Tool, UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
 import type { Db } from '../db';
 import { createLogger } from '../log';
 import { recordTurn } from './memory/state';
-import type { RunContext } from './middleware';
 import { type ApprovalContext, approvalGate } from './permissions';
 import { applyResolutions, type ParkedCall, type Resolution } from './pi/approvals';
 import { type Checkpoint, compactForTurn, withinTurnFold } from './pi/compaction';
+import { type Complete, createCompleter } from './pi/complete';
 import { composeContext } from './pi/context';
 import { injectSystemReminder } from './pi/history';
 import { injectContextBlocks, loadContextBlocks } from './pi/injectors';
 import { createLoopDetector } from './pi/loop-detection';
 import { projectAgentEvent } from './pi/projector';
 import { screenshotTrim } from './pi/screenshot-trim';
-import { createSummarizer } from './pi/summarize';
+import { summarizerFrom } from './pi/summarize';
 import { estimateTokens } from './pi/tokens';
 import { withErrorText } from './pi/tool-result';
 import { scopeToolsToSkill } from './pi/tool-scope';
 import { asPi, storedMessage } from './pi/vocabulary';
 import { readSoul } from './profile/paths';
 import { buildSystemPrompt, currentDateNote } from './prompts';
+import type { RunContext } from './run-context';
 import type { Sandbox } from './sandbox/types';
 import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from './skills/types';
 import type { AtriumTool } from './tools';
@@ -70,9 +71,6 @@ export type RunAgentOptions = {
   piModel: Model<Api>;
   streamFn: StreamFn;
   getApiKey: (provider: string) => string | undefined;
-  /** The AI SDK handle for the paths that have not moved yet — the title call
-   *  and the subagent's nested loop. Retires with them. */
-  model: LanguageModel;
   /** The thread's transcript as pi messages: what the engine runs on. */
   messages: Message[];
   /** The same history as UIMessages, for the interim consumers that still read
@@ -86,8 +84,8 @@ export type RunAgentOptions = {
    *  one narrows the tools offered on the turns that follow. */
   skills: Skill[];
   /** Built once the run context exists — the tools that reach back into the turn
-   *  close over it. `aiSdk` is the same set adapted for the subagent's loop. */
-  buildTools: (run: RunContext) => { tools: AtriumTool[]; aiSdk: Record<string, Tool> };
+   *  close over it. */
+  buildTools: (run: RunContext) => AtriumTool[];
   /** Active permission mode, surfaced in the system prompt so the model knows how approvals behave. */
   permissionMode: PermissionMode;
   /** What decides whether a call may run unasked; see agent/permissions. */
@@ -112,7 +110,7 @@ export type RunAgentOptions = {
   /** Append the turn to the usage ledger. */
   recordUsage?: (usage: RunUsage) => void;
   /** Summarize the thread's opening message into a title (fire-and-forget). */
-  generateTitle?: (ctx: RunContext) => void;
+  generateTitle?: (input: { messages: Message[]; complete: Complete }) => void;
   abortSignal?: AbortSignal;
   /** Fires once when the turn settles (finished or aborted) — e.g. to collapse UI the run left on screen. */
   onSettled?: () => void;
@@ -154,16 +152,12 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
     db: opts.db,
     sandbox: opts.sandbox,
     workspaceRoot: opts.workspaceRoot,
-    request: {
-      system: buildSystemPrompt(opts.workspaceRoot, {
-        soul,
-        platform: process.platform,
-        mode: opts.permissionMode,
-      }),
-      messages: opts.uiMessages,
-      tools: {},
-    },
-    model: opts.model,
+    system: buildSystemPrompt(opts.workspaceRoot, {
+      soul,
+      platform: process.platform,
+      mode: opts.permissionMode,
+    }),
+    history: opts.uiMessages,
     providerId: opts.providerId,
     modelId: opts.modelId,
     // Transient UI channels (a generated image, an auto-review badge, subagent
@@ -188,12 +182,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
     scratch: new Map(),
   };
 
-  const built = opts.buildTools(ctx);
-  // A client-side tool is answered by the user, never executed. Until that
-  // round trip is ported, the engine must not call it — it would throw.
-  const clientSide = new Set(built.tools.filter((t) => t.clientSide).map((t) => t.name));
-  ctx.request.tools = built.aiSdk;
-  opts.generateTitle?.(ctx);
+  const tools = opts.buildTools(ctx);
+  // A client-side tool is answered by the user, never executed.
+  const clientSide = new Set(tools.filter((t) => t.clientSide).map((t) => t.name));
 
   const loop = createLoopDetector();
   const blocks = await loadContextBlocks({
@@ -205,11 +196,13 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
   const overheadTokens = estimateTokens(blocks.join('\n'));
   const preservers = [preserveTodos, preserveActiveSkill];
   const contextWindow = opts.piModel.contextWindow;
-  const summarize = createSummarizer({
+  const complete = createCompleter({
     model: opts.piModel,
     streamFn: opts.streamFn,
     getApiKey: opts.getApiKey,
   });
+  const summarize = summarizerFrom(complete);
+  opts.generateTitle?.({ messages: opts.messages, complete });
   const announceCompaction = (phase: 'start' | 'done'): void =>
     ctx.emit({ type: 'data-compaction', data: { phase }, transient: true });
 
@@ -230,7 +223,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
   const settled = await applyResolutions({
     resolutions: opts.resolutions ?? [],
     messages: compacted,
-    tools: built.tools,
+    tools: tools,
     emit: opts.emit,
     abortSignal: opts.abortSignal,
   });
@@ -251,10 +244,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
   const toolsForNextTurn = (): AtriumTool[] =>
     loop.stopped
       ? []
-      : scopeToolsToSkill(
-          built.tools,
-          ctx.scratch.get(SKILL_SCRATCH_KEY) as ActiveSkill | undefined,
-        );
+      : scopeToolsToSkill(tools, ctx.scratch.get(SKILL_SCRATCH_KEY) as ActiveSkill | undefined);
 
   const rows: RunRow[] = [...(opts.resumeRows ?? [])];
   // A continuation extends a turn that already reported itself: it keeps the
@@ -272,9 +262,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
 
   const agent = new Agent({
     initialState: {
-      systemPrompt: ctx.request.system,
+      systemPrompt: ctx.system,
       model: opts.piModel,
-      tools: built.tools,
+      tools,
       messages: asPi(messages),
     },
     streamFn: opts.streamFn,

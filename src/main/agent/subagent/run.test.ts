@@ -7,7 +7,7 @@ import {
   type Model,
 } from '@earendil-works/pi-ai';
 import type { Db } from '../../db';
-import type { RunContext } from '../middleware';
+import type { RunContext } from '../run-context';
 import type { Sandbox } from '../sandbox/types';
 import type { AtriumTool } from '../tools';
 import type { SubagentDef } from './defs';
@@ -79,12 +79,8 @@ function parentCtx(over: Partial<RunContext> = {}): RunContext {
     db: {} as Db,
     sandbox: {} as Sandbox,
     workspaceRoot: '/ws',
-    request: {
-      system: 'PARENT SYSTEM PROMPT',
-      messages: [{ id: 'ph', role: 'user', parts: [{ type: 'text', text: 'PARENT_HISTORY' }] }],
-      tools: {},
-    },
-    model: {} as RunContext['model'],
+    system: 'PARENT SYSTEM PROMPT',
+    history: [{ id: 'ph', role: 'user', parts: [{ type: 'text', text: 'PARENT_HISTORY' }] }],
     emit: () => {},
     scratch: new Map(),
     ...over,

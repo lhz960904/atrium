@@ -1,5 +1,5 @@
-import type { LanguageModel } from 'ai';
 import { createLogger } from '../../log';
+import type { SubagentEngine } from '../subagent/run';
 import { acquireLock, releaseLock } from './lock';
 import { listMemoryDirs } from './paths';
 import { shouldConsolidate } from './state';
@@ -8,9 +8,9 @@ const log = createLogger('memory');
 const DREAM_SCAN_INTERVAL_MS = 30 * 60_000; // background sweep period
 
 export type DreamScheduler = {
-  runDream: (dir: string, model: LanguageModel) => Promise<void>;
+  runDream: (dir: string, engine: SubagentEngine) => Promise<void>;
   /** The model to consolidate with; null when none is configured → skip the sweep. */
-  model: () => LanguageModel | null;
+  model: () => SubagentEngine | null;
   /** Dirs to sweep; defaults to every memory dir on disk. Injectable for tests. */
   listDirs?: () => Promise<string[]>;
 };
@@ -18,7 +18,7 @@ export type DreamScheduler = {
 /** One pass: consolidate every memory dir that's due, each guarded by the lock. */
 export async function dreamSweep(opts: DreamScheduler, now: number): Promise<void> {
   const dirs = await (opts.listDirs ?? listMemoryDirs)();
-  let model: LanguageModel | null = null;
+  let model: SubagentEngine | null = null;
   for (const dir of dirs) {
     if (!(await shouldConsolidate(dir, now))) continue;
     if (!(await acquireLock(dir, now))) continue;

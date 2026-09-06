@@ -1,8 +1,8 @@
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
 import type { CrossingCode } from '@shared/permissions/analyze';
 import { isAllowed, type TrustRule } from '@shared/permissions/rules';
-import type { LanguageModel } from 'ai';
 import { createLogger } from '../../log';
+import type { Complete } from '../pi/complete';
 import type { ToolCtx } from '../tools/context';
 import { type Classification, classifyToolCall } from './classify';
 import { reviewBoundaryCrossing } from './reviewer';
@@ -77,8 +77,8 @@ export type ApprovalContext = {
   mode: PermissionMode;
   rules?: TrustRule[];
   workspaceRoot: string;
-  /** Reviewer for auto-review mode; absent → auto-review falls back to prompting. */
-  reviewerModel?: LanguageModel;
+  /** Reviewer call for auto-review mode; absent → auto-review falls back to prompting. */
+  review?: Complete;
   /** The turn's abort signal, so a stopped turn also cancels an in-flight review. */
   abortSignal?: AbortSignal;
   /** Marks a crossing the reviewer waved through, so the trace shows it was
@@ -104,12 +104,12 @@ export function approvalGate(ctx: ApprovalContext) {
     // MCP calls have no command/path in their input — fall back to the crossing's
     // subject (the server name) so the reviewer/badge still has something to show.
     const subject = crossingSubject(input) || verdict.crossing.subject || '';
-    if (!ctx.reviewerModel) {
+    if (!ctx.review) {
       log.info(`${toolName} crossing → prompt (auto-review, no reviewer model)`);
       return true;
     }
     return reviewBoundaryCrossing({
-      model: ctx.reviewerModel,
+      complete: ctx.review,
       subject,
       risk: RISK[verdict.crossing.code],
       abortSignal: ctx.abortSignal,
@@ -128,7 +128,7 @@ export function makeNeedsApproval(toolName: string, ctx: ToolCtx) {
     mode: ctx.permission?.mode ?? DEFAULT_PERMISSION_MODE,
     rules: ctx.permission?.rules,
     workspaceRoot: ctx.workspaceRoot,
-    reviewerModel: ctx.permission?.reviewerModel,
+    review: ctx.permission?.review,
     abortSignal: ctx.permission?.abortSignal,
     onReviewed: ({ toolCallId, subject }) =>
       ctx.run.emit({ type: 'data-autoReview', data: { toolCallId, subject }, transient: true }),

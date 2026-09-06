@@ -1,6 +1,6 @@
 import type { ImageModelRef } from '../../../providers/image-models';
 import { generateThreadImage, imageFileChunk, referenceImages } from '../../image-generation';
-import type { RunContext } from '../../middleware/types';
+import type { RunContext } from '../../run-context';
 import { defineTool, Type, textResult } from '../define';
 
 export type ImageGenDeps = {
@@ -73,7 +73,7 @@ export const imageGenTool = (deps: ImageGenDeps) => {
           providerId: ref.providerId,
           modelId: ref.modelId,
           text: prompt,
-          references: edit_previous ? referenceImages(ctx.request.messages) : [],
+          references: edit_previous ? referenceImages(ctx.history as never) : [],
           abortSignal: signal,
         });
         ctx.emit(imageFileChunk(image));
