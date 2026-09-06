@@ -14,8 +14,9 @@ export type ProviderKind = 'cloud-api' | 'local-cli' | 'local-service';
 export type CloudApiProtocol = 'anthropic' | 'openai-compatible' | 'google-gemini';
 
 /**
- * @ai-sdk/anthropic requests `${baseURL}/messages`, so it needs a base that
- * already contains the `/v1` segment — but vendors advertise their
+ * The model-listing call requests `${baseURL}/models`, and the engine's
+ * anthropic api appends `/v1/messages`, so both want a base that already
+ * contains the `/v1` segment — but vendors advertise their
  * Anthropic-compatible bases without it (Claude Code appends `/v1/messages`
  * itself), and users paste those documented URLs. Accept both shapes by
  * appending `/v1` unless the base already ends with it.

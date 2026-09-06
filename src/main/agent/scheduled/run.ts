@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import type { SelectedModel } from '@shared/settings';
-import { generateId, type UIMessage } from 'ai';
+import type { UIMessage } from 'ai';
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../db';
 import type { ScheduledTask } from '../../db/schema';
@@ -97,7 +98,7 @@ export async function runScheduledTask(
     'Instruction: This is a fresh automated run — carry out the task now. Earlier messages in this conversation are previous runs, for context only; do not skip because it was done before.',
   ].join('\n');
   const message: UIMessage = {
-    id: generateId(),
+    id: randomUUID(),
     role: 'user',
     parts: [{ type: 'text', text: `${header}\n\n${task.prompt}` }],
   };

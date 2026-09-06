@@ -1,39 +1,16 @@
-import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { SelectedModel } from '@shared/settings';
-import type { ImageModel, LanguageModel } from 'ai';
+import type { ImageModel } from 'ai';
 import { eq } from 'drizzle-orm';
 import { isImageModel, modelCapabilities } from '../agent/models/catalog';
 import type { Db } from '../db';
 import { providers } from '../db/schema';
 import { decryptCredentials } from './credentials';
-import {
-  anthropicApiBase,
-  getProviderManifest,
-  type LocalServiceManifest,
-  type ProviderManifest,
-} from './manifest';
+import { getProviderManifest, type ProviderManifest } from './manifest';
 
 type CloudManifest = Extract<ProviderManifest, { kind: 'cloud-api' }>;
 type ProviderConn = { manifest: CloudManifest; apiKey: string; baseURL: string };
-
-/**
- * A local model service (Ollama) speaks openai-compatible on /v1 with no API
- * key, so it resolves outside the keyed providerConn path. The base URL is the
- * user's override or the manifest default.
- */
-function localServiceModel(db: Db, manifest: LocalServiceManifest, modelId: string) {
-  const row = db
-    .select({ config: providers.config })
-    .from(providers)
-    .where(eq(providers.id, manifest.id))
-    .get();
-  const base = (
-    (row?.config as { baseUrl?: string } | null)?.baseUrl?.trim() || manifest.defaultBaseUrl
-  ).replace(/\/+$/, '');
-  return createOpenAICompatible({ name: manifest.id, baseURL: `${base}/v1` })(modelId);
-}
 
 /**
  * Read a cloud provider's decrypted key + effective base URL in a single DB
@@ -60,20 +37,6 @@ function providerConn(db: Db, providerId: string): ProviderConn {
 }
 
 /** Resolve a (providerId, modelId) pair into a ready-to-use AI SDK chat model. */
-export function resolveModel(db: Db, providerId: string, modelId: string): LanguageModel {
-  const known = getProviderManifest(providerId);
-  if (known?.kind === 'local-service') return localServiceModel(db, known, modelId);
-  const { manifest, apiKey, baseURL } = providerConn(db, providerId);
-  switch (manifest.protocol) {
-    case 'anthropic':
-      return createAnthropic({ apiKey, baseURL: anthropicApiBase(baseURL) })(modelId);
-    case 'openai-compatible':
-      return createOpenAICompatible({ name: providerId, apiKey, baseURL })(modelId);
-    case 'google-gemini':
-      return createGoogleGenerativeAI({ apiKey, baseURL })(modelId);
-  }
-}
-
 /**
  * Whether tool results for this provider+model may carry inline image parts.
  * Both halves matter: the model needs vision, and the provider conversion must

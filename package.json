@@ -2,7 +2,7 @@
   "name": "atrium",
   "version": "0.14.3",
   "private": true,
-  "description": "Atrium — personal AI workspace",
+  "description": "Atrium \u2014 personal AI workspace",
   "main": "./out/main/index.js",
   "author": "lhz960904",
   "license": "MIT",
@@ -52,7 +52,6 @@
   },
   "devDependencies": {
     "@agentclientprotocol/sdk": "^0.25.0",
-    "@ai-sdk/anthropic": "^3",
     "@ai-sdk/google": "^3",
     "@ai-sdk/openai-compatible": "^2",
     "@biomejs/biome": "2.4.15",

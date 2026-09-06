@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { LanguageModelUsage } from 'ai';
 import { costUsd, type TokenCounts } from '../../shared/cost';
 import type { ModelPricing } from '../agent/models/types';
 import type { Db } from '.';
@@ -14,18 +13,6 @@ export type UsageKind = 'chat' | 'subagent' | 'title' | 'summary' | 'review';
  * Values pass through verbatim (undefined stays undefined, so metadata doesn't
  * fabricate zeros); the ledger defaults them to 0 in recordUsage.
  */
-export function tokenCountsOf(u: LanguageModelUsage): Partial<TokenCounts> & {
-  totalTokens: number | undefined;
-} {
-  return {
-    inputTokens: u.inputTokens,
-    outputTokens: u.outputTokens,
-    cacheReadTokens: u.inputTokenDetails?.cacheReadTokens,
-    cacheCreationTokens: u.inputTokenDetails?.cacheWriteTokens,
-    totalTokens: u.totalTokens,
-  };
-}
-
 /** Micro-USD (1e-6 dollar) cost of one call — integer for ledger storage. */
 export function costMicros(t: TokenCounts, pricing: ModelPricing): number {
   return Math.round(costUsd(t, pricing) * 1_000_000);
