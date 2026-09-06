@@ -64,7 +64,7 @@ const tools: Array<[string, AtriumTool]> = [
   ['todo_write', todoWriteTool()],
   ['web_fetch', webFetchTool()],
   ['web_search', webSearchTool()],
-  ['task', taskTool({ maxContextTokens: () => 0, subagents: [], run })],
+  ['task', taskTool({ siblings: () => [], subagents: [], run })],
   ['skill', skillTool({ skills: [], run })],
   ['ask_clarification', askClarificationTool()],
   ['image_gen', imageGenTool({ models: [], run })],

@@ -1,41 +1,79 @@
 import { expect, test } from 'bun:test';
-import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
-import { type Tool, tool } from 'ai';
-import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
-import { z } from 'zod';
+import type { StreamFn } from '@earendil-works/pi-agent-core';
+import {
+  type AssistantMessage,
+  type Context,
+  createAssistantMessageEventStream,
+  type Model,
+} from '@earendil-works/pi-ai';
 import type { Db } from '../../db';
 import type { RunContext } from '../middleware';
 import type { Sandbox } from '../sandbox/types';
+import type { AtriumTool } from '../tools';
 import type { SubagentDef } from './defs';
 import { runSubagent } from './run';
 
-const USAGE = {
-  inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-  outputTokens: { total: 1, text: 1, reasoning: 0 },
-};
+const MODEL = {
+  id: 'm1',
+  name: 'm1',
+  api: 'anthropic-messages',
+  provider: 'p1',
+  baseUrl: 'https://example.invalid',
+  contextWindow: 200_000,
+  maxTokens: 1000,
+} as unknown as Model<'anthropic-messages'>;
 
-const textChunks = (text: string): LanguageModelV3StreamPart[] => [
-  { type: 'stream-start', warnings: [] },
-  { type: 'text-start', id: 't1' },
-  { type: 'text-delta', id: 't1', delta: text },
-  { type: 'text-end', id: 't1' },
-  { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage: USAGE },
-];
+const usage = () => ({
+  input: 1,
+  output: 1,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 2,
+  cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 },
+});
 
-const toolCallChunks: LanguageModelV3StreamPart[] = [
-  { type: 'stream-start', warnings: [] },
-  { type: 'tool-call', toolCallId: 'c1', toolName: 'echo', input: '{}' },
-  { type: 'finish', finishReason: { unified: 'tool-calls', raw: 'tool-calls' }, usage: USAGE },
-];
+const reply = (content: unknown[], stopReason: string): AssistantMessage =>
+  ({
+    role: 'assistant',
+    content,
+    api: 'anthropic-messages',
+    provider: 'p1',
+    model: 'm1',
+    usage: usage(),
+    stopReason,
+    timestamp: 1,
+  }) as unknown as AssistantMessage;
 
-const echoTool = (): Tool =>
-  tool({
-    description: 'echo',
-    inputSchema: z.object({}),
-    execute: async () => 'TOOL_RESULT_SHOULD_NOT_SURFACE',
-  });
+/** Answers with each scripted message in turn, recording what it was sent. */
+function scripted(messages: AssistantMessage[], seen: Context[] = []): StreamFn {
+  let at = 0;
+  return (_model, context) => {
+    seen.push(context);
+    const message = messages[Math.min(at++, messages.length - 1)];
+    const stream = createAssistantMessageEventStream();
+    queueMicrotask(() => stream.end(message));
+    return stream;
+  };
+}
 
-function parentCtx(model: RunContext['model'], tools: Record<string, Tool> = {}): RunContext {
+const engineWith = (streamFn: StreamFn) => ({
+  model: MODEL,
+  streamFn,
+  getApiKey: () => 'key',
+});
+
+const echoTool = {
+  name: 'echo',
+  label: 'echo',
+  description: 'echo',
+  parameters: { type: 'object' },
+  execute: async () => ({
+    content: [{ type: 'text', text: 'TOOL_RESULT_SHOULD_NOT_SURFACE' }],
+    details: 'TOOL_RESULT_SHOULD_NOT_SURFACE',
+  }),
+} as unknown as AtriumTool;
+
+function parentCtx(over: Partial<RunContext> = {}): RunContext {
   return {
     threadId: 't1',
     db: {} as Db,
@@ -44,13 +82,13 @@ function parentCtx(model: RunContext['model'], tools: Record<string, Tool> = {})
     request: {
       system: 'PARENT SYSTEM PROMPT',
       messages: [{ id: 'ph', role: 'user', parts: [{ type: 'text', text: 'PARENT_HISTORY' }] }],
-      // biome-ignore lint/suspicious/noExplicitAny: parent tool map shape is irrelevant to these tests
-      tools: tools as any,
+      tools: {},
     },
-    model,
+    model: {} as RunContext['model'],
     emit: () => {},
     scratch: new Map(),
-  };
+    ...over,
+  } as RunContext;
 }
 
 const def: SubagentDef = {
@@ -60,60 +98,82 @@ const def: SubagentDef = {
 };
 
 test('returns the final assistant text and runs in an isolated context', async () => {
-  const seen: unknown[] = [];
-  const model = new MockLanguageModelV3({
-    doStream: async (opts) => {
-      seen.push(opts.prompt);
-      return { stream: simulateReadableStream({ chunks: textChunks('THE ANSWER') }) };
-    },
-  });
-
+  const seen: Context[] = [];
   const result = await runSubagent({
-    parent: parentCtx(model),
+    parent: parentCtx(),
+    engine: engineWith(scripted([reply([{ type: 'text', text: 'THE ANSWER' }], 'stop')], seen)),
+    tools: [],
     agent: def,
     prompt: 'do the task',
     subagentId: 's1',
-    maxContextTokens: () => 200_000,
   });
 
   expect(result.text).toBe('THE ANSWER');
-
   // Isolation: the child sees its own system prompt + just the task, never the
   // parent's system prompt or conversation history.
-  const firstCall = JSON.stringify(seen[0]);
-  expect(firstCall).toContain('SUBAGENT SYSTEM PROMPT');
-  expect(firstCall).toContain('do the task');
-  expect(firstCall).not.toContain('PARENT SYSTEM PROMPT');
-  expect(firstCall).not.toContain('PARENT_HISTORY');
+  const first = JSON.stringify(seen[0]);
+  expect(first).toContain('SUBAGENT SYSTEM PROMPT');
+  expect(first).toContain('do the task');
+  expect(first).not.toContain('PARENT SYSTEM PROMPT');
+  expect(first).not.toContain('PARENT_HISTORY');
 });
 
 test('runs the full loop but returns only the final text, never tool output', async () => {
-  let call = 0;
-  const model = new MockLanguageModelV3({
-    doStream: async () => {
-      call++;
-      const chunks = call === 1 ? toolCallChunks : textChunks('FINAL SYNTHESIS');
-      return { stream: simulateReadableStream({ chunks }) };
-    },
-  });
-
+  const seen: Context[] = [];
   const result = await runSubagent({
-    parent: parentCtx(model, { echo: echoTool() }),
+    parent: parentCtx(),
+    engine: engineWith(
+      scripted(
+        [
+          reply([{ type: 'toolCall', id: 'c1', name: 'echo', arguments: {} }], 'toolUse'),
+          reply([{ type: 'text', text: 'FINAL SYNTHESIS' }], 'stop'),
+        ],
+        seen,
+      ),
+    ),
+    tools: [echoTool],
     agent: def,
     prompt: 'use the tool then answer',
     subagentId: 's2',
-    maxContextTokens: () => 200_000,
   });
 
-  expect(call).toBe(2); // model was re-invoked after the tool ran
+  expect(seen).toHaveLength(2); // the model was re-invoked after the tool ran
   expect(result.text).toBe('FINAL SYNTHESIS');
   expect(result.text).not.toContain('TOOL_RESULT_SHOULD_NOT_SURFACE');
 });
 
-test('records its own usage under the inherited model (kind=subagent)', async () => {
-  const model = new MockLanguageModelV3({
-    doStream: async () => ({ stream: simulateReadableStream({ chunks: textChunks('ANSWER') }) }),
+test('bubbles its activity up to the parent, minus the plan tool', async () => {
+  const emitted: unknown[] = [];
+  await runSubagent({
+    parent: parentCtx({ emit: (chunk) => emitted.push(chunk) }),
+    engine: engineWith(
+      scripted([
+        reply(
+          [
+            { type: 'toolCall', id: 'c1', name: 'echo', arguments: {} },
+            { type: 'toolCall', id: 'c2', name: 'todo_write', arguments: {} },
+          ],
+          'toolUse',
+        ),
+        reply([{ type: 'text', text: 'DONE' }], 'stop'),
+      ]),
+    ),
+    tools: [echoTool],
+    agent: def,
+    prompt: 'go',
+    subagentId: 's3',
   });
+
+  const phases = emitted.map((c) => (c as { data: { phase: string } }).data.phase);
+  expect(phases[0]).toBe('start');
+  expect(phases.at(-1)).toBe('done');
+  const step = emitted
+    .map((c) => (c as { data: { phase: string; tools?: { name: string }[] } }).data)
+    .find((d) => d.phase === 'step');
+  expect(step?.tools?.map((t) => t.name)).toEqual(['echo']);
+});
+
+test('records its own usage under the inherited model (kind=subagent)', async () => {
   let row: Record<string, unknown> | undefined;
   const captureDb = {
     insert: () => ({
@@ -127,11 +187,12 @@ test('records its own usage under the inherited model (kind=subagent)', async ()
 
   await runSubagent({
     // No pinned model on `def`, so the child inherits the parent's identity.
-    parent: { ...parentCtx(model), db: captureDb, providerId: 'anthropic', modelId: 'claude-x' },
+    parent: parentCtx({ db: captureDb, providerId: 'anthropic', modelId: 'claude-x' }),
+    engine: engineWith(scripted([reply([{ type: 'text', text: 'ANSWER' }], 'stop')])),
+    tools: [],
     agent: def,
     prompt: 'do the task',
     subagentId: 's1',
-    maxContextTokens: () => 200_000,
     pricingOf: () => ({ input: 0.001, output: 0.002, cacheRead: 0, cacheCreation: 0 }),
   });
 
@@ -141,14 +202,11 @@ test('records its own usage under the inherited model (kind=subagent)', async ()
   expect(row?.inputTokens).toBe(1);
   expect(row?.outputTokens).toBe(1);
   expect(row?.totalTokens).toBe(2);
-  // 1 noCache input * 0.001 + 1 output * 0.002 = 0.003 USD → 3000 micros.
+  // 1 input * 0.001 + 1 output * 0.002 = 0.003 USD → 3000 micros.
   expect(row?.costUsdMicros).toBe(3000);
 });
 
 test('skips recording when no pricing is injected', async () => {
-  const model = new MockLanguageModelV3({
-    doStream: async () => ({ stream: simulateReadableStream({ chunks: textChunks('ANSWER') }) }),
-  });
   let inserted = false;
   const captureDb = {
     insert: () => ({
@@ -161,11 +219,12 @@ test('skips recording when no pricing is injected', async () => {
   } as unknown as Db;
 
   await runSubagent({
-    parent: { ...parentCtx(model), db: captureDb, providerId: 'anthropic', modelId: 'claude-x' },
+    parent: parentCtx({ db: captureDb, providerId: 'anthropic', modelId: 'claude-x' }),
+    engine: engineWith(scripted([reply([{ type: 'text', text: 'ANSWER' }], 'stop')])),
+    tools: [],
     agent: def,
     prompt: 'do the task',
     subagentId: 's1',
-    maxContextTokens: () => 200_000,
   });
 
   expect(inserted).toBe(false);

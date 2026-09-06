@@ -1,5 +1,5 @@
 import { listEnabledImageModels } from '../../providers/image-models';
-import { maxContextTokens, modelPricing } from '../models/catalog';
+import { modelPricing } from '../models/catalog';
 import { listSubagentDefs } from '../subagent/defs';
 import { askClarificationTool } from './builtins/ask-clarification';
 import { bashTool } from './builtins/bash';
@@ -48,6 +48,9 @@ import type { AtriumTool } from './define';
  * created ones show up.
  */
 export function getTools(ctx: ToolCtx): AtriumTool[] {
+  // The task tool hands its child a slice of this same set, so it reads the
+  // assembled list at call time rather than being handed one that includes it.
+  let assembled: AtriumTool[] = [];
   // macOS desktop-automation tools, grouped so getTools can drop them wholesale
   // when the helper is unavailable (see the ctx.computerUse guard below).
   const computerBuiltins = [
@@ -75,10 +78,11 @@ export function getTools(ctx: ToolCtx): AtriumTool[] {
     webFetchTool(),
     webSearchTool(),
     taskTool({
-      maxContextTokens,
       pricingOf: modelPricing,
       subagents: listSubagentDefs(ctx.run.db),
       run: ctx.run,
+      engine: ctx.engine,
+      siblings: () => assembled,
     }),
     skillTool({ skills: ctx.skills ?? [], run: ctx.run }),
     askClarificationTool(),
@@ -96,5 +100,6 @@ export function getTools(ctx: ToolCtx): AtriumTool[] {
     ...(ctx.computerUse ? computerBuiltins : []),
   ];
   const names = new Set(builtins.map((t) => t.name));
-  return [...(ctx.mcpTools ?? []).filter((t) => !names.has(t.name)), ...builtins];
+  assembled = [...(ctx.mcpTools ?? []).filter((t) => !names.has(t.name)), ...builtins];
+  return assembled;
 }

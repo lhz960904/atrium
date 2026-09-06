@@ -1,3 +1,5 @@
+import type { StreamFn } from '@earendil-works/pi-agent-core';
+import type { Api, Model } from '@earendil-works/pi-ai';
 import type { PermissionMode } from '@shared/permissions';
 import type { TrustRule } from '@shared/permissions/rules';
 import type { LanguageModel } from 'ai';
@@ -30,6 +32,12 @@ export type ToolCtx = {
   bgShells?: BackgroundShells;
   /** Tools from connected MCP servers, named mcp__<server>__<tool>. */
   mcpTools?: AtriumTool[];
+  /** How the turn reaches its provider, so a nested loop (task) can reuse it. */
+  engine?: {
+    model: Model<Api>;
+    streamFn: StreamFn;
+    getApiKey: (provider: string) => string | undefined;
+  };
   /** The Computer Use helper (macOS desktop automation); absent off macOS. */
   computerUse?: ComputerUseHelper;
   /** Whether the active provider+model can consume image tool results (see

@@ -265,6 +265,7 @@ export function startHttpServer(deps: {
     // message id), so the model's next turns extend that same stored run
     // instead of opening a second one.
     const runId = message.role === 'assistant' ? message.id : randomUUID();
+    const piModel = resolvePiModel(deps.db, providerId, modelId);
     // A continuation answers calls an earlier turn parked. What the run already
     // stored says which ones are still open; the client's copy of the message
     // says what the user decided about each.
@@ -281,7 +282,7 @@ export function startHttpServer(deps: {
           providerId,
           modelId,
           model: resolveModel(deps.db, providerId, modelId),
-          piModel: resolvePiModel(deps.db, providerId, modelId),
+          piModel,
           streamFn: piStreamFn,
           getApiKey: makeGetApiKey(deps.db),
           messages: entries.map((entry) => entry.message),
@@ -322,6 +323,12 @@ export function startHttpServer(deps: {
               workspaceRoot,
               run,
               skills,
+              // A nested loop (the task tool) runs on the same handles as this turn.
+              engine: {
+                model: piModel,
+                streamFn: piStreamFn,
+                getApiKey: makeGetApiKey(deps.db),
+              },
               bgShells,
               supportsImageToolResults: supportsImages,
               computerUse,

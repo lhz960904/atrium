@@ -43,6 +43,8 @@ Branch: feat/protocol-isolation（基于 main@4ca74fd）
 
 - **2f. 审批 / 澄清 / 自动审查** ✅：越界调用与客户端工具不再被拒，改成**搁置**——`beforeToolCall` 判定后发 `approval_requested` 并 block，`shouldStopAfterTurn` 让本轮到此为止（同批其余工具照常跑完）。搁置的调用**不写结果行**，待办状态记在所属 assistant 行的 `metadata.toolStates` 里（阶段 1 的读侧合并器本来就认这个），封口逻辑也跳过它们——所以刷新之后卡片还在，决定几小时后再来也接得上。决定回来时由**服务端**结算：批准就直接调那个 `AgentTool`（引擎只会执行当前正在流的那一轮的调用，这一轮早结束了），并照常发 `tool_execution_start/end` 让卡片正常填充；拒绝写 `details.denied`；客户端工具则把用户的答案写成结果行。续跑不再让客户端的消息覆盖存储行——服务端只从中读取用户的决定，行仍是 pi 原生的；`resumeRows` 把本轮之前写过的行带上（run 是整体替换写入的），createdAt 与累计 token 沿用原轮次，账本只记本段花费。auto-review 的 reviewer 判定与 ALLOW 徽标原位发出。顺带修掉一个真机撞到的坑：**报错轮次会存下 content 为空的 assistant 行**，下一轮把它当历史发回去会被 provider 直接拒（thread 就此卡死），现在空轮次不落库。真机验证：审批→允许一次→执行并续跑答对、审批→拒绝→模型自行改口、ask_clarification 两问答完→续跑带上答案、自动审查模式 reviewer 放行免打扰。
 
+- **2g. 子智能体** ✅：`runSubagent` 由 `streamText` 换成嵌套 `new Agent`，跑父轮同一套 streamFn / getApiKey（子代理钉了模型就换成它的 pi Model）。工具从 AI SDK 的 `Record<string, Tool>` 改成按名字过滤 `AtriumTool[]`——`task` 在调用时才读取同轮的完整工具表（它自己也在表里，构造期拿不到）。轮内压缩、loop 刹车、日期注入复用 pi 那套；活动冒泡改从 `message_end` 折算成既有的 `data.subagent` 通知（渲染端零改动），用量按 pi 每轮原生 usage 累加，并挂到 `AgentToolResult.usage` 上（pi 原生支持工具级用量）。定时任务走的仍是 `/api/chat` 同一条路，未受影响。ACP 按 D4 冻结，不移植。真机验证：派子智能体跑 bash 回报输出正常，账本里 `kind=subagent` 独立入账。
+
 ## 纪律
 
 - main 迁移期冻结新功能，只收 fix。

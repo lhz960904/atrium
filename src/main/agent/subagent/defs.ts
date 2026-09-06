@@ -1,8 +1,8 @@
 import type { ToolName } from '@shared/tools';
-import type { Tool } from 'ai';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../../db';
 import { subagents } from '../../db/schema';
+import type { AtriumTool } from '../tools/define';
 
 /**
  * A subagent's definition: the system prompt it runs under and the slice of the
@@ -46,19 +46,17 @@ export const SUBAGENT_DENIED_TOOLS = new Set<string>([
 
 /** Narrow the parent's tools to what a subagent def permits. */
 export function filterToolsForSubagent(
-  parentTools: Record<string, Tool>,
+  parentTools: AtriumTool[],
   def: Pick<SubagentDef, 'toolAllow' | 'toolDeny'>,
-): Record<string, Tool> {
+): AtriumTool[] {
   const allow = def.toolAllow ? new Set<string>(def.toolAllow) : null;
   const deny = new Set<string>(def.toolDeny ?? []);
-  const out: Record<string, Tool> = {};
-  for (const [name, tool] of Object.entries(parentTools)) {
-    if (SUBAGENT_DENIED_TOOLS.has(name)) continue;
-    if (allow && !allow.has(name)) continue;
-    if (deny.has(name)) continue;
-    out[name] = tool;
-  }
-  return out;
+  return parentTools.filter(
+    (tool) =>
+      !SUBAGENT_DENIED_TOOLS.has(tool.name) &&
+      (!allow || allow.has(tool.name)) &&
+      !deny.has(tool.name),
+  );
 }
 
 const GENERAL_PURPOSE: SubagentDef = {

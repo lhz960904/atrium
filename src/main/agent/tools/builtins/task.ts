@@ -1,19 +1,24 @@
 import type { RunContext } from '../../middleware/types';
 import type { ModelPricing } from '../../models/types';
-import { resolveSubagentDef } from '../../subagent/defs';
-import { runSubagent } from '../../subagent/run';
+import { filterToolsForSubagent, resolveSubagentDef } from '../../subagent/defs';
+import { runSubagent, type SubagentEngine } from '../../subagent/run';
+import type { AtriumTool } from '../define';
 import { defineTool, Type, textResult } from '../define';
 
 const DEFAULT_SUBAGENT = 'general-purpose';
 
 export type TaskToolDeps = {
-  maxContextTokens: (modelId: string) => number;
   /** Pricing lookup, forwarded so the subagent records its own usage. */
   pricingOf?: (modelId: string) => ModelPricing;
   /** All delegatable subagents (built-in + custom), advertised in the description. */
   subagents: Array<{ name: string; description: string }>;
-  /** The parent turn's context — the child reuses its model / sandbox / db. */
+  /** The parent turn's context — the child reuses its sandbox / db / stream. */
   run: RunContext;
+  /** How the parent reaches its provider; the child runs on the same handles. */
+  engine?: SubagentEngine;
+  /** The turn's whole tool set, read at call time — it includes this tool, so
+   *  it cannot be handed over at construction. */
+  siblings: () => AtriumTool[];
 };
 
 /**
@@ -55,18 +60,23 @@ ${list}`,
       const def = resolveSubagentDef(name, deps.run.db);
       if (!def) throw new Error(`unknown subagent '${name}'.`);
 
-      const { text } = await runSubagent({
+      if (!deps.engine) throw new Error('subagents are unavailable in this context.');
+
+      const { text, usage } = await runSubagent({
         parent: deps.run,
+        engine: deps.engine,
+        tools: filterToolsForSubagent(deps.siblings(), def),
         agent: def,
         prompt,
         // Key the subagent's bubbled-up activity by the tool call id so the
         // frontend can correlate it with this task part's card.
         subagentId: toolCallId,
-        maxContextTokens: deps.maxContextTokens,
         pricingOf: deps.pricingOf,
         abortSignal: signal,
       });
-      return textResult(text);
+      // The nested loop's own spend rides on the result, where the engine
+      // accounts for tool-level usage.
+      return { ...textResult(text), usage };
     },
   });
 };
