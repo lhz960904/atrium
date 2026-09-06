@@ -11,7 +11,8 @@ import { mcpManager } from '../agent/mcp/manager';
 import { buildMcpTools } from '../agent/mcp/tool-adapter';
 import { generateThreadTitle } from '../agent/middleware';
 import { isImageModel, modelPricing } from '../agent/models/catalog';
-import { needsApprovalFor } from '../agent/permissions';
+import type { Resolution } from '../agent/pi/approvals';
+import { toolCallsById } from '../agent/pi/approvals';
 import { foldToCheckpoint } from '../agent/pi/compaction';
 import { createSummarizer } from '../agent/pi/summarize';
 import { runAgent } from '../agent/run';
@@ -31,11 +32,13 @@ import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model
 import { resolveModel, supportsImageToolResults } from '../providers/resolve';
 import { getSettings } from '../settings/conf';
 import {
+  loadRunRows,
   loadThreadHistory,
   loadThreadMessages,
   persistCheckpoint,
   persistMessage,
   persistRun,
+  type RunRow,
   readAcpBinding,
   readAcpConfig,
   resolveThreadWorkspace,
@@ -109,6 +112,38 @@ function resolveReviewerModel(
   }
 }
 
+/**
+ * The decisions a resumed message carries for the calls its run left open. The
+ * stored rows are the authority on which calls are still waiting; the client's
+ * copy of the message carries the user's answer for each.
+ */
+function resolutionsFor(message: UIMessage, resumeRows: RunRow[]): Resolution[] {
+  if (message.role !== 'assistant' || resumeRows.length === 0) return [];
+  const answered = new Set(resumeRows.flatMap((r) => (r.role === 'toolResult' ? [r.id] : [])));
+  const open = toolCallsById(resumeRows.map((r) => r.message));
+  const out: Resolution[] = [];
+  for (const part of message.parts) {
+    const p = part as {
+      toolCallId?: string;
+      state?: string;
+      output?: unknown;
+      approval?: { approved?: boolean; reason?: string };
+    };
+    const toolCallId = p.toolCallId;
+    if (!toolCallId || answered.has(toolCallId) || !open.has(toolCallId)) continue;
+    if (p.state === 'approval-responded') {
+      out.push(
+        p.approval?.approved
+          ? { toolCallId, kind: 'approved' }
+          : { toolCallId, kind: 'denied', reason: p.approval?.reason },
+      );
+    } else if (p.state === 'output-available') {
+      out.push({ toolCallId, kind: 'answered', output: p.output });
+    }
+  }
+  return out;
+}
+
 export function startHttpServer(deps: {
   db: Db;
   token: string;
@@ -152,7 +187,6 @@ export function startHttpServer(deps: {
     // answered and the chat auto-resumed: overwrite the stored call so history
     // carries the answer the model is about to continue from.
     if (message.role === 'user') persistMessage(deps.db, threadId, message);
-    else if (message.role === 'assistant') upsertMessage(deps.db, threadId, message);
     const history = loadThreadMessages(deps.db, threadId);
 
     // Resolve the thread's workspace per request: its project's directory, or
@@ -231,6 +265,11 @@ export function startHttpServer(deps: {
     // message id), so the model's next turns extend that same stored run
     // instead of opening a second one.
     const runId = message.role === 'assistant' ? message.id : randomUUID();
+    // A continuation answers calls an earlier turn parked. What the run already
+    // stored says which ones are still open; the client's copy of the message
+    // says what the user decided about each.
+    const resumeRows = message.role === 'assistant' ? loadRunRows(deps.db, runId) : [];
+    const resolutions = resolutionsFor(message, resumeRows);
     // The engine runs on pi messages; the entries keep each one's row id so a
     // compaction checkpoint can name the last row it folded away.
     const entries = loadThreadHistory(deps.db, threadId);
@@ -253,6 +292,19 @@ export function startHttpServer(deps: {
           sandbox,
           skills,
           permissionMode: mode,
+          permission: {
+            mode,
+            rules: getSettings('permissions.trustRules'),
+            // Resolve the reviewer only when auto-review can actually use it; a
+            // misconfigured/removed model resolves to undefined, so auto-review
+            // simply falls back to prompting rather than failing the turn.
+            reviewerModel:
+              mode === 'auto-review'
+                ? resolveReviewerModel(deps.db, { providerId, modelId })
+                : undefined,
+          },
+          resolutions,
+          resumeRows,
           abortSignal: abort.signal,
           emit: piLog.append,
           persist: (rows, opts) => persistRun(deps.db, threadId, runId, rows, opts),
@@ -264,14 +316,6 @@ export function startHttpServer(deps: {
             ? (run) => generateThreadTitle(run, setThreadTitle)
             : undefined,
           onSettled: () => computerUse?.hideOverlay(),
-          guardToolCall: ({ name, input }) =>
-            needsApprovalFor(
-              name,
-              input,
-              mode,
-              workspaceRoot,
-              getSettings('permissions.trustRules'),
-            ),
           buildTools: (run) => {
             const toolCtx = {
               sandbox,

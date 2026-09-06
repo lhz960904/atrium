@@ -189,6 +189,27 @@ export function loadThreadAgentMessages(db: Db, threadId: string): Message[] {
 }
 
 /**
+ * The rows one run already wrote, oldest first. A run is replaced whole on
+ * write, so a continuation has to carry its earlier turns along — and the
+ * calls among them that never got a result are the ones waiting on the user.
+ */
+export function loadRunRows(db: Db, runId: string): RunRow[] {
+  return db
+    .select()
+    .from(messages)
+    .where(eq(messages.runId, runId))
+    .orderBy(asc(messages.createdAt))
+    .all()
+    .filter((row) => row.role === 'assistant' || row.role === 'toolResult')
+    .map((row) => ({
+      id: row.id,
+      role: row.role as RunRow['role'],
+      message: row.parts as Message,
+      metadata: (row.metadata as Record<string, unknown> | null) ?? null,
+    }));
+}
+
+/**
  * Store a compaction checkpoint: the summary the model reads in place of the
  * folded history, and the ack that keeps the roles alternating after it. Both
  * are ordinary rows — the transcript keeps its full history, and the reader

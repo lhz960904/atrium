@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Agent, type AgentEvent, type StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model, Message as PiMessage } from '@earendil-works/pi-ai';
 import type { PermissionMode } from '@shared/permissions';
@@ -13,6 +14,8 @@ import type { Db } from '../db';
 import { createLogger } from '../log';
 import { recordTurn } from './memory/state';
 import type { RunContext } from './middleware';
+import { type ApprovalContext, approvalGate } from './permissions';
+import { applyResolutions, type ParkedCall, type Resolution } from './pi/approvals';
 import { type Checkpoint, compactForTurn, withinTurnFold } from './pi/compaction';
 import { composeContext } from './pi/context';
 import { injectSystemReminder } from './pi/history';
@@ -87,6 +90,14 @@ export type RunAgentOptions = {
   buildTools: (run: RunContext) => { tools: AtriumTool[]; aiSdk: Record<string, Tool> };
   /** Active permission mode, surfaced in the system prompt so the model knows how approvals behave. */
   permissionMode: PermissionMode;
+  /** What decides whether a call may run unasked; see agent/permissions. */
+  permission: Omit<ApprovalContext, 'workspaceRoot' | 'abortSignal' | 'onReviewed'>;
+  /** Decisions the user made about calls an earlier turn parked. Settled before
+   *  the loop resumes, so the transcript is whole again by the time it runs. */
+  resolutions?: Resolution[];
+  /** The rows this run already stored, when the turn is a continuation: the run
+   *  is replaced whole on write, so what came before has to be carried along. */
+  resumeRows?: RunRow[];
   /** Where the run's events go — the thread's envelope log. */
   emit: (event: AgentSessionEvent) => void;
   /** Store the run's messages as its rows; injected so the agent layer stays
@@ -102,13 +113,6 @@ export type RunAgentOptions = {
   recordUsage?: (usage: RunUsage) => void;
   /** Summarize the thread's opening message into a title (fire-and-forget). */
   generateTitle?: (ctx: RunContext) => void;
-  /**
-   * Whether a call crosses the workspace boundary and must therefore wait for
-   * the user. It is refused rather than parked: the approve/deny round trip is
-   * still being ported, and a boundary crossing that runs unasked is the one
-   * outcome the permission modes exist to prevent.
-   */
-  guardToolCall?: (call: { name: string; input: unknown }) => boolean;
   abortSignal?: AbortSignal;
   /** Fires once when the turn settles (finished or aborted) — e.g. to collapse UI the run left on screen. */
   onSettled?: () => void;
@@ -117,13 +121,8 @@ export type RunAgentOptions = {
 /** Complex work routinely runs a dozen turns; this is the runaway brake. */
 const MAX_TURNS = 100;
 
-const NOT_YET_ASKABLE =
-  'Asking the user through this tool is not wired up in this build. ' +
-  'Ask your question in plain text instead and end your turn.';
-
-const NEEDS_APPROVAL =
-  "This call needs the user's approval, which this build cannot ask for yet. " +
-  'Tell the user to switch the permission mode to full access, or to run it themselves.';
+/** What the model is told about a call it will not get a result for this turn. */
+const AWAITING_USER = 'Paused: waiting for the user. The turn ends here.';
 
 const isAssistant = (m: Message): m is AssistantMessage => m.role === 'assistant';
 
@@ -214,7 +213,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
   const announceCompaction = (phase: 'start' | 'done'): void =>
     ctx.emit({ type: 'data-compaction', data: { phase }, transient: true });
 
-  const messages = opts.persistCheckpoint
+  const compacted = opts.persistCheckpoint
     ? await compactForTurn({
         messages: opts.messages,
         summarize,
@@ -224,6 +223,28 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
         persist: opts.persistCheckpoint,
       })
     : opts.messages;
+
+  // Settle what the user decided before the loop sees the transcript: a parked
+  // call has no result yet, and the engine will not run a call from a turn that
+  // has already ended.
+  const settled = await applyResolutions({
+    resolutions: opts.resolutions ?? [],
+    messages: compacted,
+    tools: built.tools,
+    emit: opts.emit,
+    abortSignal: opts.abortSignal,
+  });
+  const messages = settled.length > 0 ? [...compacted, ...settled] : compacted;
+
+  /** Calls this turn handed back to the user; they end it and stay open. */
+  const parked = new Map<string, ParkedCall>();
+  const gate = approvalGate({
+    ...opts.permission,
+    workspaceRoot: opts.workspaceRoot,
+    abortSignal: opts.abortSignal,
+    onReviewed: ({ toolCallId, subject }) =>
+      ctx.emit({ type: 'data-autoReview', data: { toolCallId, subject }, transient: true }),
+  });
 
   // A run that tripped the loop brake is offered nothing, so the model has to
   // answer in text; otherwise the active skill decides how wide the set is.
@@ -235,9 +256,18 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
           ctx.scratch.get(SKILL_SCRATCH_KEY) as ActiveSkill | undefined,
         );
 
-  const rows: RunRow[] = [];
+  const rows: RunRow[] = [...(opts.resumeRows ?? [])];
+  // A continuation extends a turn that already reported itself: it keeps the
+  // run's original start, and its cost adds to what the run had already spent.
+  const prior = (opts.resumeRows?.[0]?.metadata ?? {}) as Record<string, number | undefined>;
+  const openedAt = prior.createdAt ?? startedAt;
+  for (const message of settled) {
+    rows.push({ id: message.toolCallId, role: 'toolResult', message });
+  }
   let turns = 0;
   let contextTokens: number | undefined;
+  // What this segment spent. The ledger takes it as-is (a continuation is its
+  // own billable call); the stored turn adds it to what the run spent before.
   const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 
   const agent = new Agent({
@@ -272,14 +302,20 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
       loop.observe(message);
       return { context: { ...context, tools: toolsForNextTurn() } };
     },
-    shouldStopAfterTurn: () => ++turns >= MAX_TURNS,
+    // A parked call ends the turn: the rest of its batch still runs, but nothing
+    // new is asked of the model until the user has answered.
+    shouldStopAfterTurn: () => ++turns >= MAX_TURNS || parked.size > 0,
     beforeToolCall: async ({ toolCall, args }) => {
-      if (clientSide.has(toolCall.name)) {
-        return { block: true, terminate: true, reason: NOT_YET_ASKABLE };
-      }
-      return opts.guardToolCall?.({ name: toolCall.name, input: args })
-        ? { block: true, terminate: true, reason: NEEDS_APPROVAL }
-        : undefined;
+      const park = (approvalId?: string) => {
+        parked.set(toolCall.id, { toolCallId: toolCall.id, toolName: toolCall.name, approvalId });
+        return { block: true, terminate: true, reason: AWAITING_USER };
+      };
+      // A client-side tool is answered by the user, never executed.
+      if (clientSide.has(toolCall.name)) return park();
+      if (!(await gate(toolCall.name, args, toolCall.id))) return undefined;
+      const approvalId = randomUUID();
+      opts.emit({ type: 'approval_requested', approvalId, toolCallId: toolCall.id });
+      return park(approvalId);
     },
   });
 
@@ -303,6 +339,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
       return;
     }
     if (projected.type === 'tool_execution_end') {
+      // A parked call produced no result — the card is showing the ask, and a
+      // refusal frame would replace it with an error the user never caused.
+      if (parked.has(projected.toolCallId)) return;
       projected.result.details = withErrorText(
         projected.result.details,
         projected.result.content,
@@ -327,20 +366,28 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
       // Not `input + output`: a cached prompt bills only its uncached part to
       // `input`, so that pair reads as a fraction of what was actually sent.
       contextTokens = contextSizeOf(usage);
-      rows.push({
-        id: `${opts.runId}:${rows.filter((r) => r.role === 'assistant').length}`,
-        role: 'assistant',
-        message,
-      });
+      // A turn that produced nothing (the provider errored before its first
+      // block) is not stored: an empty content list is rejected outright when
+      // it comes back as history, which would wedge the thread for good.
+      if (message.content.length > 0) {
+        rows.push({
+          id: `${opts.runId}:${rows.filter((r) => r.role === 'assistant').length}`,
+          role: 'assistant',
+          message,
+        });
+      }
       return;
     }
     if (message.role === 'toolResult') {
+      // Same for storage: a parked call is stored as still open, so a reload
+      // shows the ask again and the decision can still land on it.
+      if (parked.has(message.toolCallId)) return;
       message.details = withErrorText(message.details, message.content, message.isError);
       rows.push({ id: message.toolCallId, role: 'toolResult', message });
     }
   });
 
-  opts.emit({ type: 'notice', name: 'message-metadata', payload: { createdAt: startedAt } });
+  opts.emit({ type: 'notice', name: 'message-metadata', payload: { createdAt: openedAt } });
 
   try {
     await agent.continue();
@@ -359,23 +406,24 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
 
   const aborted = opts.abortSignal?.aborted ?? false;
   const metadata = {
-    createdAt: startedAt,
-    durationMs: Date.now() - startedAt,
+    createdAt: openedAt,
+    durationMs: Date.now() - openedAt,
     providerId: opts.providerId,
     modelId: opts.modelId,
-    inputTokens: totals.input,
-    outputTokens: totals.output,
-    cacheReadTokens: totals.cacheRead,
-    cacheCreationTokens: totals.cacheWrite,
-    totalTokens: totals.total,
-    contextTokens,
+    inputTokens: (prior.inputTokens ?? 0) + totals.input,
+    outputTokens: (prior.outputTokens ?? 0) + totals.output,
+    cacheReadTokens: (prior.cacheReadTokens ?? 0) + totals.cacheRead,
+    cacheCreationTokens: (prior.cacheCreationTokens ?? 0) + totals.cacheWrite,
+    totalTokens: (prior.totalTokens ?? 0) + totals.total,
+    contextTokens: contextTokens ?? prior.contextTokens,
   };
   opts.emit({ type: 'notice', name: 'message-metadata', payload: metadata });
 
   if (rows.length > 0) {
     attachFiles(rows, files);
-    sealUnansweredCalls(rows);
-    rows[0].metadata = metadata;
+    stampParkedCalls(rows, parked);
+    sealUnansweredCalls(rows, parked);
+    rows[0].metadata = { ...rows[0].metadata, ...metadata };
     opts.persist(rows, { markRead: aborted });
     opts.recordUsage?.({
       messageId: opts.runId,
@@ -394,6 +442,31 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
   opts.onSettled?.();
 }
 
+/**
+ * Record each parked call's pending state on the turn that made it. The row
+ * vocabulary has no slot for "waiting on the user" — a call is open or it has a
+ * result — so the UI state rides in the row's metadata, which is where every
+ * other tool-state extra already lives.
+ */
+function stampParkedCalls(rows: RunRow[], parked: Map<string, ParkedCall>): void {
+  if (parked.size === 0) return;
+  for (const row of rows) {
+    if (row.message.role !== 'assistant') continue;
+    const states: Record<string, unknown> = {};
+    for (const content of row.message.content) {
+      if (content.type !== 'toolCall') continue;
+      const call = parked.get((content as ToolCall).id);
+      if (!call) continue;
+      states[call.toolCallId] = call.approvalId
+        ? { state: 'approval-requested', approval: { id: call.approvalId } }
+        : { state: 'input-available' };
+    }
+    if (Object.keys(states).length === 0) continue;
+    const existing = (row.metadata?.toolStates ?? {}) as Record<string, unknown>;
+    row.metadata = { ...row.metadata, toolStates: { ...existing, ...states } };
+  }
+}
+
 const SEAL_ERROR = 'Stopped before the tool returned.';
 
 /**
@@ -401,8 +474,11 @@ const SEAL_ERROR = 'Stopped before the tool returned.';
  * unanswered, and both the provider (which rejects an unpaired tool call in the
  * history) and the card (which would sit spinning forever) need it closed.
  */
-function sealUnansweredCalls(rows: RunRow[]): void {
-  const answered = new Set(rows.flatMap((row) => (row.role === 'toolResult' ? [row.id] : [])));
+function sealUnansweredCalls(rows: RunRow[], parked: Map<string, ParkedCall>): void {
+  const answered = new Set([
+    ...parked.keys(),
+    ...rows.flatMap((row) => (row.role === 'toolResult' ? [row.id] : [])),
+  ]);
   const sealed: RunRow[] = [];
   for (const row of rows) {
     sealed.push(row);

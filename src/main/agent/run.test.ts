@@ -83,6 +83,7 @@ async function runOnce(text: string) {
     sandbox: {} as Sandbox,
     skills: [],
     permissionMode: 'default',
+    permission: { mode: 'default' },
     buildTools: () => ({ tools: [], aiSdk: {} }),
     emit: (event) => events.push(event),
     persist: (rows, opts) => {
@@ -146,6 +147,7 @@ test('reports the turn to the usage ledger once', async () => {
     sandbox: {} as Sandbox,
     skills: [],
     permissionMode: 'default',
+    permission: { mode: 'default' },
     buildTools: () => ({ tools: [], aiSdk: {} }),
     emit: () => {},
     persist: () => {},
@@ -163,4 +165,182 @@ test('reports the turn to the usage ledger once', async () => {
       totalTokens: 5,
     },
   ]);
+});
+
+/** Answers with one tool call, then wraps up in text — so an executed call
+ *  doesn't loop the fake model forever. */
+function toolCallStream(name: string, args: Record<string, unknown>): StreamFn {
+  let asked = false;
+  return (model, context, options) => {
+    if (asked) return textStream('done')(model, context, options);
+    asked = true;
+    const stream = createAssistantMessageEventStream();
+    const message: AssistantMessage = {
+      role: 'assistant',
+      content: [{ type: 'toolCall', id: 'call-1', name, arguments: args }],
+      api: 'anthropic-messages',
+      provider: 'p1',
+      model: 'm1',
+      usage: usage(),
+      stopReason: 'toolUse',
+      timestamp: 1,
+    };
+    queueMicrotask(() => {
+      stream.push({ type: 'start', partial: { ...message, content: [] } });
+      stream.push({ type: 'done', reason: 'toolUse', message });
+      stream.end(message);
+    });
+    return stream;
+  };
+}
+
+const parkTool = (name: string, clientSide?: true) =>
+  ({
+    name,
+    label: name,
+    description: '',
+    parameters: { type: 'object' },
+    clientSide,
+    execute: async () => ({ content: [{ type: 'text', text: 'ran' }], details: 'ran' }),
+  }) as never;
+
+async function runParking(tool: unknown, args: Record<string, unknown>, name: string) {
+  const events: AgentSessionEvent[] = [];
+  let stored: RunRow[] = [];
+  await runAgent({
+    runId: 'run-3',
+    providerId: 'p1',
+    modelId: 'm1',
+    piModel: MODEL,
+    streamFn: toolCallStream(name, args),
+    getApiKey: () => 'key',
+    model: {} as never,
+    messages: [userMessage('go')],
+    uiMessages: [],
+    workspaceRoot: '/ws',
+    threadId: 't1',
+    db: {} as Db,
+    sandbox: {} as Sandbox,
+    skills: [],
+    permissionMode: 'default',
+    permission: { mode: 'default' },
+    buildTools: () => ({ tools: [tool as never], aiSdk: {} }),
+    emit: (event) => events.push(event),
+    persist: (rows) => {
+      stored = rows;
+    },
+  });
+  return { events, stored };
+}
+
+test('a call the user must answer ends the turn and is stored still open', async () => {
+  const { events, stored } = await runParking(
+    parkTool('ask_clarification', true),
+    { questions: [] },
+    'ask_clarification',
+  );
+
+  // No result row: the call is waiting, not failed.
+  expect(stored.filter((r) => r.role === 'toolResult')).toHaveLength(0);
+  expect(stored[0].metadata?.toolStates).toEqual({ 'call-1': { state: 'input-available' } });
+  // And no refusal frame on the wire — the card is showing the question.
+  expect(events.some((e) => e.type === 'tool_execution_end')).toBe(false);
+  expect(events.at(-1)?.type).toBe('agent_end');
+});
+
+test('a boundary crossing asks for approval and parks the call under it', async () => {
+  const { events, stored } = await runParking(
+    parkTool('bash'),
+    { command: 'curl https://example.invalid' },
+    'bash',
+  );
+
+  const asked = events.find((e) => e.type === 'approval_requested');
+  expect(asked).toBeDefined();
+  if (asked?.type !== 'approval_requested') return;
+  expect(asked.toolCallId).toBe('call-1');
+  expect(stored.filter((r) => r.role === 'toolResult')).toHaveLength(0);
+  expect(stored[0].metadata?.toolStates).toEqual({
+    'call-1': { state: 'approval-requested', approval: { id: asked.approvalId } },
+  });
+});
+
+test('full access runs the same call without asking', async () => {
+  const events: AgentSessionEvent[] = [];
+  let stored: RunRow[] = [];
+  await runAgent({
+    runId: 'run-4',
+    providerId: 'p1',
+    modelId: 'm1',
+    piModel: MODEL,
+    streamFn: toolCallStream('bash', { command: 'curl https://example.invalid' }),
+    getApiKey: () => 'key',
+    model: {} as never,
+    messages: [userMessage('go')],
+    uiMessages: [],
+    workspaceRoot: '/ws',
+    threadId: 't1',
+    db: {} as Db,
+    sandbox: {} as Sandbox,
+    skills: [],
+    permissionMode: 'full-access',
+    permission: { mode: 'full-access' },
+    buildTools: () => ({ tools: [parkTool('bash')], aiSdk: {} }),
+    emit: (event) => events.push(event),
+    persist: (rows) => {
+      stored = rows;
+    },
+  });
+  expect(events.some((e) => e.type === 'approval_requested')).toBe(false);
+  expect(stored.some((r) => r.role === 'toolResult')).toBe(true);
+});
+
+/** A stream that fails before producing any block, the way a dropped connection does. */
+const erroringStream: StreamFn = () => {
+  const stream = createAssistantMessageEventStream();
+  const message = {
+    role: 'assistant',
+    content: [],
+    api: 'anthropic-messages',
+    provider: 'p1',
+    model: 'm1',
+    usage: usage(),
+    stopReason: 'error',
+    errorMessage: 'Connection error.',
+    timestamp: 1,
+  } as unknown as AssistantMessage;
+  queueMicrotask(() => {
+    stream.push({ type: 'start', partial: message });
+    stream.push({ type: 'done', reason: 'error', message } as never);
+    stream.end(message);
+  });
+  return stream;
+};
+
+test('a turn that produced nothing is not stored', async () => {
+  let stored: RunRow[] | undefined;
+  await runAgent({
+    runId: 'run-5',
+    providerId: 'p1',
+    modelId: 'm1',
+    piModel: MODEL,
+    streamFn: erroringStream,
+    getApiKey: () => 'key',
+    model: {} as never,
+    messages: [userMessage('hi')],
+    uiMessages: [],
+    workspaceRoot: '/ws',
+    threadId: 't1',
+    db: {} as Db,
+    sandbox: {} as Sandbox,
+    skills: [],
+    permissionMode: 'default',
+    permission: { mode: 'default' },
+    buildTools: () => ({ tools: [], aiSdk: {} }),
+    emit: () => {},
+    persist: (rows) => {
+      stored = rows;
+    },
+  });
+  expect(stored).toBeUndefined();
 });
