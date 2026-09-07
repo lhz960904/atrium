@@ -80,7 +80,7 @@ function parentCtx(over: Partial<RunContext> = {}): RunContext {
     sandbox: {} as Sandbox,
     workspaceRoot: '/ws',
     system: 'PARENT SYSTEM PROMPT',
-    emit: () => {},
+    notice: () => {},
     scratch: new Map(),
     ...over,
   } as RunContext;
@@ -139,7 +139,7 @@ test('runs the full loop but returns only the final text, never tool output', as
 test('bubbles its activity up to the parent, minus the plan tool', async () => {
   const emitted: unknown[] = [];
   await runSubagent({
-    parent: parentCtx({ emit: (chunk) => emitted.push(chunk) }),
+    parent: parentCtx({ notice: (_name, data) => emitted.push(data) }),
     engine: engineWith(
       scripted([
         reply(
@@ -158,12 +158,12 @@ test('bubbles its activity up to the parent, minus the plan tool', async () => {
     subagentId: 's3',
   });
 
-  const phases = emitted.map((c) => (c as { data: { phase: string } }).data.phase);
+  const phases = emitted.map((d) => (d as { phase: string }).phase);
   expect(phases[0]).toBe('start');
   expect(phases.at(-1)).toBe('done');
-  const step = emitted
-    .map((c) => (c as { data: { phase: string; tools?: { name: string }[] } }).data)
-    .find((d) => d.phase === 'step');
+  const step = (emitted as { phase: string; tools?: { name: string }[] }[]).find(
+    (d) => d.phase === 'step',
+  );
   expect(step?.tools?.map((t) => t.name)).toEqual(['echo']);
 });
 

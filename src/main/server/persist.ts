@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { AtriumUIMessage } from '@shared/chat';
-import type { Message } from '@shared/protocol';
+import type { Message, ToolResultMessage } from '@shared/protocol';
 
 import { asc, eq, or } from 'drizzle-orm';
 import { withModelAttachments } from '../agent/pi/attachments';
 import type { Checkpoint } from '../agent/pi/compaction';
 import { sealDanglingToolCalls } from '../agent/pi/history';
+import type { RunRow } from '../agent/pi/recorder';
 import type { Db } from '../db';
 import { messages, projects, threads } from '../db/schema';
 import {
@@ -269,18 +270,6 @@ export function loadThreadMessageDtos(db: Db, threadId: string): ThreadMessageDt
   return loadThreadMessages(db, threadId) as ThreadMessageDto[];
 }
 
-/** Whether any stored row belongs to this message (either generation). */
-function messageExists(db: Db, id: string): boolean {
-  return (
-    db
-      .select({ id: messages.id })
-      .from(messages)
-      .where(or(eq(messages.runId, id), eq(messages.id, id)))
-      .limit(1)
-      .get() !== undefined
-  );
-}
-
 /** The original wall-clock position of a stored message, for rewrites. */
 function messageBaseCreatedAt(db: Db, id: string): number | undefined {
   return db
@@ -292,87 +281,6 @@ function messageBaseCreatedAt(db: Db, id: string): number | undefined {
     .get()
     ?.createdAt?.getTime();
 }
-
-/**
- * Write one run-shaped message as pi-native rows. An assistant run rewrites
- * atomically (delete the run's rows — including a legacy-generation row under
- * the same id — and reinsert), keeping its original chronological position;
- * per-row createdAt offsets preserve in-run order under the createdAt sort.
- */
-function writePiMessage(db: Db, threadId: string, msg: AtriumUIMessage, overwrite: boolean): void {
-  if (msg.role === 'user') {
-    const row = splitUserMessage(msg as AtriumUIMessage);
-    const values = {
-      id: row.id,
-      threadId,
-      role: 'user' as const,
-      parts: row.message,
-      metadata: row.metadata,
-      runId: row.runId,
-    };
-    const insert = db.insert(messages).values(values);
-    if (overwrite) {
-      insert
-        .onConflictDoUpdate({
-          target: messages.id,
-          set: { parts: row.message, metadata: row.metadata, runId: row.runId },
-        })
-        .run();
-    } else {
-      insert.onConflictDoNothing({ target: messages.id }).run();
-    }
-    return;
-  }
-
-  if (msg.role !== 'assistant') {
-    // System rows have no pi vocabulary; store them as legacy rows unchanged.
-    db.insert(messages)
-      .values({
-        id: msg.id,
-        threadId,
-        role: msg.role,
-        parts: msg.parts,
-        metadata: msg.metadata ?? null,
-      })
-      .onConflictDoNothing({ target: messages.id })
-      .run();
-    return;
-  }
-
-  if (!overwrite && messageExists(db, msg.id)) return;
-  const base = messageBaseCreatedAt(db, msg.id) ?? Date.now();
-  const rows = splitAssistantMessage(msg as AtriumUIMessage);
-  db.transaction((tx) => {
-    tx.delete(messages)
-      .where(or(eq(messages.runId, msg.id), eq(messages.id, msg.id)))
-      .run();
-    rows.forEach((row, index) => {
-      tx.insert(messages)
-        .values({
-          id: row.id,
-          threadId,
-          role: row.role,
-          parts: row.message,
-          metadata: row.metadata,
-          runId: row.runId,
-          createdAt: new Date(base + index),
-        })
-        .run();
-    });
-  });
-}
-
-/**
- * One pi message a run produced, ready to become a row. `id` is the row key:
- * `<runId>:<turn>` for an assistant turn, the tool call id for its results —
- * the same keys the split converters have always written.
- */
-export type RunRow = {
-  id: string;
-  role: 'assistant' | 'toolResult';
-  message: Message;
-  metadata?: Record<string, unknown> | null;
-};
 
 /**
  * Write a run's pi messages as its rows, replacing whatever the run had before.
@@ -416,65 +324,55 @@ export function persistRun(
 }
 
 /**
- * Persist one AtriumUIMessage into a thread, storing its parts verbatim (the
- * canonical message shape). Idempotent on message id so re-sends / retries
- * don't duplicate. Bumps the thread's updatedAt so the sidebar re-sorts.
+ * Store the user's turn as its own pi-native row. Idempotent on the message id
+ * so a re-send can't duplicate it, and it bumps the thread's updatedAt so the
+ * sidebar re-sorts. Sending counts as reading, so lastReadAt moves with it —
+ * a thread must never flash "unread" from your own message.
  */
-export function persistMessage(db: Db, threadId: string, msg: AtriumUIMessage): void {
-  writePiMessage(db, threadId, msg, false);
+export function persistUserTurn(db: Db, threadId: string, msg: AtriumUIMessage): void {
+  const row = splitUserMessage(msg);
+  db.insert(messages)
+    .values({
+      id: row.id,
+      threadId,
+      role: 'user',
+      parts: row.message,
+      metadata: row.metadata,
+      runId: row.runId,
+    })
+    .onConflictDoNothing({ target: messages.id })
+    .run();
   const now = new Date();
-  // Sending counts as reading: stamp lastReadAt = updatedAt for the user's own
-  // message so a thread never flashes "unread" from your own send (only a later
-  // assistant turn bumps updatedAt past lastReadAt).
-  const bump = msg.role === 'user' ? { updatedAt: now, lastReadAt: now } : { updatedAt: now };
-  db.update(threads).set(bump).where(eq(threads.id, threadId)).run();
+  db.update(threads).set({ updatedAt: now, lastReadAt: now }).where(eq(threads.id, threadId)).run();
 }
 
 /**
- * Insert a message or overwrite an existing one's parts/metadata in place. Two
- * cases need the overwrite, both keyed on a reused message id: the client
- * re-sends an assistant message whose client-side tool (ask_clarification) just
- * got its answer, and the model continues that same assistant message after the
- * answer (the continuation extends it under the same id rather than minting a
- * new one). Insert-and-ignore would silently drop it.
+ * Close a run's parked calls with the results the user's decisions produced,
+ * without running the model. Used when a decision settles a call but must not
+ * resume the turn — a cancelled clarification, where the user has taken the
+ * turn back and will send again themselves.
+ *
+ * The results are appended to the run and the whole run is rewritten, which is
+ * how every other write to a run works: the group stays contiguous and keeps
+ * its position in the thread.
  */
-export function upsertMessage(
+export function settleRunCalls(
   db: Db,
   threadId: string,
-  msg: AtriumUIMessage,
-  opts?: { markRead?: boolean },
+  runId: string,
+  results: ToolResultMessage[],
 ): void {
-  writePiMessage(db, threadId, msg, true);
-  const now = new Date();
-  // markRead stamps lastReadAt = updatedAt so this write can't trip the sidebar's
-  // unread dot — used when the user stops a turn, since the partial message is
-  // persisted on a thread they're actively viewing.
-  const bump = opts?.markRead ? { updatedAt: now, lastReadAt: now } : { updatedAt: now };
-  db.update(threads).set(bump).where(eq(threads.id, threadId)).run();
-}
-
-/**
- * Fill a client-side tool call's result into the stored message without running
- * the model — used when a clarification is cancelled: the call must be resolved
- * (so the next turn's history isn't a dangling tool_use) but no continuation
- * should fire until the user sends again.
- */
-export function resolveToolOutput(
-  db: Db,
-  threadId: string,
-  toolCallId: string,
-  output: unknown,
-): void {
-  const msg = loadThreadMessages(db, threadId).find((m) =>
-    m.parts.some((p) => (p as { toolCallId?: string }).toolCallId === toolCallId),
-  );
-  if (!msg) return;
-  const parts = msg.parts.map((p) =>
-    (p as { toolCallId?: string }).toolCallId === toolCallId
-      ? { ...p, state: 'output-available', output }
-      : p,
-  ) as AtriumUIMessage['parts'];
-  upsertMessage(db, threadId, { ...msg, parts });
+  if (results.length === 0) return;
+  const rows = loadRunRows(db, runId);
+  if (rows.length === 0) return;
+  persistRun(db, threadId, runId, [
+    ...rows,
+    ...results.map((message) => ({
+      id: message.toolCallId,
+      role: 'toolResult' as const,
+      message,
+    })),
+  ]);
 }
 
 /** Replace a thread's title with the model-generated summary of its first message. */

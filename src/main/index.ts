@@ -29,8 +29,9 @@ import {
   useCredentialStore,
 } from './providers/pi-model';
 import { firstEnabledModel } from './providers/resolve';
-import { type ChatEndpoint, startHttpServer } from './server/http';
+import { startHttpServer } from './server/http';
 import { getRunningThreadIds } from './server/resumable';
+import { createRunner, type Runner } from './server/runner';
 import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { loadShellEnv } from './shell-path';
@@ -116,8 +117,8 @@ function createWindow(): BrowserWindow {
 }
 
 // Held at module scope so before-quit can dispose it (kill background shells) —
-// assigned once the server is up inside whenReady.
-let serverEndpoint: ChatEndpoint | undefined;
+// assigned once the runner exists inside whenReady.
+let runner: Runner | undefined;
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.atrium.app');
@@ -138,11 +139,15 @@ app.whenReady().then(async () => {
   const projectlessRoot = join(homedir(), 'Documents', 'Atrium');
   mkdirSync(projectlessRoot, { recursive: true });
 
+  // One composition root for every turn — the chat endpoint and the scheduler
+  // are both callers of it.
+  const runs = createRunner({ db, projectlessRoot });
+  runner = runs;
+
   // Bring the chat server up first — it's a fast port bind — so the IPC handler
   // attaches before the window paints and the renderer's first tRPC calls never
   // race a missing handler.
-  const chatEndpoint = await startHttpServer({ db, token: randomUUID(), projectlessRoot });
-  serverEndpoint = chatEndpoint;
+  const chatEndpoint = await startHttpServer({ db, token: randomUUID(), runner: runs });
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
@@ -239,7 +244,7 @@ app.whenReady().then(async () => {
   const startScheduler = (): void => {
     startScheduledTasks({
       db,
-      endpoint: { port: chatEndpoint.port, token: chatEndpoint.token },
+      runner: runs,
       runningThreadIds: getRunningThreadIds,
       defaultModel: () => {
         // The renderer only persists general.defaultModel on an explicit pick, so
@@ -285,7 +290,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
-  serverEndpoint?.dispose();
+  runner?.dispose();
   scheduledManager.dispose();
   void mcpManager.dispose();
   updaterManager.dispose();

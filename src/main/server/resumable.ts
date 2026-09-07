@@ -32,16 +32,20 @@ export function abortThreadRun(threadId: string): boolean {
   return true;
 }
 
-/** Start a thread's run; a newer run on the same thread supersedes this one's
- *  registry slot without cancelling it. */
+/**
+ * Start a thread's run; a newer run on the same thread supersedes this one's
+ * registry slot without cancelling it. The thread's event log exists by the time
+ * this returns, so a caller can subscribe to it immediately. The returned
+ * promise settles when the run has finished and its log is sealed.
+ */
 export function startThreadRun(
   threadId: string,
   produce: (log: RunLog) => Promise<void>,
   abort: AbortController,
-): void {
+): Promise<void> {
   const token: Run = { abort };
   runByThread.set(threadId, token);
-  void withRunLog(threadId, produce).finally(() => {
+  return withRunLog(threadId, produce).finally(() => {
     if (runByThread.get(threadId) === token) runByThread.delete(threadId);
   });
 }

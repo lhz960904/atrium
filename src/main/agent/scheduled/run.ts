@@ -4,12 +4,11 @@ import type { SelectedModel } from '@shared/settings';
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../db';
 import type { ScheduledTask } from '../../db/schema';
-import { messages, scheduledTaskRuns } from '../../db/schema';
+import { scheduledTaskRuns } from '../../db/schema';
 import { createLogger } from '../../log';
+import type { Runner } from '../../server/runner';
 
 const log = createLogger('scheduled');
-
-export type RunEndpoint = { port: number; token: string };
 
 export type ScheduledRunResult = {
   status: 'ok' | 'error';
@@ -47,33 +46,14 @@ function lastCompletedRunAt(db: Db, taskId: string): Date | undefined {
     .get()?.startedAt;
 }
 
-/** Run-level id of the newest assistant message in a thread, or undefined. */
-function latestAssistantId(db: Db, threadId: string): string | undefined {
-  const row = db
-    .select({ id: messages.id, runId: messages.runId })
-    .from(messages)
-    .where(and(eq(messages.threadId, threadId), eq(messages.role, 'assistant')))
-    .orderBy(desc(messages.createdAt))
-    .limit(1)
-    .get();
-  return row?.runId ?? row?.id;
-}
-
 /**
- * Fire one scheduled task headlessly by driving the same localhost chat pipeline
- * the renderer uses: append the task prompt as a user turn to the task's bound
- * thread, then drain the response to completion. The run is decoupled from any
- * client (resumable.ts owns its lifetime), so draining here just tells us when
- * the turn finished — the messages are already persisted by the pipeline.
- *
- * The turn's own errors surface as an in-stream `error` chunk (onError), not an
- * HTTP status, so we scan the streamed bytes for one to report an accurate
- * ok/error — that's what drives the task's consecutive-failure auto-pause. The
- * produced assistant message is identified by diffing the thread's latest
- * assistant id across the run, so a failed run mis-attributes nothing.
+ * Fire one scheduled task headlessly: append the task prompt as a user turn to
+ * the task's bound thread and run it on the same runner the chat endpoint uses.
+ * The run reports its own outcome, which is what drives the task's
+ * consecutive-failure auto-pause; the messages are persisted by the run itself.
  */
 export async function runScheduledTask(
-  deps: { db: Db; endpoint: RunEndpoint; defaultModel: () => SelectedModel | null },
+  deps: { db: Db; runner: Runner; defaultModel: () => SelectedModel | null },
   task: ScheduledTask,
 ): Promise<ScheduledRunResult> {
   if (!task.threadId) return { status: 'error', error: 'Scheduled task has no bound thread.' };
@@ -85,7 +65,6 @@ export async function runScheduledTask(
     return { status: 'error', error: 'No model configured for this scheduled task.' };
   }
 
-  const priorAssistant = latestAssistantId(deps.db, task.threadId);
   // A Codex-style key:value preamble frames the turn as an automation run. The
   // Instruction line is our own: each fire appends to the bound thread, so the
   // model sees prior runs and would otherwise reply "already done" and skip.
@@ -105,51 +84,22 @@ export async function runScheduledTask(
 
   const release = blockSuspension();
   try {
-    let res: Response;
-    try {
-      res = await fetch(`http://127.0.0.1:${deps.endpoint.port}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-atrium-token': deps.endpoint.token },
-        body: JSON.stringify({
-          threadId: task.threadId,
-          providerId: model.providerId,
-          modelId: model.modelId,
-          message,
-          permissionMode: task.permissionMode,
-        }),
-      });
-    } catch (err) {
-      log.error(`fetch failed for task ${task.id}`, err);
-      return { status: 'error', error: String(err) };
+    const outcome = await deps.runner.start({
+      threadId: task.threadId,
+      providerId: model.providerId,
+      modelId: model.modelId,
+      permissionMode: task.permissionMode,
+      userMessage: message,
+    }).settled;
+    if (outcome.status === 'error') {
+      log.error(`task ${task.id} run failed: ${outcome.error}`);
     }
-
-    if (!res.ok || !res.body) {
-      const body = await res.text().catch(() => '');
-      return { status: 'error', error: `chat endpoint ${res.status}: ${body}`.trim() };
-    }
-
-    // Drain the pi event SSE to EOF; the turn is done when the stream closes.
-    // Scan the decoded bytes for a stream-error notice so a model/tool failure
-    // counts as a failed run rather than a silent success.
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let streamError: string | undefined;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (streamError) continue;
-      const text = decoder.decode(value, { stream: true });
-      const match = text.match(/"name":"stream-error".*?"errorText":"((?:[^"\\]|\\.)*)"/);
-      if (match) streamError = match[1] ? JSON.parse(`"${match[1]}"`) : 'The scheduled run failed.';
-    }
-
-    const after = latestAssistantId(deps.db, task.threadId);
-    const messageId = after && after !== priorAssistant ? after : undefined;
-    if (streamError) {
-      log.error(`task ${task.id} run failed: ${streamError}`);
-      return { status: 'error', error: streamError, messageId };
-    }
-    return { status: 'ok', messageId };
+    return { status: outcome.status, error: outcome.error, messageId: outcome.messageId };
+  } catch (err) {
+    // A request the runner refuses outright (an unresolvable model) throws
+    // before the run ever starts.
+    log.error(`task ${task.id} could not start`, err);
+    return { status: 'error', error: err instanceof Error ? err.message : String(err) };
   } finally {
     release();
   }

@@ -1,7 +1,7 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
 import type { PermissionMode } from '@shared/permissions';
-import type { EventEnvelope } from '@shared/protocol';
+import type { EventEnvelope, ToolDecision } from '@shared/protocol';
 import {
   type ChatStatus,
   generateId,
@@ -17,10 +17,10 @@ import { RunAssembler } from './reduce';
  * SSE; reconnects replay the envelope log from seq 0. Messages are assembled
  * by RunAssembler in the part shape the components already consume.
  *
- * Continuations (a clarify answered, an approval decided) re-send the
- * assistant message and seed the assembler with its parts — the new run's
- * events extend that message in place, mirroring how the server upserts the
- * same row. Auto-resume replicates useChat's sendAutomaticallyWhen contract.
+ * Continuations (a clarify answered, an approval decided) post the user's
+ * decisions to the run that parked those calls and seed the assembler with the
+ * message's parts, so the new run's events extend that message in place.
+ * Auto-resume replicates useChat's sendAutomaticallyWhen contract.
  */
 
 export type PiChatSnapshot = {
@@ -81,6 +81,24 @@ function toolRoundComplete(messages: AtriumUIMessage[]): boolean {
   return tools.length > 0 && tools.every((p) => p.state === 'output-available');
 }
 
+/** The user's answers for the last step's parked calls, as the wire states them. */
+function decisionsOf(messages: AtriumUIMessage[]): ToolDecision[] {
+  const out: ToolDecision[] = [];
+  for (const part of lastStepToolParts(messages)) {
+    const toolCallId = part.toolCallId;
+    if (part.state === 'approval-responded') {
+      out.push(
+        part.approval?.approved
+          ? { toolCallId, kind: 'approved' }
+          : { toolCallId, kind: 'denied', reason: part.approval?.reason },
+      );
+    } else if (part.state === 'output-available') {
+      out.push({ toolCallId, kind: 'answered', output: part.output });
+    }
+  }
+  return out;
+}
+
 /** Every pending approval got its answer — the turn can continue and execute. */
 function approvalsAnswered(messages: AtriumUIMessage[]): boolean {
   const tools = lastStepToolParts(messages);
@@ -137,7 +155,7 @@ export class PiChat {
       metadata: { createdAt: Date.now() },
     };
     this.history = [...this.history, message];
-    void this.post(message);
+    void this.post({ path: '/api/chat', body: { message } });
   };
 
   /** Reconnect to a still-running stream; a 204 means nothing to rejoin. */
@@ -195,33 +213,40 @@ export class PiChat {
   };
 
   /** useChat's sendAutomaticallyWhen contract: a completed tool round or an
-   *  answered approval resumes the turn by re-sending the assistant message. */
+   *  answered approval resumes the turn the decisions belong to. */
   private maybeAutoResume(): void {
     if (this.isBusy) return;
     const messages = this.merged();
     const last = messages.at(-1);
     if (!last || last.role !== 'assistant') return;
     const complete = toolRoundComplete(messages) || approvalsAnswered(messages);
-    if (complete && !lastClarifyCancelled(messages)) void this.post(last);
+    if (!complete || lastClarifyCancelled(messages)) return;
+    void this.post({
+      path: `/api/chat/${this.threadId}/resume`,
+      body: { runId: last.id, decisions: decisionsOf(messages) },
+      // A continuation extends the assistant message in place: seed the
+      // assembler with its parts so the streamed tail lands after them.
+      seed: { id: last.id, parts: last.parts },
+    });
   }
 
-  private async post(message: AtriumUIMessage): Promise<void> {
+  private async post(input: {
+    path: string;
+    body: Record<string, unknown>;
+    seed?: { id: string; parts: Part[] };
+  }): Promise<void> {
     const abort = this.begin('submitted');
-    // A continuation extends the assistant message in place: seed the assembler
-    // with its parts so the streamed tail lands after them.
-    const seed =
-      message.role === 'assistant' ? { id: message.id, parts: message.parts } : undefined;
     try {
-      const res = await this.fetchFn(`${this.init.baseUrl}/api/chat`, {
+      const res = await this.fetchFn(`${this.init.baseUrl}${input.path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-atrium-token': this.init.token },
-        body: JSON.stringify({ ...this.init.getExtras(), message }),
+        body: JSON.stringify({ ...this.init.getExtras(), ...input.body }),
         signal: abort.signal,
       });
       if (!res.ok || !res.body) {
         throw new Error(`chat request failed (${res.status}) ${await res.text().catch(() => '')}`);
       }
-      await this.consume(res.body, seed);
+      await this.consume(res.body, input.seed);
       this.finalizeRun();
     } catch (err) {
       if (!abort.signal.aborted) this.failWith(err);

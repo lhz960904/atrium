@@ -11,19 +11,24 @@ import type {
 } from '@shared/protocol';
 
 /**
- * Converters between the run-shaped UIMessage the engine and renderer still
- * speak and the pi-native rows the DB stores: one row per pi message — the
- * user message, one assistant message per step, and each tool result its own
- * row — grouped by the run id. Splitting happens on write, merging on read;
- * both directions are mechanical and round-trip exactly over the part
+ * Converters between the run-shaped UIMessage the renderer consumes and the
+ * pi-native rows the DB stores: one row per pi message — the user message, one
+ * assistant message per step, and each tool result its own row — grouped by the
+ * run id. Both directions are mechanical and round-trip exactly over the part
  * inventory real threads contain.
+ *
+ * Merging serves the renderer. Splitting has two remaining callers: the user's
+ * own turn, which arrives in the composer's part shape, and a legacy row (run
+ * id null, still holding a flat part array) being read back as history — which
+ * is why an assistant split stamps `api: 'ai-sdk'`, the engine those rows were
+ * actually produced by. Nothing else writes through this file any more.
  *
  * UI-only tool state pi has no slot for (pending/answered approvals, a call
  * still streaming its input) lives in the row's metadata under `toolStates`,
  * next to the run metadata on the first row — the pi message JSON stays a
  * clean subset-plus-nothing of pi's vocabulary.
  *
- * Known, deliberate losses on the write side (documented, not accidental):
+ * Known, deliberate losses when splitting (documented, not accidental):
  * reasoning providerMetadata is reduced to the anthropic signature
  * (thinkingSignature), and tool-part provider bookkeeping
  * (callProviderMetadata, toolMetadata, providerExecuted) is dropped.

@@ -149,7 +149,7 @@ describe('continuations', () => {
     metadata: { createdAt: 1 },
   });
 
-  test('an answered clarification auto-resumes with the assistant message', async () => {
+  test('an answered clarification resumes its run with the answer as a decision', async () => {
     const { chat, calls } = makeChat(
       () => new Response(sseBody(sayText('a1', '收到'))),
       [clarifyMessage()],
@@ -157,9 +157,12 @@ describe('continuations', () => {
     chat.addToolOutput({ tool: 'ask_clarification', toolCallId: 'c1', output: { answers: ['A'] } });
     await untilIdle(chat);
     expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('http://test/api/chat/t1/resume');
     const body = JSON.parse(String(calls[0].init?.body));
-    expect(body.message.role).toBe('assistant');
-    expect(body.message.id).toBe('a1');
+    expect(body.runId).toBe('a1');
+    expect(body.decisions).toEqual([
+      { toolCallId: 'c1', kind: 'answered', output: { answers: ['A'] } },
+    ]);
     // The continuation extends the same message: clarify part kept, reply appended.
     const snap = chat.getSnapshot();
     expect(snap.messages).toHaveLength(1);
@@ -216,11 +219,10 @@ describe('continuations', () => {
     chat.addToolApprovalResponse({ id: 'ap1', approved: true });
     await untilIdle(chat);
     expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('http://test/api/chat/t1/resume');
     const body = JSON.parse(String(calls[0].init?.body));
-    expect(body.message.parts.at(-1)).toMatchObject({
-      state: 'approval-responded',
-      approval: { id: 'ap1', approved: true },
-    });
+    expect(body.runId).toBe('a1');
+    expect(body.decisions).toEqual([{ toolCallId: 'b1', kind: 'approved' }]);
     // The seeded part got its execution result under the original toolCallId.
     const bash = chat
       .getSnapshot()

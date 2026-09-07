@@ -83,6 +83,19 @@ export type AgentSessionEvent =
   | { type: 'notice'; name: string; payload: unknown };
 
 /**
+ * What the user came back with for a call the agent parked — the client's half
+ * of the approval protocol, addressed to one call by id.
+ *
+ * A decision is a claim, not an instruction: the server checks it against the
+ * run's stored rows, so a client working from a stale view can only ask for
+ * less than it thinks, never for more.
+ */
+export type ToolDecision =
+  | { toolCallId: string; kind: 'approved' }
+  | { toolCallId: string; kind: 'denied'; reason?: string }
+  | { toolCallId: string; kind: 'answered'; output: unknown };
+
+/**
  * seq is monotonic per stream; reconnecting clients pass their last seen seq
  * and the server replays the gap, making the replay/live seam idempotent.
  */

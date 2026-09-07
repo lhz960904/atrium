@@ -19,11 +19,12 @@ export type RunContext = {
   providerId?: string;
   modelId?: string;
   /**
-   * Write a transient UI event. Tools speak in stream chunks (`data-*`, `file`)
-   * because that is the vocabulary the renderer's notice router already reads;
-   * the run maps them onto the wire.
+   * Announce something that belongs beside the conversation rather than in it —
+   * a compaction in progress, a subagent's activity. Notices are delivered to
+   * the reader and never stored, so nothing that must survive a reload may go
+   * out this way.
    */
-  emit: (chunk: { type: string; [key: string]: unknown }) => void;
+  notice: (name: string, data: unknown) => void;
   /** Cross-step scratch space; each feature namespaces its own keys. */
   scratch: Map<string, unknown>;
 };

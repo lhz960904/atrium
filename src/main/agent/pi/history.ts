@@ -46,6 +46,23 @@ export function sealDanglingToolCalls(messages: Message[]): Message[] {
 }
 
 /**
+ * Fold freshly settled results into a transcript, dropping any placeholder it
+ * already carried for the same calls.
+ *
+ * A parked call has no result row, so reading the thread back seals it as
+ * "stopped before the tool returned" — right for a turn nobody is coming back
+ * to, wrong the moment the user's answer does arrive. Appending the real result
+ * next to the placeholder gives one call two results, which every provider
+ * rejects outright, so the placeholder has to go.
+ */
+export function withSettledResults(messages: Message[], settled: ToolResultMessage[]): Message[] {
+  if (settled.length === 0) return messages;
+  const ids = new Set(settled.map((m) => m.toolCallId));
+  const kept = messages.filter((m) => m.role !== 'toolResult' || !ids.has(m.toolCallId));
+  return [...kept, ...settled];
+}
+
+/**
  * Prepend a `<system-reminder>` to a user message — on the message rather than
  * the system prompt, so the cached system prefix stays byte-stable.
  *
