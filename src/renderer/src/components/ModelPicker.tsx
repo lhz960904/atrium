@@ -41,12 +41,8 @@ export function ModelPicker({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
-  // An external (ACP) provider has no meaningful model id, so show its name.
-  const selectedGroup = value ? groups.find((g) => g.providerId === value.providerId) : undefined;
   const label = value
-    ? selectedGroup?.external
-      ? selectedGroup.providerName
-      : value.modelId
+    ? value.modelId
     : (inheritLabel ?? placeholder ?? t('modelPicker.placeholder'));
   const triggerClass =
     variant === 'field'
@@ -112,12 +108,8 @@ function ModelList({
     return (
       groups
         // External providers match by name (they have no real model to search).
-        .map((g) =>
-          g.external ? g : { ...g, models: g.models.filter((m) => m.toLowerCase().includes(q)) },
-        )
-        .filter((g) =>
-          g.external ? g.providerName.toLowerCase().includes(q) : g.models.length > 0,
-        )
+        .map((g) => ({ ...g, models: g.models.filter((m) => m.toLowerCase().includes(q)) }))
+        .filter((g) => g.models.length > 0)
     );
   }, [groups, query]);
 
@@ -171,49 +163,30 @@ function ModelList({
             {t('modelPicker.noMatch')}
           </li>
         ) : (
-          filtered.map((g) =>
-            g.external ? (
-              // ACP provider: one row showing the provider name (no model sub-item).
-              <li key={g.providerId}>
-                <button
-                  type="button"
-                  onClick={() => onPick({ providerId: g.providerId, modelId: g.models[0] ?? '' })}
-                  className={`flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm hover:bg-surface-strong ${
-                    value?.providerId === g.providerId ? 'text-fg-primary' : 'text-fg-secondary'
-                  }`}
-                >
-                  <ProviderIcon id={g.providerId} className="size-3.5 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{g.providerName}</span>
-                  {value?.providerId === g.providerId && (
-                    <Check className="size-[14px] shrink-0 text-accent" />
-                  )}
-                </button>
-              </li>
-            ) : (
-              <li key={g.providerId}>
-                <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 font-medium text-[10.5px] text-fg-tertiary uppercase tracking-wider">
-                  <ProviderIcon id={g.providerId} className="size-3.5" />
-                  {g.providerName}
-                </div>
-                {g.models.map((m) => {
-                  const isSel = value?.providerId === g.providerId && value?.modelId === m;
-                  return (
-                    <button
-                      type="button"
-                      key={m}
-                      onClick={() => onPick({ providerId: g.providerId, modelId: m })}
-                      className={`flex w-full items-center gap-2 rounded-md py-1.5 pr-3 pl-8 text-left text-sm hover:bg-surface-strong ${
-                        isSel ? 'text-fg-primary' : 'text-fg-secondary'
-                      }`}
-                    >
-                      <span className="min-w-0 flex-1 truncate font-mono text-xs">{m}</span>
-                      {isSel && <Check className="size-[14px] shrink-0 text-accent" />}
-                    </button>
-                  );
-                })}
-              </li>
-            ),
-          )
+          filtered.map((g) => (
+            <li key={g.providerId}>
+              <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 font-medium text-[10.5px] text-fg-tertiary uppercase tracking-wider">
+                <ProviderIcon id={g.providerId} className="size-3.5" />
+                {g.providerName}
+              </div>
+              {g.models.map((m) => {
+                const isSel = value?.providerId === g.providerId && value?.modelId === m;
+                return (
+                  <button
+                    type="button"
+                    key={m}
+                    onClick={() => onPick({ providerId: g.providerId, modelId: m })}
+                    className={`flex w-full items-center gap-2 rounded-md py-1.5 pr-3 pl-8 text-left text-sm hover:bg-surface-strong ${
+                      isSel ? 'text-fg-primary' : 'text-fg-secondary'
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs">{m}</span>
+                    {isSel && <Check className="size-[14px] shrink-0 text-accent" />}
+                  </button>
+                );
+              })}
+            </li>
+          ))
         )}
       </ul>
     </>

@@ -1,4 +1,4 @@
-import type { ToolName } from '@shared/tools';
+import type { RetiredToolName, ToolName } from '@shared/tools';
 import type { ParseKeys, TFunction } from 'i18next';
 import {
   Bot,
@@ -27,7 +27,6 @@ import {
   Sparkles,
   Terminal,
   TextSearch,
-  Trash2,
   Wrench,
 } from 'lucide-react';
 
@@ -36,7 +35,10 @@ import {
  * plan renders in the composer-level plan panel) and `ask_clarification` (it
  * renders as a ClarifyCard in the message flow, not a trace marker).
  */
-export type MarkerToolName = Exclude<ToolName, 'todo_write' | 'ask_clarification'>;
+export type MarkerToolName = Exclude<
+  ToolName | RetiredToolName,
+  'todo_write' | 'ask_clarification'
+>;
 
 /** The input fields the presentation reads to build a tool's labels. */
 export type ToolInput = {
@@ -304,23 +306,7 @@ export const TOOL_PRESENTATION: Record<MarkerToolName, ToolPresentation> = {
   },
 };
 
-/**
- * Icons for an external agent's tools, keyed by ACP tool kind (read/edit/…).
- * External agents bring arbitrary tools, so they render as dynamic parts whose
- * name is the ACP kind rather than a built-in ToolName.
- */
-const ACP_KIND_ICON: Record<string, LucideIcon> = {
-  read: FileText,
-  edit: FilePenLine,
-  delete: Trash2,
-  move: FolderTree,
-  search: Search,
-  execute: Terminal,
-  think: Sparkles,
-  fetch: Globe,
-};
-
-/** Resolve a tool's icon by name: a built-in tool, else an ACP kind, else generic. */
+/** Resolve a tool's icon by name, falling back to a generic one. */
 export function toolIcon(name: string): LucideIcon {
-  return TOOL_PRESENTATION[name as MarkerToolName]?.icon ?? ACP_KIND_ICON[name] ?? Wrench;
+  return TOOL_PRESENTATION[name as MarkerToolName]?.icon ?? Wrench;
 }

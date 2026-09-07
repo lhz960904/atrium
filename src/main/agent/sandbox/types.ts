@@ -3,7 +3,7 @@
  *
  * Tools never touch node:fs / child processes directly — they go through a Sandbox.
  * This keeps tools unit-testable (inject a mock) and leaves a seam for future
- * sandbox backends (ACP / remote). LocalSandbox is the only impl for now.
+ * sandbox backends (remote). LocalSandbox is the only impl for now.
  *
  * Paths are interpreted relative to the sandbox's workspace root; absolute
  * paths pass through. Reads may reach outside the root; the write boundary is

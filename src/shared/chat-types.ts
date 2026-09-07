@@ -15,8 +15,8 @@ export type Todo = { content: string; status: TodoStatus };
 
 export type Tool = {
   id: string;
-  /** The tool's name — the icon key. A built-in ToolName, or (for an external
-   *  agent's tools) an ACP tool kind like "edit"/"execute". */
+  /** The tool's name — the icon key. A built-in ToolName, or an MCP tool's
+   *  namespaced name. */
   name: string;
   verb: string;
   target: string;

@@ -2,7 +2,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { CalendarClock, FolderPlus, Search, Settings, SquarePen } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { dropThreadChat } from '../../lib/chat-store';
+import { dropThreadChat } from '../../lib/pi-chat/chats';
 import { trpc } from '../../lib/trpc';
 import { useCommandPalette } from '../../state/command-palette-store';
 import { useUpdateStore } from '../../state/update-store';

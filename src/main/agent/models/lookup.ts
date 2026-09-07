@@ -96,7 +96,7 @@ export function capabilitiesFrom(catalog: ModelsCatalog, modelId: string): Model
   const outputModalities = toModalities(info?.supported_output_modalities);
   // Image generators (gpt-image-2, dall-e, imagen, …) often omit output
   // modalities but carry mode=image_generation/image_edit — treat that as the
-  // explicit image-output signal so image_gen model selection sees them.
+  // explicit image-output signal.
   if (
     (info?.mode === 'image_generation' || info?.mode === 'image_edit') &&
     !outputModalities.includes('image')

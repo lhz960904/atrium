@@ -48,6 +48,5 @@ export type ModelCapabilities = {
   toolCall: boolean;
   reasoning: boolean;
   inputModalities: Modality[];
-  /** `image` here marks a model that generates images — drives image_gen model selection. */
   outputModalities: Modality[];
 };

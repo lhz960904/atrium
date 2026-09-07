@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { UIMessage } from 'ai';
+import type { AtriumUIMessage } from './chat';
 import { type ChatMarkdownLabels, exportFilename, renderChatMarkdown } from './chat-markdown';
 
 const labels: ChatMarkdownLabels = {
@@ -9,8 +9,8 @@ const labels: ChatMarkdownLabels = {
   image: (name) => (name ? `Image: ${name}` : 'Image'),
 };
 
-const ui = (role: UIMessage['role'], parts: unknown[], metadata?: unknown): UIMessage =>
-  ({ id: 'x', role, parts, metadata }) as unknown as UIMessage;
+const ui = (role: AtriumUIMessage['role'], parts: unknown[], metadata?: unknown): AtriumUIMessage =>
+  ({ id: 'x', role, parts, metadata }) as unknown as AtriumUIMessage;
 
 test('renders user text and assistant prose under role labels', () => {
   const md = renderChatMarkdown({

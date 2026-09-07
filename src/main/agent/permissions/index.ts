@@ -1,8 +1,8 @@
-import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
+import type { PermissionMode } from '@shared/permissions';
 import type { CrossingCode } from '@shared/permissions/analyze';
 import { isAllowed, type TrustRule } from '@shared/permissions/rules';
 import { createLogger } from '../../log';
-import type { ToolCtx } from '../tools/context';
+import type { Complete } from '../pi/complete';
 import { type Classification, classifyToolCall } from './classify';
 import { reviewBoundaryCrossing } from './reviewer';
 
@@ -72,68 +72,50 @@ function crossingSubject(input: unknown): string {
   return '';
 }
 
-/** The stream writer the run hands to tools via experimental_context, used to
- *  badge an auto-reviewed call. Narrowed structurally so this stays decoupled. */
-type EmitContext = {
-  emit?: (chunk: {
-    type: 'data-autoReview';
-    data: { toolCallId: string; subject: string };
-    transient: true;
-  }) => void;
+export type ApprovalContext = {
+  mode: PermissionMode;
+  rules?: TrustRule[];
+  workspaceRoot: string;
+  /** Reviewer call for auto-review mode; absent → auto-review falls back to prompting. */
+  review?: Complete;
+  /** The turn's abort signal, so a stopped turn also cancels an in-flight review. */
+  abortSignal?: AbortSignal;
+  /** Marks a crossing the reviewer waved through, so the trace shows it was
+   *  reviewed rather than slipped through ungated. */
+  onReviewed?: (call: { toolCallId: string; subject: string }) => void;
 };
 
 /**
- * Bind a tool's `needsApproval` to the request's permission context. Returns a
- * sync boolean on the common paths (allow / prompt) and a promise only when
- * auto-review must consult the reviewer — which, lacking a model, also falls
- * back to a prompt. The reviewer can only turn a would-be prompt into a silent
- * allow; it never widens access on its own. On a silent allow it emits an
- * autoReview marker (via the run's stream writer in experimental_context) so
- * the trace shows the call was reviewed rather than slipped through ungated.
+ * The permission verdict for one call. Sync on the common paths (allow /
+ * prompt) and a promise only when auto-review must consult the reviewer —
+ * which, lacking a model, also falls back to a prompt. The reviewer can only
+ * turn a would-be prompt into a silent allow; it never widens access.
  */
-export function makeNeedsApproval(toolName: string, ctx: ToolCtx) {
-  return (
-    input: unknown,
-    options?: { toolCallId: string; experimental_context?: unknown },
-  ): boolean | Promise<boolean> => {
-    const permission = ctx.permission;
-    const mode = permission?.mode ?? DEFAULT_PERMISSION_MODE;
-    const verdict = staticVerdict(
-      toolName,
-      input,
-      mode,
-      ctx.workspaceRoot,
-      permission?.rules ?? [],
-    );
+export function approvalGate(ctx: ApprovalContext) {
+  return (toolName: string, input: unknown, toolCallId?: string): boolean | Promise<boolean> => {
+    const verdict = staticVerdict(toolName, input, ctx.mode, ctx.workspaceRoot, ctx.rules ?? []);
     if (verdict.kind === 'allow') return false;
     if (verdict.kind === 'prompt') {
-      log.info(`${toolName} crossing → prompt (mode=${mode})`);
+      log.info(`${toolName} crossing → prompt (mode=${ctx.mode})`);
       return true;
     }
 
-    const model = permission?.reviewerModel;
     // MCP calls have no command/path in their input — fall back to the crossing's
     // subject (the server name) so the reviewer/badge still has something to show.
     const subject = crossingSubject(input) || verdict.crossing.subject || '';
-    if (!model) {
+    if (!ctx.review) {
       log.info(`${toolName} crossing → prompt (auto-review, no reviewer model)`);
       return true;
     }
     return reviewBoundaryCrossing({
-      model,
+      complete: ctx.review,
       subject,
       risk: RISK[verdict.crossing.code],
-      abortSignal: permission.abortSignal,
+      abortSignal: ctx.abortSignal,
     }).then((review) => {
       log.info(`${toolName} crossing → reviewer ${review}: ${subject}`);
       if (review === 'deny') return true;
-      if (options?.toolCallId) {
-        (options.experimental_context as EmitContext | undefined)?.emit?.({
-          type: 'data-autoReview',
-          data: { toolCallId: options.toolCallId, subject },
-          transient: true,
-        });
-      }
+      if (toolCallId) ctx.onReviewed?.({ toolCallId, subject });
       return false;
     });
   };

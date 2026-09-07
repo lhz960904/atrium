@@ -1,13 +1,8 @@
-import type { ImageToolOutput } from '@shared/chat-types';
-import type { Tool } from 'ai';
-
 /**
  * Output formatting shared by the file/shell tools. The sandbox returns raw
- * content + throws on error; tools truncate here and turn errors into
- * model-readable `Error: ...` strings.
+ * content and throws on error; tools truncate here and rethrow failures with a
+ * model-readable message (the loop encodes the throw as an error result).
  */
-
-type ToolResultOutput = Awaited<ReturnType<NonNullable<Tool['toModelOutput']>>>;
 
 /**
  * Cap for images carried inline as base64 (MCP results, view_image). Past this
@@ -31,46 +26,15 @@ export function middleTruncate(s: string, max: number): string {
 }
 
 /**
- * Map a tool output onto the wire format. Plain strings (text-only results and
- * pre-image history rows) go out as text. Structured outputs inline their
- * images as image-data parts — unless the provider+model can't consume image
- * tool results, in which case the images are dropped with an explicit note so
- * the model knows what it isn't seeing. Shared by the MCP adapter and the
- * view_image builtin, which return the same { text, images } shape.
+ * Map a Node fs error to a model-readable one, shared by the single-file tools
+ * (read/write/edit). `verb` only varies the EACCES phrasing (e.g. 'reading',
+ * 'writing to', 'editing'); the code mapping is identical. Directory tools keep
+ * their own mapper — different codes (ENOTDIR) and wording.
  */
-export function imageOutputToModelOutput(
-  output: unknown,
-  supportsImageToolResults: boolean,
-): ToolResultOutput {
-  if (typeof output === 'string') return { type: 'text', value: output };
-  const { text, images } = output as ImageToolOutput;
-  if (!supportsImageToolResults) {
-    const note = `[${images.length} image(s) omitted: the current model cannot view images]`;
-    return { type: 'text', value: text ? `${text}\n${note}` : note };
-  }
-  return {
-    type: 'content',
-    value: [
-      ...(text ? [{ type: 'text' as const, text }] : []),
-      ...images.map((img) => ({
-        type: 'image-data' as const,
-        data: img.dataUrl.slice(img.dataUrl.indexOf(',') + 1),
-        mediaType: img.mediaType,
-      })),
-    ],
-  };
-}
-
-/**
- * Map a Node fs error to a model-readable message, shared by the single-file
- * tools (read/write/edit). `verb` only varies the EACCES phrasing (e.g.
- * 'reading', 'writing to', 'editing'); the code mapping is identical. Directory
- * tools keep their own mapper — different codes (ENOTDIR) and wording.
- */
-export function fsErrorMessage(err: unknown, path: string, verb: string): string {
+export function fsError(err: unknown, path: string, verb: string): Error {
   const code = (err as NodeJS.ErrnoException)?.code;
-  if (code === 'ENOENT') return `Error: File not found: ${path}`;
-  if (code === 'EACCES') return `Error: Permission denied ${verb} file: ${path}`;
-  if (code === 'EISDIR') return `Error: Path is a directory, not a file: ${path}`;
-  return `Error: ${err instanceof Error ? err.message : String(err)}`;
+  if (code === 'ENOENT') return new Error(`File not found: ${path}`);
+  if (code === 'EACCES') return new Error(`Permission denied ${verb} file: ${path}`);
+  if (code === 'EISDIR') return new Error(`Path is a directory, not a file: ${path}`);
+  return err instanceof Error ? err : new Error(String(err));
 }

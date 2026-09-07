@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { MEMORY_SCOPES, memoryDir } from './paths';
 
 const DREAM_GATES = { minHours: 24, minSessions: 5 }; // borrowed from Claude's auto-dream
 const DREAM_SCAN_THROTTLE_MS = 10 * 60_000; // don't re-scan a dir within this window
@@ -44,6 +45,21 @@ export async function recordSessionTouch(dir: string, sessionId: string): Promis
   if (s.touchedSessions.includes(sessionId)) return;
   s.touchedSessions.push(sessionId);
   await writeState(dir, s);
+}
+
+/**
+ * Count a finished turn against every scope. Only the session tally moves — the
+ * dream scheduler reads it to decide when consolidation is due. Resolving the
+ * dirs is inside the try so no electron, under tests, degrades to a no-op.
+ */
+export async function recordTurn(workspaceRoot: string, threadId: string): Promise<void> {
+  try {
+    for (const scope of MEMORY_SCOPES) {
+      await recordSessionTouch(memoryDir(scope, workspaceRoot), threadId);
+    }
+  } catch {
+    // a turn must not fail over bookkeeping
+  }
 }
 
 /**

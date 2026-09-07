@@ -1,8 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
+import { runTool } from '../testing';
 import { webFetchTool } from './web-fetch';
 
-// biome-ignore lint/suspicious/noExplicitAny: tool.execute's option arg is irrelevant to these tests
-const opts = {} as any;
 const realFetch = globalThis.fetch;
 afterEach(() => {
   globalThis.fetch = realFetch;
@@ -35,10 +34,10 @@ const ARTICLE_HTML = `<html><head><title>Quantum Notes</title></head><body>
 
 test('extracts the main article as markdown, dropping nav and footer', async () => {
   stubFetch({ body: ARTICLE_HTML });
-  const out = (await webFetchTool().execute?.(
-    { description: 'x', url: 'https://example.com/a' },
-    opts,
-  )) as string;
+  const out = (await runTool(webFetchTool(), {
+    description: 'x',
+    url: 'https://example.com/a',
+  })) as string;
   expect(out).toContain('# Quantum Notes');
   expect(out).toContain('paragraph number 1');
   expect(out).not.toContain('subscribe to our newsletter');
@@ -47,29 +46,25 @@ test('extracts the main article as markdown, dropping nav and footer', async () 
 
 test('passes non-HTML text content through unchanged', async () => {
   stubFetch({ contentType: 'text/plain', body: 'plain body text' });
-  const out = await webFetchTool().execute?.(
-    { description: 'x', url: 'https://example.com/raw.txt' },
-    opts,
-  );
+  const out = await runTool(webFetchTool(), {
+    description: 'x',
+    url: 'https://example.com/raw.txt',
+  });
   expect(out).toBe('plain body text');
 });
 
 test('rejects binary content types', async () => {
   stubFetch({ contentType: 'application/pdf', body: '%PDF-1.7' });
-  const out = (await webFetchTool().execute?.(
-    { description: 'x', url: 'https://example.com/doc.pdf' },
-    opts,
-  )) as string;
-  expect(out).toContain('cannot be read as text');
+  expect(
+    runTool(webFetchTool(), { description: 'x', url: 'https://example.com/doc.pdf' }),
+  ).rejects.toThrow('cannot be read as text');
 });
 
-test('surfaces HTTP errors as a model-readable string', async () => {
+test('surfaces HTTP errors as a model-readable failure', async () => {
   stubFetch({ ok: false, status: 404, statusText: 'Not Found' });
-  const out = (await webFetchTool().execute?.(
-    { description: 'x', url: 'https://example.com/missing' },
-    opts,
-  )) as string;
-  expect(out).toBe('Error: HTTP 404 Not Found for https://example.com/missing');
+  expect(
+    runTool(webFetchTool(), { description: 'x', url: 'https://example.com/missing' }),
+  ).rejects.toThrow('HTTP 404 Not Found for https://example.com/missing');
 });
 
 test('rejects non-http(s) URLs without fetching', async () => {
@@ -78,10 +73,8 @@ test('rejects non-http(s) URLs without fetching', async () => {
     fetched = true;
     return {} as Response;
   }) as unknown as typeof fetch;
-  const out = (await webFetchTool().execute?.(
-    { description: 'x', url: 'file:///etc/passwd' },
-    opts,
-  )) as string;
-  expect(out).toContain('only http(s) URLs are supported');
+  await expect(
+    runTool(webFetchTool(), { description: 'x', url: 'file:///etc/passwd' }),
+  ).rejects.toThrow('only http(s) URLs are supported');
   expect(fetched).toBe(false);
 });

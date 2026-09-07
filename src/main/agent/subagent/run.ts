@@ -1,68 +1,105 @@
+import { Agent, type StreamFn } from '@earendil-works/pi-agent-core';
+import type { Api, Model, Message as PiMessage } from '@earendil-works/pi-ai';
+import type { AssistantMessage, Message, TextContent, Usage } from '@shared/protocol';
 import type { ToolName } from '@shared/tools';
-import { convertToModelMessages, generateId, stepCountIs, streamText, type UIMessage } from 'ai';
-import { recordUsage, tokenCountsOf } from '../../db/usage';
+import { recordUsage } from '../../db/usage';
 import { createLogger } from '../../log';
-import { MODEL_CALL_MAX_RETRIES } from '../errors';
-import {
-  compactionMiddleware,
-  composeBeforeStep,
-  loopDetectionMiddleware,
-  type RunContext,
-} from '../middleware';
-import { injectSystemReminder } from '../middleware/shared/reminder';
 import type { ModelPricing } from '../models/types';
-import { stampCacheBreakpoints, usesAnthropicPromptCache } from '../prompt-cache';
+import { withinTurnFold } from '../pi/compaction';
+import { composeContext } from '../pi/context';
+import { injectSystemReminder } from '../pi/history';
+import { createLoopDetector } from '../pi/loop-detection';
+import { createSummarizer } from '../pi/summarize';
+import { asPi, storedMessage } from '../pi/vocabulary';
 import { currentDateNote, workspaceGuidance } from '../prompts';
-import { todoPreserver } from '../tools/builtins/todo';
-import { filterToolsForSubagent, type SubagentDef } from './defs';
+import type { RunContext } from '../run-context';
+import type { AtriumTool } from '../tools';
+import { preserveTodos } from '../tools/builtins/todo';
+import type { SubagentDef } from './defs';
 
 const log = createLogger('subagent');
 
-const SUBAGENT_MAX_STEPS = 100;
+const SUBAGENT_MAX_TURNS = 100;
 
-export type SubagentResult = { text: string; usage?: { totalTokens?: number } };
+/** What a nested loop needs to reach a provider — the parent's, by default. */
+export type SubagentEngine = {
+  model: Model<Api>;
+  streamFn: StreamFn;
+  getApiKey: (provider: string) => string | undefined;
+};
+
+export type SubagentResult = { text: string; usage: Usage };
 
 export type RunSubagentOptions = {
-  /** Carries the run's model / sandbox / workspace / db that the child reuses. */
+  /** Carries the run's sandbox / workspace / db / stream that the child reuses. */
   parent: RunContext;
+  engine: SubagentEngine;
+  /** The child's tools, already filtered to what its definition allows. */
+  tools: AtriumTool[];
   agent: SubagentDef;
   /** The task handed to the subagent — its sole initial user message. */
   prompt: string;
-  /** Correlates the child's bubbled-up activity with its UI block (used later). */
+  /** Correlates the child's bubbled-up activity with its UI block. */
   subagentId: string;
-  /** Context window per model id (injected, like compaction — avoids importing
-   *  the Electron-bound catalog here so this stays unit-testable). */
-  maxContextTokens: (modelId: string) => number;
   /** Pricing lookup for the usage ledger; omitted in tests (skips recording). */
   pricingOf?: (modelId: string) => ModelPricing;
   abortSignal?: AbortSignal;
 };
 
+const zeroUsage = (): Usage => ({
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+});
+
+function addUsage(total: Usage, next: Usage): void {
+  total.input += next.input;
+  total.output += next.output;
+  total.cacheRead += next.cacheRead;
+  total.cacheWrite += next.cacheWrite;
+  total.totalTokens += next.totalTokens;
+  total.cost.input += next.cost.input;
+  total.cost.output += next.cost.output;
+  total.cost.cacheRead += next.cost.cacheRead;
+  total.cost.cacheWrite += next.cost.cacheWrite;
+  total.cost.total += next.cost.total;
+}
+
+const textOf = (message: AssistantMessage): string =>
+  message.content
+    .flatMap((c) => (c.type === 'text' ? [(c as TextContent).text] : []))
+    .join('')
+    .trim();
+
 /**
  * Run a subagent: a nested agent loop with its own system prompt, a filtered
  * slice of the parent's tools, and a fresh ephemeral context (only the task
- * prompt — none of the parent's history). It runs the full ReAct loop and
- * returns ONLY the final assistant text; every intermediate tool call/result
- * stays inside the child and never reaches the parent's context. That isolation
- * is the point — a big sweep of work collapses to one short result.
+ * prompt — none of the parent's history). It runs the full loop and returns
+ * ONLY the final assistant text; every intermediate tool call and result stays
+ * inside the child and never reaches the parent's context. That isolation is
+ * the point — a big sweep of work collapses to one short answer here.
  *
- * The child reuses within-turn compaction (it can run many steps and overflow
- * its own window) but never the cross-turn path — it has no persisted history.
+ * The child reuses within-turn compaction (it can run many turns and overflow
+ * its own window) but never the cross-turn path — it has no persisted history
+ * to check point against.
  */
 export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentResult> {
-  const { parent, agent, prompt } = opts;
+  const { parent, agent } = opts;
 
   // Pin the subagent to its own model if it has a valid one, else inherit the
-  // parent's. resolveModel is imported lazily — it pulls in the Electron-bound
+  // parent's. resolvePiModel is imported lazily — it pulls in the Electron-bound
   // credential store, which we don't want loaded when there's nothing to resolve
   // (and which would break non-Electron unit tests on import).
-  let model = parent.model;
+  let { model } = opts.engine;
   let providerId = parent.providerId;
   let modelId = parent.modelId;
   if (agent.providerId && agent.modelId) {
     try {
-      const { resolveModel } = await import('../../providers/resolve');
-      model = resolveModel(parent.db, agent.providerId, agent.modelId);
+      const { resolvePiModel } = await import('../../providers/pi-model');
+      model = resolvePiModel(parent.db, agent.providerId, agent.modelId);
       providerId = agent.providerId;
       modelId = agent.modelId;
     } catch (err) {
@@ -72,103 +109,97 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
     }
   }
 
-  const tools = filterToolsForSubagent(parent.request.tools, agent);
-  const system = `${agent.systemPrompt}\n\n${workspaceGuidance(parent.workspaceRoot)}`;
-  const messages: UIMessage[] = injectSystemReminder(
-    [{ id: generateId(), role: 'user', parts: [{ type: 'text', text: prompt }] }],
-    currentDateNote(new Date()),
-  );
-
-  const subCtx: RunContext = {
-    threadId: parent.threadId,
-    db: parent.db,
-    sandbox: parent.sandbox,
-    workspaceRoot: parent.workspaceRoot,
-    request: { system, messages, tools },
-    model,
-    providerId,
-    modelId,
-    // The child's own middleware (within-turn compaction) doesn't emit; its
-    // activity is bubbled to the parent's stream below via parent.emit instead.
-    emit: () => {},
-    scratch: new Map(),
-  };
-
-  const middlewares = [
-    compactionMiddleware({
-      maxContextTokens: opts.maxContextTokens,
-      // Never actually invoked: the child opens with only its task prompt, so
-      // the cross-turn pass can't fold a single message and persists nothing.
-      // Only within-turn folding (as the loop grows) ever fires.
-      persist: () => {},
-      preservers: [todoPreserver],
-    }),
-    loopDetectionMiddleware(),
+  const systemPrompt = `${agent.systemPrompt}\n\n${workspaceGuidance(parent.workspaceRoot)}`;
+  const messages: Message[] = [
+    { role: 'user', content: [{ type: 'text', text: opts.prompt }], timestamp: Date.now() },
   ];
-  const beforeStep = composeBeforeStep(subCtx, middlewares);
 
   const emit = (data: Record<string, unknown>): void =>
     parent.emit({ type: 'data-subagent', data: { id: opts.subagentId, ...data }, transient: true });
 
-  emit({ phase: 'start' });
-  const result = streamText({
-    model,
-    system,
-    messages: await convertToModelMessages(messages, { tools }),
-    tools,
-    stopWhen: stepCountIs(SUBAGENT_MAX_STEPS),
-    maxRetries: MODEL_CALL_MAX_RETRIES,
-    // Same post-middleware cache stamping as the parent loop (see agent/run.ts).
-    prepareStep: async ({ stepNumber, messages }) => {
-      const override = await beforeStep({ stepNumber, messages });
-      if (!usesAnthropicPromptCache(providerId)) return override;
-      return { ...override, messages: stampCacheBreakpoints(override.messages ?? messages) };
+  const loop = createLoopDetector();
+  let turns = 0;
+
+  const child = new Agent({
+    initialState: { systemPrompt, model, tools: opts.tools, messages: asPi(messages) },
+    streamFn: opts.engine.streamFn,
+    getApiKey: opts.engine.getApiKey,
+    convertToLlm: (m) => m as PiMessage[],
+    transformContext: composeContext([
+      withinTurnFold({
+        summarize: createSummarizer({ ...opts.engine, model }),
+        contextWindow: model.contextWindow,
+        preservers: [preserveTodos],
+      }),
+      (m) => injectSystemReminder(m, currentDateNote(new Date()), { anchor: 'last' }),
+      loop.transform,
+    ]),
+    prepareNextTurnWithContext: async ({ message, context }) => {
+      loop.observe(message);
+      return { context: { ...context, tools: loop.stopped ? [] : opts.tools } };
     },
-    abortSignal: opts.abortSignal,
-    // Bubble each step's completed tool calls up to the parent so its task card
-    // shows a live activity list. todo_write is a plan-panel concern, not trace.
-    // Only name + input go up — the card shows a static line, no output.
-    onStepFinish: ({ toolCalls }) => {
-      const tools = toolCalls
-        .filter((tc) => tc.toolName !== 'todo_write')
-        .map((tc) => ({ id: tc.toolCallId, name: tc.toolName as ToolName, input: tc.input }));
-      if (tools.length > 0) emit({ phase: 'step', tools });
-    },
+    shouldStopAfterTurn: () => ++turns >= SUBAGENT_MAX_TURNS,
   });
 
-  try {
-    // Drive the loop to completion, then take the final assistant text.
-    const text = (await result.text).trim();
-    const totalUsage = await result.totalUsage;
-    // Subagent calls are separate model calls, invisible to the parent turn's
-    // usage — record them on their own so the ledger isn't an undercount.
-    if (opts.pricingOf && providerId && modelId) {
-      recordUsage(
-        parent.db,
-        {
-          threadId: parent.threadId,
-          kind: 'subagent',
-          providerId,
-          modelId,
-          ...tokenCountsOf(totalUsage),
-        },
-        opts.pricingOf(modelId),
-      );
+  const usage = zeroUsage();
+  let lastText = '';
+  child.subscribe((event) => {
+    if (event.type === 'agent_end') {
+      emit({ phase: 'done', status: 'done' });
+      return;
     }
-    const usage = { totalTokens: totalUsage.totalTokens };
-    emit({ phase: 'done', status: 'done' });
-    if (text) return { text, usage };
+    if (event.type !== 'message_end') return;
+    const message = storedMessage(event.message);
+    if (message.role !== 'assistant') return;
+    addUsage(usage, message.usage);
+    const text = textOf(message);
+    if (text) lastText = text;
+    // Bubble the turn's calls up so the parent's task card shows a live activity
+    // list. Only name + input go up — the card shows a static line, no output —
+    // and todo_write is a plan-panel concern, not trace.
+    const tools = message.content
+      .flatMap((c) =>
+        c.type === 'toolCall'
+          ? [c as unknown as { id: string; name: string; arguments: unknown }]
+          : [],
+      )
+      .filter((c) => c.name !== 'todo_write')
+      .map((c) => ({ id: c.id, name: c.name as ToolName, input: c.arguments }));
+    if (tools.length > 0) emit({ phase: 'step', tools });
+  });
 
-    // The loop ended on a tool step with no closing text (e.g. it hit the step
-    // cap) — fall back to the most recent step that did produce text.
-    const steps = await result.steps;
-    for (let i = steps.length - 1; i >= 0; i--) {
-      const t = steps[i].text?.trim();
-      if (t) return { text: t, usage };
-    }
-    return { text: '(subagent finished without a text response)', usage };
+  const stop = () => child.abort();
+  opts.abortSignal?.addEventListener('abort', stop, { once: true });
+
+  emit({ phase: 'start' });
+  try {
+    await child.continue();
   } catch (err) {
     emit({ phase: 'done', status: 'failed' });
     throw err;
+  } finally {
+    opts.abortSignal?.removeEventListener('abort', stop);
   }
+
+  // Subagent calls are separate model calls, invisible to the parent turn's
+  // usage — record them on their own so the ledger isn't an undercount.
+  if (opts.pricingOf && providerId && modelId) {
+    recordUsage(
+      parent.db,
+      {
+        threadId: parent.threadId,
+        kind: 'subagent',
+        providerId,
+        modelId,
+        inputTokens: usage.input,
+        outputTokens: usage.output,
+        cacheReadTokens: usage.cacheRead,
+        cacheCreationTokens: usage.cacheWrite,
+        totalTokens: usage.totalTokens,
+      },
+      opts.pricingOf(modelId),
+    );
+  }
+
+  return { text: lastText || '(subagent finished without a text response)', usage };
 }

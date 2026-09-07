@@ -57,7 +57,6 @@ test('does not re-explain individual tools (their descriptions own that)', () =>
   // Guards against the old per-tool paragraphs creeping back in.
   expect(p).not.toContain('edit_file');
   expect(p).not.toContain('run_in_background');
-  expect(p).not.toContain('image_gen');
 });
 
 test('tells the model to cite web sources as titled markdown links, not bare URLs', () => {

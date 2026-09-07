@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import type { AtriumUIMessage } from '@shared/chat';
 import type { SelectedModel } from '@shared/settings';
-import { generateId, type UIMessage } from 'ai';
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 import type { Db } from '../../db';
 import type { ScheduledTask } from '../../db/schema';
@@ -46,15 +47,16 @@ function lastCompletedRunAt(db: Db, taskId: string): Date | undefined {
     .get()?.startedAt;
 }
 
-/** Id of the newest assistant message in a thread, or undefined. */
+/** Run-level id of the newest assistant message in a thread, or undefined. */
 function latestAssistantId(db: Db, threadId: string): string | undefined {
-  return db
-    .select({ id: messages.id })
+  const row = db
+    .select({ id: messages.id, runId: messages.runId })
     .from(messages)
     .where(and(eq(messages.threadId, threadId), eq(messages.role, 'assistant')))
     .orderBy(desc(messages.createdAt))
     .limit(1)
-    .get()?.id;
+    .get();
+  return row?.runId ?? row?.id;
 }
 
 /**
@@ -95,8 +97,8 @@ export async function runScheduledTask(
     `Last run: ${lastRun ? `${lastRun.toISOString()} (${lastRun.getTime()})` : 'never'}`,
     'Instruction: This is a fresh automated run — carry out the task now. Earlier messages in this conversation are previous runs, for context only; do not skip because it was done before.',
   ].join('\n');
-  const message: UIMessage = {
-    id: generateId(),
+  const message: AtriumUIMessage = {
+    id: randomUUID(),
     role: 'user',
     parts: [{ type: 'text', text: `${header}\n\n${task.prompt}` }],
   };
@@ -126,9 +128,9 @@ export async function runScheduledTask(
       return { status: 'error', error: `chat endpoint ${res.status}: ${body}`.trim() };
     }
 
-    // Drain the SSE to EOF; the turn is done when the stream closes. Scan the
-    // decoded bytes for an error chunk so a model/tool failure counts as a failed
-    // run rather than a silent success.
+    // Drain the pi event SSE to EOF; the turn is done when the stream closes.
+    // Scan the decoded bytes for a stream-error notice so a model/tool failure
+    // counts as a failed run rather than a silent success.
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let streamError: string | undefined;
@@ -137,7 +139,7 @@ export async function runScheduledTask(
       if (done) break;
       if (streamError) continue;
       const text = decoder.decode(value, { stream: true });
-      const match = text.match(/"type":"error"[^}]*?"errorText":"((?:[^"\\]|\\.)*)"/);
+      const match = text.match(/"name":"stream-error".*?"errorText":"((?:[^"\\]|\\.)*)"/);
       if (match) streamError = match[1] ? JSON.parse(`"${match[1]}"`) : 'The scheduled run failed.';
     }
 

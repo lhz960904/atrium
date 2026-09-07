@@ -1,4 +1,4 @@
-import { generateText, type LanguageModel } from 'ai';
+import type { Complete } from '../pi/complete';
 
 /** allow = auto-approve; deny = fall back to a user prompt. There is no third
  *  state — uncertainty, timeout, and failure all resolve to deny. */
@@ -26,7 +26,8 @@ DENY operations that could cause real harm, exfiltrate data, or that you cannot 
 When genuinely unsure, reply DENY — a human will then confirm.`;
 
 export type ReviewArgs = {
-  model: LanguageModel;
+  /** The one-shot call this verdict rides on; see agent/pi/complete. */
+  complete: Complete;
   /** The command or path to judge, shown to the reviewer verbatim. */
   subject: string;
   /** Optional hint on why it was flagged, when the caller knows something the
@@ -54,11 +55,10 @@ export async function reviewBoundaryCrossing(args: ReviewArgs): Promise<ReviewVe
     // No maxOutputTokens cap: a reasoning model spends tokens thinking before it
     // answers, and a tight cap would truncate it to empty (→ a false deny). The
     // 6s timeout bounds latency instead; the prompt keeps the answer terse.
-    const { text } = await generateText({
-      model: args.model,
+    const text = await args.complete({
       system: SYSTEM,
       prompt: `${lead}\n\n${args.subject}\n\nALLOW or DENY?`,
-      abortSignal: signal,
+      signal,
     });
     return parseVerdict(text);
   } catch {

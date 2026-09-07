@@ -1,5 +1,4 @@
-import { tool } from 'ai';
-import { z } from 'zod';
+import { defineTool, StringEnum, Type, textResult } from '../define';
 import { renderTodos } from './todo';
 
 /**
@@ -10,28 +9,28 @@ import { renderTodos } from './todo';
  * call (no merge), matching Claude Code / DeerFlow.
  */
 export const todoWriteTool = () =>
-  tool({
+  defineTool({
+    name: 'todo_write',
+    label: 'Update plan',
     description: `Create and update a structured plan for the current task. The whole list is replaced on every call, so always send the full set of steps.
 
 Use this for non-trivial work that takes 3+ distinct steps, when the user gives multiple tasks, or when a plan may shift as you learn more. Skip it for simple or conversational requests — just do those directly.
 
 Keep it live: when you write the plan, mark the first step in_progress immediately; flip a step to completed the moment it's done (don't batch); keep exactly one step in_progress unless steps truly run in parallel. Only mark completed when fully done — if blocked, leave it in_progress and add a step describing what's needed.`,
-    inputSchema: z.object({
-      todos: z
-        .array(
-          z.object({
-            content: z.string().describe('Short, actionable description of the step.'),
-            status: z
-              .enum(['pending', 'in_progress', 'completed'])
-              .describe(
-                'pending = not started, in_progress = working on it, completed = fully done.',
-              ),
+    parameters: Type.Object({
+      todos: Type.Array(
+        Type.Object({
+          content: Type.String({ description: 'Short, actionable description of the step.' }),
+          status: StringEnum(['pending', 'in_progress', 'completed'], {
+            description:
+              'pending = not started, in_progress = working on it, completed = fully done.',
           }),
-        )
-        .describe('The full plan, in order. Replaces any previous plan.'),
+        }),
+        { description: 'The full plan, in order. Replaces any previous plan.' },
+      ),
     }),
-    execute: async ({ todos }) => {
+    execute: async (_id, { todos }) => {
       const done = todos.filter((t) => t.status === 'completed').length;
-      return `Plan updated · ${done}/${todos.length} done\n${renderTodos(todos)}`;
+      return textResult(`Plan updated · ${done}/${todos.length} done\n${renderTodos(todos)}`);
     },
   });

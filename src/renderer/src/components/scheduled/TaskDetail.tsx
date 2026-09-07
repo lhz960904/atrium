@@ -150,7 +150,7 @@ export function TaskDetail({
     ...deriveGroups(providers.data ?? []).flatMap((g) =>
       g.models.map((m) => ({
         value: `${g.providerId}${SEP}${m}`,
-        label: g.external ? g.providerName : m,
+        label: m,
       })),
     ),
   ];

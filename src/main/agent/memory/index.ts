@@ -15,6 +15,7 @@ export {
   markConsolidated,
   readState,
   recordSessionTouch,
+  recordTurn,
   shouldConsolidate,
 } from './state';
 export {

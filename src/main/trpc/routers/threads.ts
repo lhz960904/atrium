@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { asc, desc, eq, isNull } from 'drizzle-orm';
+import { desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { messages, projects, threads } from '../../db/schema';
+import { loadThreadMessageDtos } from '../../server/persist';
 import { getRunningThreadIds } from '../../server/resumable';
 import { publicProcedure, router } from '../trpc';
 
@@ -23,17 +24,13 @@ export const threadsRouter = router({
    *  in the main process, so the sidebar spinner stays correct across reloads. */
   running: publicProcedure.query(() => getRunningThreadIds()),
 
-  /** One thread + its messages ordered chronologically. Returns null if not found. */
+  /** One thread + its messages ordered chronologically. Returns null if not found.
+   *  Messages go through the persistence merge layer, so pi-native rows and
+   *  legacy rows come back in the same run-shaped form. */
   get: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
     const thread = ctx.db.select().from(threads).where(eq(threads.id, input.id)).get();
     if (!thread) return null;
-    const msgs = ctx.db
-      .select()
-      .from(messages)
-      .where(eq(messages.threadId, input.id))
-      .orderBy(asc(messages.createdAt))
-      .all();
-    return { ...thread, messages: msgs };
+    return { ...thread, messages: loadThreadMessageDtos(ctx.db, input.id) };
   }),
 
   /** Create an empty thread. Returns the new id. */

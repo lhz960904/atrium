@@ -1,9 +1,8 @@
 import { basename } from 'node:path';
-import { tool } from 'ai';
-import { z } from 'zod';
 import { resolveAbsolute } from '../../sandbox/paths';
 import type { ToolCtx } from '../context';
-import { fsErrorMessage, IMAGE_INLINE_MAX_BYTES, imageOutputToModelOutput } from '../output';
+import { defineTool, imageResult, Type } from '../define';
+import { fsError, IMAGE_INLINE_MAX_BYTES } from '../output';
 
 /**
  * Magic-byte signatures for the image formats vision providers accept
@@ -31,30 +30,39 @@ function sniffMediaType(data: Uint8Array): string | null {
 }
 
 export const viewImageTool = (ctx: ToolCtx) =>
-  tool({
+  defineTool({
+    name: 'view_image',
+    label: 'View image',
     description:
       'View an image file (png, jpeg, gif, webp) from disk so it becomes visible in the ' +
       'conversation — e.g. a screenshot or picture another tool saved. Not for text files.',
-    inputSchema: z.object({
-      description: z
-        .string()
-        .describe('Why you are viewing this image, in short words. ALWAYS PROVIDE THIS FIRST.'),
-      path: z.string().describe('Absolute path to the image file.'),
+    parameters: Type.Object({
+      description: Type.String({
+        description: 'Why you are viewing this image, in short words. ALWAYS PROVIDE THIS FIRST.',
+      }),
+      path: Type.String({ description: 'Absolute path to the image file.' }),
     }),
-    execute: async ({ path }) => {
+    execute: async (_id, { path }) => {
+      const abs = resolveAbsolute(ctx.workspaceRoot, path);
+      let bytes: Uint8Array;
       try {
-        const abs = resolveAbsolute(ctx.workspaceRoot, path);
-        const bytes = await ctx.sandbox.readFileBytes(abs);
-        const mediaType = sniffMediaType(bytes);
-        if (!mediaType) {
-          return `Error: Not a supported image file (png, jpeg, gif, webp): ${path}`;
-        }
-        if (bytes.byteLength > IMAGE_INLINE_MAX_BYTES) {
-          const mb = (bytes.byteLength / (1024 * 1024)).toFixed(1);
-          return `Error: Image is ${mb}MB, over the 3MB inline limit. Downscale it first (e.g. \`sips -Z 1568 <file> --out <smaller copy>\`) and view the smaller copy.`;
-        }
-        const kb = Math.max(1, Math.round(bytes.byteLength / 1024));
-        return {
+        bytes = await ctx.sandbox.readFileBytes(abs);
+      } catch (err) {
+        throw fsError(err, path, 'reading');
+      }
+      const mediaType = sniffMediaType(bytes);
+      if (!mediaType) {
+        throw new Error(`Not a supported image file (png, jpeg, gif, webp): ${path}`);
+      }
+      if (bytes.byteLength > IMAGE_INLINE_MAX_BYTES) {
+        const mb = (bytes.byteLength / (1024 * 1024)).toFixed(1);
+        throw new Error(
+          `Image is ${mb}MB, over the 3MB inline limit. Downscale it first (e.g. \`sips -Z 1568 <file> --out <smaller copy>\`) and view the smaller copy.`,
+        );
+      }
+      const kb = Math.max(1, Math.round(bytes.byteLength / 1024));
+      return imageResult(
+        {
           text: `${abs} (${mediaType}, ${kb} KB)`,
           images: [
             {
@@ -63,11 +71,8 @@ export const viewImageTool = (ctx: ToolCtx) =>
               filename: basename(abs),
             },
           ],
-        };
-      } catch (err) {
-        return fsErrorMessage(err, path, 'reading');
-      }
+        },
+        ctx.supportsImageToolResults ?? false,
+      );
     },
-    toModelOutput: ({ output }) =>
-      imageOutputToModelOutput(output, ctx.supportsImageToolResults ?? false),
   });

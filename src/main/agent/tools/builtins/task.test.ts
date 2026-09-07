@@ -1,38 +1,63 @@
 import { expect, test } from 'bun:test';
-import type { LanguageModelV3StreamPart } from '@ai-sdk/provider';
-import { MockLanguageModelV3, simulateReadableStream } from 'ai/test';
+import type { StreamFn } from '@earendil-works/pi-agent-core';
+import {
+  type AssistantMessage,
+  createAssistantMessageEventStream,
+  type Model,
+} from '@earendil-works/pi-ai';
 import type { Db } from '../../../db';
-import type { RunContext } from '../../middleware';
+import type { RunContext } from '../../run-context';
 import type { Sandbox } from '../../sandbox/types';
+import { runTool } from '../testing';
 import { taskTool } from './task';
 
-const USAGE = {
-  inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-  outputTokens: { total: 1, text: 1, reasoning: 0 },
-};
-const textModel = (text: string) => {
-  const chunks: LanguageModelV3StreamPart[] = [
-    { type: 'stream-start', warnings: [] },
-    { type: 'text-start', id: 't1' },
-    { type: 'text-delta', id: 't1', delta: text },
-    { type: 'text-end', id: 't1' },
-    { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage: USAGE },
-  ];
-  return new MockLanguageModelV3({
-    doStream: async () => ({ stream: simulateReadableStream({ chunks }) }),
-  });
+const MODEL = {
+  id: 'm1',
+  api: 'anthropic-messages',
+  provider: 'p1',
+  contextWindow: 200_000,
+} as unknown as Model<'anthropic-messages'>;
+
+/** A stream function that answers with one text block and stops. */
+const answering = (text: string): StreamFn => {
+  const message = {
+    role: 'assistant',
+    content: [{ type: 'text', text }],
+    api: 'anthropic-messages',
+    provider: 'p1',
+    model: 'm1',
+    usage: {
+      input: 1,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 2,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: 'stop',
+    timestamp: 1,
+  } as unknown as AssistantMessage;
+  return () => {
+    const stream = createAssistantMessageEventStream();
+    queueMicrotask(() => stream.end(message));
+    return stream;
+  };
 };
 
-const deps = { maxContextTokens: () => 200_000, subagents: [] };
+const deps = (run: RunContext, text: string) => ({
+  siblings: () => [],
+  subagents: [],
+  run,
+  engine: { model: MODEL, streamFn: answering(text), getApiKey: () => 'key' },
+});
 
-function ctx(model: RunContext['model'], db: Db): RunContext {
+function ctx(db: Db): RunContext {
   return {
     threadId: 't1',
     db,
     sandbox: {} as Sandbox,
     workspaceRoot: '/ws',
-    request: { system: 's', messages: [], tools: {} as RunContext['request']['tools'] },
-    model,
+    system: 's',
     emit: () => {},
     scratch: new Map(),
   };
@@ -42,21 +67,20 @@ const noRowsDb = {
   select: () => ({ from: () => ({ where: () => ({ get: () => undefined }) }) }),
 } as unknown as Db;
 
-// biome-ignore lint/suspicious/noExplicitAny: tool execute's options arg only needs experimental_context here
-const exec = (ec: RunContext): any => ({ experimental_context: ec });
-
-test('returns an error for an unknown subagent', async () => {
-  const result = await taskTool(deps).execute?.(
-    { description: 'd', prompt: 'p', subagent: 'nope' },
-    exec(ctx(textModel('x'), noRowsDb)),
+test('fails for an unknown subagent', async () => {
+  const t = taskTool(deps(ctx(noRowsDb), 'x'));
+  expect(runTool(t, { description: 'd', prompt: 'p', subagent: 'nope' })).rejects.toThrow(
+    "unknown subagent 'nope'",
   );
-  expect(result).toContain("unknown subagent 'nope'");
 });
 
 test('delegates to general-purpose by default and returns the subagent final text', async () => {
-  const result = await taskTool(deps).execute?.(
-    { description: 'd', prompt: 'do it' },
-    exec(ctx(textModel('SUBAGENT ANSWER'), {} as Db)),
-  );
-  expect(result).toBe('SUBAGENT ANSWER');
+  const t = taskTool(deps(ctx({} as Db), 'SUBAGENT ANSWER'));
+  expect(await runTool(t, { description: 'd', prompt: 'do it' })).toBe('SUBAGENT ANSWER');
+});
+
+test('refuses when the turn has no engine to nest on', async () => {
+  const { engine: _dropped, ...noEngine } = deps(ctx({} as Db), 'x');
+  const t = taskTool(noEngine);
+  expect(runTool(t, { description: 'd', prompt: 'p' })).rejects.toThrow('unavailable');
 });

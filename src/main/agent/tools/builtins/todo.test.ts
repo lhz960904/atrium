@@ -1,34 +1,18 @@
 import { expect, test } from 'bun:test';
 import type { Todo } from '@shared/chat-types';
-import type { ModelMessage, UIMessage } from 'ai';
-import { latestTodosModel, latestTodosUI, renderTodos, todoPreserver } from './todo';
+import type { Message } from '@shared/protocol';
+import { latestTodos, preserveTodos, renderTodos } from './todo';
 
 const todos: Todo[] = [
   { content: 'build', status: 'in_progress' },
   { content: 'test', status: 'pending' },
 ];
 
-const uiPlan = (t: unknown): UIMessage[] =>
-  [
-    {
-      id: 'a1',
-      role: 'assistant',
-      parts: [
-        {
-          type: 'tool-todo_write',
-          toolCallId: '1',
-          state: 'output-available',
-          input: { todos: t },
-        },
-      ],
-    },
-  ] as unknown as UIMessage[];
-
-const modelPlan = (t: unknown): ModelMessage[] => [
+const plan = (t: unknown): Message[] => [
   {
     role: 'assistant',
-    content: [{ type: 'tool-call', toolCallId: '1', toolName: 'todo_write', input: { todos: t } }],
-  },
+    content: [{ type: 'toolCall', id: '1', name: 'todo_write', arguments: { todos: t } }],
+  } as unknown as Message,
 ];
 
 test('renderTodos prints status markers', () => {
@@ -36,38 +20,24 @@ test('renderTodos prints status markers', () => {
   expect(renderTodos(todos)).toBe('[>] build\n[ ] test');
 });
 
-test('latestTodosUI / latestTodosModel find the most recent plan', () => {
-  expect(latestTodosUI(uiPlan(todos))).toEqual(todos);
-  expect(latestTodosModel(modelPlan(todos))).toEqual(todos);
+test('the finder returns the most recent plan', () => {
+  expect(latestTodos(plan(todos))).toEqual(todos);
 });
 
-test('finders return null when there is no plan', () => {
-  expect(
-    latestTodosUI([
-      { id: 'u1', role: 'user', parts: [{ type: 'text', text: 'hi' }] },
-    ] as unknown as UIMessage[]),
-  ).toBeNull();
-  expect(
-    latestTodosModel([
-      {
-        role: 'assistant',
-        content: [{ type: 'tool-call', toolCallId: '1', toolName: 'read', input: {} }],
-      },
-    ]),
-  ).toBeNull();
+test('the finder returns null when there is no plan', () => {
+  expect(latestTodos([{ role: 'user', content: 'hi', timestamp: 0 }])).toBeNull();
 });
 
-test('todoPreserver carries a folded plan forward', () => {
-  const carried = todoPreserver.fromUI(uiPlan(todos), []);
+test('a folded plan is carried forward', () => {
+  const carried = preserveTodos(plan(todos), []);
   expect(carried).toContain('Current plan');
   expect(carried).toContain('[>] build');
 });
 
-test('todoPreserver skips when the kept window still holds the plan', () => {
-  expect(todoPreserver.fromUI(uiPlan(todos), uiPlan(todos))).toBeNull();
-  expect(todoPreserver.fromModel(modelPlan(todos), modelPlan(todos))).toBeNull();
+test('nothing is carried when the kept window still holds the plan', () => {
+  expect(preserveTodos(plan(todos), plan(todos))).toBeNull();
 });
 
-test('todoPreserver returns null when no plan was folded', () => {
-  expect(todoPreserver.fromModel([], [])).toBeNull();
+test('nothing is carried when no plan was folded', () => {
+  expect(preserveTodos([], [])).toBeNull();
 });

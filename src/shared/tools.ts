@@ -21,7 +21,6 @@ export const TOOL_NAMES = [
   'task',
   'skill',
   'ask_clarification',
-  'image_gen',
   'view_image',
   'memory',
   'profile',
@@ -40,11 +39,18 @@ export const TOOL_NAMES = [
   'computer_perform_action',
 ] as const;
 
+/**
+ * Tools the agent no longer implements. Stored threads still carry their parts,
+ * so the renderer must keep rendering them — but nothing may offer them again.
+ */
+export const RETIRED_TOOL_NAMES = ['image_gen'] as const;
+
 export type ToolName = (typeof TOOL_NAMES)[number];
+export type RetiredToolName = (typeof RETIRED_TOOL_NAMES)[number];
 
 /**
  * The tools generic for UIMessage. We only care that tool parts carry a typed
  * name (so the renderer's tool table is exhaustive); inputs/outputs are read
  * loosely, so they stay `unknown` rather than dragging schemas into the type.
  */
-export type AtriumTools = Record<ToolName, { input: unknown; output: unknown }>;
+export type AtriumTools = Record<ToolName | RetiredToolName, { input: unknown; output: unknown }>;

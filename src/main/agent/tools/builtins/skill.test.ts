@@ -2,9 +2,11 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { RunContext } from '../../middleware';
+import type { Message } from '@shared/protocol';
+import type { RunContext } from '../../run-context';
 import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
-import { latestSkillBodyModel, latestSkillBodyUI, skillPreserver, skillTool } from './skill';
+import { runTool } from '../testing';
+import { latestSkillBody, preserveActiveSkill, skillTool } from './skill';
 
 let tmp: string;
 beforeEach(async () => {
@@ -34,13 +36,8 @@ function fakeCtx(): RunContext {
   } as unknown as RunContext;
 }
 
-const run = (
-  skill: ReturnType<typeof skillTool>,
-  input: { name: string; args?: string },
-  ctx: RunContext,
-): Promise<string> =>
-  // biome-ignore lint/suspicious/noExplicitAny: tool.execute's options arg is loose in tests
-  skill.execute?.(input, { experimental_context: ctx } as any) as Promise<string>;
+const load = (skills: Skill[], run: RunContext, input: { name: string; args?: string }) =>
+  runTool(skillTool({ skills, run }), input);
 
 test('prepends the base directory, strips frontmatter, substitutes SKILL_DIR', async () => {
   const skill = await writeSkill(
@@ -50,7 +47,7 @@ test('prepends the base directory, strips frontmatter, substitutes SKILL_DIR', a
     'Run ${SKILL_DIR}/run.py and $SKILL_DIR/extra.py.',
   );
   const ctx = fakeCtx();
-  const out = await run(skillTool({ skills: [skill] }), { name: 'deep-research' }, ctx);
+  const out = await load([skill], ctx, { name: 'deep-research' });
 
   expect(out).toContain(`Base directory for this skill: ${skill.dir}`);
   // both ${SKILL_DIR} and $SKILL_DIR spellings resolved to the absolute dir
@@ -66,7 +63,7 @@ test('records the active skill in scratch (name + allowed-tools)', async () => {
     ['read_file', 'bash'],
   );
   const ctx = fakeCtx();
-  await run(skillTool({ skills: [skill] }), { name: 'pptx' }, ctx);
+  await load([skill], ctx, { name: 'pptx' });
 
   expect(ctx.scratch.get(SKILL_SCRATCH_KEY)).toEqual({
     name: 'pptx',
@@ -77,73 +74,52 @@ test('records the active skill in scratch (name + allowed-tools)', async () => {
 test('appends user-supplied args after the body', async () => {
   const skill = await writeSkill('x', 'name: x\ndescription: y', 'do the thing');
   const ctx = fakeCtx();
-  const out = await run(
-    skillTool({ skills: [skill] }),
-    { name: 'x', args: 'on the Q3 report' },
-    ctx,
-  );
+  const out = await load([skill], ctx, { name: 'x', args: 'on the Q3 report' });
   expect(out).toContain('do the thing');
   expect(out).toContain('Arguments for this run: on the Q3 report');
 });
 
-test('unknown skill returns an error listing the available ones', async () => {
+test('an unknown skill fails, listing the available ones', async () => {
   const skill = await writeSkill('real', 'name: real\ndescription: y', 'body');
   const ctx = fakeCtx();
-  const out = await run(skillTool({ skills: [skill] }), { name: 'ghost' }, ctx);
-  expect(out).toContain("unknown skill 'ghost'");
-  expect(out).toContain('real');
+  expect(load([skill], ctx, { name: 'ghost' })).rejects.toThrow(/unknown skill 'ghost'.*real/);
   // nothing activated on failure
   expect(ctx.scratch.get(SKILL_SCRATCH_KEY)).toBeUndefined();
 });
 
-test('a missing manifest file returns a read error, not a throw', async () => {
+test('a missing manifest file fails with a read error', async () => {
   const skill: Skill = {
     name: 'gone',
     description: 'y',
     dir: join(tmp, 'gone'), // never created
     source: 'agents',
   };
-  const ctx = fakeCtx();
-  const out = await run(skillTool({ skills: [skill] }), { name: 'gone' }, ctx);
-  expect(out).toContain("could not read skill 'gone'");
+  expect(load([skill], fakeCtx(), { name: 'gone' })).rejects.toThrow("could not read skill 'gone'");
 });
 
-// biome-ignore lint/suspicious/noExplicitAny: terse message fixtures for the preserver
-const uiSkill = (output: string): any => ({
-  parts: [{ type: 'tool-skill', state: 'output-available', output }],
-});
-// biome-ignore lint/suspicious/noExplicitAny: terse message fixtures for the preserver
-const modelSkillResult = (output: unknown): any => ({
-  role: 'tool',
-  content: [{ type: 'tool-result', toolName: 'skill', output }],
+const skillResult = (text: string): Message =>
+  ({
+    role: 'toolResult',
+    toolCallId: '1',
+    toolName: 'skill',
+    content: [{ type: 'text', text }],
+    isError: false,
+    timestamp: 0,
+  }) as Message;
+
+test('latestSkillBody returns the most recent loaded body', () => {
+  expect(latestSkillBody([skillResult('first'), skillResult('second')])).toBe('second');
+  expect(latestSkillBody([{ role: 'user', content: 'hi', timestamp: 0 }])).toBeNull();
 });
 
-test('latestSkillBodyUI returns the most recent loaded body', () => {
-  expect(latestSkillBodyUI([uiSkill('first'), uiSkill('second')])).toBe('second');
-  expect(latestSkillBodyUI([{ parts: [] } as never])).toBeNull();
-});
-
-test('latestSkillBodyModel reads text and string tool-result outputs', () => {
-  expect(latestSkillBodyModel([modelSkillResult('plain')])).toBe('plain');
-  expect(latestSkillBodyModel([modelSkillResult({ type: 'text', value: 'wrapped' })])).toBe(
-    'wrapped',
-  );
-});
-
-test('preserver carries the body only when it is being folded away', () => {
+test('the body is carried only when it is being folded away', () => {
   // loaded body sits in the fold, not the kept window → carry it
-  const carried = skillPreserver.fromUI([uiSkill('SOP')], []);
+  const carried = preserveActiveSkill([skillResult('SOP')], []);
   expect(carried).toContain('Active skill instructions');
   expect(carried).toContain('SOP');
 
   // already in the kept window → nothing to carry
-  expect(skillPreserver.fromUI([uiSkill('SOP')], [uiSkill('SOP')])).toBeNull();
+  expect(preserveActiveSkill([skillResult('SOP')], [skillResult('SOP')])).toBeNull();
   // no skill anywhere → nothing to carry
-  expect(skillPreserver.fromUI([], [])).toBeNull();
-});
-
-test('preserver works on the within-turn (ModelMessage) fold', () => {
-  const carried = skillPreserver.fromModel([modelSkillResult('SOP')], []);
-  expect(carried).toContain('SOP');
-  expect(skillPreserver.fromModel([modelSkillResult('SOP')], [modelSkillResult('SOP')])).toBeNull();
+  expect(preserveActiveSkill([], [])).toBeNull();
 });

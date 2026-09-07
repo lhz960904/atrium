@@ -1,8 +1,7 @@
 import { Readability } from '@mozilla/readability';
-import { tool } from 'ai';
 import { parseHTML } from 'linkedom';
 import TurndownService from 'turndown';
-import { z } from 'zod';
+import { defineTool, Type, textResult } from '../define';
 import { headTruncate } from '../output';
 
 const FETCH_MAX = 50_000;
@@ -23,23 +22,25 @@ function toMarkdown(html: string): string {
 }
 
 export const webFetchTool = () =>
-  tool({
+  defineTool({
+    name: 'web_fetch',
+    label: 'Fetch page',
     description:
       'Fetch a web page and return its main readable content as Markdown. Use this to read an article, documentation, or any URL the user mentions or that a web search surfaced. Navigation, ads, and boilerplate are stripped out.',
-    inputSchema: z.object({
-      description: z
-        .string()
-        .describe('Why you are fetching this page, in short words. ALWAYS PROVIDE THIS FIRST.'),
-      url: z.url().describe('The absolute http(s) URL to fetch.'),
+    parameters: Type.Object({
+      description: Type.String({
+        description: 'Why you are fetching this page, in short words. ALWAYS PROVIDE THIS FIRST.',
+      }),
+      url: Type.String({ format: 'uri', description: 'The absolute http(s) URL to fetch.' }),
     }),
-    execute: async ({ url }, { abortSignal }) => {
+    execute: async (_id, { url }, signal) => {
       try {
-        return await fetchAsMarkdown(url, abortSignal);
+        return textResult(await fetchAsMarkdown(url, signal));
       } catch (err) {
         if (err instanceof Error && err.name === 'TimeoutError') {
-          return `Error: timed out fetching ${url} after ${FETCH_TIMEOUT_MS / 1000}s`;
+          throw new Error(`timed out fetching ${url} after ${FETCH_TIMEOUT_MS / 1000}s`);
         }
-        return `Error: ${err instanceof Error ? err.message : String(err)}`;
+        throw err;
       }
     },
   });
@@ -47,7 +48,7 @@ export const webFetchTool = () =>
 async function fetchAsMarkdown(url: string, abortSignal?: AbortSignal): Promise<string> {
   const parsed = new URL(url);
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return `Error: only http(s) URLs are supported, got ${parsed.protocol}`;
+    throw new Error(`only http(s) URLs are supported, got ${parsed.protocol}`);
   }
 
   // Abort on either the fetch timeout or the user stopping the turn; whichever
@@ -59,7 +60,7 @@ async function fetchAsMarkdown(url: string, abortSignal?: AbortSignal): Promise<
     redirect: 'follow',
     signal,
   });
-  if (!res.ok) return `Error: HTTP ${res.status} ${res.statusText} for ${url}`;
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText} for ${url}`);
 
   const contentType = res.headers.get('content-type') ?? '';
   const body = await res.text();
@@ -68,7 +69,9 @@ async function fetchAsMarkdown(url: string, abortSignal?: AbortSignal): Promise<
   // through an HTML extractor would only mangle it.
   if (!contentType.includes('html')) {
     if (isBinary(contentType)) {
-      return `Error: ${url} is ${contentType.split(';')[0] || 'binary'} content, which cannot be read as text.`;
+      throw new Error(
+        `${url} is ${contentType.split(';')[0] || 'binary'} content, which cannot be read as text.`,
+      );
     }
     return headTruncate(body.trim(), FETCH_MAX, 'content was truncated');
   }

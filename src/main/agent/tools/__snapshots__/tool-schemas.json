@@ -1,0 +1,724 @@
+{
+  "read_file": {
+    "description": "Read the contents of a text file (documents, notes, data, config, code \u2014 anything text-based).",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Why you are reading this file, in short words. ALWAYS PROVIDE THIS FIRST."
+        },
+        "path": {
+          "type": "string",
+          "description": "Absolute path to the file (under the workspace root)."
+        },
+        "start_line": {
+          "description": "Optional 1-indexed start line (inclusive). Use with end_line for a range.",
+          "type": "integer"
+        },
+        "end_line": {
+          "description": "Optional 1-indexed end line (inclusive). Use with start_line for a range.",
+          "type": "integer"
+        }
+      },
+      "required": ["description", "path"]
+    }
+  },
+  "write_file": {
+    "description": "Write text content to a file. Overwrites by default; set append to add to the end instead. Parent directories are created as needed.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Why you are writing this file, in short words. ALWAYS PROVIDE THIS FIRST."
+        },
+        "path": {
+          "type": "string",
+          "description": "Absolute path to the file (under the workspace root)."
+        },
+        "content": {
+          "type": "string",
+          "description": "The full content to write."
+        },
+        "append": {
+          "description": "Append to the end instead of overwriting. Defaults to false.",
+          "type": "boolean"
+        }
+      },
+      "required": ["description", "path", "content"]
+    }
+  },
+  "edit_file": {
+    "description": "Performs exact string replacement in a file. Read the file first so old_string matches exactly.\n\n- old_string must match the file exactly, including whitespace and indentation, and be unique \u2014 the edit fails otherwise.\n- replace_all: true replaces every occurrence instead.\n- Prefer this over write_file for modifying a file. To create a new file, use write_file.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Why you are editing this file, in short words. ALWAYS PROVIDE THIS FIRST."
+        },
+        "path": {
+          "type": "string",
+          "description": "Absolute path to the file (under the workspace root)."
+        },
+        "old_string": {
+          "type": "string",
+          "description": "The exact text to replace, copied verbatim from the file."
+        },
+        "new_string": {
+          "type": "string",
+          "description": "The text to replace it with."
+        },
+        "replace_all": {
+          "description": "Replace every occurrence instead of requiring a unique match. Defaults to false.",
+          "type": "boolean"
+        }
+      },
+      "required": ["description", "path", "old_string", "new_string"]
+    }
+  },
+  "list_dir": {
+    "description": "List the contents of a directory up to 2 levels deep (junk like .git / node_modules is skipped).",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Why you are listing this directory, in short words. ALWAYS PROVIDE THIS FIRST."
+        },
+        "path": {
+          "description": "Absolute directory path (under the workspace root). Defaults to the workspace root.",
+          "type": "string"
+        }
+      },
+      "required": ["description"]
+    }
+  },
+  "grep": {
+    "description": "Search file contents for a regular expression across the workspace. Returns matching file:line: text. Case-insensitive by default; skips ignored directories (node_modules, .git, \u2026) and binary files. Prefer this over running grep/rg through bash \u2014 it is consistent across platforms and never floods the output.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Why you are searching, in short words. ALWAYS PROVIDE THIS FIRST."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "The regular expression to search for (or plain text with literal set)."
+        },
+        "path": {
+          "description": "Subdirectory under the workspace to search. Defaults to the whole workspace.",
+          "type": "string"
+        },
+        "glob": {
+          "description": "Only search files whose path matches this glob, e.g. \"src/**/*.ts\".",
+          "type": "string"
+        },
+        "literal": {
+          "description": "Treat pattern as plain text instead of a regex. Defaults to false.",
+          "type": "boolean"
+        },
+        "case_sensitive": {
+          "description": "Match case. Defaults to false (case-insensitive).",
+          "type": "boolean"
+        }
+      },
+      "required": ["description", "pattern"]
+    }
+  },
+  "glob": {
+    "description": "Find files and directories by path pattern across the workspace (e.g. \"**/*.ts\", \"src/**\", \"blog-dashboard\"). Returns matching paths \u2014 directories end with a trailing slash \u2014 skipping ignored dirs (node_modules, .git, \u2026). Use it to check whether a file or folder exists. Prefer this over running find/ls through bash.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Why you are searching, in short words. ALWAYS PROVIDE THIS FIRST."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "A glob pattern. Supports *, ** (across directories) and ?; no brace expansion."
+        },
+        "path": {
+          "description": "Subdirectory under the workspace to search. Defaults to the whole workspace.",
+          "type": "string"
+        }
+      },
+      "required": ["description", "pattern"]
+    }
+  },
+  "bash": {
+    "description": "Run a command in the workspace via a real shell. Use for any shell task \u2014 inspecting files, running scripts, system operations, and so on. Use absolute paths under the workspace. For a long-running command that never returns on its own (a dev server, file watcher, `tail -f`), set run_in_background \u2014 a foreground command would hang until it times out.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Why you are running this command, in short words. ALWAYS PROVIDE THIS FIRST."
+        },
+        "command": {
+          "type": "string",
+          "description": "The shell command to run."
+        },
+        "run_in_background": {
+          "description": "Run as a long-running background shell. Returns a shell id immediately; read its output with bash_output and stop it with kill_shell.",
+          "type": "boolean"
+        }
+      },
+      "required": ["description", "command"]
+    }
+  },
+  "bash_output": {
+    "description": "Read new output from a background shell started with bash (run_in_background). Returns only the output produced since the last read. Optionally pass a regular expression to keep only matching lines.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "shell_id": {
+          "type": "string",
+          "description": "The shell id returned by bash run_in_background (e.g. bash_1)."
+        },
+        "filter": {
+          "description": "A regular expression; only output lines matching it are returned.",
+          "type": "string"
+        }
+      },
+      "required": ["shell_id"]
+    }
+  },
+  "kill_shell": {
+    "description": "Stop a background shell started with bash (run_in_background).",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "shell_id": {
+          "type": "string",
+          "description": "The shell id to stop (e.g. bash_1)."
+        }
+      },
+      "required": ["shell_id"]
+    }
+  },
+  "todo_write": {
+    "description": "Create and update a structured plan for the current task. The whole list is replaced on every call, so always send the full set of steps.\n\nUse this for non-trivial work that takes 3+ distinct steps, when the user gives multiple tasks, or when a plan may shift as you learn more. Skip it for simple or conversational requests \u2014 just do those directly.\n\nKeep it live: when you write the plan, mark the first step in_progress immediately; flip a step to completed the moment it's done (don't batch); keep exactly one step in_progress unless steps truly run in parallel. Only mark completed when fully done \u2014 if blocked, leave it in_progress and add a step describing what's needed.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "todos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string",
+                "description": "Short, actionable description of the step."
+              },
+              "status": {
+                "type": "string",
+                "enum": ["pending", "in_progress", "completed"],
+                "description": "pending = not started, in_progress = working on it, completed = fully done."
+              }
+            },
+            "required": ["content", "status"]
+          },
+          "description": "The full plan, in order. Replaces any previous plan."
+        }
+      },
+      "required": ["todos"]
+    }
+  },
+  "web_fetch": {
+    "description": "Fetch a web page and return its main readable content as Markdown. Use this to read an article, documentation, or any URL the user mentions or that a web search surfaced. Navigation, ads, and boilerplate are stripped out.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Why you are fetching this page, in short words. ALWAYS PROVIDE THIS FIRST."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "The absolute http(s) URL to fetch."
+        }
+      },
+      "required": ["description", "url"]
+    }
+  },
+  "web_search": {
+    "description": "Search the web and get a list of result titles, URLs, and snippets. Use this to find current information or pages you can then read with web_fetch. Returns the top results \u2014 follow up with web_fetch on a URL to read its full content.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The search query."
+        }
+      },
+      "required": ["query"]
+    }
+  },
+  "task": {
+    "description": "Delegate a self-contained task to a subagent that works in an isolated context and returns only its final result. Use this for work that takes many steps or would otherwise fill this conversation with intermediate detail (broad code searches, multi-source research). The subagent can't ask you questions, so give it everything it needs in the prompt.\n\nAvailable subagents:\n",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "A short 3-5 word label for the task, shown to the user (e.g. \"research optical stocks\")."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "The complete, self-contained task for the subagent to carry out autonomously, including any context it needs."
+        },
+        "subagent": {
+          "description": "Which subagent to delegate to, by name. Defaults to 'general-purpose'.",
+          "type": "string"
+        }
+      },
+      "required": ["description", "prompt"]
+    }
+  },
+  "skill": {
+    "description": "Load the full instructions for an available skill (listed in the available_skills reminder) so you can carry out its procedure. Call this with the skill name the moment a request matches one, then follow the instructions it returns. Pass any user-supplied specifics as args.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the skill to load, exactly as listed."
+        },
+        "args": {
+          "description": "Optional specifics to hand the skill (e.g. the concrete subject or target).",
+          "type": "string"
+        }
+      },
+      "required": ["name"]
+    }
+  },
+  "ask_clarification": {
+    "description": "Ask the user one to four clarifying questions when the request is genuinely ambiguous and a wrong guess would waste real work. Don't ask about things you can decide yourself or discover by looking \u2014 only ask when the answer materially changes what you build.\n\nEach question needs a short header (\u226412 chars, used as a tab label) and the question text. Pick the input type per question: 'single' (radio \u2014 pick one of the options), 'multi' (checkboxes \u2014 pick any number of the options), or 'text' (free input, no options). Provide options for single/multi; the user can always write their own answer beyond the listed options, so don't add a catch-all \"other\" option yourself. Keep it minimal \u2014 fewer, sharper questions beat a long form.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "questions": {
+          "minItems": 1,
+          "maxItems": 4,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "header": {
+                "type": "string",
+                "description": "Tab label, \u226412 chars (e.g. \"Auth\", \"DB\", \"Style\")."
+              },
+              "question": {
+                "type": "string",
+                "description": "The full question to ask."
+              },
+              "inputType": {
+                "type": "string",
+                "enum": ["single", "multi", "text"],
+                "description": "'single' = one option, 'multi' = many, 'text' = free input."
+              },
+              "options": {
+                "description": "Required for single/multi; omit for text.",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "preview": {
+                      "description": "Optional code/mockup shown beside a single-select option.",
+                      "type": "string"
+                    }
+                  },
+                  "required": ["label"]
+                }
+              },
+              "context": {
+                "description": "Optional one-line note under the question.",
+                "type": "string"
+              }
+            },
+            "required": ["header", "question", "inputType"]
+          },
+          "description": "1\u20134 questions, shown as tabs when more than one."
+        }
+      },
+      "required": ["questions"]
+    }
+  },
+  "view_image": {
+    "description": "View an image file (png, jpeg, gif, webp) from disk so it becomes visible in the conversation \u2014 e.g. a screenshot or picture another tool saved. Not for text files.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Why you are viewing this image, in short words. ALWAYS PROVIDE THIS FIRST."
+        },
+        "path": {
+          "type": "string",
+          "description": "Absolute path to the image file."
+        }
+      },
+      "required": ["description", "path"]
+    }
+  },
+  "memory": {
+    "description": "Durable memory that persists across sessions, so you don't depend on the user repeating themselves.\nRecord a memory when you learn something that should change how you act in future sessions: a user preference you keep getting corrected on, a hard-won project fact, a reusable command or workflow, a decision and why it was made. Before writing, ask: will a future session plausibly act better because of this? If not, don't write it. Do NOT record transient task state (use todo_write), facts you can re-derive, generic advice, or secrets.\nKeep what's stored honest: if a memory here is now wrong \u2014 it contradicts the user's instructions, or the project changed and made it stale \u2014 delete or rewrite it.\nscope=project: facts specific to this workspace. scope=global: facts true across all the user's projects.\nThe name is the key \u2014 writing an existing name replaces that memory. The MEMORY.md index is maintained for you; read it with view (no name) to see what's stored, then view a name for the full entry.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "enum": ["view", "write", "delete"]
+        },
+        "scope": {
+          "default": "project",
+          "type": "string",
+          "enum": ["project", "global"]
+        },
+        "name": {
+          "description": "the memory's short title; identifies it for view/write/delete. Omit on view to read the index.",
+          "type": "string"
+        },
+        "description": {
+          "description": "one-line summary shown in the index (required on write)",
+          "type": "string"
+        },
+        "type": {
+          "description": "preference = how the user likes to work; project = a fact/convention/decision about this codebase; reference = a pointer to a file, url, or command (required on write)",
+          "type": "string",
+          "enum": ["preference", "project", "reference"]
+        },
+        "body": {
+          "description": "the memory itself \u2014 what to remember and why it matters (required on write)",
+          "type": "string"
+        }
+      },
+      "required": ["command"]
+    }
+  },
+  "profile": {
+    "description": "Read and write the two identity files.\nsoul = who you are: your name, persona, and how you relate to this user. user = who the user is: their name, background, and preferences.\nUse this to establish or refine either identity \u2014 during a get-acquainted conversation, or whenever the user asks you to adjust how you act or what you know about them. Write the FULL file each time (it replaces the old one). Keep each concise and in a dense, telegraphic style. The user's name lives in USER.md frontmatter as `name:`.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "enum": ["view", "write"]
+        },
+        "target": {
+          "type": "string",
+          "enum": ["soul", "user"]
+        },
+        "content": {
+          "description": "the full markdown to write (replaces the file) when command=write",
+          "type": "string"
+        }
+      },
+      "required": ["command", "target"]
+    }
+  },
+  "schedule_create": {
+    "description": "Schedule a prompt to run automatically \u2014 on a recurring cron schedule, or once at a future time. Use when the user wants a reminder, a recurring briefing/monitor, or anything run on a schedule (\"every weekday at 8am summarize AI news\", \"remind me in 30 minutes\", \"check X every hour\").\n\nThe task fires later in its OWN conversation with no memory of this chat, so write the fields for that moment:\n- title: short and imperative, verb first; do NOT include the date or time.\n- prompt: the task written as a self-contained message from the user to you; do NOT include any scheduling info (the schedule fields own that).\n\nProvide exactly one of cron (recurring) or at (one-time). Times are the user's local time \u2014 resolve relative requests (\"in 30 minutes\", \"tonight\") into an absolute \"at\" using the current time from context. Lean toward NOT proactively suggesting tasks; schedule only when asked.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short imperative title (verb first), no date/time. Shown in the Scheduled list."
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The task as a self-contained message from the user to you, with no scheduling info; it cannot see this conversation."
+        },
+        "cron": {
+          "description": "5-field cron for a recurring task, e.g. \"0 8 * * 1-5\" = 08:00 on weekdays.",
+          "type": "string"
+        },
+        "at": {
+          "description": "ISO 8601 local datetime for a one-time run, e.g. \"2026-07-03T15:00\". Compute relative times (\"in 30 min\") from the current time.",
+          "type": "string"
+        },
+        "timezone": {
+          "description": "IANA timezone, e.g. \"Asia/Shanghai\". Defaults to the system timezone.",
+          "type": "string"
+        }
+      },
+      "required": ["title", "prompt"]
+    }
+  },
+  "schedule_list": {
+    "description": "List the user's scheduled tasks (id, title, schedule, enabled, next run). Use before cancelling, or when asked what's scheduled.",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  "schedule_update": {
+    "description": "Update an existing scheduled task \u2014 its schedule, prompt, title, or enabled state. Get the id from schedule_list first, and pass only the fields to change. Use cron for recurring or at (ISO datetime) for one-time; enabled:false pauses, true resumes.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The scheduled task id (from schedule_list)."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cron": {
+          "description": "New 5-field cron (switches to recurring).",
+          "type": "string"
+        },
+        "at": {
+          "description": "New ISO 8601 datetime (switches to one-time).",
+          "type": "string"
+        },
+        "enabled": {
+          "description": "false pauses the task, true resumes it.",
+          "type": "boolean"
+        },
+        "timezone": {
+          "type": "string"
+        }
+      },
+      "required": ["id"]
+    }
+  },
+  "schedule_cancel": {
+    "description": "Cancel (delete) a scheduled task by id. Get the id from schedule_list first.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The scheduled task id (from schedule_list)."
+        }
+      },
+      "required": ["id"]
+    }
+  },
+  "computer_list_apps": {
+    "description": "List the apps currently running (and recently used) on the Mac, so you can pick one to drive.",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    }
+  },
+  "computer_get_app_state": {
+    "description": "Open an app in the background and read its current state: an accessibility tree of interactive elements (each with an index) plus a window screenshot. Call this before acting, and again after an action to see the result.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Target app: bundle id (e.g. \"com.apple.Music\") or its name."
+        }
+      },
+      "required": ["app"]
+    }
+  },
+  "computer_click": {
+    "description": "Click an element (by index) or a pixel coordinate. Prefer element_index; fall back to x/y (screenshot pixels) when the app exposes no usable tree.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Target app: bundle id (e.g. \"com.apple.Music\") or its name."
+        },
+        "element_index": {
+          "type": "string",
+          "description": "Element index from the most recent get_app_state snapshot."
+        },
+        "x": {
+          "description": "Screenshot x, if clicking by coordinate.",
+          "type": "number"
+        },
+        "y": {
+          "description": "Screenshot y, if clicking by coordinate.",
+          "type": "number"
+        },
+        "mouse_button": {
+          "type": "string",
+          "enum": ["left", "right", "middle"]
+        },
+        "click_count": {
+          "description": "e.g. 2 for a double-click.",
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["app"]
+    }
+  },
+  "computer_type_text": {
+    "description": "Type literal text into the focused field of an app.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Target app: bundle id (e.g. \"com.apple.Music\") or its name."
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": ["app", "text"]
+    }
+  },
+  "computer_press_key": {
+    "description": "Press a key or key combination (xdotool syntax): e.g. \"cmd+s\", \"Return\", \"space\", \"ctrl+shift+t\".",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Target app: bundle id (e.g. \"com.apple.Music\") or its name."
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": ["app", "key"]
+    }
+  },
+  "computer_scroll": {
+    "description": "Scroll a scrollable element up/down/left/right by a number of pages.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Target app: bundle id (e.g. \"com.apple.Music\") or its name."
+        },
+        "element_index": {
+          "type": "string",
+          "description": "Element index from the most recent get_app_state snapshot."
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["up", "down", "left", "right"]
+        },
+        "pages": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["app", "element_index", "direction"]
+    }
+  },
+  "computer_drag": {
+    "description": "Drag from one screenshot coordinate to another (e.g. move a window or a file).",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Target app: bundle id (e.g. \"com.apple.Music\") or its name."
+        },
+        "from_x": {
+          "type": "number"
+        },
+        "from_y": {
+          "type": "number"
+        },
+        "to_x": {
+          "type": "number"
+        },
+        "to_y": {
+          "type": "number"
+        }
+      },
+      "required": ["app", "from_x", "from_y", "to_x", "to_y"]
+    }
+  },
+  "computer_set_value": {
+    "description": "Set an element's value directly (a slider, stepper, or text field) \u2014 faster than typing character by character.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Target app: bundle id (e.g. \"com.apple.Music\") or its name."
+        },
+        "element_index": {
+          "type": "string",
+          "description": "Element index from the most recent get_app_state snapshot."
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": ["app", "element_index", "value"]
+    }
+  },
+  "computer_perform_action": {
+    "description": "Invoke a secondary accessibility action on an element: \"raise\" (bring window forward), \"press\", \"showmenu\" (context menu), \"confirm\", \"cancel\", \"pick\".",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Target app: bundle id (e.g. \"com.apple.Music\") or its name."
+        },
+        "element_index": {
+          "type": "string",
+          "description": "Element index from the most recent get_app_state snapshot."
+        },
+        "action": {
+          "type": "string"
+        }
+      },
+      "required": ["app", "element_index", "action"]
+    }
+  },
+  "memory__dir": {
+    "description": "View, write, and delete memories in this directory. Writing an existing name replaces it; the index is maintained for you.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "enum": ["view", "write", "delete"]
+        },
+        "name": {
+          "description": "the memory's short title; identifies it for view/write/delete. Omit on view to read the index.",
+          "type": "string"
+        },
+        "description": {
+          "description": "one-line summary shown in the index (required on write)",
+          "type": "string"
+        },
+        "type": {
+          "description": "preference = how the user likes to work; project = a fact/convention/decision about this codebase; reference = a pointer to a file, url, or command (required on write)",
+          "type": "string",
+          "enum": ["preference", "project", "reference"]
+        },
+        "body": {
+          "description": "the memory itself \u2014 what to remember and why it matters (required on write)",
+          "type": "string"
+        }
+      },
+      "required": ["command"]
+    }
+  }
+}

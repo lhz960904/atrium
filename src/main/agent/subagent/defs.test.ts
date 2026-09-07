@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { ToolName } from '@shared/tools';
-import type { Tool } from 'ai';
 import type { Db } from '../../db';
+import type { AtriumTool } from '../tools/define';
 import { BUILTIN_SUBAGENTS, filterToolsForSubagent, resolveSubagentDef } from './defs';
 
 const ALL_TOOLS: ToolName[] = [
@@ -13,12 +13,9 @@ const ALL_TOOLS: ToolName[] = [
   'web_fetch',
   'web_search',
 ];
-const parentTools = (extra: string[] = []): Record<ToolName, Tool> =>
-  Object.fromEntries([...ALL_TOOLS, ...extra].map((n) => [n, {} as Tool])) as Record<
-    ToolName,
-    Tool
-  >;
-const names = (tools: Record<ToolName, Tool>): string[] => Object.keys(tools).sort();
+const parentTools = (extra: string[] = []): AtriumTool[] =>
+  [...ALL_TOOLS, ...extra].map((name) => ({ name }) as AtriumTool);
+const names = (tools: AtriumTool[]): string[] => tools.map((t) => t.name).sort();
 
 const fakeDb = (row: unknown): Db =>
   ({

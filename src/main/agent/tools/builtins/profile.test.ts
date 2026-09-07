@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { dispatchProfile, profileInputSchema } from './profile';
+import { dispatchProfile, profileParameters } from './profile';
 
 const created: string[] = [];
 afterAll(async () => {
@@ -15,8 +15,8 @@ async function tmp(): Promise<string> {
 }
 
 test('target only accepts soul or user', () => {
-  expect(profileInputSchema.parse({ command: 'write', target: 'soul' }).target).toBe('soul');
-  expect(() => profileInputSchema.parse({ command: 'view', target: 'other' })).toThrow();
+  const target = profileParameters.properties.target as unknown as { enum: string[] };
+  expect(target.enum).toEqual(['soul', 'user']);
 });
 
 test('write then view round-trips each target independently', async () => {

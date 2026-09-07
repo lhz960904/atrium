@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
-import type { Db } from '../../../db';
 import type { Sandbox } from '../../sandbox/types';
 import type { ToolCtx } from '../context';
+import { fakeRun, runTool } from '../testing';
 import { writeFileTool } from './write-file';
 
 function ctx(over: Partial<Sandbox>): ToolCtx {
@@ -12,11 +12,9 @@ function ctx(over: Partial<Sandbox>): ToolCtx {
     list: async () => [],
     exec: async () => ({ output: '', exitCode: 0 }),
   };
-  return { sandbox: { ...base, ...over }, workspaceRoot: '/ws', db: {} as Db };
+  return { sandbox: { ...base, ...over }, workspaceRoot: '/ws', run: fakeRun() };
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: tool.execute's option arg is irrelevant here
-const opts = {} as any;
 const errno = (code: string): NodeJS.ErrnoException => Object.assign(new Error(code), { code });
 
 test('resolves the path, writes, and reports bytes', async () => {
@@ -31,7 +29,7 @@ test('resolves the path, writes, and reports bytes', async () => {
       },
     }),
   );
-  const out = await t.execute?.({ description: 'x', path: 'a.txt', content: 'hello' }, opts);
+  const out = await runTool(t, { description: 'x', path: 'a.txt', content: 'hello' });
   expect(gotPath).toBe('/ws/a.txt');
   expect(gotAppend).toBe(false);
   expect(out).toContain('5 bytes');
@@ -47,11 +45,11 @@ test('passes the append flag through', async () => {
       },
     }),
   );
-  await t.execute?.({ description: 'x', path: 'a.txt', content: 'x', append: true }, opts);
+  await runTool(t, { description: 'x', path: 'a.txt', content: 'x', append: true });
   expect(gotAppend).toBe(true);
 });
 
-test('maps permission errors to a friendly message', async () => {
+test('maps permission errors to a friendly failure', async () => {
   const t = writeFileTool(
     ctx({
       writeFile: async () => {
@@ -59,8 +57,8 @@ test('maps permission errors to a friendly message', async () => {
       },
     }),
   );
-  expect(await t.execute?.({ description: 'x', path: 'a.txt', content: 'x' }, opts)).toBe(
-    'Error: Permission denied writing to file: a.txt',
+  expect(runTool(t, { description: 'x', path: 'a.txt', content: 'x' })).rejects.toThrow(
+    'Permission denied writing to file: a.txt',
   );
 });
 
@@ -74,7 +72,7 @@ test('writes outside the workspace (the boundary is the approval gate, not this 
       },
     }),
   );
-  const out = await t.execute?.({ description: 'x', path: '../x', content: 'x' }, opts);
+  const out = await runTool(t, { description: 'x', path: '../x', content: 'x' });
   expect(gotPath).toBe('/x');
   expect(out).toContain('1 bytes');
 });

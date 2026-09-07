@@ -1,18 +1,18 @@
-import { getToolName, isDataUIPart, isToolUIPart, type ModelMessage, type UIMessage } from 'ai';
 import { isImageToolOutput, type ToolResultImage } from './chat-types';
 
+/** Typed loosely on purpose: fixtures and persisted rows are shaped like a
+ *  UIMessage without being one. */
+type UIMessageLike = { parts: readonly { type: string }[] };
+
 /**
- * One traversal layer over both message families. UIMessages (persisted chat
- * history) and ModelMessages (the within-turn wire form) carry the same
- * conversation content in different shapes — parts vs content, merged tool
- * parts vs split tool-call/tool-result, three tool-output encodings. Every
- * consumer that walks a conversation (token estimation, transcript rendering,
- * markdown export, text extraction) reads the normalized parts produced here
- * instead of re-implementing the shape dispatch.
+ * Flattens a UIMessage's parts into one sequence a consumer can reduce over,
+ * absorbing the shape variance: three tool-output encodings, tool parts that
+ * merge call and result, error results carried in a separate field. Consumers
+ * (currently the markdown copy/export) read NormalizedPart instead of
+ * re-implementing the dispatch.
  *
- * A UIMessage tool part that already has its result yields two parts — a
- * `tool-call` then a `tool-result` — matching the ModelMessage form, so
- * consumers handle one sequence regardless of family.
+ * A tool part that already has its result yields two parts — a `tool-call`
+ * then a `tool-result` — so call and result are always separate entries.
  */
 
 export type NormalizedToolOutput = {
@@ -105,32 +105,44 @@ function normalizeContentEntries(entries: LooseObject[]): NormalizedToolOutput {
   return { text: texts.join('\n'), images };
 }
 
-/** Normalized conversation content of a message, either family. */
-export function normalizedParts(msg: UIMessage | ModelMessage): NormalizedPart[] {
-  return 'parts' in msg ? fromUIParts(msg.parts) : fromModelContent(msg.content);
+/** Normalized conversation content of a message. */
+export function normalizedParts(msg: UIMessageLike): NormalizedPart[] {
+  return fromUIParts(msg.parts);
 }
 
-function fromUIParts(parts: UIMessage['parts']): NormalizedPart[] {
+function fromUIParts(parts: UIMessageLike['parts']): NormalizedPart[] {
   const out: NormalizedPart[] = [];
   // Defensive ?? []: persisted rows and test fixtures can lack the field.
-  for (const part of parts ?? []) {
+  for (const raw of parts ?? []) {
+    const part = raw as { type: string } & Record<string, unknown>;
     if (part.type === 'text') {
-      out.push({ kind: 'text', text: part.text });
+      out.push({ kind: 'text', text: String(part.text ?? '') });
     } else if (part.type === 'reasoning') {
-      out.push({ kind: 'reasoning', text: part.text });
+      out.push({ kind: 'reasoning', text: String(part.text ?? '') });
     } else if (part.type === 'file') {
       out.push({
         kind: 'file',
-        mediaType: part.mediaType,
-        url: part.url,
-        filename: part.filename,
+        mediaType: part.mediaType as string | undefined,
+        url: part.url as string | undefined,
+        filename: part.filename as string | undefined,
       });
     } else if (part.type === 'source-url') {
-      out.push({ kind: 'source', title: part.title, url: part.url });
+      out.push({
+        kind: 'source',
+        title: part.title as string | undefined,
+        url: part.url as string | undefined,
+      });
     } else if (part.type === 'source-document') {
-      out.push({ kind: 'source', title: part.title, filename: part.filename });
-    } else if (isToolUIPart(part)) {
-      const name = getToolName(part);
+      out.push({
+        kind: 'source',
+        title: part.title as string | undefined,
+        filename: part.filename as string | undefined,
+      });
+    } else if (part.type.startsWith('tool-') || part.type === 'dynamic-tool') {
+      const name =
+        part.type === 'dynamic-tool'
+          ? String(part.toolName ?? '')
+          : part.type.slice('tool-'.length);
       out.push({ kind: 'tool-call', name, input: part.input });
       // Presence-checked rather than state-gated: loosely-shaped parts (fixtures,
       // mock threads) carry an output without the state machine fields.
@@ -140,10 +152,10 @@ function fromUIParts(parts: UIMessage['parts']): NormalizedPart[] {
         out.push({
           kind: 'tool-result',
           name,
-          output: { text: part.errorText, images: [], error: true },
+          output: { text: String(part.errorText ?? ''), images: [], error: true },
         });
       }
-    } else if (isDataUIPart(part)) {
+    } else if (part.type.startsWith('data-')) {
       out.push({ kind: 'data', dataType: part.type.slice('data-'.length), data: part.data });
     }
     // step-start carries no content.
@@ -151,50 +163,8 @@ function fromUIParts(parts: UIMessage['parts']): NormalizedPart[] {
   return out;
 }
 
-function fromModelContent(content: ModelMessage['content']): NormalizedPart[] {
-  if (typeof content === 'string') return [{ kind: 'text', text: content }];
-  const out: NormalizedPart[] = [];
-  for (const part of content) {
-    switch (part.type) {
-      case 'text':
-      case 'reasoning':
-        out.push({ kind: part.type, text: part.text });
-        break;
-      case 'tool-call':
-        out.push({ kind: 'tool-call', name: part.toolName, input: part.input });
-        break;
-      case 'tool-result':
-        out.push({
-          kind: 'tool-result',
-          name: part.toolName,
-          output: normalizeToolOutput(part.output),
-        });
-        break;
-      case 'image':
-        out.push({
-          kind: 'file',
-          mediaType: part.mediaType,
-          url: typeof part.image === 'string' ? part.image : undefined,
-        });
-        break;
-      case 'file':
-        out.push({
-          kind: 'file',
-          mediaType: part.mediaType,
-          url: typeof part.data === 'string' ? part.data : undefined,
-          filename: part.filename,
-        });
-        break;
-      default:
-        // Approval bookkeeping parts carry no conversation content.
-        break;
-    }
-  }
-  return out;
-}
-
 /** Concatenated plain text of a message's text parts. */
-export function textOfMessage(msg: UIMessage | ModelMessage, separator = ''): string {
+export function textOfMessage(msg: UIMessageLike, separator = ''): string {
   return normalizedParts(msg)
     .filter((p) => p.kind === 'text')
     .map((p) => p.text)

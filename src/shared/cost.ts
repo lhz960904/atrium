@@ -5,7 +5,7 @@
  * float directly.
  */
 
-/** Token counts for one call; inputTokens is inclusive of cache (AI SDK semantics). */
+/** Token counts for one call; inputTokens is inclusive of cache. */
 export type TokenCounts = {
   inputTokens: number;
   outputTokens: number;
