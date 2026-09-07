@@ -172,10 +172,9 @@ export const Composer = memo(function Composer({
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result !== 'string') return;
-        // The data URL's own media type wins over the part's mediaType field
-        // downstream (convertToModelMessages reads it from the URL header), so
-        // rebuild the URL with the classified type — e.g. an SVG read as text
-        // must declare text/plain, not image/svg+xml, or the API rejects it.
+        // Rebuild the URL with the classified type so the two never disagree:
+        // an SVG read as text must declare text/plain, not image/svg+xml, or
+        // the API rejects it.
         const base64 = reader.result.slice(reader.result.indexOf(',') + 1);
         setAttachments((prev) => [
           ...prev,

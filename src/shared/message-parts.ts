@@ -1,25 +1,18 @@
 import { isImageToolOutput, type ToolResultImage } from './chat-types';
 
-/**
- * Structural stand-ins for both message families. Typed loosely on purpose:
- * this shared traversal layer must accept the stored UIMessage
- * (main-process callers) and the self-owned AtriumUIMessage alike, without
- * carrying an SDK import into the renderer bundle.
- */
+/** Typed loosely on purpose: fixtures and persisted rows are shaped like a
+ *  UIMessage without being one. */
 type UIMessageLike = { parts: readonly { type: string }[] };
 
 /**
- * One traversal layer over both message families. UIMessages (persisted chat
- * history) and ModelMessages (the within-turn wire form) carry the same
- * conversation content in different shapes — parts vs content, merged tool
- * parts vs split tool-call/tool-result, three tool-output encodings. Every
- * consumer that walks a conversation (token estimation, transcript rendering,
- * markdown export, text extraction) reads the normalized parts produced here
- * instead of re-implementing the shape dispatch.
+ * Flattens a UIMessage's parts into one sequence a consumer can reduce over,
+ * absorbing the shape variance: three tool-output encodings, tool parts that
+ * merge call and result, error results carried in a separate field. Consumers
+ * (currently the markdown copy/export) read NormalizedPart instead of
+ * re-implementing the dispatch.
  *
- * A UIMessage tool part that already has its result yields two parts — a
- * `tool-call` then a `tool-result` — matching the ModelMessage form, so
- * consumers handle one sequence regardless of family.
+ * A tool part that already has its result yields two parts — a `tool-call`
+ * then a `tool-result` — so call and result are always separate entries.
  */
 
 export type NormalizedToolOutput = {
@@ -112,7 +105,7 @@ function normalizeContentEntries(entries: LooseObject[]): NormalizedToolOutput {
   return { text: texts.join('\n'), images };
 }
 
-/** Normalized conversation content of a message, either family. */
+/** Normalized conversation content of a message. */
 export function normalizedParts(msg: UIMessageLike): NormalizedPart[] {
   return fromUIParts(msg.parts);
 }
