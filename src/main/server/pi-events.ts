@@ -6,10 +6,6 @@ import { createLogger } from '../log';
  * log, and readers replay the buffer from any seq then tail live. This IS the
  * chat transport — the POST response and every reconnect serve slices of it.
  *
- * The agent loop appends pi events directly; the paths still producing AI SDK
- * chunks (an external ACP agent, image generation) fold theirs through the
- * protocol bridge on the way in.
- *
  * Memory bounds: one log per thread, superseded by the thread's next run, and
  * ended logs beyond a fixed count are evicted oldest-first. A single log holds
  * one run — the same per-run bound the old resumable store accepted.

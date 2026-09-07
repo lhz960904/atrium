@@ -16,7 +16,7 @@ import type { AtriumTool } from './define';
  * via resolveAbsolute; reads may reach outside it, while out-of-workspace
  * writes are gated by the permission layer. `run` is the turn's own context,
  * which is why the toolset is built per run: the tools that reach back into the
- * turn (task's subagent, skill activation, image_gen's stream write) close over
+ * turn (task's subagent, skill activation) close over
  * it instead of being handed a context at call time. `skills` are the ones
  * discovered at startup, so the skill tool can load a body by name; absent
  * until discovery is wired, so it defaults to none. `bgShells` is the

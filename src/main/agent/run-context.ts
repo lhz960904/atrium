@@ -14,9 +14,6 @@ export type RunContext = {
   workspaceRoot: string;
   /** The system prompt this turn runs under. */
   system: string;
-  /** The turn's history, for the few consumers that still read past content
-   *  (image generation's reference images). */
-  history: unknown[];
   /** The run's model identity, for the usage ledger. Optional: test contexts
    *  omit it, and a subagent inherits its parent's when not pinned to its own. */
   providerId?: string;

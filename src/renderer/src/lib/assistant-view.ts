@@ -38,8 +38,8 @@ export type ClarifySegment = {
   result?: ClarifyResult;
 };
 
-/** A generated/attached image shown inline (from a file part the agent emits,
- *  e.g. image_gen). Clicking it opens the full attachment viewer. */
+/** An image shown inline, from a file part on the message. Clicking it opens
+ *  the full attachment viewer. */
 export type ImageSegment = {
   kind: 'image';
   id: string;
@@ -84,9 +84,9 @@ export function buildAssistantView(parts: AtriumUIMessage['parts'], t: TFunction
       if (content === '') continue;
       work.push({ kind: 'narrative', id: `s${seq++}`, content });
     } else if (part.type === 'file' && part.mediaType.startsWith('image/')) {
-      // Images the agent produced (image_gen emits a file part) render inline as
-      // the deliverable. Not a tool, so it doesn't advance lastToolIdx — it
-      // trails the generating tool and lands in `final`, shown prominently.
+      // Images the agent produced render inline as the deliverable. Not a tool,
+      // so it doesn't advance lastToolIdx — it trails the generating tool and
+      // lands in `final`, shown prominently.
       work.push({
         kind: 'image',
         id: `s${seq++}`,

@@ -91,7 +91,7 @@ async function scanRoot(root: string, source: SkillSource): Promise<Skill[]> {
  *  - by skill name, where the higher-priority source wins (SOURCE_PRIORITY) —
  *    the shared ~/.agents home overriding an ecosystem copy of the same name.
  *
- * Pure over its roots + filesystem (no AI SDK); the only side channel is the
+ * Pure over its roots + filesystem; the only side channel is the
  * scoped logger, which falls back to console off Electron — directly unit
  * testable against a temp dir.
  */

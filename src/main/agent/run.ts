@@ -1,15 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Agent, type AgentEvent, type StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model, Message as PiMessage } from '@earendil-works/pi-ai';
-import type { AtriumUIMessage } from '@shared/chat';
 import type { PermissionMode } from '@shared/permissions';
-import type {
-  AgentSessionEvent,
-  AssistantMessage,
-  Content,
-  Message,
-  ToolCall,
-} from '@shared/protocol';
+import type { AgentSessionEvent, AssistantMessage, Message, ToolCall } from '@shared/protocol';
 import type { Db } from '../db';
 import { createLogger } from '../log';
 import { recordTurn } from './memory/state';
@@ -73,9 +66,6 @@ export type RunAgentOptions = {
   getApiKey: (provider: string) => string | undefined;
   /** The thread's transcript as pi messages: what the engine runs on. */
   messages: Message[];
-  /** The same history as UIMessages, for the interim consumers that still read
-   *  it (image_gen's reference images, the subagent). */
-  uiMessages: AtriumUIMessage[];
   workspaceRoot: string;
   threadId: string;
   db: Db;
@@ -143,9 +133,6 @@ const contextSizeOf = (usage: AssistantMessage['usage']): number =>
 export async function runAgent(opts: RunAgentOptions): Promise<void> {
   const soul = await readSoul();
   const startedAt = Date.now();
-  // Files a tool produced mid-turn (image_gen). The wire gets them immediately
-  // as notices; they join the turn's stored content so a reload still shows them.
-  const files: Content[] = [];
 
   const ctx: RunContext = {
     threadId: opts.threadId,
@@ -157,24 +144,13 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
       platform: process.platform,
       mode: opts.permissionMode,
     }),
-    history: opts.uiMessages,
     providerId: opts.providerId,
     modelId: opts.modelId,
-    // Transient UI channels (a generated image, an auto-review badge, subagent
-    // activity) still speak in stream chunks; they ride the wire as notices,
-    // which is exactly what the renderer's notice router already expects.
+    // Transient UI channels (an auto-review badge, subagent activity) still
+    // speak in stream chunks; they ride the wire as notices, which is exactly
+    // what the renderer's notice router already expects.
     emit: (chunk) => {
-      const c = chunk as { type: string; url?: string; mediaType?: string };
-      if (c.type === 'file') {
-        const content: Content = { type: 'file', url: c.url, mediaType: c.mediaType } as Content;
-        files.push(content);
-        opts.emit({
-          type: 'notice',
-          name: 'file',
-          payload: { url: c.url, mediaType: c.mediaType },
-        });
-        return;
-      }
+      const c = chunk as { type: string };
       if (!c.type.startsWith('data-')) return;
       const { type, ...payload } = chunk as { type: string; [key: string]: unknown };
       opts.emit({ type: 'notice', name: type.slice('data-'.length), payload });
@@ -410,7 +386,6 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
   opts.emit({ type: 'notice', name: 'message-metadata', payload: metadata });
 
   if (rows.length > 0) {
-    attachFiles(rows, files);
     stampParkedCalls(rows, parked);
     sealUnansweredCalls(rows, parked);
     rows[0].metadata = { ...rows[0].metadata, ...metadata };
@@ -495,16 +470,4 @@ function sealUnansweredCalls(rows: RunRow[], parked: Map<string, ParkedCall>): v
   }
   rows.length = 0;
   rows.push(...sealed);
-}
-
-/** Fold tool-produced files into the run's last assistant turn, so they are
- *  stored on the message the way the renderer already shows them. */
-function attachFiles(rows: RunRow[], files: Content[]): void {
-  if (files.length === 0) return;
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const message = rows[i].message;
-    if (message.role !== 'assistant') continue;
-    message.content = [...message.content, ...files];
-    return;
-  }
 }

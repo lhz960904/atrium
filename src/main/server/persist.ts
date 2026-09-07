@@ -434,8 +434,8 @@ export function persistMessage(db: Db, threadId: string, msg: AtriumUIMessage): 
  * cases need the overwrite, both keyed on a reused message id: the client
  * re-sends an assistant message whose client-side tool (ask_clarification) just
  * got its answer, and the model continues that same assistant message after the
- * answer (the AI SDK extends it under the same id rather than minting a new
- * one). Insert-and-ignore would silently drop the continuation.
+ * answer (the continuation extends it under the same id rather than minting a
+ * new one). Insert-and-ignore would silently drop it.
  */
 export function upsertMessage(
   db: Db,

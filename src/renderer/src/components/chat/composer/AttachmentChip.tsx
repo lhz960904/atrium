@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 /** A pending composer attachment. The content is read into `url` (a data URL)
  *  at pick time, so it's a self-contained copy — moving/deleting the original
- *  file doesn't affect us. Maps directly to an AI SDK file part on send. */
+ *  file doesn't affect us. Maps directly to a file part on send. */
 export type Attachment = {
   id: string;
   name: string;

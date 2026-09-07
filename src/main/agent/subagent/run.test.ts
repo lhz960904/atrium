@@ -80,7 +80,6 @@ function parentCtx(over: Partial<RunContext> = {}): RunContext {
     sandbox: {} as Sandbox,
     workspaceRoot: '/ws',
     system: 'PARENT SYSTEM PROMPT',
-    history: [{ id: 'ph', role: 'user', parts: [{ type: 'text', text: 'PARENT_HISTORY' }] }],
     emit: () => {},
     scratch: new Map(),
     ...over,
@@ -106,12 +105,11 @@ test('returns the final assistant text and runs in an isolated context', async (
 
   expect(result.text).toBe('THE ANSWER');
   // Isolation: the child sees its own system prompt + just the task, never the
-  // parent's system prompt or conversation history.
+  // parent's.
   const first = JSON.stringify(seen[0]);
   expect(first).toContain('SUBAGENT SYSTEM PROMPT');
   expect(first).toContain('do the task');
   expect(first).not.toContain('PARENT SYSTEM PROMPT');
-  expect(first).not.toContain('PARENT_HISTORY');
 });
 
 test('runs the full loop but returns only the final text, never tool output', async () => {

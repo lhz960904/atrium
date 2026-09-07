@@ -1,4 +1,3 @@
-import type { PermissionOptionKind } from '@agentclientprotocol/sdk';
 import type { AtriumTools, ToolName } from './tools';
 import type { UIMessage } from './ui-message';
 
@@ -13,13 +12,7 @@ export type SubagentActivityTool = { id: string; name: ToolName; input: unknown 
  * indicator. Within-turn folds aren't surfaced (internal, not persisted).
  * `subagent` bubbles a delegated subagent's activity (keyed by the task tool's
  * call id) so its card can show a live nested trace; never persisted, so a
- * reloaded card shows just the result. `permissionRequest`
- * surfaces an external (ACP) agent's blocked permission ask — the agent process
- * is parked mid-turn on it, so the answer goes back over a side endpoint rather
- * than a new chat turn; a reload mid-approval replays it (the stream is still
- * live), restoring the card. `permissionResolved` is its settlement receipt:
- * a reload replays the whole buffer, so without it every already-answered ask
- * would re-materialize as a ghost card — replaying request + receipt nets out.
+ * reloaded card shows just the result.
  */
 export type AtriumDataParts = {
   compaction: { phase: 'start' | 'done' };
@@ -27,18 +20,6 @@ export type AtriumDataParts = {
     | { id: string; phase: 'start' }
     | { id: string; phase: 'step'; tools: SubagentActivityTool[] }
     | { id: string; phase: 'done'; status: 'done' | 'failed' };
-  permissionRequest: {
-    requestId: string;
-    toolCallId: string;
-    title: string;
-    /** The command / path / title to show in the card's mono block, verbatim. */
-    target: string;
-    /** Mono prefix: `$ ` for a shell command, `✎ ` for a file change. */
-    prefix: string;
-    /** Whether the agent offered an "allow always" option for this call. */
-    canAlways: boolean;
-  };
-  permissionResolved: { requestId: string };
   /** A boundary-crossing tool call the auto-review reviewer silently approved.
    *  Transient — drives a persistent "reviewed" badge on the tool marker (keyed
    *  by toolCallId) and a one-shot toast above the composer (showing subject).
@@ -48,17 +29,6 @@ export type AtriumDataParts = {
    *  chat and sidebar update live, the DB is updated in parallel. */
   title: { title: string };
 };
-
-/**
- * The user's answer to an external agent's permission request, sent to the
- * acp-permission endpoint. Semantic (not an optionId) so the server maps it to
- * one of the agent-supplied options — a stale or forged optionId can't be
- * injected from the client. Derived from the protocol's option vocabulary minus
- * reject_always: the approval card deliberately offers no persistent deny (the
- * agent stores it on its side, where our Settings can't list or undo it).
- * Cancellation isn't a decision — stop/abort settles parked requests directly.
- */
-export type AcpPermissionDecision = Exclude<PermissionOptionKind, 'reject_always'>;
 
 /**
  * Per-assistant-message observability, minted server-side via the stream's

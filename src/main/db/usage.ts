@@ -6,13 +6,6 @@ import { usage } from './schema';
 
 export type UsageKind = 'chat' | 'subagent' | 'title' | 'summary' | 'review';
 
-/**
- * Token breakdown from an AI SDK usage object — the single place that maps
- * inputTokenDetails to our cache read/write fields, shared by the live metadata
- * stamp and the subagent's ledger write so the mapping is never duplicated.
- * Values pass through verbatim (undefined stays undefined, so metadata doesn't
- * fabricate zeros); the ledger defaults them to 0 in recordUsage.
- */
 /** Micro-USD (1e-6 dollar) cost of one call — integer for ledger storage. */
 export function costMicros(t: TokenCounts, pricing: ModelPricing): number {
   return Math.round(costUsd(t, pricing) * 1_000_000);

@@ -1,4 +1,4 @@
-import type { ToolName } from '@shared/tools';
+import type { RetiredToolName, ToolName } from '@shared/tools';
 import type { ParseKeys, TFunction } from 'i18next';
 import {
   Bot,
@@ -35,7 +35,10 @@ import {
  * plan renders in the composer-level plan panel) and `ask_clarification` (it
  * renders as a ClarifyCard in the message flow, not a trace marker).
  */
-export type MarkerToolName = Exclude<ToolName, 'todo_write' | 'ask_clarification'>;
+export type MarkerToolName = Exclude<
+  ToolName | RetiredToolName,
+  'todo_write' | 'ask_clarification'
+>;
 
 /** The input fields the presentation reads to build a tool's labels. */
 export type ToolInput = {

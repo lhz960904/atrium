@@ -22,8 +22,7 @@ import { decryptCredentials } from './credentials';
 import { getProviderManifest, type ManifestModel, PROVIDER_MANIFEST } from './manifest';
 
 /**
- * pi-side model resolution, the counterpart of resolveModel (AI SDK) — both
- * coexist until the engine swap completes, then the AI SDK path retires.
+ * Model resolution for the engine.
  *
  * Model metadata comes from pi itself, not the litellm catalog: the builtin
  * entry when pi ships the provider (compat quirks included); otherwise the

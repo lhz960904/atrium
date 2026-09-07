@@ -2,7 +2,7 @@
   "name": "atrium",
   "version": "0.14.3",
   "private": true,
-  "description": "Atrium \u2014 personal AI workspace",
+  "description": "Atrium — personal AI workspace",
   "main": "./out/main/index.js",
   "author": "lhz960904",
   "license": "MIT",
@@ -51,7 +51,6 @@
     "shiki": "^4.3.1"
   },
   "devDependencies": {
-    "@agentclientprotocol/sdk": "^0.25.0",
     "@biomejs/biome": "2.4.15",
     "@codemirror/lang-json": "^6.0.2",
     "@codemirror/merge": "^6.12.2",

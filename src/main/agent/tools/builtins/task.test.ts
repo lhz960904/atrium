@@ -58,7 +58,6 @@ function ctx(db: Db): RunContext {
     sandbox: {} as Sandbox,
     workspaceRoot: '/ws',
     system: 's',
-    history: [],
     emit: () => {},
     scratch: new Map(),
   };

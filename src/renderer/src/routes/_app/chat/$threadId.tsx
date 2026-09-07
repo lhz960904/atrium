@@ -22,7 +22,7 @@ export const Route = createFileRoute('/_app/chat/$threadId')({
   component: ChatView,
 });
 
-/** Composer attachments → AI SDK file parts for sendMessage. */
+/** Composer attachments → file parts for sendMessage. */
 function toFileParts(attachments: Attachment[]) {
   return attachments.map((a) => ({
     type: 'file' as const,

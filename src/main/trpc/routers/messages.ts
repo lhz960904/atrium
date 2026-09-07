@@ -17,8 +17,8 @@ export const messagesRouter = router({
 
   /**
    * Append a message. parts / metadata are arbitrary JSON; runtime callers
-   * are responsible for shaping them (Vercel AI SDK UIMessage.parts on the
-   * agent loop side, the chat-types shapes on the mock side).
+   * are responsible for shaping them (UIMessage.parts on the agent loop side,
+   * the chat-types shapes on the mock side).
    *
    * Also bumps the parent thread's updatedAt so the sidebar floats this
    * thread to the top.

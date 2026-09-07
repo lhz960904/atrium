@@ -160,7 +160,7 @@ export const Composer = memo(function Composer({
 
   // Read each file into a data URL up front, so the attachment is a
   // self-contained copy (the original can move or be deleted) and maps straight
-  // to an AI SDK file part on send. Shared by the file picker and clipboard paste.
+  // to a file part on send. Shared by the file picker and clipboard paste.
   const addFiles = (files: File[]): void => {
     const dropped: string[] = [];
     for (const file of files) {

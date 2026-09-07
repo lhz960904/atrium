@@ -30,7 +30,6 @@ import { getSettings } from '../settings/conf';
 import {
   loadRunRows,
   loadThreadHistory,
-  loadThreadMessages,
   persistCheckpoint,
   persistMessage,
   persistRun,
@@ -58,8 +57,7 @@ function runResponse(threadId: string): Response {
     : new Response('event log missing', { status: 500 });
 }
 
-// Client sends only the latest message (AI SDK persistence best practice);
-// the server rebuilds history from the DB. The thread row always exists before
+// Client sends only the latest message; the server rebuilds history from the DB. The thread row always exists before
 // the chat view can send (the home view creates it, then navigates), so
 // threadId is a hard requirement — its absence is a bug, not a degraded mode.
 type ChatBody = {
@@ -72,9 +70,8 @@ type ChatBody = {
 
 /**
  * Localhost HTTP server for AI streaming. Lives alongside electron-trpc:
- * tRPC handles CRUD, this handles the chat stream (AI SDK's happy path is
- * an HTTP Response that useChat consumes). Bound to 127.0.0.1 on a random
- * free port; a per-launch token gates /api/* so other local processes
+ * tRPC handles CRUD, this handles the chat stream — a long-lived HTTP response
+ * the renderer reads as SSE. Bound to 127.0.0.1 on a random free port; a per-launch token gates /api/* so other local processes
  * can't drive the user's model credits.
  */
 const log = createLogger('chat');
@@ -83,8 +80,7 @@ const log = createLogger('chat');
  * Resolve the auto-review reviewer model. Prefers the dedicated setting; when
  * unset, falls back to this turn's chat model so auto-review works out of the
  * box. Returns undefined (→ auto-review prompts) when nothing resolves — a
- * removed model, or the fallback being an external agent whose model we can't
- * drive (an ACP turn has no controllable model to inherit).
+ * removed model.
  */
 function resolveReviewer(
   db: Db,
@@ -145,8 +141,6 @@ export function startHttpServer(deps: {
   // Long-running shells (dev servers, watchers) outlive a request, so the
   // registry is a single instance held for the server's lifetime, not per-call.
   const bgShells = new BackgroundShells();
-  // External CLI agents keep one ACP session per thread (so they remember the
-  // conversation across turns), so this registry is also server-lifetime.
   // Renderer is a different origin (localhost:5173 in dev, file:// in prod);
   // CORS must run before auth so the credential-less preflight isn't 401'd.
   app.use(
@@ -167,16 +161,15 @@ export function startHttpServer(deps: {
     const { threadId, providerId, modelId, message, permissionMode } = await c.req.json<ChatBody>();
     if (!threadId) return c.text('threadId required', 400);
 
-    // Persist the just-sent user message, then rebuild the full history from
-    // the DB (the DB is the source of truth, not the client). An assistant
+    // Persist the just-sent user message; the turn's history is rebuilt from
+    // the DB below, which is the source of truth, not the client. An assistant
     // message arrives only when a client-side tool (ask_clarification) was just
-    // answered and the chat auto-resumed: overwrite the stored call so history
-    // carries the answer the model is about to continue from.
+    // answered and the chat auto-resumed: the stored call is overwritten so
+    // history carries the answer the model is about to continue from.
     if (message.role === 'user') persistMessage(deps.db, threadId, message);
-    const history = loadThreadMessages(deps.db, threadId);
 
     // Resolve the thread's workspace per request: its project's directory, or
-    // the projectless fallback. Drives the sandbox, tools, and ACP spec below.
+    // the projectless fallback. Drives the sandbox and the tools below.
     const workspaceRoot = resolveThreadWorkspace(deps.db, threadId, deps.projectlessRoot);
 
     const abort = new AbortController();
@@ -213,7 +206,6 @@ export function startHttpServer(deps: {
           streamFn: piStreamFn,
           getApiKey: makeGetApiKey(deps.db),
           messages: entries.map((entry) => entry.message),
-          uiMessages: history,
           workspaceRoot,
           threadId,
           db: deps.db,

@@ -1,9 +1,8 @@
-import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
+import type { PermissionMode } from '@shared/permissions';
 import type { CrossingCode } from '@shared/permissions/analyze';
 import { isAllowed, type TrustRule } from '@shared/permissions/rules';
 import { createLogger } from '../../log';
 import type { Complete } from '../pi/complete';
-import type { ToolCtx } from '../tools/context';
 import { type Classification, classifyToolCall } from './classify';
 import { reviewBoundaryCrossing } from './reviewer';
 
@@ -120,19 +119,4 @@ export function approvalGate(ctx: ApprovalContext) {
       return false;
     });
   };
-}
-
-/** The same gate, bound to a tool's context for the AI SDK's `needsApproval`. */
-export function makeNeedsApproval(toolName: string, ctx: ToolCtx) {
-  const gate = approvalGate({
-    mode: ctx.permission?.mode ?? DEFAULT_PERMISSION_MODE,
-    rules: ctx.permission?.rules,
-    workspaceRoot: ctx.workspaceRoot,
-    review: ctx.permission?.review,
-    abortSignal: ctx.permission?.abortSignal,
-    onReviewed: ({ toolCallId, subject }) =>
-      ctx.run.emit({ type: 'data-autoReview', data: { toolCallId, subject }, transient: true }),
-  });
-  return (input: unknown, options?: { toolCallId: string }) =>
-    gate(toolName, input, options?.toolCallId);
 }
