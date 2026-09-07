@@ -6,6 +6,7 @@ import { asc, eq, or } from 'drizzle-orm';
 import { withModelAttachments } from '../agent/pi/attachments';
 import type { Checkpoint } from '../agent/pi/compaction';
 import { sealDanglingToolCalls } from '../agent/pi/history';
+import type { RunRow } from '../agent/pi/recorder';
 import type { Db } from '../db';
 import { messages, projects, threads } from '../db/schema';
 import {
@@ -361,18 +362,6 @@ function writePiMessage(db: Db, threadId: string, msg: AtriumUIMessage, overwrit
     });
   });
 }
-
-/**
- * One pi message a run produced, ready to become a row. `id` is the row key:
- * `<runId>:<turn>` for an assistant turn, the tool call id for its results —
- * the same keys the split converters have always written.
- */
-export type RunRow = {
-  id: string;
-  role: 'assistant' | 'toolResult';
-  message: Message;
-  metadata?: Record<string, unknown> | null;
-};
 
 /**
  * Write a run's pi messages as its rows, replacing whatever the run had before.

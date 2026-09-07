@@ -6,19 +6,14 @@ import { cors } from 'hono/cors';
 import type { Resolution } from '../agent/pi/approvals';
 import { toolCallsById } from '../agent/pi/approvals';
 import { foldToCheckpoint } from '../agent/pi/compaction';
+import type { RunRow } from '../agent/pi/recorder';
 import { createSummarizer } from '../agent/pi/summarize';
 import { preserveActiveSkill } from '../agent/tools/builtins/skill';
 import { preserveTodos } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
 import { createLogger } from '../log';
 import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
-import {
-  loadRunRows,
-  loadThreadHistory,
-  persistCheckpoint,
-  type RunRow,
-  resolveToolOutput,
-} from './persist';
+import { loadRunRows, loadThreadHistory, persistCheckpoint, resolveToolOutput } from './persist';
 import { subscribePiEvents } from './pi-events';
 import { abortThreadRun, isThreadRunning } from './resumable';
 import type { Runner } from './runner';

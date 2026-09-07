@@ -1,25 +1,21 @@
-import { Agent, type StreamFn } from '@earendil-works/pi-agent-core';
-import type { Api, Model, Message as PiMessage } from '@earendil-works/pi-ai';
+import type { StreamFn } from '@earendil-works/pi-agent-core';
+import type { Api, Model } from '@earendil-works/pi-ai';
 import type { AssistantMessage, Message, TextContent, Usage } from '@shared/protocol';
 import type { ToolName } from '@shared/tools';
 import { recordUsage } from '../../db/usage';
 import { createLogger } from '../../log';
 import type { ModelPricing } from '../models/types';
 import { withinTurnFold } from '../pi/compaction';
-import { composeContext } from '../pi/context';
-import { injectSystemReminder } from '../pi/history';
-import { createLoopDetector } from '../pi/loop-detection';
+import { createAgentRuntime } from '../pi/runtime';
 import { createSummarizer } from '../pi/summarize';
-import { asPi, storedMessage } from '../pi/vocabulary';
-import { currentDateNote, workspaceGuidance } from '../prompts';
+import { storedMessage } from '../pi/vocabulary';
+import { workspaceGuidance } from '../prompts';
 import type { RunContext } from '../run-context';
 import type { AtriumTool } from '../tools';
 import { preserveTodos } from '../tools/builtins/todo';
 import type { SubagentDef } from './defs';
 
 const log = createLogger('subagent');
-
-const SUBAGENT_MAX_TURNS = 100;
 
 /** What a nested loop needs to reach a provider — the parent's, by default. */
 export type SubagentEngine = {
@@ -115,30 +111,24 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   ];
 
   const emit = (data: Record<string, unknown>): void =>
-    parent.emit({ type: 'data-subagent', data: { id: opts.subagentId, ...data }, transient: true });
+    parent.notice('subagent', { id: opts.subagentId, ...data });
 
-  const loop = createLoopDetector();
-  let turns = 0;
-
-  const child = new Agent({
-    initialState: { systemPrompt, model, tools: opts.tools, messages: asPi(messages) },
+  const child = createAgentRuntime({
+    systemPrompt,
+    model,
     streamFn: opts.engine.streamFn,
     getApiKey: opts.engine.getApiKey,
-    convertToLlm: (m) => m as PiMessage[],
-    transformContext: composeContext([
+    messages,
+    tools: opts.tools,
+    // The child can run many turns and overflow its own window, but it has no
+    // persisted history to check point against — only the within-turn fold.
+    transforms: [
       withinTurnFold({
         summarize: createSummarizer({ ...opts.engine, model }),
         contextWindow: model.contextWindow,
         preservers: [preserveTodos],
       }),
-      (m) => injectSystemReminder(m, currentDateNote(new Date()), { anchor: 'last' }),
-      loop.transform,
-    ]),
-    prepareNextTurnWithContext: async ({ message, context }) => {
-      loop.observe(message);
-      return { context: { ...context, tools: loop.stopped ? [] : opts.tools } };
-    },
-    shouldStopAfterTurn: () => ++turns >= SUBAGENT_MAX_TURNS,
+    ],
   });
 
   const usage = zeroUsage();
@@ -168,17 +158,12 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
     if (tools.length > 0) emit({ phase: 'step', tools });
   });
 
-  const stop = () => child.abort();
-  opts.abortSignal?.addEventListener('abort', stop, { once: true });
-
   emit({ phase: 'start' });
   try {
-    await child.continue();
+    await child.run(opts.abortSignal);
   } catch (err) {
     emit({ phase: 'done', status: 'failed' });
     throw err;
-  } finally {
-    opts.abortSignal?.removeEventListener('abort', stop);
   }
 
   // Subagent calls are separate model calls, invisible to the parent turn's
