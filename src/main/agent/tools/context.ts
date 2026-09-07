@@ -1,9 +1,6 @@
 import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
-import type { PermissionMode } from '@shared/permissions';
-import type { TrustRule } from '@shared/permissions/rules';
 import type { ComputerUseHelper } from '../../computer-use';
-import type { Complete } from '../pi/complete';
 import type { RunContext } from '../run-context';
 import type { BackgroundShells } from '../sandbox/background-shells';
 import type { Sandbox } from '../sandbox/types';
@@ -46,12 +43,4 @@ export type ToolCtx = {
    *  emitting image parts lets openai-compatible stringify base64 into the
    *  prompt. */
   supportsImageToolResults?: boolean;
-  permission?: {
-    mode: PermissionMode;
-    rules?: TrustRule[];
-    /** Reviewer for auto-review mode; absent → auto-review falls back to prompting. */
-    review?: Complete;
-    /** The turn's abort signal, so a stopped turn also cancels an in-flight review. */
-    abortSignal?: AbortSignal;
-  };
 };

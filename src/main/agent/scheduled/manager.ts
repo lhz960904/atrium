@@ -7,8 +7,9 @@ import type { Db } from '../../db';
 import type { ScheduledTask, ScheduledTaskRun } from '../../db/schema';
 import { scheduledTaskRuns, scheduledTasks, threads } from '../../db/schema';
 import { createLogger } from '../../log';
+import type { Runner } from '../../server/runner';
 import { computeNextRun } from './cron';
-import { type RunEndpoint, runScheduledTask, type ScheduledRunResult } from './run';
+import { runScheduledTask, type ScheduledRunResult } from './run';
 
 const log = createLogger('scheduled');
 
@@ -17,7 +18,8 @@ const FAILURE_THRESHOLD = 5;
 
 export type ScheduledManagerDeps = {
   db: Db;
-  endpoint: RunEndpoint;
+  /** The shared run composition root; scheduled turns run on the same one chat does. */
+  runner: Runner;
   defaultModel: () => SelectedModel | null;
   /** Fired after each run settles, for the notification layer. */
   onComplete?: (task: ScheduledTask, run: ScheduledTaskRun) => void;
@@ -64,7 +66,7 @@ export type ScheduledTaskView = ScheduledTask & {
  * in-memory croner jobs never drift from the DB. Every mutation (from the tRPC
  * router or an agent tool) goes through here, and each firing appends a turn to
  * the task's bound thread. Construct once as `scheduledManager`, `init()` it
- * with the app's db + chat endpoint at boot, then `start()`.
+ * with the app's db + runner at boot, then `start()`.
  */
 export class ScheduledTaskManager {
   private deps!: ScheduledManagerDeps;
@@ -85,11 +87,11 @@ export class ScheduledTaskManager {
     return this.deps.now?.() ?? Date.now();
   }
 
-  private runner(task: ScheduledTask): Promise<ScheduledRunResult> {
+  private runTask(task: ScheduledTask): Promise<ScheduledRunResult> {
     return this.deps.run
       ? this.deps.run(task)
       : runScheduledTask(
-          { db: this.db, endpoint: this.deps.endpoint, defaultModel: this.deps.defaultModel },
+          { db: this.db, runner: this.deps.runner, defaultModel: this.deps.defaultModel },
           task,
         );
   }
@@ -389,7 +391,7 @@ export class ScheduledTaskManager {
 
       let result: ScheduledRunResult;
       try {
-        result = await this.runner(task);
+        result = await this.runTask(task);
       } catch (err) {
         log.error(`scheduled task ${id} threw`, err);
         result = { status: 'error', error: String(err) };

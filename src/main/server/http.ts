@@ -1,47 +1,29 @@
-import { randomUUID } from 'node:crypto';
 import { serve } from '@hono/node-server';
 import type { AtriumUIMessage } from '@shared/chat';
-import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
+import type { PermissionMode } from '@shared/permissions';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { mcpManager } from '../agent/mcp/manager';
-import { buildMcpTools } from '../agent/mcp/tool-adapter';
-
-import { modelPricing } from '../agent/models/catalog';
 import type { Resolution } from '../agent/pi/approvals';
 import { toolCallsById } from '../agent/pi/approvals';
 import { foldToCheckpoint } from '../agent/pi/compaction';
-import { type Complete, createCompleter } from '../agent/pi/complete';
 import { createSummarizer } from '../agent/pi/summarize';
-import { generateThreadTitle } from '../agent/pi/title';
-import { runAgent } from '../agent/run';
-import { BackgroundShells, LocalSandbox } from '../agent/sandbox';
-import { getSkills } from '../agent/skills/registry';
-import { getTools } from '../agent/tools';
 import { preserveActiveSkill } from '../agent/tools/builtins/skill';
 import { preserveTodos } from '../agent/tools/builtins/todo';
-import { getComputerUseHelper } from '../computer-use';
 import type { Db } from '../db';
-import { recordUsage } from '../db/usage';
 import { createLogger } from '../log';
 import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
-import { supportsImageToolResults } from '../providers/resolve';
-import { getSettings } from '../settings/conf';
 import {
   loadRunRows,
   loadThreadHistory,
   persistCheckpoint,
-  persistMessage,
-  persistRun,
   type RunRow,
-  resolveThreadWorkspace,
   resolveToolOutput,
-  setThreadTitle,
 } from './persist';
 import { subscribePiEvents } from './pi-events';
-import { abortThreadRun, isThreadRunning, startThreadRun } from './resumable';
+import { abortThreadRun, isThreadRunning } from './resumable';
+import type { Runner } from './runner';
 
-export type ChatEndpoint = { port: number; token: string; dispose: () => void };
+export type ChatEndpoint = { port: number; token: string };
 
 const PI_SSE_HEADERS = {
   'Content-Type': 'text/event-stream',
@@ -68,37 +50,7 @@ type ChatBody = {
   permissionMode?: PermissionMode;
 };
 
-/**
- * Localhost HTTP server for AI streaming. Lives alongside electron-trpc:
- * tRPC handles CRUD, this handles the chat stream — a long-lived HTTP response
- * the renderer reads as SSE. Bound to 127.0.0.1 on a random free port; a per-launch token gates /api/* so other local processes
- * can't drive the user's model credits.
- */
 const log = createLogger('chat');
-
-/**
- * Resolve the auto-review reviewer model. Prefers the dedicated setting; when
- * unset, falls back to this turn's chat model so auto-review works out of the
- * box. Returns undefined (→ auto-review prompts) when nothing resolves — a
- * removed model.
- */
-function resolveReviewer(
-  db: Db,
-  fallback: { providerId: string; modelId: string },
-): Complete | undefined {
-  const configured = getSettings('permissions.reviewerModel');
-  const picked = configured ?? fallback;
-  try {
-    const model = resolvePiModel(db, picked.providerId, picked.modelId);
-    log.info(
-      `reviewer = ${picked.providerId}/${picked.modelId}${configured ? '' : ' (inherited chat model)'}`,
-    );
-    return createCompleter({ model, streamFn: piStreamFn, getApiKey: makeGetApiKey(db) });
-  } catch (err) {
-    log.info(`reviewer unresolved (${picked.providerId}/${picked.modelId}) → prompts: ${err}`);
-    return undefined;
-  }
-}
 
 /**
  * The decisions a resumed message carries for the calls its run left open. The
@@ -132,15 +84,22 @@ function resolutionsFor(message: AtriumUIMessage, resumeRows: RunRow[]): Resolut
   return out;
 }
 
+/**
+ * Localhost HTTP server for AI streaming. Lives alongside electron-trpc: tRPC
+ * handles CRUD, this handles the chat stream — a long-lived HTTP response the
+ * renderer reads as SSE. Bound to 127.0.0.1 on a random free port; a per-launch
+ * token gates /api/* so other local processes can't drive the user's model
+ * credits.
+ *
+ * This layer only translates: it turns a request into a run request and a run's
+ * event log into an SSE body. How a run is assembled belongs to the runner.
+ */
 export function startHttpServer(deps: {
   db: Db;
   token: string;
-  projectlessRoot: string;
+  runner: Runner;
 }): Promise<ChatEndpoint> {
   const app = new Hono();
-  // Long-running shells (dev servers, watchers) outlive a request, so the
-  // registry is a single instance held for the server's lifetime, not per-call.
-  const bgShells = new BackgroundShells();
   // Renderer is a different origin (localhost:5173 in dev, file:// in prod);
   // CORS must run before auth so the credential-less preflight isn't 401'd.
   app.use(
@@ -161,126 +120,24 @@ export function startHttpServer(deps: {
     const { threadId, providerId, modelId, message, permissionMode } = await c.req.json<ChatBody>();
     if (!threadId) return c.text('threadId required', 400);
 
-    // Persist the just-sent user message; the turn's history is rebuilt from
-    // the DB below, which is the source of truth, not the client. An assistant
-    // message arrives only when a client-side tool (ask_clarification) was just
-    // answered and the chat auto-resumed: the stored call is overwritten so
-    // history carries the answer the model is about to continue from.
-    if (message.role === 'user') persistMessage(deps.db, threadId, message);
+    // An assistant message arrives only when a client-side tool (a clarification
+    // or an approval) was just answered and the chat auto-resumed: the run it
+    // belongs to is continued, and the message is read for the user's decisions
+    // rather than stored.
+    const resumeRunId = message.role === 'assistant' ? message.id : undefined;
+    const resolutions = resumeRunId
+      ? resolutionsFor(message, loadRunRows(deps.db, resumeRunId))
+      : [];
 
-    // Resolve the thread's workspace per request: its project's directory, or
-    // the projectless fallback. Drives the sandbox and the tools below.
-    const workspaceRoot = resolveThreadWorkspace(deps.db, threadId, deps.projectlessRoot);
-
-    const abort = new AbortController();
-
-    const sandbox = new LocalSandbox(workspaceRoot);
-    const skills = getSkills();
-    const mode = permissionMode ?? DEFAULT_PERMISSION_MODE;
-    const supportsImages = supportsImageToolResults(providerId, modelId);
-    const computerUse =
-      process.platform === 'darwin' && getSettings('computerUse.enabled')
-        ? getComputerUseHelper()
-        : undefined;
-    // A continuation resumes the run the client is answering (its assistant
-    // message id), so the model's next turns extend that same stored run
-    // instead of opening a second one.
-    const runId = message.role === 'assistant' ? message.id : randomUUID();
-    const piModel = resolvePiModel(deps.db, providerId, modelId);
-    // A continuation answers calls an earlier turn parked. What the run already
-    // stored says which ones are still open; the client's copy of the message
-    // says what the user decided about each.
-    const resumeRows = message.role === 'assistant' ? loadRunRows(deps.db, runId) : [];
-    const resolutions = resolutionsFor(message, resumeRows);
-    // The engine runs on pi messages; the entries keep each one's row id so a
-    // compaction checkpoint can name the last row it folded away.
-    const entries = loadThreadHistory(deps.db, threadId);
-    startThreadRun(
+    deps.runner.start({
       threadId,
-      (piLog) =>
-        runAgent({
-          runId,
-          providerId,
-          modelId,
-          piModel,
-          streamFn: piStreamFn,
-          getApiKey: makeGetApiKey(deps.db),
-          messages: entries.map((entry) => entry.message),
-          workspaceRoot,
-          threadId,
-          db: deps.db,
-          sandbox,
-          skills,
-          permissionMode: mode,
-          permission: {
-            mode,
-            rules: getSettings('permissions.trustRules'),
-            // Resolve the reviewer only when auto-review can actually use it; a
-            // misconfigured/removed model resolves to undefined, so auto-review
-            // simply falls back to prompting rather than failing the turn.
-            review:
-              mode === 'auto-review'
-                ? resolveReviewer(deps.db, { providerId, modelId })
-                : undefined,
-          },
-          resolutions,
-          resumeRows,
-          abortSignal: abort.signal,
-          emit: piLog.append,
-          persist: (rows, opts) => persistRun(deps.db, threadId, runId, rows, opts),
-          persistCheckpoint: (checkpoint) =>
-            persistCheckpoint(deps.db, threadId, checkpoint, entries[checkpoint.coveredThrough].id),
-          recordUsage: (u) =>
-            recordUsage(deps.db, { threadId, kind: 'chat', ...u }, modelPricing(u.modelId)),
-          generateTitle: getSettings('general.autoGenerateTitle')
-            ? ({ messages, complete }) =>
-                generateThreadTitle({
-                  messages,
-                  complete,
-                  onTitle: (title) => {
-                    setThreadTitle(deps.db, threadId, title);
-                    piLog.append({ type: 'notice', name: 'title', payload: { data: { title } } });
-                  },
-                })
-            : undefined,
-          onSettled: () => computerUse?.hideOverlay(),
-          buildTools: (run) => {
-            const toolCtx = {
-              sandbox,
-              workspaceRoot,
-              run,
-              skills,
-              // A nested loop (the task tool) runs on the same handles as this turn.
-              engine: {
-                model: piModel,
-                streamFn: piStreamFn,
-                getApiKey: makeGetApiKey(deps.db),
-              },
-              bgShells,
-              supportsImageToolResults: supportsImages,
-              computerUse,
-              mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
-                supportsImageToolResults: supportsImages,
-                workspaceRoot,
-              }),
-              permission: {
-                mode,
-                rules: getSettings('permissions.trustRules'),
-                // Resolve the reviewer only when auto-review can actually use it; a
-                // misconfigured/removed model resolves to undefined, so auto-review
-                // simply falls back to prompting rather than failing the turn.
-                review:
-                  mode === 'auto-review'
-                    ? resolveReviewer(deps.db, { providerId, modelId })
-                    : undefined,
-                abortSignal: abort.signal,
-              },
-            };
-            return getTools(toolCtx);
-          },
-        }),
-      abort,
-    );
+      providerId,
+      modelId,
+      permissionMode,
+      userMessage: message.role === 'user' ? message : undefined,
+      resumeRunId,
+      resolutions,
+    });
     return runResponse(threadId);
   });
 
@@ -344,28 +201,14 @@ export function startHttpServer(deps: {
     if (!isThreadRunning(c.req.param('threadId'))) return c.body(null, 204);
     const raw = Number(c.req.query('from') ?? '-1');
     const sse = subscribePiEvents(c.req.param('threadId'), Number.isFinite(raw) ? raw : -1);
-    return sse
-      ? new Response(sse, {
-          headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-          },
-        })
-      : c.body(null, 204);
+    return sse ? new Response(sse, { headers: PI_SSE_HEADERS }) : c.body(null, 204);
   });
 
   // serve() binds asynchronously; the real port arrives in the listening
   // callback (server.address() is null synchronously right after).
   return new Promise((resolve) => {
     serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 }, (info) => {
-      resolve({
-        port: info.port,
-        token: deps.token,
-        dispose: () => {
-          bgShells.killAll();
-        },
-      });
+      resolve({ port: info.port, token: deps.token });
     });
   });
 }

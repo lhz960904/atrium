@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Agent, type AgentEvent, type StreamFn } from '@earendil-works/pi-agent-core';
-import type { Api, Model, Message as PiMessage } from '@earendil-works/pi-ai';
+import type { Api, Model } from '@earendil-works/pi-ai';
 import type { PermissionMode } from '@shared/permissions';
 import type { AgentSessionEvent, AssistantMessage, Message, ToolCall } from '@shared/protocol';
 import type { Db } from '../db';
@@ -38,6 +38,19 @@ export type RunRow = {
   role: 'assistant' | 'toolResult';
   message: Message;
   metadata?: Record<string, unknown> | null;
+};
+
+/**
+ * How the turn ended, for a caller that isn't watching the event stream. A
+ * model failure is not an exception — pi encodes it as an errored assistant
+ * turn — so a headless caller can only tell success from failure if the run
+ * reports it here.
+ */
+export type RunResult = {
+  status: 'ok' | 'error';
+  error?: string;
+  /** Whether the run stored rows; false when it produced nothing to store. */
+  stored: boolean;
 };
 
 /** What the turn cost, as the ledger records it. */
@@ -130,7 +143,7 @@ const contextSizeOf = (usage: AssistantMessage['usage']): number =>
  *
  * Resolves when the run has settled and every subscriber has finished with it.
  */
-export async function runAgent(opts: RunAgentOptions): Promise<void> {
+export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
   const soul = await readSoul();
   const startedAt = Date.now();
 
@@ -232,6 +245,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
   }
   let turns = 0;
   let contextTokens: number | undefined;
+  let failure: string | undefined;
   // What this segment spent. The ledger takes it as-is (a continuation is its
   // own billable call); the stored turn adds it to what the run spent before.
   const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
@@ -245,9 +259,6 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
     },
     streamFn: opts.streamFn,
     getApiKey: opts.getApiKey,
-    // Every message in the transcript is an LLM message today; the filter earns
-    // its keep once compaction checkpoints land.
-    convertToLlm: (messages) => messages as PiMessage[],
     /**
      * Everything the model sees beyond the stored transcript, rebuilt for each
      * request and thrown away after it. Order is the contract: the trim runs
@@ -321,6 +332,10 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
     if (event.type !== 'message_end') return;
     const message = storedMessage(event.message);
     if (isAssistant(message)) {
+      // A provider failure ends the turn as an errored assistant message rather
+      // than an exception, so this is the only place a headless caller can learn
+      // the run failed.
+      if (message.stopReason === 'error') failure = message.errorMessage ?? 'the model call failed';
       const usage = message.usage;
       totals.input += usage.input;
       totals.output += usage.output;
@@ -361,10 +376,11 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
     // pi encodes model failures in the stream; reaching here means the loop
     // itself broke, and the renderer needs to hear about it.
     log.warn(`run failed: ${err}`);
+    failure = err instanceof Error ? err.message : String(err);
     opts.emit({
       type: 'notice',
       name: 'stream-error',
-      payload: { errorText: err instanceof Error ? err.message : String(err) },
+      payload: { errorText: failure },
     });
   } finally {
     opts.abortSignal?.removeEventListener('abort', stopRun);
@@ -405,6 +421,13 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
   await recordTurn(opts.workspaceRoot, opts.threadId);
   opts.emit({ type: 'agent_end', willRetry: false });
   opts.onSettled?.();
+
+  // A stop is the user's doing, not a failure — only a real error is reported.
+  return {
+    status: failure && !aborted ? 'error' : 'ok',
+    error: aborted ? undefined : failure,
+    stored: rows.length > 0,
+  };
 }
 
 /**

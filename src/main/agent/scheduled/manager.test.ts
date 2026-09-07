@@ -48,13 +48,18 @@ function makeDb(): Db {
 
 const START = 1_700_000_000_000;
 
+const unreachable = (): never => {
+  throw new Error('the scheduled tests never start a real run');
+};
+
 function setup(runner?: (task: ScheduledTask) => Promise<ScheduledRunResult>) {
   const db = makeDb();
   const nowRef = { v: START };
   const mgr = new ScheduledTaskManager();
   mgr.init({
     db,
-    endpoint: { port: 0, token: 't' },
+    // Every test injects `run`, so the real runner is never reached.
+    runner: { start: () => unreachable(), dispose: () => {} },
     defaultModel: () => ({ providerId: 'p', modelId: 'm' }),
     now: () => nowRef.v,
     run: runner ?? (async () => ({ status: 'ok', messageId: 'a1' })),
