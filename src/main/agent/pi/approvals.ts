@@ -4,10 +4,12 @@ import type {
   Message,
   TextContent,
   ToolCall,
+  ToolDecision,
   ToolResultMessage,
 } from '@shared/protocol';
 import { createLogger } from '../../log';
 import type { AtriumTool } from '../tools';
+import type { RunRow } from './recorder';
 
 const log = createLogger('approval');
 
@@ -25,10 +27,7 @@ export type ParkedCall = {
 };
 
 /** What the user came back with for a parked call. */
-export type Resolution =
-  | { toolCallId: string; kind: 'approved' }
-  | { toolCallId: string; kind: 'denied'; reason?: string }
-  | { toolCallId: string; kind: 'answered'; output: unknown };
+export type Resolution = ToolDecision;
 
 const DENIED_TEXT = 'The user denied this call. Do not retry it; adjust your approach.';
 
@@ -72,6 +71,42 @@ function resultMessage(
 }
 
 /**
+ * The decisions that still apply, given what the run actually stored. The rows
+ * are the authority: a call the client claims to have answered may already have
+ * a result (a double-click, a stale view) or may not exist at all, and either
+ * would put a second result on the transcript.
+ */
+export function openResolutions(rows: RunRow[], decisions: Resolution[]): Resolution[] {
+  if (decisions.length === 0) return [];
+  const answered = new Set(rows.flatMap((r) => (r.role === 'toolResult' ? [r.id] : [])));
+  const calls = toolCallsById(rows.map((r) => r.message));
+  return decisions.filter((d) => calls.has(d.toolCallId) && !answered.has(d.toolCallId));
+}
+
+/**
+ * The result a decision settles a call with, or null for an approval — that one
+ * has to run the tool, which only `applyResolutions` can do.
+ */
+export function resultFor(call: ToolCall, resolution: Resolution): ToolResultMessage | null {
+  if (resolution.kind === 'denied') {
+    const reason = resolution.reason?.trim() || DENIED_TEXT;
+    return resultMessage(call, {
+      content: text(reason),
+      details: { denied: true, errorText: reason },
+      isError: true,
+    });
+  }
+  if (resolution.kind === 'answered') {
+    return resultMessage(call, {
+      content: text(stringify(resolution.output)),
+      details: resolution.output,
+      isError: false,
+    });
+  }
+  return null;
+}
+
+/**
  * Settle the calls the user has now decided, before the loop resumes. An
  * approved call runs here rather than inside the loop: the engine only executes
  * calls from the turn it is currently streaming, and this one belongs to a turn
@@ -101,26 +136,9 @@ export async function applyResolutions(opts: {
       continue;
     }
 
-    if (resolution.kind === 'denied') {
-      const reason = resolution.reason?.trim() || DENIED_TEXT;
-      out.push(
-        resultMessage(call, {
-          content: text(reason),
-          details: { denied: true, errorText: reason },
-          isError: true,
-        }),
-      );
-      continue;
-    }
-
-    if (resolution.kind === 'answered') {
-      out.push(
-        resultMessage(call, {
-          content: text(stringify(resolution.output)),
-          details: resolution.output,
-          isError: false,
-        }),
-      );
+    const settled = resultFor(call, resolution);
+    if (settled) {
+      out.push(settled);
       continue;
     }
 

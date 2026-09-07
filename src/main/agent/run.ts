@@ -11,6 +11,7 @@ import { applyResolutions, type ParkedCall, type Resolution } from './pi/approva
 import { type Checkpoint, compactForTurn, withinTurnFold } from './pi/compaction';
 import { type Complete, createCompleter } from './pi/complete';
 import { wireEmitter } from './pi/emitter';
+import { withSettledResults } from './pi/history';
 import { injectContextBlocks, loadContextBlocks } from './pi/injectors';
 import { createRunRecorder, type RunRow } from './pi/recorder';
 import { createAgentRuntime } from './pi/runtime';
@@ -183,7 +184,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
     emit: opts.emit,
     abortSignal: opts.abortSignal,
   });
-  const messages = settled.length > 0 ? [...compacted, ...settled] : compacted;
+  const messages = withSettledResults(compacted, settled);
 
   /** Calls this turn handed back to the user; they end it and stay open. */
   const parked = new Map<string, ParkedCall>();

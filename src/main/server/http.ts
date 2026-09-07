@@ -1,19 +1,19 @@
 import { serve } from '@hono/node-server';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { PermissionMode } from '@shared/permissions';
+import type { ToolCall, ToolResultMessage } from '@shared/protocol';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Resolution } from '../agent/pi/approvals';
-import { toolCallsById } from '../agent/pi/approvals';
+import { openResolutions, resultFor, toolCallsById } from '../agent/pi/approvals';
 import { foldToCheckpoint } from '../agent/pi/compaction';
-import type { RunRow } from '../agent/pi/recorder';
 import { createSummarizer } from '../agent/pi/summarize';
 import { preserveActiveSkill } from '../agent/tools/builtins/skill';
 import { preserveTodos } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
 import { createLogger } from '../log';
 import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
-import { loadRunRows, loadThreadHistory, persistCheckpoint, resolveToolOutput } from './persist';
+import { loadRunRows, loadThreadHistory, persistCheckpoint, settleRunCalls } from './persist';
 import { subscribePiEvents } from './pi-events';
 import { abortThreadRun, isThreadRunning } from './resumable';
 import type { Runner } from './runner';
@@ -34,50 +34,24 @@ function runResponse(threadId: string): Response {
     : new Response('event log missing', { status: 500 });
 }
 
-// Client sends only the latest message; the server rebuilds history from the DB. The thread row always exists before
-// the chat view can send (the home view creates it, then navigates), so
-// threadId is a hard requirement — its absence is a bug, not a degraded mode.
-type ChatBody = {
+/** What every request that starts a run has to say. */
+type RunBody = {
   threadId: string;
   providerId: string;
   modelId: string;
-  message: AtriumUIMessage;
   permissionMode?: PermissionMode;
 };
 
-const log = createLogger('chat');
+// The client sends only the turn it just wrote; the server rebuilds the history
+// from the DB. The thread row always exists before the chat view can send (the
+// home view creates it, then navigates), so threadId is a hard requirement —
+// its absence is a bug, not a degraded mode.
+type ChatBody = RunBody & { message: AtriumUIMessage };
 
-/**
- * The decisions a resumed message carries for the calls its run left open. The
- * stored rows are the authority on which calls are still waiting; the client's
- * copy of the message carries the user's answer for each.
- */
-function resolutionsFor(message: AtriumUIMessage, resumeRows: RunRow[]): Resolution[] {
-  if (message.role !== 'assistant' || resumeRows.length === 0) return [];
-  const answered = new Set(resumeRows.flatMap((r) => (r.role === 'toolResult' ? [r.id] : [])));
-  const open = toolCallsById(resumeRows.map((r) => r.message));
-  const out: Resolution[] = [];
-  for (const part of message.parts) {
-    const p = part as {
-      toolCallId?: string;
-      state?: string;
-      output?: unknown;
-      approval?: { approved?: boolean; reason?: string };
-    };
-    const toolCallId = p.toolCallId;
-    if (!toolCallId || answered.has(toolCallId) || !open.has(toolCallId)) continue;
-    if (p.state === 'approval-responded') {
-      out.push(
-        p.approval?.approved
-          ? { toolCallId, kind: 'approved' }
-          : { toolCallId, kind: 'denied', reason: p.approval?.reason },
-      );
-    } else if (p.state === 'output-available') {
-      out.push({ toolCallId, kind: 'answered', output: p.output });
-    }
-  }
-  return out;
-}
+/** The user's answers for the calls a run parked, addressed to that run. */
+type DecisionsBody = { runId: string; decisions: Resolution[] };
+
+const log = createLogger('chat');
 
 /**
  * Localhost HTTP server for AI streaming. Lives alongside electron-trpc: tRPC
@@ -114,26 +88,52 @@ export function startHttpServer(deps: {
   app.post('/api/chat', async (c) => {
     const { threadId, providerId, modelId, message, permissionMode } = await c.req.json<ChatBody>();
     if (!threadId) return c.text('threadId required', 400);
+    if (message?.role !== 'user') return c.text('chat takes a user message', 400);
 
-    // An assistant message arrives only when a client-side tool (a clarification
-    // or an approval) was just answered and the chat auto-resumed: the run it
-    // belongs to is continued, and the message is read for the user's decisions
-    // rather than stored.
-    const resumeRunId = message.role === 'assistant' ? message.id : undefined;
-    const resolutions = resumeRunId
-      ? resolutionsFor(message, loadRunRows(deps.db, resumeRunId))
-      : [];
+    deps.runner.start({ threadId, providerId, modelId, permissionMode, userMessage: message });
+    return runResponse(threadId);
+  });
+
+  /**
+   * Continue a run with what the user decided about the calls it parked — an
+   * approval answered, a clarification filled in. The decisions travel as
+   * decisions: the stored rows say which calls are still open, so a client that
+   * is out of date can only ask for less than it thinks, never for more.
+   */
+  app.post('/api/chat/:threadId/resume', async (c) => {
+    const threadId = c.req.param('threadId');
+    const { providerId, modelId, permissionMode, runId, decisions } = await c.req.json<
+      RunBody & DecisionsBody
+    >();
+    const resolutions = openResolutions(loadRunRows(deps.db, runId), decisions ?? []);
+    if (resolutions.length === 0) return c.text('no open call to resume', 409);
 
     deps.runner.start({
       threadId,
       providerId,
       modelId,
       permissionMode,
-      userMessage: message.role === 'user' ? message : undefined,
-      resumeRunId,
+      resumeRunId: runId,
       resolutions,
     });
     return runResponse(threadId);
+  });
+
+  /**
+   * Record decisions without running the model. Used when a decision closes a
+   * call but must not resume the turn — a cancelled clarification, where the
+   * user has taken the turn back and will send again themselves. The call still
+   * has to be closed, or the next request's history carries an unpaired call.
+   */
+  app.post('/api/chat/:threadId/decisions', async (c) => {
+    const { runId, decisions } = await c.req.json<DecisionsBody>();
+    const rows = loadRunRows(deps.db, runId);
+    const calls = toolCallsById(rows.map((r) => r.message));
+    const results = openResolutions(rows, decisions ?? [])
+      .map((d) => resultFor(calls.get(d.toolCallId) as ToolCall, d))
+      .filter((r): r is ToolResultMessage => r !== null);
+    settleRunCalls(deps.db, c.req.param('threadId'), runId, results);
+    return c.json({ settled: results.length });
   });
 
   // Stop a thread's in-flight generation. Aborts the agent loop server-side
@@ -142,14 +142,6 @@ export function startHttpServer(deps: {
   app.post('/api/chat/:threadId/abort', (c) => {
     const aborted = abortThreadRun(c.req.param('threadId'));
     return c.json({ aborted });
-  });
-
-  // Resolve a client-side tool call (a cancelled clarification) in the DB
-  // without running the model — the turn only resumes on the user's next send.
-  app.post('/api/chat/:threadId/resolve-clarify', async (c) => {
-    const { toolCallId, output } = await c.req.json<{ toolCallId: string; output: unknown }>();
-    resolveToolOutput(deps.db, c.req.param('threadId'), toolCallId, output);
-    return c.json({ ok: true });
   });
 
   // Force-compact a thread on demand (user-invoked /compact). Summarizes the

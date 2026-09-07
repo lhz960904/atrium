@@ -22,8 +22,8 @@ import {
   loadRunRows,
   loadThreadHistory,
   persistCheckpoint,
-  persistMessage,
   persistRun,
+  persistUserTurn,
   resolveThreadWorkspace,
   setThreadTitle,
 } from './persist';
@@ -111,7 +111,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
       const { threadId, providerId, modelId } = request;
       // The turn's history is rebuilt from the DB below, which is the source of
       // truth — the caller only supplies the message that starts it.
-      if (request.userMessage) persistMessage(db, threadId, request.userMessage);
+      if (request.userMessage) persistUserTurn(db, threadId, request.userMessage);
 
       // The thread's workspace: its project's directory, or the projectless
       // fallback. Drives the sandbox and the tools below.

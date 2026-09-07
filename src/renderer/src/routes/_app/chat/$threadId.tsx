@@ -131,20 +131,28 @@ function ChatRunner({
     }).catch(() => {});
   }, [stop, setMessages, endpoint.baseUrl, endpoint.token, threadId]);
 
-  // Cancelling a clarification: resolve the call so the next turn's history is
+  // Cancelling a clarification: close the call so the next turn's history is
   // valid, but don't auto-resume (the store's sendAutomaticallyWhen skips a
-  // cancelled clarify). Persist it server-side without running the model.
+  // cancelled clarify). The decision is recorded server-side without running
+  // the model, against the run that parked the call.
   const onCancelClarify = useCallback(
     (toolCallId: string): void => {
       const output: ClarifyResult = { answers: [], cancelled: true };
       addToolOutput({ tool: 'ask_clarification', toolCallId, output });
-      void fetch(`${endpoint.baseUrl}/api/chat/${threadId}/resolve-clarify`, {
+      const runId = messages.find((m) =>
+        m.parts.some((p) => (p as { toolCallId?: string }).toolCallId === toolCallId),
+      )?.id;
+      if (!runId) return;
+      void fetch(`${endpoint.baseUrl}/api/chat/${threadId}/decisions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-atrium-token': endpoint.token },
-        body: JSON.stringify({ toolCallId, output }),
+        body: JSON.stringify({
+          runId,
+          decisions: [{ toolCallId, kind: 'answered', output }],
+        }),
       }).catch(() => {});
     },
-    [addToolOutput, endpoint.baseUrl, endpoint.token, threadId],
+    [addToolOutput, messages, endpoint.baseUrl, endpoint.token, threadId],
   );
 
   const utils = trpc.useUtils();
