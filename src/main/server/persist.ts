@@ -3,6 +3,7 @@ import type { AtriumUIMessage } from '@shared/chat';
 import type { Message } from '@shared/protocol';
 
 import { asc, eq, or } from 'drizzle-orm';
+import { withModelAttachments } from '../agent/pi/attachments';
 import type { Checkpoint } from '../agent/pi/compaction';
 import { sealDanglingToolCalls } from '../agent/pi/history';
 import type { Db } from '../db';
@@ -181,7 +182,7 @@ export function loadThreadHistory(db: Db, threadId: string): HistoryEntry[] {
       for (const piRow of splitAssistantMessage(legacy))
         out.push({ id: row.id, message: piRow.message });
   }
-  return sealHistory(out);
+  return sealHistory(out).map((e) => ({ ...e, message: withModelAttachments(e.message) }));
 }
 
 export function loadThreadAgentMessages(db: Db, threadId: string): Message[] {
