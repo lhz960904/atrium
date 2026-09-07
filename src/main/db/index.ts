@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { app } from 'electron';
+import { openSessionStore } from '../session/repo';
 import { segment } from './jieba';
 import * as schema from './schema';
 
@@ -20,7 +21,10 @@ function migrationsFolder(): string {
 export function openDb(): Db {
   if (_db) return _db;
 
-  const dbPath = join(app.getPath('userData'), 'atrium.db');
+  // `data.db`, not the old `atrium.db`: the session store replaces the message
+  // rows outright, so the two generations get separate files rather than one
+  // file holding both shapes. The old database is left untouched.
+  const dbPath = join(app.getPath('userData'), 'data.db');
   _raw = new Database(dbPath);
   _raw.pragma('journal_mode = WAL');
   _raw.pragma('foreign_keys = ON');
@@ -31,6 +35,7 @@ export function openDb(): Db {
   _db = drizzle(_raw, { schema, casing: 'snake_case' });
 
   migrate(_db, { migrationsFolder: migrationsFolder() });
+  openSessionStore(_raw, dbPath);
 
   return _db;
 }

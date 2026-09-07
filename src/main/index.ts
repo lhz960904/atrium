@@ -32,6 +32,7 @@ import { firstEnabledModel } from './providers/resolve';
 import { startHttpServer } from './server/http';
 import { getRunningThreadIds } from './server/resumable';
 import { createRunner, type Runner } from './server/runner';
+import { closeSessionStore } from './session/repo';
 import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { loadShellEnv } from './shell-path';
@@ -290,6 +291,10 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  // Best effort: this clears the lease heartbeats synchronously, while the
+  // lease rows themselves may not survive the shutdown. Their TTL is the
+  // backstop — a thread killed mid-lease is openable again once it expires.
+  void closeSessionStore();
   runner?.dispose();
   scheduledManager.dispose();
   void mcpManager.dispose();
