@@ -1,6 +1,6 @@
 ---
 Status: Ready
-Last updated: 2026-08-21
+Last updated: 2026-09-07
 Baseline: main@4ca74fd5 (v0.14.3) + feat/artifact-workspace
 Purpose: Parity ledger for the ground-up rebuild — every capability the rebuild must eventually cover or explicitly drop.
 ---
@@ -8,13 +8,15 @@ Purpose: Parity ledger for the ground-up rebuild — every capability the rebuil
 # Atrium main：Feature inventory（重建对齐账本）
 
 > 本文是重建期间的对齐清单：每个里程碑关闭时，在此勾掉已覆盖条目或标注「有意不做」。技术正文用英文记录，避免翻译损耗。
+>
+> **正文描述的是迁移前的 main，作为对照基线保留原样。**迁移已经覆盖或有意去掉的条目，见 §6；逐步的实现记录在 `docs/migration.md`。
 
 ## 0. Architecture contract (current)
 
 - Two renderer↔main transports: `electron-trpc` over IPC (19 sub-routers, all CRUD/config) + localhost Hono HTTP server (random port, per-launch token `x-atrium-token`) for chat streaming.
-- Resumable streams: in-memory store decoupled from clients (`server/resumable.ts`); reload/thread-switch rejoins mid-generation. Bounds: 64 streams / 100k chunks / idle TTL.
+- Resumable streams: in-memory store decoupled from clients (`server/resumable.ts`); reload/thread-switch rejoins mid-generation. Bounds: 64 streams / 100k chunks / idle TTL. *(Phase 1 replaced the chunk store with the pi-event envelope log — same guarantee, `seq` replay + live tail.)*
 - DB is source of truth for history; client sends only the newest message.
-- HTTP endpoints: `POST /api/chat`, `/abort`, `/acp-permission`, `/resolve-clarify`, `/compact`, `GET /stream` (replay).
+- HTTP endpoints: `POST /api/chat`, `/abort`, `/acp-permission`, `/resolve-clarify`, `/compact`, `GET /stream` (replay). *(Now: `/acp-permission` gone with ACP, `GET /stream` → `GET /pi-events`.)*
 
 ## 1. Agent core (main)
 
@@ -27,7 +29,7 @@ Purpose: Parity ledger for the ground-up rebuild — every capability the rebuil
   - shell: `bash`† (120s, 20k cap, background), `bash_output`, `kill_shell` (process-tree kill)
   - web: `web_search` (headless BrowserWindow scraping, engine chain), `web_fetch` (Readability→Markdown, 5MB)
   - control: `todo_write`, `task` (subagent), `skill`, `ask_clarification` (client-side)
-  - media: `image_gen` (model picked from enabled image-output models, `edit_previous`), `view_image`
+  - media: ~~`image_gen`~~ **(dropped — §6)**, `view_image`
   - persistence: `memory` (scopes global/project; types preference/project/reference), `profile`
   - scheduling: `schedule_create/list/update/cancel`
   - computer use (macOS, 9): `computer_list_apps/get_app_state/click/type_text/press_key/scroll/drag/set_value/perform_action`
@@ -39,11 +41,11 @@ Purpose: Parity ledger for the ground-up rebuild — every capability the rebuil
 - **Skills**: `<name>/SKILL.md` + frontmatter (`allowed-tools`); 4 roots (bundled, `~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills`); bundled: computer-use, browser-control, get-acquainted; foreign tool-name aliasing; tool scoping while active; `${SKILL_DIR}`.
 - **Memory**: file-backed `userData/memory/{global,projects/<ws>}` with MEMORY.md index; **dream** consolidation (30-min sweep, 24h+5-session gates, pid lock, snapshot/rollback, memory-tool-only agent, 40 steps).
 - **MCP**: stdio/http/sse; per-server status + backoff reconnect (1s→30s), 30s connect / 120s call timeouts; OAuth 2.1 (discovery+DCR+PKCE+refresh, loopback callback, separate encrypted blob); qualified naming (≤64 bytes slug+hash); image results → real image parts (vision-gated), oversized spill to `.atrium/media`; safeStorage secrets, envPassthrough/headersFromEnv; bidirectional `mcp.json` (Cursor/Claude Desktop/VS Code dialect) + imports from Cursor/Claude Code/Claude Desktop/Codex(TOML); `managed: true` rows (browser).
-- **ACP external agents**: Claude Code / Codex CLI / Gemini CLI; one live session per thread (LRU 6), session id persisted → resume via `session/load`; ChunkEmitter translates session/update → UIMessageChunks (external tools as dynamic-tool parts); permission broker; auto-review can auto-allow; not-installed hinting.
+- ~~**ACP external agents**~~ **(dropped — §6)**: Claude Code / Codex CLI / Gemini CLI; one live session per thread (LRU 6), session id persisted → resume via `session/load`; ChunkEmitter translates session/update → UIMessageChunks (external tools as dynamic-tool parts); permission broker; auto-review can auto-allow; not-installed hinting.
 - **Computer use (macOS)**: signed Swift helper app spawned as child (inherits TCC), JSON-lines RPC, 30s timeout, SIGKILL+respawn; AX tree + `desktopCapturer` screenshots; virtual cursor overlay (toggleable, hidden on settle, suppressed for list_apps); drag-to-grant flow into Privacy pane with tracking overlay; renderer permission dialog + relaunch.
 - **Browser control**: two managed MCP rows running `npx @playwright/mcp` (`browser` --isolated; `browser-login` --extension into user Chrome); output-dir under `userData/media/browser`; Chrome + extension detection; clipboard token import (polled), encrypted.
 - **Scheduled tasks**: recurring (5-field cron, croner, IANA tz) + once (self-disabling); bound thread/project/model/permission mode (default full-access); catchUpPolicy fire_once/skip; boot rebuild + powerMonitor resume catch-up; powerSaveBlocker during runs; run history (`running|ok|error|skipped|interrupted`); auto-pause after 5 consecutive failures; skip if thread busy; desktop notification → open thread.
-- **Providers**: kinds cloud-api / local-cli / local-service; protocols anthropic / openai-compatible / google-gemini (+`/v1` normalization); manifest catalog (Anthropic, OpenAI, DeepSeek, Gemini, Moonshot, Kimi/Z.AI/Volcengine plans, OpenRouter, AiHubMix, 3 CLIs, Ollama); safeStorage credentials; model fetch per protocol; Ollama probe/list/pull-with-progress; litellm model catalog 3-tier (bundled→disk→hourly refresh) supplying context/output limits, vision/tool/reasoning flags, image-output detection, pricing; image-output models route chat turns to `run-image.ts`.
+- **Providers**: kinds cloud-api / local-cli / local-service; protocols anthropic / openai-compatible / google-gemini (+`/v1` normalization); manifest catalog (Anthropic, OpenAI, DeepSeek, Gemini, Moonshot, Kimi/Z.AI/Volcengine plans, OpenRouter, AiHubMix, 3 CLIs, Ollama); safeStorage credentials; model fetch per protocol; Ollama probe/list/pull-with-progress; litellm model catalog 3-tier (bundled→disk→hourly refresh) supplying context/output limits, vision/tool/reasoning flags, image-output detection, pricing; image-output models route chat turns to `run-image.ts`. *(Now: the engine's own catalog leads where it has one; image-output routing dropped with `run-image.ts`.)*
 - **DB (SQLite WAL, Drizzle)**: threads (per-thread model, metadata.acpSession, last_read_at, archived_at, pinned) · projects · messages (parts JSON) · artifacts (unused on main) · providers · subagents · mcp_servers · usage (kind chat/subagent/title/summary/review, frozen cost) · scheduled_tasks + runs. **FTS**: `chat_fts` with jieba-wasm as SQL function, trigger-maintained, bm25 + title boost, custom snippets.
 - **Settings** (zod schema → defaults + patch validation, electron-conf): general (language, defaultModel, autoTitle, menuBar, sendKey, hideTokenUsage) · appearance (windowState, uiFont, fontSize, light/dark Shiki themes) · keyboard · permissions (mode, trustRules, reviewerModel) · browser · computerUse (+openAtLogin via Electron API).
 - **Shell/OS**: hidden-inset window (min 880×560), hide-on-close macOS, tray + New Chat, notifications, login-shell env resolution before stdio MCP, `atrium-favicon://` protocol (direct fetch, disk cache), openExternal.
@@ -75,3 +77,14 @@ Session dirs (`threads.sessionDir`, day-grouped, dual-root writes) · session fo
 ## 5. Known gaps on main (not parity targets)
 
 artifacts table unused · hooks/connections/worktrees settings are placeholders · skills lack enable/disable · computer use macOS-only · auto-review shown but disabled in composer picker · no analytics, no cloud, no multi-window.
+
+## 6. Dropped during the engine migration (2026-09)
+
+Each of these was a working capability on main. They are recorded here rather
+than silently missing, with what it would take to bring them back.
+
+- **ACP external agents** (Claude Code / Codex CLI / Gemini CLI over the Agent Client Protocol). The new engine's ecosystem ships no ACP, so there was nothing to port the channel onto. Removed with it: `ChunkEmitter`, the chunk→event bridge, the `local-cli` provider kind, the second approval source, and the picker's synthetic single-model row. **Coming back needs** an ACP implementation to build on; the subscription providers below cover the "reuse my Claude/ChatGPT plan" case that motivated most of its use.
+- **Image generation** (`image_gen` tool + the direct image-model turn). The engine ships an images contract but only one provider implementation, none of ours, so both of our protocols would have been hand-written HTTP — and unverifiable, since the only image-configured provider had no balance. **Coming back starts** from what the engine reports about a model's output modalities, rather than a separate catalog flag.
+- **The Vercel AI SDK** itself (`ai`, `@ai-sdk/*`). Nothing imports it. The UI message vocabulary the renderer speaks has been self-owned since the protocol was frozen.
+
+**Added in the same window**, not on the baseline: subscription sign-in (Claude Pro/Max, OpenAI Codex) as first-class providers, one row per credential.
