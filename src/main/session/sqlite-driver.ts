@@ -7,11 +7,13 @@ import type {
 /**
  * The part of a SQLite connection the session store actually uses.
  *
- * Declared structurally rather than as better-sqlite3's own type so the adapter
- * can be exercised off Electron: better-sqlite3 is a native module bun can't
- * load, while `bun:sqlite` — modelled on the same API — satisfies this shape.
- * The production call site still passes a real better-sqlite3 connection, which
- * is where the compiler checks the two agree.
+ * Declared as a capability rather than as better-sqlite3's own type, which is
+ * what lets the tests drive the real backend on `bun:sqlite`. The two bindings
+ * are not assignable to each other — their `prepare()` returns different
+ * `Statement` types — so borrowing better-sqlite3's type would force the test
+ * to cast, and the cast would hide exactly the mismatch it is there to catch.
+ * The production call site passes a real better-sqlite3 connection, which is
+ * where the compiler checks that this shape is honest.
  */
 export type SqliteConnection = {
   exec(sql: string): unknown;
