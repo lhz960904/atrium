@@ -1,0 +1,1 @@
+ALTER TABLE `threads` ADD `session_id` text;

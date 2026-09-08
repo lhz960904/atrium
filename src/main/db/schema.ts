@@ -25,6 +25,10 @@ export const threads = sqliteTable('threads', {
   /** Pinned to the top of the sidebar; the Pinned section mixes pinned threads
    *  and pinned projects. */
   pinned: integer({ mode: 'boolean' }).notNull().default(false),
+  /** The pi session holding this thread's conversation. Null until the thread
+   *  runs for the first time — the session is created with the first turn, so
+   *  a thread nobody ever wrote to costs nothing. */
+  sessionId: text('session_id'),
 });
 
 /**
