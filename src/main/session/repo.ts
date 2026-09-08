@@ -1,35 +1,11 @@
-import { mkdir, stat } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
-import { ok } from '@earendil-works/pi-agent-core';
-import {
-  SqliteSessionRepository,
-  type SqliteSessionRepositoryEnv,
-} from '@earendil-works/pi-session-backend-sqlite-node';
+import { dirname } from 'node:path';
+import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
+import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import type Database from 'better-sqlite3';
 import { createLogger } from '../log';
 import { sessionSqlite } from './sqlite-driver';
 
 const log = createLogger('session');
-
-/**
- * The three filesystem calls the repository makes. It only ever asks about the
- * database file itself — where it is, whether it exists, and that its directory
- * is there — so this is the whole surface, not a stub of a larger one.
- */
-const nodeEnv: SqliteSessionRepositoryEnv = {
-  absolutePath: async (path) => ok(isAbsolute(path) ? path : resolve(path)),
-  exists: async (path) =>
-    ok(
-      await stat(path).then(
-        () => true,
-        () => false,
-      ),
-    ),
-  createDir: async (path, options) => {
-    await mkdir(path, { recursive: options?.recursive ?? false });
-    return ok(undefined);
-  },
-};
 
 let repository: SqliteSessionRepository | undefined;
 let ready: Promise<void> | undefined;
@@ -49,7 +25,10 @@ export function openSessionStore(db: Database.Database, databasePath: string): v
   // long a thread stays locked after a crash — a longer one would trade a
   // problem we don't have (two processes) for one we would.
   repository = new SqliteSessionRepository({
-    env: nodeEnv,
+    // The repository only ever asks where the database file is, whether it
+    // exists and that its directory is there — three of the filesystem calls
+    // pi's own node environment already implements, error mapping included.
+    env: new NodeExecutionEnv({ cwd: dirname(databasePath) }),
     sqlite: sessionSqlite(db),
     databasePath,
   });

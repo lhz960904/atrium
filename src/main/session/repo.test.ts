@@ -1,6 +1,10 @@
 import { Database } from 'bun:sqlite';
-import { expect, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
+import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import { sessionSqlite } from './sqlite-driver';
 
@@ -8,23 +12,30 @@ import { sessionSqlite } from './sqlite-driver';
  * The substrate against a real SQLite file: the backend's migrations, its
  * schema and its writes all have to work through the driver we hand it, which
  * is the app's own connection rather than the one the package would open.
+ *
+ * A file rather than :memory: because the repository asks its environment
+ * whether the database exists before listing — the same composition the app
+ * runs, environment included.
  */
-const env = {
-  absolutePath: async (path: string) => ({ ok: true as const, value: path }),
-  exists: async () => ({ ok: true as const, value: true }),
-  createDir: async () => ({ ok: true as const, value: undefined }),
-};
+const dirs: string[] = [];
+
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 function store() {
+  const dir = mkdtempSync(join(tmpdir(), 'atrium-session-'));
+  dirs.push(dir);
+  const databasePath = join(dir, 'data.db');
   // bun:sqlite stands in for the app's better-sqlite3 connection; the driver is
   // typed on the shape both satisfy.
-  const db = new Database(':memory:');
+  const db = new Database(databasePath);
   const repo = new SqliteSessionRepository({
-    env,
+    env: new NodeExecutionEnv({ cwd: dirname(databasePath) }),
     sqlite: sessionSqlite(db),
-    databasePath: ':memory:',
+    databasePath,
   });
-  return { db, repo };
+  return { db, repo, databasePath };
 }
 
 const user = (text: string): AgentMessage => ({
@@ -73,7 +84,7 @@ test('reopening the same session hands back the live writer, not a second one', 
 });
 
 test('a session survives the repository being closed and reopened', async () => {
-  const { db, repo } = store();
+  const { db, repo, databasePath } = store();
   const created = await repo.create({ cwd: '/tmp/work' });
   const metadata = await created.getMetadata();
   await created.appendMessage(user('before close'));
@@ -81,9 +92,9 @@ test('a session survives the repository being closed and reopened', async () => 
   await repo.close();
 
   const reopened = new SqliteSessionRepository({
-    env,
+    env: new NodeExecutionEnv({ cwd: dirname(databasePath) }),
     sqlite: sessionSqlite(db),
-    databasePath: ':memory:',
+    databasePath,
   });
   const session = await reopened.open(metadata);
   expect((await session.findEntriesOnBranch()).length).toBe(1);
