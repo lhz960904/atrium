@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { messages, threads } from '../../db/schema';
-import { loadThreadMessageDtos } from '../../server/persist';
+import { threadMessages } from '../../session/threads';
 import { publicProcedure, router } from '../trpc';
 
 export const messagesRouter = router({
@@ -13,7 +13,7 @@ export const messagesRouter = router({
    */
   listByThread: publicProcedure
     .input(z.object({ threadId: z.string() }))
-    .query(({ ctx, input }) => loadThreadMessageDtos(ctx.db, input.threadId)),
+    .query(({ ctx, input }) => threadMessages(ctx.db, input.threadId)),
 
   /**
    * Append a message. parts / metadata are arbitrary JSON; runtime callers

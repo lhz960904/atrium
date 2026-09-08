@@ -156,6 +156,39 @@ test('a parked call comes back as its approval card', async () => {
   await repo.close();
 });
 
+test('the refusal result a parked call produces is not kept', async () => {
+  const { repo, session: s } = await session();
+  const journal = createRunJournal({ session: s, runId: 'r1' });
+  await journal.begin(user('curl x'));
+  await journal.observe(
+    ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
+  );
+  await journal.park({ toolCallId: 'c1', approvalId: 'ap1' });
+  // Blocking the call makes the engine stand in an error result for it.
+  await journal.observe(
+    ended({
+      role: 'toolResult',
+      toolCallId: 'c1',
+      toolName: 'bash',
+      content: [{ type: 'text', text: 'Paused: waiting for the user.' }],
+      details: { errorText: 'Paused: waiting for the user.' },
+      isError: true,
+      timestamp: 3,
+    } as AgentMessage),
+  );
+
+  const { entries, records } = await read(s);
+  // The call is still open, so the card still shows the ask.
+  expect(projectHistory(entries).some((m) => m.role === 'toolResult')).toBe(false);
+  const [, reply] = projectMessages(entries, records);
+  expect(reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1')).toMatchObject(
+    {
+      state: 'approval-requested',
+    },
+  );
+  await repo.close();
+});
+
 test('a continuation extends the run it resumes instead of opening a second one', async () => {
   const { repo, session: s } = await session();
   const first = createRunJournal({ session: s, runId: 'r1' });

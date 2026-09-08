@@ -7,7 +7,8 @@ import {
 } from '@earendil-works/pi-ai';
 import type { AgentSessionEvent, Message } from '@shared/protocol';
 import type { Db } from '../db';
-import { type RunRow, runAgent } from './run';
+import type { RunJournal } from '../session/journal';
+import { runAgent } from './run';
 import type { Sandbox } from './sandbox/types';
 
 const MODEL = {
@@ -64,9 +65,55 @@ const userMessage = (text: string): Message => ({
   timestamp: 0,
 });
 
+/**
+ * Stands in for the session so these tests stay about what the run hands over.
+ * That the store keeps it faithfully is the journal's own round-trip test.
+ */
+function recordingJournal() {
+  const written: Message[] = [];
+  const parked: string[] = [];
+  let outcome: string | undefined;
+  let failure: string | undefined;
+  const journal: RunJournal = {
+    begin: async (prompt) => {
+      if (prompt) written.push(prompt);
+    },
+    observe: async (event) => {
+      if (event.type !== 'message_end') return;
+      const message = event.message as Message;
+      written.push(message);
+      // The one part of the journal's reading the run depends on: a provider
+      // failure arrives as an errored turn, not an exception.
+      if (message.role === 'assistant' && message.stopReason === 'error') {
+        failure = message.errorMessage ?? 'the model call failed';
+      }
+    },
+    park: async (call) => {
+      parked.push(call.toolCallId);
+    },
+    end: async (result) => {
+      outcome = result;
+    },
+    totals: { input: 3, output: 2, cacheRead: 0, cacheWrite: 0, total: 5 },
+    get failure() {
+      return failure;
+    },
+    contextTokens: 5,
+    wrote: true,
+  };
+  return {
+    journal,
+    written,
+    parked,
+    get outcome() {
+      return outcome;
+    },
+  };
+}
+
 async function runOnce(text: string) {
   const events: AgentSessionEvent[] = [];
-  let stored: { rows: RunRow[]; markRead: boolean } | undefined;
+  const recording = recordingJournal();
   await runAgent({
     runId: 'run-1',
     providerId: 'p1',
@@ -84,11 +131,9 @@ async function runOnce(text: string) {
     permission: { mode: 'default' },
     buildTools: () => [],
     emit: (event) => events.push(event),
-    persist: (rows, opts) => {
-      stored = { rows, markRead: opts.markRead };
-    },
+    journal: recording.journal,
   });
-  return { events, stored };
+  return { events, recording };
 }
 
 test('projects the run onto the wire, opening and closing the assistant message', async () => {
@@ -116,15 +161,20 @@ test('stream frames carry deltas only, never the cumulative message', async () =
   }
 });
 
-test('stores the run as one assistant row carrying the turn metadata', async () => {
-  const { stored } = await runOnce('done');
-  expect(stored?.rows).toHaveLength(1);
-  const [row] = stored?.rows ?? [];
-  expect(row.id).toBe('run-1:0');
-  expect(row.role).toBe('assistant');
-  expect((row.message as { content: unknown[] }).content).toEqual([{ type: 'text', text: 'done' }]);
-  // The reader takes the run's observability off its first row.
-  expect(row.metadata).toMatchObject({ inputTokens: 3, outputTokens: 2, totalTokens: 5 });
+test('hands the finished turn to the journal and closes the run', async () => {
+  const { events, recording } = await runOnce('done');
+  expect(recording.written.map((m) => m.role)).toEqual(['assistant']);
+  expect((recording.written[0] as { content: unknown[] }).content).toEqual([
+    { type: 'text', text: 'done' },
+  ]);
+  expect(recording.outcome).toBe('completed');
+  // The card's live figures still ride the wire, whatever the store keeps.
+  const metadata = events.findLast((e) => e.type === 'notice' && e.name === 'message-metadata');
+  expect(metadata && 'payload' in metadata && metadata.payload).toMatchObject({
+    inputTokens: 3,
+    outputTokens: 2,
+    totalTokens: 5,
+  });
 });
 
 test('reports the turn to the usage ledger once', async () => {
@@ -146,7 +196,7 @@ test('reports the turn to the usage ledger once', async () => {
     permission: { mode: 'default' },
     buildTools: () => [],
     emit: () => {},
-    persist: () => {},
+    journal: recordingJournal().journal,
     recordUsage: (u) => seen.push(u),
   });
   expect(seen).toEqual([
@@ -202,7 +252,7 @@ const parkTool = (name: string, clientSide?: true) =>
 
 async function runParking(tool: unknown, args: Record<string, unknown>, name: string) {
   const events: AgentSessionEvent[] = [];
-  let stored: RunRow[] = [];
+  const recording = recordingJournal();
   await runAgent({
     runId: 'run-3',
     providerId: 'p1',
@@ -220,30 +270,28 @@ async function runParking(tool: unknown, args: Record<string, unknown>, name: st
     permission: { mode: 'default' },
     buildTools: () => [tool as never],
     emit: (event) => events.push(event),
-    persist: (rows) => {
-      stored = rows;
-    },
+    journal: recording.journal,
   });
-  return { events, stored };
+  return { events, recording };
 }
 
-test('a call the user must answer ends the turn and is stored still open', async () => {
-  const { events, stored } = await runParking(
+test('a call the user must answer ends the turn with the call left parked', async () => {
+  const { events, recording } = await runParking(
     parkTool('ask_clarification', true),
     { questions: [] },
     'ask_clarification',
   );
 
-  // No result row: the call is waiting, not failed.
-  expect(stored.filter((r) => r.role === 'toolResult')).toHaveLength(0);
-  expect(stored[0].metadata?.toolStates).toEqual({ 'call-1': { state: 'input-available' } });
+  // Parked, and the run left open so the decision can still extend it.
+  expect(recording.parked).toEqual(['call-1']);
+  expect(recording.outcome).toBeUndefined();
   // And no refusal frame on the wire — the card is showing the question.
   expect(events.some((e) => e.type === 'tool_execution_end')).toBe(false);
   expect(events.at(-1)?.type).toBe('agent_end');
 });
 
 test('a boundary crossing asks for approval and parks the call under it', async () => {
-  const { events, stored } = await runParking(
+  const { events, recording } = await runParking(
     parkTool('bash'),
     { command: 'curl https://example.invalid' },
     'bash',
@@ -253,15 +301,13 @@ test('a boundary crossing asks for approval and parks the call under it', async 
   expect(asked).toBeDefined();
   if (asked?.type !== 'approval_requested') return;
   expect(asked.toolCallId).toBe('call-1');
-  expect(stored.filter((r) => r.role === 'toolResult')).toHaveLength(0);
-  expect(stored[0].metadata?.toolStates).toEqual({
-    'call-1': { state: 'approval-requested', approval: { id: asked.approvalId } },
-  });
+  expect(recording.parked).toEqual(['call-1']);
+  expect(recording.outcome).toBeUndefined();
 });
 
 test('full access runs the same call without asking', async () => {
   const events: AgentSessionEvent[] = [];
-  let stored: RunRow[] = [];
+  const recording = recordingJournal();
   await runAgent({
     runId: 'run-4',
     providerId: 'p1',
@@ -279,12 +325,11 @@ test('full access runs the same call without asking', async () => {
     permission: { mode: 'full-access' },
     buildTools: () => [parkTool('bash')],
     emit: (event) => events.push(event),
-    persist: (rows) => {
-      stored = rows;
-    },
+    journal: recording.journal,
   });
   expect(events.some((e) => e.type === 'approval_requested')).toBe(false);
-  expect(stored.some((r) => r.role === 'toolResult')).toBe(true);
+  expect(recording.parked).toEqual([]);
+  expect(recording.written.some((m) => m.role === 'toolResult')).toBe(true);
 });
 
 /** A stream that fails before producing any block, the way a dropped connection does. */
@@ -309,9 +354,10 @@ const erroringStream: StreamFn = () => {
   return stream;
 };
 
-test('a turn that produced nothing is not stored', async () => {
-  let stored: RunRow[] | undefined;
-  await runAgent({
+test('a turn that failed at the provider is reported as a failed run', async () => {
+  const events: AgentSessionEvent[] = [];
+  const recording = recordingJournal();
+  const result = await runAgent({
     runId: 'run-5',
     providerId: 'p1',
     modelId: 'm1',
@@ -327,10 +373,12 @@ test('a turn that produced nothing is not stored', async () => {
     permissionMode: 'default',
     permission: { mode: 'default' },
     buildTools: () => [],
-    emit: () => {},
-    persist: (rows) => {
-      stored = rows;
-    },
+    emit: (event) => events.push(event),
+    journal: recording.journal,
   });
-  expect(stored).toBeUndefined();
+  expect(result).toMatchObject({ status: 'error', error: 'Connection error.' });
+  expect(recording.outcome).toBe('failed');
+  // A provider failure is encoded in the stream rather than thrown, so the run
+  // still closes normally — the renderer reads the error off the turn itself.
+  expect(events.at(-1)?.type).toBe('agent_end');
 });

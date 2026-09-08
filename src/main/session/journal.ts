@@ -65,6 +65,7 @@ export function createRunJournal(opts: {
   let failure: string | undefined;
   let wrote = false;
   let attempt = 0;
+  const parked = new Set<string>();
 
   return {
     async begin(prompt) {
@@ -125,12 +126,17 @@ export function createRunJournal(opts: {
       }
 
       if (message.role === 'toolResult') {
+        // Blocking a call makes the engine stand in an error result for it. A
+        // parked call has not failed — it is waiting — so that result is
+        // dropped, leaving the call open for the decision to land on later.
+        if (parked.has(message.toolCallId)) return;
         await session.appendMessage(message);
         wrote = true;
       }
     },
 
     async park(call) {
+      parked.add(call.toolCallId);
       // pi has no state for "waiting on the user", so it rides in an entry of
       // our own — the extension point pi does offer.
       await session.appendCustomEntry(APPROVAL_ENTRY, call);
