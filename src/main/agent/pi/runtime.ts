@@ -2,6 +2,7 @@ import {
   Agent,
   type AgentEvent,
   type AgentOptions,
+  convertToLlm,
   type StreamFn,
 } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
@@ -70,6 +71,10 @@ export function createAgentRuntime(opts: AgentRuntimeOptions): AgentRuntime {
     },
     streamFn: opts.streamFn,
     getApiKey: opts.getApiKey,
+    // pi's own converter, not the default: a transcript read back from the
+    // session can hold pi's message roles — a compaction summary above all —
+    // and the default would silently drop them instead of framing them.
+    convertToLlm,
     transformContext: composeContext([
       ...(opts.transforms ?? []),
       (messages) => injectSystemReminder(messages, currentDateNote(new Date()), { anchor: 'last' }),

@@ -9,7 +9,7 @@ import type { RunJournal } from '../session/journal';
 import { recordTurn } from './memory/state';
 import { type ApprovalContext, approvalGate } from './permissions';
 import { applyResolutions, type ParkedCall, type Resolution } from './pi/approvals';
-import { type Checkpoint, compactForTurn, withinTurnFold } from './pi/compaction';
+import { compactForTurn, type Fold, withinTurnFold } from './pi/compaction';
 import { type Complete, createCompleter } from './pi/complete';
 import { wireEmitter } from './pi/emitter';
 import { withSettledResults } from './pi/history';
@@ -94,11 +94,10 @@ export type RunAgentOptions = {
   /** When the run first started, for a continuation that reports itself again. */
   openedAt?: number;
   /**
-   * Record a compaction checkpoint covering `messages[0..coveredThrough]`.
-   * Cross-turn folding only runs when this is supplied: a summary nobody stores
-   * would be paid for again on every turn.
+   * Record a cross-turn fold. Folding only runs when this is supplied: a summary
+   * nobody stores would be paid for again on every turn.
    */
-  persistCheckpoint?: (checkpoint: Checkpoint) => void;
+  persistCheckpoint?: (fold: Fold) => Promise<void> | void;
   /** Append the turn to the usage ledger. */
   recordUsage?: (usage: RunUsage) => void;
   /** Summarize the thread's opening message into a title (fire-and-forget). */

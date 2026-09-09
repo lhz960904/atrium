@@ -1,11 +1,14 @@
-import type { Session } from '@earendil-works/pi-agent-core';
+import { randomUUID } from 'node:crypto';
+import type { AgentMessage, Session } from '@earendil-works/pi-agent-core';
 import type { SqliteSessionMetadata } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { AtriumUIMessage } from '@shared/chat';
-import type { ToolCall, ToolResultMessage } from '@shared/protocol';
+import type { Message, ToolCall, ToolResultMessage } from '@shared/protocol';
 import { eq } from 'drizzle-orm';
+import type { Fold } from '../agent/pi/compaction';
+import { asStored } from '../agent/pi/vocabulary';
 import type { Db } from '../db';
 import { threads } from '../db/schema';
-import { openToolCalls, projectMessages } from './project';
+import { openToolCalls, projectHistory, projectMessages } from './project';
 import { sessionStore } from './repo';
 
 /**
@@ -96,6 +99,34 @@ export async function settleThreadCalls(
   if (!session) return;
   for (const result of results) await session.appendMessage(result as never);
   touchThread(db, threadId);
+}
+
+/**
+ * Record a fold on the thread's conversation. The folded messages stay in the
+ * session — only what the model is shown gets shorter, and the reader rebuilds
+ * the shorter view from this entry.
+ */
+export async function compactThread(db: Db, threadId: string, fold: Fold): Promise<void> {
+  const session = await findThreadSession(db, threadId);
+  if (!session) return;
+  await session.appendEntry(
+    {
+      id: randomUUID(),
+      type: 'compaction',
+      summary: fold.summary,
+      retainedTail: fold.retainedTail as unknown as AgentMessage[],
+      tokensBefore: fold.tokensBefore,
+    },
+    'main',
+  );
+  touchThread(db, threadId);
+}
+
+/** A thread's transcript as the engine runs it, folded at its latest compaction. */
+export async function threadHistory(db: Db, threadId: string): Promise<Message[]> {
+  const session = await findThreadSession(db, threadId);
+  if (!session) return [];
+  return asStored(projectHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' })));
 }
 
 export async function openThreadSession(

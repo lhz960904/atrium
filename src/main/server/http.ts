@@ -13,8 +13,12 @@ import { preserveTodos } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
 import { createLogger } from '../log';
 import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
-import { openThreadCalls, settleThreadCalls } from '../session/threads';
-import { loadThreadHistory, persistCheckpoint } from './persist';
+import {
+  compactThread,
+  openThreadCalls,
+  settleThreadCalls,
+  threadHistory,
+} from '../session/threads';
 import { subscribePiEvents } from './pi-events';
 import { abortThreadRun, isThreadRunning } from './resumable';
 import type { Runner } from './runner';
@@ -156,13 +160,13 @@ export function startHttpServer(deps: {
   app.post('/api/chat/:threadId/compact', async (c) => {
     const threadId = c.req.param('threadId');
     const { providerId, modelId } = await c.req.json<{ providerId: string; modelId: string }>();
-    const history = loadThreadHistory(deps.db, threadId);
+    const history = await threadHistory(deps.db, threadId);
     // Force-compact is aggressive on purpose: the automatic path keeps a quarter
     // of the window (so a short chat folds nothing), but the user asked to
     // compact now — keep only the recent floor and fold everything before it.
     const piModel = resolvePiModel(deps.db, providerId, modelId);
     const folded = await foldToCheckpoint({
-      messages: history.map((entry) => entry.message),
+      messages: history,
       summarize: createSummarizer({
         model: piModel,
         streamFn: piStreamFn,
@@ -173,14 +177,9 @@ export function startHttpServer(deps: {
       keepRecentTokens: 0,
     });
     if (!folded) return c.json({ compacted: false });
-    persistCheckpoint(
-      deps.db,
-      threadId,
-      folded.checkpoint,
-      history[folded.checkpoint.coveredThrough].id,
-    );
+    await compactThread(deps.db, threadId, folded);
     log.info(
-      `forced compaction folded ${folded.checkpoint.coveredThrough + 1} of ${history.length} messages`,
+      `forced compaction folded ${history.length - folded.retainedTail.length} of ${history.length} messages`,
     );
     return c.json({ compacted: true });
   });

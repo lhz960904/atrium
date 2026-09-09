@@ -238,6 +238,44 @@ test('the engine transcript is every message in order, records ignored', async (
   await repo.close();
 });
 
+test('a fold hides what it covered from the model but not from the reader', async () => {
+  const { repo, session: s } = await session();
+  await run(s, 'r1', async (s) => {
+    await s.appendMessage(user('the earliest thing'));
+    await s.appendMessage(assistant([{ type: 'text', text: 'an early answer' }]));
+  });
+  await s.appendEntry(
+    {
+      id: 'fold-1',
+      type: 'compaction',
+      summary: 'They discussed the earliest thing.',
+      retainedTail: [user('the kept turn') as never],
+      tokensBefore: 4321,
+    },
+    'main',
+  );
+  await run(s, 'r2', async (s) => {
+    await s.appendMessage(assistant([{ type: 'text', text: 'a later answer' }]));
+  });
+
+  const { entries, records } = await read(s);
+
+  // The model sees the summary in place of everything before the fold.
+  const history = projectHistory(entries);
+  expect(history[0]).toMatchObject({
+    role: 'compactionSummary',
+    summary: 'They discussed the earliest thing.',
+  });
+  expect(history.map((m) => m.role)).toEqual(['compactionSummary', 'user', 'assistant']);
+
+  // The reader still sees the whole conversation, with the fold as a divider.
+  const messages = projectMessages(entries, records);
+  const divider = messages.find((m) => m.metadata?.kind === 'compaction');
+  expect(divider?.parts).toEqual([{ type: 'text', text: 'They discussed the earliest thing.' }]);
+  expect(messages.filter((m) => m.role === 'assistant')).toHaveLength(2);
+  await repo.close();
+});
+
 test('an unanswered call is reported as open', async () => {
   const { repo, session: s } = await session();
   await run(s, 'r1', async (s) => {

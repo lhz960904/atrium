@@ -1,4 +1,10 @@
-import type { Entry, LaneRecord, MessageEntry } from '@earendil-works/pi-agent-core';
+import {
+  type AgentMessage,
+  buildSessionContext,
+  type Entry,
+  type LaneRecord,
+  type MessageEntry,
+} from '@earendil-works/pi-agent-core';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { AssistantMessage, Message, ToolCall } from '@shared/protocol';
 import { mergeAssistantMessage, mergeUserMessage, type PiRow } from '../server/persist-convert';
@@ -162,6 +168,17 @@ export function projectMessages(entries: Entry[], records: LaneRecord[]): Atrium
   const runs = runsOf(records);
   const out: AtriumUIMessage[] = [];
 
+  // A fold is shown where it happened, as its own divider; the messages it
+  // folded away stay in the list above it.
+  const folds = entries.filter((entry) => entry.type === 'compaction');
+  const divider = (entry: Extract<Entry, { type: 'compaction' }>): AtriumUIMessage =>
+    ({
+      id: entry.id,
+      role: 'user',
+      parts: [{ type: 'text', text: entry.summary }],
+      metadata: { kind: 'compaction', createdAt: entry.timestamp },
+    }) as AtriumUIMessage;
+
   for (const run of runs) {
     const own = entries.filter((entry) => entry.seq > run.startSeq && entry.seq < run.endSeq);
     // The turn the user opened the run with is its own message, not part of the
@@ -182,14 +199,31 @@ export function projectMessages(entries: Entry[], records: LaneRecord[]): Atrium
     const produced = own.filter((entry) => !(isMessage(entry) && entry.message.role === 'user'));
     const rows = rowsOf(run, produced, records);
     if (rows.length > 0) out.push(mergeAssistantMessage(run.id, rows));
+    for (const fold of folds) {
+      if (fold.seq > run.startSeq && fold.seq < run.endSeq) out.push(divider(fold));
+    }
+  }
+  // A fold the user asked for happens between runs, so it belongs to none.
+  for (const fold of folds) {
+    if (!runs.some((run) => fold.seq > run.startSeq && fold.seq < run.endSeq)) {
+      out.push(divider(fold));
+    }
   }
 
   return out;
 }
 
-/** The transcript the engine runs on: every message the branch holds, in order. */
-export function projectHistory(entries: Entry[]): Message[] {
-  return entries.filter(isMessage).map((entry) => entry.message as Message);
+/**
+ * The transcript the engine runs on. pi's own builder does the folding: it cuts
+ * at the newest compaction entry and turns it back into the summary that stands
+ * for everything before it, which is the same view the fold itself produced.
+ *
+ * Typed in pi's vocabulary rather than the frozen one on purpose: a compaction
+ * summary is a role pi owns, which never reaches storage or the wire — the
+ * reader is handed a divider instead.
+ */
+export function projectHistory(entries: Entry[]): AgentMessage[] {
+  return buildSessionContext(entries).messages;
 }
 
 /** Tool calls in the branch that never got a result — the ones still parked. */

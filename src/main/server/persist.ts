@@ -1,10 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { Message, ToolResultMessage } from '@shared/protocol';
 
 import { asc, eq, or } from 'drizzle-orm';
 import { withModelAttachments } from '../agent/pi/attachments';
-import type { Checkpoint } from '../agent/pi/compaction';
 import { sealDanglingToolCalls } from '../agent/pi/history';
 import type { RunRow } from '../agent/pi/recorder';
 import type { Db } from '../db';
@@ -209,48 +207,6 @@ export function loadRunRows(db: Db, runId: string): RunRow[] {
       message: row.parts as Message,
       metadata: (row.metadata as Record<string, unknown> | null) ?? null,
     }));
-}
-
-/**
- * Store a compaction checkpoint: the summary the model reads in place of the
- * folded history, and the ack that keeps the roles alternating after it. Both
- * are ordinary rows — the transcript keeps its full history, and the reader
- * folds at them.
- */
-export function persistCheckpoint(
-  db: Db,
-  threadId: string,
-  checkpoint: Checkpoint,
-  coveredThroughId: string,
-): void {
-  const now = Date.now();
-  const summaryId = randomUUID();
-  const ackRunId = randomUUID();
-  db.transaction((tx) => {
-    tx.insert(messages)
-      .values({
-        id: summaryId,
-        threadId,
-        role: 'user',
-        parts: checkpoint.summary,
-        metadata: { kind: 'compaction', coveredThroughId, createdAt: now },
-        runId: summaryId,
-        createdAt: new Date(now),
-      })
-      .run();
-    tx.insert(messages)
-      .values({
-        id: `${ackRunId}:0`,
-        threadId,
-        role: 'assistant',
-        parts: checkpoint.ack,
-        metadata: { kind: 'compaction-ack', createdAt: now + 1 },
-        runId: ackRunId,
-        createdAt: new Date(now + 1),
-      })
-      .run();
-  });
-  db.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
 }
 
 /**
