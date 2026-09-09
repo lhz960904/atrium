@@ -56,12 +56,19 @@ function runsOf(records: LaneRecord[]): Run[] {
     runs.push({
       id: record.id,
       startSeq: record.seq,
-      // An unfinished run is still streaming (or was interrupted): everything
-      // after its start belongs to it, since a lane runs one at a time.
       endSeq: end?.seq ?? Number.POSITIVE_INFINITY,
       startedAt: record.timestamp,
       finishedAt: end?.timestamp,
     });
+  }
+  runs.sort((a, b) => a.startSeq - b.startSeq);
+  // A run with no end is still streaming, or was left parked, or was cut off.
+  // Its entries reach to wherever the next run begins — a lane runs one
+  // operation at a time, so nothing after that point can be its own.
+  for (const [index, run] of runs.entries()) {
+    if (run.endSeq === Number.POSITIVE_INFINITY) {
+      run.endSeq = runs[index + 1]?.startSeq ?? Number.POSITIVE_INFINITY;
+    }
   }
   return runs;
 }

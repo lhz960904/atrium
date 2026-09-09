@@ -189,6 +189,32 @@ test('the refusal result a parked call produces is not kept', async () => {
   await repo.close();
 });
 
+test('a new run supersedes one the user walked away from', async () => {
+  const { repo, session: s } = await session();
+  const first = createRunJournal({ session: s, runId: 'r1' });
+  await first.begin(user('curl x'));
+  await first.observe(
+    ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
+  );
+  await first.park({ toolCallId: 'c1', approvalId: 'ap1' });
+
+  // The user ignores the ask and sends something else. The lane holds one
+  // operation at a time, so this only works if the parked one is closed first.
+  const second = createRunJournal({ session: s, runId: 'r2' });
+  await second.begin(user('never mind, do this'));
+  await second.observe(ended(assistant([{ type: 'text', text: 'done' }])));
+  await second.end('completed');
+
+  expect(await s.findOpenOperations('main')).toEqual([]);
+  const { entries, records } = await read(s);
+  const abandoned = records.find((r) => r.type === 'operation_finished' && r.runId === 'r1');
+  expect(abandoned).toMatchObject({ outcome: 'aborted' });
+  // Both runs are still readable, each with its own turn.
+  const messages = projectMessages(entries, records);
+  expect(messages.map((m) => m.id)).toEqual([messages[0].id, 'r1', messages[2].id, 'r2']);
+  await repo.close();
+});
+
 test('a continuation extends the run it resumes instead of opening a second one', async () => {
   const { repo, session: s } = await session();
   const first = createRunJournal({ session: s, runId: 'r1' });

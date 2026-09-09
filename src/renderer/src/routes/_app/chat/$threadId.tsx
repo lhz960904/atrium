@@ -229,7 +229,7 @@ function ChatRunner({
   // that keeps UserMessage's memo intact through a streaming turn.
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
-  const deleteMessages = trpc.messages.deleteMany.useMutation();
+  const rewind = trpc.messages.rewind.useMutation();
   const onEditMessage = useCallback(
     async (messageId: string, text: string): Promise<void> => {
       if (!model) return;
@@ -238,16 +238,15 @@ function ChatRunner({
       if (index === -1) return;
       // The edited message keeps its attachments; only its text is rewritten.
       const files = current[index].parts.filter((p) => p.type === 'file');
-      const removeIds = current.slice(index).map((m) => m.id);
-      // Truncate the DB tail before re-sending: the server rebuilds history from
-      // the DB (the client sends only the latest message), so the edited message
-      // and everything after it must be gone first, or the re-run would replay
-      // the stale branch.
-      await deleteMessages.mutateAsync({ threadId, ids: removeIds });
+      // Rewind before re-sending: the server rebuilds history from its own
+      // store (the client sends only the latest message), so the conversation
+      // has to stop at the edited message first or the re-run replays the stale
+      // tail. The messages after it are kept, just no longer on the branch.
+      await rewind.mutateAsync({ threadId, messageId });
       setMessages((prev) => prev.slice(0, index));
       sendMessage({ text, ...(files.length > 0 && { files }) });
     },
-    [model, threadId, deleteMessages, setMessages, sendMessage],
+    [model, threadId, rewind, setMessages, sendMessage],
   );
   const onClarify = useCallback(
     (toolCallId: string, result: ClarifyResult) =>

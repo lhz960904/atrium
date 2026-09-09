@@ -129,6 +129,26 @@ export async function threadHistory(db: Db, threadId: string): Promise<Message[]
   return asStored(projectHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' })));
 }
 
+/**
+ * Take the conversation back to just before one message, so the next turn
+ * continues from there — what editing an earlier message and re-running needs.
+ *
+ * Nothing is deleted. The branch is moved back and the messages after it stay in
+ * the session, off to one side, which is both cheaper than a delete and the
+ * reason a re-run can never half-truncate a thread.
+ */
+export async function rewindThread(db: Db, threadId: string, messageId: string): Promise<boolean> {
+  const session = await findThreadSession(db, threadId);
+  if (!session) return false;
+  const entry = await session.getEntry(messageId);
+  if (!entry) return false;
+  // Any run still open would be left dangling past the new leaf; the next run
+  // closes it, so there is nothing to do here but move the branch.
+  await session.moveLane('main', entry.parentId);
+  touchThread(db, threadId, { markRead: true });
+  return true;
+}
+
 export async function openThreadSession(
   db: Db,
   threadId: string,

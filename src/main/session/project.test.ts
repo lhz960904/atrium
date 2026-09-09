@@ -77,7 +77,7 @@ async function run(
   s: Session,
   id: string,
   write: (s: Session) => Promise<void>,
-  opts: { finish?: boolean } = {},
+  opts: { finish?: boolean | 'aborted' } = {},
 ): Promise<void> {
   await s.appendRecord({
     id,
@@ -93,7 +93,7 @@ async function run(
       lane: 'main',
       type: 'operation_finished',
       runId: id,
-      outcome: 'completed',
+      outcome: opts.finish === 'aborted' ? 'aborted' : 'completed',
     });
   }
 }
@@ -238,6 +238,38 @@ test('the engine transcript is every message in order, records ignored', async (
   await repo.close();
 });
 
+test('a run left parked does not swallow the run that follows it', async () => {
+  const { repo, session: s } = await session();
+  // Parked: the user was asked something and sent a new message instead. The
+  // store allows one open operation per lane, so the parked one is closed as
+  // the next run opens — which is what the journal does.
+  await run(
+    s,
+    'r1',
+    async (s) => {
+      await s.appendMessage(user('first ask'));
+      await s.appendMessage(
+        assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }]),
+      );
+      await s.appendCustomEntry(APPROVAL_ENTRY, { toolCallId: 'c1', approvalId: 'ap1' });
+    },
+    { finish: 'aborted' },
+  );
+  await run(s, 'r2', async (s) => {
+    await s.appendMessage(user('never mind, do this'));
+    await s.appendMessage(assistant([{ type: 'text', text: 'done' }]));
+  });
+
+  const { entries, records } = await read(s);
+  const messages = projectMessages(entries, records);
+  expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+  // The second run's answer belongs to the second run, not the parked one.
+  expect(messages[1].id).toBe('r1');
+  expect(messages[3].id).toBe('r2');
+  expect(messages[3].parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'done' }]);
+  await repo.close();
+});
+
 test('a fold hides what it covered from the model but not from the reader', async () => {
   const { repo, session: s } = await session();
   await run(s, 'r1', async (s) => {
@@ -273,6 +305,41 @@ test('a fold hides what it covered from the model but not from the reader', asyn
   const divider = messages.find((m) => m.metadata?.kind === 'compaction');
   expect(divider?.parts).toEqual([{ type: 'text', text: 'They discussed the earliest thing.' }]);
   expect(messages.filter((m) => m.role === 'assistant')).toHaveLength(2);
+  await repo.close();
+});
+
+test('rewinding the branch drops the tail from the conversation but keeps it stored', async () => {
+  const { repo, session: s } = await session();
+  let editedId = '';
+  await run(s, 'r1', async (s) => {
+    editedId = await s.appendMessage(user('the message being edited'));
+    await s.appendMessage(assistant([{ type: 'text', text: 'an answer to it' }]));
+  });
+  await run(s, 'r2', async (s) => {
+    await s.appendMessage(user('a follow-up'));
+    await s.appendMessage(assistant([{ type: 'text', text: 'and its answer' }]));
+  });
+
+  // What editing that message does: take the branch back to just before it.
+  const edited = await s.getEntry(editedId);
+  await s.moveLane('main', edited?.parentId ?? null);
+
+  const { entries, records } = await read(s);
+  expect(projectMessages(entries, records)).toEqual([]);
+  expect(projectHistory(entries)).toEqual([]);
+  // Nothing was deleted — the messages are still in the session, off-branch.
+  expect((await s.findEntries()).length).toBeGreaterThan(3);
+
+  // And the re-run continues from there rather than from the stale tail.
+  await run(s, 'r3', async (s) => {
+    await s.appendMessage(user('the edited message'));
+    await s.appendMessage(assistant([{ type: 'text', text: 'a fresh answer' }]));
+  });
+  const after = await read(s);
+  expect(projectMessages(after.entries, after.records).map((m) => m.role)).toEqual([
+    'user',
+    'assistant',
+  ]);
   await repo.close();
 });
 

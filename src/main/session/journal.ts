@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentEvent, AgentMessage, Session } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, Message } from '@shared/protocol';
+import { createLogger } from '../log';
 import { APPROVAL_ENTRY, type ApprovalEntryData } from './project';
+
+const log = createLogger('session');
 
 /**
  * Everything one run writes into its session.
@@ -72,6 +75,20 @@ export function createRunJournal(opts: {
       // A continuation extends the operation the earlier turn left open, so its
       // bracket must not be opened a second time.
       if (!opts.resuming) {
+        // A lane holds one operation at a time, so anything still open has to be
+        // closed first. It is open because the run that owned it never got to
+        // end — the user was asked something and moved on instead, or the app
+        // died mid-turn — and either way it is not going to finish now.
+        for (const open of await session.findOpenOperations('main')) {
+          log.info(`abandoning run ${open.id}, superseded by ${runId}`);
+          await session.appendRecord({
+            id: randomUUID(),
+            lane: 'main',
+            type: 'operation_finished',
+            runId: open.id,
+            outcome: 'aborted',
+          });
+        }
         await session.appendRecord({
           id: runId,
           lane: 'main',
