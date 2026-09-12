@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/lhz960904/atrium/compare/v0.15.0...v0.15.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **agent:** keep counting tokens once a thread has been compacted ([#107](https://github.com/lhz960904/atrium/issues/107)) ([85eb1aa](https://github.com/lhz960904/atrium/commit/85eb1aa1101e1c3eb7c70887c5d634303b293655))
+
 ## [0.15.0](https://github.com/lhz960904/atrium/compare/v0.14.3...v0.15.0) (2026-09-12)
 
 
