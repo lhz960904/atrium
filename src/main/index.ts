@@ -292,9 +292,10 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true;
   // Best effort: this clears the lease heartbeats synchronously, while the
-  // lease rows themselves may not survive the shutdown. Their TTL is the
-  // backstop — a thread killed mid-lease is openable again once it expires.
-  void closeSessionStore();
+  // release itself races the connection closing below. Their TTL is the
+  // backstop — a thread whose lease outlived the app is openable again once it
+  // expires — so a failure here is expected and not worth reporting.
+  void closeSessionStore().catch(() => {});
   runner?.dispose();
   scheduledManager.dispose();
   void mcpManager.dispose();

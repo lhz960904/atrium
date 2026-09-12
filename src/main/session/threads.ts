@@ -9,6 +9,7 @@ import { sealDanglingToolCalls } from '../agent/pi/history';
 import { asStored } from '../agent/pi/vocabulary';
 import type { Db } from '../db';
 import { projects, threads } from '../db/schema';
+import { durable } from './durable';
 import { openToolCalls, projectHistory, projectMessages } from './project';
 import { sessionStore } from './repo';
 
@@ -123,7 +124,7 @@ export async function settleThreadCalls(
   if (results.length === 0) return;
   const session = await findThreadSession(db, threadId);
   if (!session) return;
-  for (const result of results) await session.appendMessage(result as never);
+  for (const result of results) await session.appendMessage(durable(result) as never);
   touchThread(db, threadId);
 }
 
@@ -140,7 +141,7 @@ export async function compactThread(db: Db, threadId: string, fold: Fold): Promi
       id: randomUUID(),
       type: 'compaction',
       summary: fold.summary,
-      retainedTail: fold.retainedTail as unknown as AgentMessage[],
+      retainedTail: durable(fold.retainedTail) as unknown as AgentMessage[],
       tokensBefore: fold.tokensBefore,
     },
     'main',

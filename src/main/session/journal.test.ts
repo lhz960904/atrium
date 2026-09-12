@@ -43,10 +43,10 @@ const usage = (input: number, output: number) => ({
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 });
 
-const user = (text: string): Message => ({
-  role: 'user',
-  content: [{ type: 'text', text }],
-  timestamp: 1,
+let seq = 0;
+const user = (text: string): { id: string; message: Message } => ({
+  id: `u${++seq}`,
+  message: { role: 'user', content: [{ type: 'text', text }], timestamp: 1 },
 });
 
 const assistant = (content: unknown[], extra: Record<string, unknown> = {}): AgentMessage =>
@@ -186,6 +186,74 @@ test('the refusal result a parked call produces is not kept', async () => {
       state: 'approval-requested',
     },
   );
+  await repo.close();
+});
+
+test('a message carrying undefined is still storable', async () => {
+  const { repo, session: s } = await session();
+  const journal = createRunJournal({ session: s, runId: 'r1' });
+  await journal.begin(user('run something'));
+  await journal.observe(
+    ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
+  );
+  // What a tool actually returns: optional fields left unset rather than absent.
+  // The store rejects undefined outright, and one rejected append fails the turn.
+  await journal.observe(
+    ended({
+      role: 'toolResult',
+      toolCallId: 'c1',
+      toolName: 'bash',
+      content: [{ type: 'text', text: 'ok' }],
+      details: { stdout: 'ok', stderr: undefined, exitCode: 0 },
+      isError: false,
+      timestamp: 3,
+    } as AgentMessage),
+  );
+  await journal.end('completed');
+
+  const { entries, records } = await read(s);
+  const [, reply] = projectMessages(entries, records);
+  expect(reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1')).toMatchObject(
+    {
+      state: 'output-available',
+      output: { stdout: 'ok', exitCode: 0 },
+    },
+  );
+  await repo.close();
+});
+
+test('a clarification with no approval id is still storable', async () => {
+  const { repo, session: s } = await session();
+  const journal = createRunJournal({ session: s, runId: 'r1' });
+  await journal.begin(user('ask me'));
+  await journal.observe(
+    ended(assistant([{ type: 'toolCall', id: 'c1', name: 'ask_clarification', arguments: {} }])),
+  );
+  // A tool the user answers has no approval, so the field is simply undefined.
+  await journal.park({ toolCallId: 'c1' });
+
+  const { entries, records } = await read(s);
+  const [, reply] = projectMessages(entries, records);
+  expect(reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1')).toMatchObject(
+    {
+      state: 'input-available',
+    },
+  );
+  await repo.close();
+});
+
+test("the user's turn keeps the id it was sent under", async () => {
+  const { repo, session: s } = await session();
+  const journal = createRunJournal({ session: s, runId: 'r1' });
+  const prompt = user('find me later');
+  await journal.begin(prompt);
+  await journal.end('completed');
+
+  // The live view addresses this message by that id, and editing it later has
+  // to find the entry it became — a store-assigned id would never match.
+  expect(await s.getEntry(prompt.id)).toMatchObject({ type: 'message' });
+  const { entries, records } = await read(s);
+  expect(projectMessages(entries, records)[0].id).toBe(prompt.id);
   await repo.close();
 });
 

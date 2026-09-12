@@ -76,7 +76,7 @@ function recordingJournal() {
   let failure: string | undefined;
   const journal: RunJournal = {
     begin: async (prompt) => {
-      if (prompt) written.push(prompt);
+      if (prompt) written.push(prompt.message);
     },
     observe: async (event) => {
       if (event.type !== 'message_end') return;

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { AgentEvent, AgentMessage, Session } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, Message } from '@shared/protocol';
 import { createLogger } from '../log';
+import { durable } from './durable';
 import { APPROVAL_ENTRY, type ApprovalEntryData } from './project';
 
 const log = createLogger('session');
@@ -31,8 +32,9 @@ export type RunTotals = {
 export type RunOutcome = 'completed' | 'aborted' | 'failed';
 
 export type RunJournal = {
-  /** Open the run, and record the turn that started it. */
-  begin(prompt?: Message): Promise<void>;
+  /** Open the run, and record the turn that started it under the id its author
+   *  already gave it. */
+  begin(prompt?: { id: string; message: Message }): Promise<void>;
   /** Fold one engine event into the session. */
   observe(event: AgentEvent): Promise<void>;
   /** Record a call handed back to the user; it gets no result this run. */
@@ -98,7 +100,13 @@ export function createRunJournal(opts: {
         });
       }
       if (prompt) {
-        await session.appendMessage(prompt as AgentMessage);
+        // Stored under the id the client minted, not one the store assigns:
+        // the live view already addresses the message by it, and editing that
+        // message later has to find the entry it became.
+        await session.appendEntry(
+          { id: prompt.id, type: 'message', message: durable(prompt.message) as AgentMessage },
+          'main',
+        );
         wrote = true;
       }
     },
@@ -126,7 +134,7 @@ export function createRunJournal(opts: {
         // it comes back as history, which would wedge the thread for good.
         if (message.content.length === 0) return;
 
-        const entryId = await session.appendMessage(message);
+        const entryId = await session.appendMessage(durable(message));
         wrote = true;
         await session.appendRecord({
           id: randomUUID(),
@@ -137,7 +145,7 @@ export function createRunJournal(opts: {
           entryId,
           attempt: ++attempt,
           stopReason: message.stopReason === 'pending' ? 'stop' : message.stopReason,
-          usage,
+          usage: durable(usage),
         });
         return;
       }
@@ -147,7 +155,7 @@ export function createRunJournal(opts: {
         // parked call has not failed — it is waiting — so that result is
         // dropped, leaving the call open for the decision to land on later.
         if (parked.has(message.toolCallId)) return;
-        await session.appendMessage(message);
+        await session.appendMessage(durable(message));
         wrote = true;
       }
     },
@@ -156,7 +164,7 @@ export function createRunJournal(opts: {
       parked.add(call.toolCallId);
       // pi has no state for "waiting on the user", so it rides in an entry of
       // our own — the extension point pi does offer.
-      await session.appendCustomEntry(APPROVAL_ENTRY, call);
+      await session.appendCustomEntry(APPROVAL_ENTRY, durable(call));
       wrote = true;
     },
 

@@ -157,7 +157,10 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
             resuming: request.resumeRunId !== undefined,
           });
           const prompt = request.userMessage
-            ? (splitUserMessage(request.userMessage).message as Message)
+            ? {
+                id: request.userMessage.id,
+                message: splitUserMessage(request.userMessage).message as Message,
+              }
             : undefined;
           await journal.begin(prompt);
           // Sending counts as reading: a thread must never flash unread from
