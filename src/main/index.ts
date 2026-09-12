@@ -18,6 +18,7 @@ import { disposeComputerUseHelper } from './computer-use';
 import { registerComputerUseDrag } from './computer-use/drag';
 import { registerDragOverlay } from './computer-use/drag-overlay';
 import { registerPermissionBridge } from './computer-use/permissions';
+import { closeSessionStore } from './conversation/store/repo';
 import { closeDb, openDb } from './db';
 import { registerFaviconScheme, serveFavicons } from './favicons';
 import { initLogging } from './log';
@@ -32,7 +33,6 @@ import {
 } from './providers/pi-model';
 import { firstEnabledModel } from './providers/resolve';
 import { startHttpServer } from './server/http';
-import { closeSessionStore } from './session/repo';
 import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
 import { loadShellEnv } from './shell-path';
@@ -148,7 +148,7 @@ app.whenReady().then(async () => {
   // Bring the chat server up first — it's a fast port bind — so the IPC handler
   // attaches before the window paints and the renderer's first tRPC calls never
   // race a missing handler.
-  const chatEndpoint = await startHttpServer({ db, token: randomUUID(), runner: runs });
+  const chatEndpoint = await startHttpServer({ token: randomUUID(), runner: runs });
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);

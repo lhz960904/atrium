@@ -1,4 +1,4 @@
-import { rewindThread, threadMessages } from '@main/session/threads';
+import { rewindThread, threadMessages } from '@main/conversation/threads';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
 

@@ -5,8 +5,8 @@ import {
   createAssistantMessageEventStream,
   type Model,
 } from '@earendil-works/pi-ai';
+import type { RunJournal } from '@main/conversation/journal';
 import type { Db } from '@main/db';
-import type { RunJournal } from '@main/session/journal';
 import type { AgentSessionEvent, Message } from '@shared/protocol';
 import type { Sandbox } from '../sandbox/types';
 import { runAgent } from './run';

@@ -5,9 +5,9 @@ import {
   type LaneRecord,
   type MessageEntry,
 } from '@earendil-works/pi-agent-core';
-import { mergeAssistantMessage, mergeUserMessage, type PiRow } from '@main/server/persist-convert';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { AssistantMessage, Message, ToolCall } from '@shared/protocol';
+import { mergeAssistantMessage, mergeUserMessage, type PiRow } from './ui-messages';
 
 /**
  * A session as the rest of the app reads it.

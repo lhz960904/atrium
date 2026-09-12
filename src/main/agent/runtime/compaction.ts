@@ -213,7 +213,7 @@ export type FoldOptions = {
  * caller decides when. Returns the pair to persist plus the window it keeps, or
  * null when there is nothing left to fold.
  */
-export async function foldToCheckpoint(opts: FoldOptions): Promise<Fold | null> {
+export async function foldHistory(opts: FoldOptions): Promise<Fold | null> {
   const selected = selectFold(opts.messages, pickRecentWindow, {
     keepRecentTokens: opts.keepRecentTokens ?? Math.floor(opts.contextWindow * KEEP_RECENT_RATIO),
     minKeepMessages: opts.minKeepMessages ?? MIN_KEEP_MESSAGES,
@@ -244,7 +244,7 @@ export async function compactForTurn(
   log.info(`cross-turn fold (${tokens}/${opts.contextWindow} tokens)`);
   opts.emit('start');
   try {
-    const folded = await foldToCheckpoint(opts);
+    const folded = await foldHistory(opts);
     if (!folded) return opts.messages;
     await opts.persist(folded);
     // The same view a later read rebuilds from the stored entry, so the prefix

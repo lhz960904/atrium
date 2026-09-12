@@ -9,7 +9,7 @@ import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqli
 import type { Message } from '@shared/protocol';
 import { createRunJournal } from './journal';
 import { projectHistory, projectMessages } from './project';
-import { sessionSqlite } from './sqlite-driver';
+import { sessionSqlite } from './store/sqlite-driver';
 
 /**
  * Round-trip: what the journal writes has to be exactly what the projection

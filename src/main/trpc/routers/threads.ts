@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { getRunningThreadIds } from '@main/agent/runtime/runs';
+import { deleteThreadSession, threadMessages } from '@main/conversation/threads';
 import { projects, threads } from '@main/db/schema';
-import { deleteThreadSession, threadMessages } from '@main/session/threads';
 import { desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';

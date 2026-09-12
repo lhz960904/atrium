@@ -11,7 +11,7 @@ import type { Message, ToolCall, ToolResultMessage } from '@shared/protocol';
 import { eq } from 'drizzle-orm';
 import { durable } from './durable';
 import { openToolCalls, projectHistory, projectMessages } from './project';
-import { sessionStore } from './repo';
+import { sessionStore } from './store/repo';
 
 /**
  * The join between the product's threads and the store's sessions.

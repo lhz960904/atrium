@@ -60,7 +60,13 @@ function setup(runner?: (task: ScheduledTask) => Promise<ScheduledRunResult>) {
   mgr.init({
     db,
     // Every test injects `run`, so the real runner is never reached.
-    runner: { start: () => unreachable(), dispose: () => {} },
+    runner: {
+      start: () => unreachable(),
+      resume: () => unreachable(),
+      settle: () => unreachable(),
+      compact: () => unreachable(),
+      dispose: () => {},
+    },
     defaultModel: () => ({ providerId: 'p', modelId: 'm' }),
     now: () => nowRef.v,
     run: runner ?? (async () => ({ status: 'ok', messageId: 'a1' })),

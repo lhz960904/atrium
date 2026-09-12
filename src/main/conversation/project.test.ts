@@ -7,7 +7,7 @@ import type { AgentMessage, Session } from '@earendil-works/pi-agent-core';
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import { APPROVAL_ENTRY, openToolCalls, projectHistory, projectMessages } from './project';
-import { sessionSqlite } from './sqlite-driver';
+import { sessionSqlite } from './store/sqlite-driver';
 import { runnableHistory } from './threads';
 
 /**

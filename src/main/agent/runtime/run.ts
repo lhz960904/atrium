@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
+import type { RunJournal } from '@main/conversation/journal';
 import type { Db } from '@main/db';
 import { createLogger } from '@main/log';
-import type { RunJournal } from '@main/session/journal';
 import type { PermissionMode } from '@shared/permissions';
 import type { AgentSessionEvent, Message } from '@shared/protocol';
 import { recordTurn } from '../memory/state';

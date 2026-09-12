@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { openSessionStore } from '@main/session/repo';
+import { openSessionStore } from '@main/conversation/store/repo';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
