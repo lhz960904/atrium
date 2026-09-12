@@ -3,6 +3,7 @@ import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import type Database from 'better-sqlite3';
 import { createLogger } from '../log';
+import { attachChatSearch } from './search';
 import { sessionSqlite } from './sqlite-driver';
 
 const log = createLogger('session');
@@ -38,6 +39,9 @@ export function openSessionStore(db: Database.Database, databasePath: string): v
   ready = repository
     .list()
     .then((sessions) => {
+      // Only now do the store's tables exist, which is what the search triggers
+      // hang off.
+      attachChatSearch(db);
       log.info(`session store open on ${databasePath} (${sessions.length} session(s))`);
     })
     .catch((err) => {

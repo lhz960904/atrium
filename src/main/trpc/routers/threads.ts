@@ -3,7 +3,7 @@ import { desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { projects, threads } from '../../db/schema';
 import { getRunningThreadIds } from '../../server/resumable';
-import { threadMessages } from '../../session/threads';
+import { deleteThreadSession, threadMessages } from '../../session/threads';
 import { publicProcedure, router } from '../trpc';
 
 /** A thread's bound model; null = inherit general.defaultModel. */
@@ -64,7 +64,10 @@ export const threadsRouter = router({
    * so we never leave empty threads behind when the message insert fails.
    */
   /** Delete a thread; its conversation and artifacts go with it. */
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    // The conversation goes first: the thread row is what names it, so dropping
+    // that first would strand the session in the store.
+    await deleteThreadSession(ctx.db, input.id);
     ctx.db.delete(threads).where(eq(threads.id, input.id)).run();
   }),
 

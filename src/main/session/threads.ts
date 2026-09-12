@@ -188,6 +188,18 @@ export async function rewindThread(db: Db, threadId: string, messageId: string):
   return true;
 }
 
+/** Drop a thread's conversation. The thread row is the caller's to remove. */
+export async function deleteThreadSession(db: Db, threadId: string): Promise<void> {
+  const row = db
+    .select({ sessionId: threads.sessionId })
+    .from(threads)
+    .where(eq(threads.id, threadId))
+    .get();
+  if (!row?.sessionId) return;
+  const metadata = (await sessionStore().list()).find((s) => s.id === row.sessionId);
+  if (metadata) await sessionStore().delete(metadata);
+}
+
 export async function openThreadSession(
   db: Db,
   threadId: string,
