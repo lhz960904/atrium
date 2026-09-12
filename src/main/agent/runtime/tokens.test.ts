@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createCompactionSummaryMessage } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, Message, Usage } from '@shared/protocol';
 import { countTokens, estimateContextTokens, estimateTokens, tokensOfMessage } from './tokens';
 
@@ -102,4 +103,21 @@ test('a cache-served turn is counted at its full prompt size', () => {
 test('a turn with no reported total falls back to summing the parts', () => {
   const cached = assistant('x', usage({ input: 100, output: 5, cacheRead: 900, cacheWrite: 50 }));
   expect(countTokens([user('a'), cached])).toBe(1055);
+});
+
+test("counts pi's own message roles instead of choking on them", () => {
+  // A compacted thread carries a compactionSummary, which holds its text in
+  // `summary` and has no `content` at all.
+  const summary = createCompactionSummaryMessage('folded away', 4321, 0) as unknown as Message;
+
+  expect(() => estimateContextTokens([summary, user('aaaa')])).not.toThrow();
+  // The summary is really in the prompt, so it has to be counted, not skipped.
+  expect(estimateContextTokens([summary])).toBeGreaterThan(estimateTokens('folded away'));
+  expect(estimateContextTokens([summary, user('aaaa')])).toBe(estimateContextTokens([summary]) + 1);
+});
+
+test('still anchors on reported usage across a compaction summary', () => {
+  const summary = createCompactionSummaryMessage('folded away', 4321, 0) as unknown as Message;
+  const messages = [summary, assistant('a', usage({ totalTokens: 1000 })), user('aaaa')];
+  expect(countTokens(messages)).toBe(1001);
 });

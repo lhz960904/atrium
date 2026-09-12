@@ -1,3 +1,4 @@
+import { convertToLlm } from '@earendil-works/pi-agent-core';
 import type {
   AssistantMessage,
   Content,
@@ -5,6 +6,7 @@ import type {
   Message,
   TextContent,
 } from '@shared/protocol';
+import { asPi, asStored } from './vocabulary';
 
 /**
  * Token accounting for compaction's threshold check. Not exact — exactness
@@ -63,7 +65,19 @@ function sizeOfContent(content: readonly (Content | TextContent | ImageContent)[
   return { text, images };
 }
 
-/** Size estimate for one message: text-bearing content by length, images flat. */
+/**
+ * The transcript in the three roles this file knows how to size.
+ *
+ * A compacted thread carries pi's own message roles, and those keep their text
+ * somewhere other than `content` — a compaction summary has no `content` field
+ * at all. Converting first turns each into the user turn it stands for, so the
+ * summary is counted at its real weight instead of throwing. Same reason
+ * `renderTranscript` converts before flattening.
+ */
+const sizable = (messages: Message[]): Message[] => asStored(convertToLlm(asPi(messages)));
+
+/** Size estimate for one message: text-bearing content by length, images flat.
+ *  Takes a converted message — see `sizable`. */
 export function tokensOfMessage(message: Message): number {
   if (message.role === 'user' && typeof message.content === 'string') {
     return estimateTokens(message.content);
@@ -98,10 +112,11 @@ function reportedContextTokens(message: Message): number | undefined {
  * becomes the anchor for the next check.
  */
 export function countTokens(messages: Message[]): number {
+  const sized = sizable(messages);
   let anchor = -1;
   let base = 0;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const reported = reportedContextTokens(messages[i]);
+  for (let i = sized.length - 1; i >= 0; i--) {
+    const reported = reportedContextTokens(sized[i]);
     if (reported !== undefined) {
       anchor = i;
       base = reported;
@@ -109,13 +124,13 @@ export function countTokens(messages: Message[]): number {
     }
   }
   let tail = 0;
-  for (let i = anchor + 1; i < messages.length; i++) tail += tokensOfMessage(messages[i]);
+  for (let i = anchor + 1; i < sized.length; i++) tail += tokensOfMessage(sized[i]);
   return base + tail;
 }
 
 /** Pure estimate, for a view whose reported counts no longer describe it. */
 export function estimateContextTokens(messages: Message[]): number {
   let total = 0;
-  for (const message of messages) total += tokensOfMessage(message);
+  for (const message of sizable(messages)) total += tokensOfMessage(message);
   return total;
 }

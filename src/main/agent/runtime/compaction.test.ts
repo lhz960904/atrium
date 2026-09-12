@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
-import type { AgentMessage } from '@earendil-works/pi-agent-core';
+import { type AgentMessage, createCompactionSummaryMessage } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, Message, Usage } from '@shared/protocol';
 import {
   compactForTurn,
   type Fold,
+  foldHistory,
   pickRecentTail,
   pickRecentWindow,
   renderTranscript,
@@ -277,4 +278,22 @@ test('a failed within-turn summary runs the request on the view it had', async (
   });
   const messages = [user('go'), call('c1'), result('c1', 'a'), call('c2'), result('c2', 'b')];
   expect(asStored(await fold(asPi(messages)))).toEqual(messages);
+});
+
+test('re-folds a transcript that already carries a compaction summary', async () => {
+  // Compacting twice is ordinary: the standing summary is part of the history
+  // the second fold reads, and it holds its text outside `content`.
+  const summary = createCompactionSummaryMessage('earlier fold', 9, 0) as unknown as Message;
+  const history = [summary, ...Array.from({ length: 8 }, (_, i) => user(`turn ${i}`.repeat(200)))];
+
+  const folded = await foldHistory({
+    messages: history,
+    summarize: async () => 'second summary',
+    contextWindow: 1000,
+    keepRecentTokens: 0,
+  });
+
+  expect(folded).not.toBeNull();
+  expect(folded?.summary).toBe('second summary');
+  expect(folded?.tokensBefore).toBeGreaterThan(0);
 });
