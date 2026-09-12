@@ -5,15 +5,15 @@ import type { PermissionMode } from '@shared/permissions';
 import type { AgentSessionEvent, Message } from '@shared/protocol';
 import type { Db } from '../db';
 import { createLogger } from '../log';
+import type { RunJournal } from '../session/journal';
 import { recordTurn } from './memory/state';
 import { type ApprovalContext, approvalGate } from './permissions';
 import { applyResolutions, type ParkedCall, type Resolution } from './pi/approvals';
-import { type Checkpoint, compactForTurn, withinTurnFold } from './pi/compaction';
+import { compactForTurn, type Fold, withinTurnFold } from './pi/compaction';
 import { type Complete, createCompleter } from './pi/complete';
 import { wireEmitter } from './pi/emitter';
 import { withSettledResults } from './pi/history';
 import { injectContextBlocks, loadContextBlocks } from './pi/injectors';
-import { createRunRecorder, type RunRow } from './pi/recorder';
 import { createAgentRuntime } from './pi/runtime';
 import { screenshotTrim } from './pi/screenshot-trim';
 import { summarizerFrom } from './pi/summarize';
@@ -29,8 +29,6 @@ import { preserveActiveSkill } from './tools/builtins/skill';
 import { preserveTodos } from './tools/builtins/todo';
 
 const log = createLogger('agent');
-
-export type { RunRow } from './pi/recorder';
 
 /**
  * How the turn ended, for a caller that isn't watching the event stream. A
@@ -88,20 +86,18 @@ export type RunAgentOptions = {
   /** Decisions the user made about calls an earlier turn parked. Settled before
    *  the loop resumes, so the transcript is whole again by the time it runs. */
   resolutions?: Resolution[];
-  /** The rows this run already stored, when the turn is a continuation: the run
-   *  is replaced whole on write, so what came before has to be carried along. */
-  resumeRows?: RunRow[];
   /** Where the run's events go — the thread's envelope log. */
   emit: (event: AgentSessionEvent) => void;
-  /** Store the run's messages as its rows; injected so the agent layer stays
-   *  independent of the server's persistence. */
-  persist: (rows: RunRow[], opts: { markRead: boolean }) => void;
+  /** Where the run's messages go, as they land. Injected so the agent layer
+   *  stays independent of how a conversation is stored. */
+  journal: RunJournal;
+  /** When the run first started, for a continuation that reports itself again. */
+  openedAt?: number;
   /**
-   * Record a compaction checkpoint covering `messages[0..coveredThrough]`.
-   * Cross-turn folding only runs when this is supplied: a summary nobody stores
-   * would be paid for again on every turn.
+   * Record a cross-turn fold. Folding only runs when this is supplied: a summary
+   * nobody stores would be paid for again on every turn.
    */
-  persistCheckpoint?: (checkpoint: Checkpoint) => void;
+  persistCheckpoint?: (fold: Fold) => Promise<void> | void;
   /** Append the turn to the usage ledger. */
   recordUsage?: (usage: RunUsage) => void;
   /** Summarize the thread's opening message into a title (fire-and-forget). */
@@ -195,22 +191,14 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
     onReviewed: ({ toolCallId, subject }) => ctx.notice('autoReview', { toolCallId, subject }),
   });
 
-  // A continuation extends a turn that already reported itself: it keeps the
-  // run's original start, and its cost adds to what the run had already spent.
-  const prior = (opts.resumeRows?.[0]?.metadata ?? {}) as Record<string, number | undefined>;
-  const openedAt = prior.createdAt ?? startedAt;
-  const recorder = createRunRecorder({
-    runId: opts.runId,
-    parked,
-    seed: [
-      ...(opts.resumeRows ?? []),
-      ...settled.map((message) => ({
-        id: message.toolCallId,
-        role: 'toolResult' as const,
-        message,
-      })),
-    ],
-  });
+  // A continuation keeps the run's original start, so the card it extends does
+  // not appear to have begun again.
+  const openedAt = opts.openedAt ?? startedAt;
+  // The results the user's decisions produced belong to the run too — they are
+  // what the loop is about to continue from.
+  for (const message of settled) {
+    await opts.journal.observe({ type: 'message_end', message } as never);
+  }
 
   const runtime = createAgentRuntime({
     systemPrompt: ctx.system,
@@ -239,8 +227,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
     // new is asked of the model until the user has answered.
     stopAfterTurn: () => parked.size > 0,
     beforeToolCall: async ({ toolCall, args }) => {
-      const park = (approvalId?: string) => {
+      const park = async (approvalId?: string) => {
         parked.set(toolCall.id, { toolCallId: toolCall.id, toolName: toolCall.name, approvalId });
+        await opts.journal.park({ toolCallId: toolCall.id, approvalId });
         return { block: true, terminate: true, reason: AWAITING_USER };
       };
       // A client-side tool is answered by the user, never executed.
@@ -253,7 +242,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
   });
 
   runtime.subscribe(wireEmitter({ runId: opts.runId, parked, emit: opts.emit }));
-  runtime.subscribe(recorder.observe);
+  // Second, so a reader sees the turn as soon as it lands while the loop still
+  // waits for it to be stored before going on.
+  runtime.subscribe(opts.journal.observe);
 
   opts.emit({ type: 'notice', name: 'message-metadata', payload: { createdAt: openedAt } });
 
@@ -269,24 +260,35 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
   }
 
   const aborted = opts.abortSignal?.aborted ?? false;
-  const totals = recorder.totals;
-  const metadata = {
-    createdAt: openedAt,
-    durationMs: Date.now() - openedAt,
-    providerId: opts.providerId,
-    modelId: opts.modelId,
-    inputTokens: (prior.inputTokens ?? 0) + totals.input,
-    outputTokens: (prior.outputTokens ?? 0) + totals.output,
-    cacheReadTokens: (prior.cacheReadTokens ?? 0) + totals.cacheRead,
-    cacheCreationTokens: (prior.cacheCreationTokens ?? 0) + totals.cacheWrite,
-    totalTokens: (prior.totalTokens ?? 0) + totals.total,
-    contextTokens: recorder.contextTokens ?? prior.contextTokens,
-  };
-  opts.emit({ type: 'notice', name: 'message-metadata', payload: metadata });
+  const totals = opts.journal.totals;
+  // The live figures the card shows while the turn is open. What gets stored is
+  // the usage records the journal already wrote; this is the wire's copy.
+  opts.emit({
+    type: 'notice',
+    name: 'message-metadata',
+    payload: {
+      createdAt: openedAt,
+      durationMs: Date.now() - openedAt,
+      providerId: opts.providerId,
+      modelId: opts.modelId,
+      inputTokens: totals.input,
+      outputTokens: totals.output,
+      cacheReadTokens: totals.cacheRead,
+      cacheCreationTokens: totals.cacheWrite,
+      totalTokens: totals.total,
+      contextTokens: opts.journal.contextTokens,
+    },
+  });
 
-  const rows = recorder.finalize(metadata);
-  if (rows.length > 0) {
-    opts.persist(rows, { markRead: aborted });
+  // A stop is the user's doing, not a failure — only a real error is reported.
+  const failure = loopError ?? opts.journal.failure;
+  // A run holding a parked call is not over: its bracket stays open so the
+  // decision, whenever it arrives, extends this same run.
+  if (parked.size === 0) {
+    await opts.journal.end(aborted ? 'aborted' : failure ? 'failed' : 'completed');
+  }
+
+  if (opts.journal.wrote) {
     opts.recordUsage?.({
       messageId: opts.runId,
       providerId: opts.providerId,
@@ -303,11 +305,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
   opts.emit({ type: 'agent_end', willRetry: false });
   opts.onSettled?.();
 
-  // A stop is the user's doing, not a failure — only a real error is reported.
-  const failure = loopError ?? recorder.failure;
   return {
     status: failure && !aborted ? 'error' : 'ok',
     error: aborted ? undefined : failure,
-    stored: rows.length > 0,
+    stored: opts.journal.wrote,
   };
 }

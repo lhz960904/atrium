@@ -2,8 +2,8 @@ import { expect, test } from 'bun:test';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, Message, Usage } from '@shared/protocol';
 import {
-  type Checkpoint,
   compactForTurn,
+  type Fold,
   pickRecentTail,
   pickRecentWindow,
   renderTranscript,
@@ -133,7 +133,7 @@ const longHistory = (): Message[] => [
 ];
 
 function runFold(messages: Message[], over: Partial<Parameters<typeof compactForTurn>[0]> = {}) {
-  const persisted: Checkpoint[] = [];
+  const persisted: Fold[] = [];
   const phases: string[] = [];
   return {
     persisted,
@@ -147,7 +147,9 @@ function runFold(messages: Message[], over: Partial<Parameters<typeof compactFor
         keepRecentTokens: 1,
         minKeepMessages: 2,
         emit: (phase) => phases.push(phase),
-        persist: (checkpoint) => persisted.push(checkpoint),
+        persist: (fold) => {
+          persisted.push(fold);
+        },
         ...over,
       }),
   };
@@ -161,18 +163,22 @@ test('under the threshold nothing is summarized or stored', async () => {
   expect(out.map(textOf)).toEqual(['hi']);
 });
 
-test('over the threshold a checkpoint pair replaces the folded prefix', async () => {
+test('over the threshold the summary replaces the folded prefix', async () => {
   const messages = longHistory();
   const { persisted, phases, run } = runFold(messages);
   const out = await run();
 
   expect(persisted).toHaveLength(1);
-  expect(textOf(persisted[0].summary)).toContain('SUMMARY');
-  // Covered through the last folded message, never into the kept tail.
-  expect(textOf(messages[persisted[0].coveredThrough])).toBe('d');
-  expect(out[0]).toBe(persisted[0].summary);
-  expect(out[1]).toBe(persisted[0].ack);
-  expect(out.slice(2).map(textOf)).toEqual(['e', 'f']);
+  expect(persisted[0].summary).toContain('SUMMARY');
+  // Only the recent window is kept verbatim, never folded away.
+  expect(persisted[0].retainedTail.map(textOf)).toEqual(['e', 'f']);
+  expect(persisted[0].tokensBefore).toBeGreaterThan(0);
+
+  // The turn runs on the same view a later read rebuilds from the stored fold:
+  // the summary standing in for the prefix, then the window.
+  expect(out).toHaveLength(3);
+  expect(out[0]).toMatchObject({ role: 'compactionSummary', summary: persisted[0].summary });
+  expect(out.slice(1).map(textOf)).toEqual(['e', 'f']);
   expect(phases).toEqual(['start', 'done']);
 });
 
@@ -188,7 +194,7 @@ test('a failed summary leaves the transcript whole and stores nothing', async ()
 test('preserver output rides along with the summary', async () => {
   const { persisted, run } = runFold(longHistory(), { preservers: [() => 'CARRIED-PLAN'] });
   await run();
-  expect(textOf(persisted[0].summary)).toContain('CARRIED-PLAN');
+  expect(persisted[0].summary).toContain('CARRIED-PLAN');
 });
 
 // ── the within-turn fold ────────────────────────────────────────────────────

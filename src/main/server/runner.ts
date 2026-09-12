@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import type { Session } from '@earendil-works/pi-agent-core';
 import type { AtriumUIMessage } from '@shared/chat';
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
+import type { Message } from '@shared/protocol';
 import { mcpManager } from '../agent/mcp/manager';
 import { buildMcpTools } from '../agent/mcp/tool-adapter';
 import { modelPricing } from '../agent/models/catalog';
@@ -17,16 +19,17 @@ import { recordUsage } from '../db/usage';
 import { createLogger } from '../log';
 import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
 import { supportsImageToolResults } from '../providers/resolve';
-import { getSettings } from '../settings/conf';
+import { createRunJournal } from '../session/journal';
 import {
-  loadRunRows,
-  loadThreadHistory,
-  persistCheckpoint,
-  persistRun,
-  persistUserTurn,
+  compactThread,
+  openThreadSession,
   resolveThreadWorkspace,
+  runnableHistory,
   setThreadTitle,
-} from './persist';
+  touchThread,
+} from '../session/threads';
+import { getSettings } from '../settings/conf';
+import { splitUserMessage } from './persist-convert';
 import { startThreadRun } from './resumable';
 
 const log = createLogger('runner');
@@ -100,6 +103,15 @@ function resolveReviewer(
   }
 }
 
+/**
+ * When a run first opened. A continuation reports the moment the run began, not
+ * the moment it resumed, so the card it extends doesn't appear to restart.
+ */
+async function runStartedAt(session: Session, runId: string): Promise<number> {
+  const [started] = await session.findRecords({ type: 'operation_started', runId, limit: 1 });
+  return started?.timestamp ?? Date.now();
+}
+
 export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner {
   const { db } = deps;
   // Long-running shells (dev servers, watchers) outlive a turn, so the registry
@@ -109,10 +121,6 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
   return {
     start(request: RunRequest): RunHandle {
       const { threadId, providerId, modelId } = request;
-      // The turn's history is rebuilt from the DB below, which is the source of
-      // truth — the caller only supplies the message that starts it.
-      if (request.userMessage) persistUserTurn(db, threadId, request.userMessage);
-
       // The thread's workspace: its project's directory, or the projectless
       // fallback. Drives the sandbox and the tools below.
       const workspaceRoot = resolveThreadWorkspace(db, threadId, deps.projectlessRoot);
@@ -129,10 +137,6 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
       // A continuation extends the run it answers, so the model's next turns
       // land in that same stored run instead of opening a second one.
       const runId = request.resumeRunId ?? randomUUID();
-      const resumeRows = request.resumeRunId ? loadRunRows(db, request.resumeRunId) : [];
-      // The engine runs on pi messages; the entries keep each one's row id so a
-      // compaction checkpoint can name the last row it folded away.
-      const entries = loadThreadHistory(db, threadId);
       // Resolve the reviewer only when auto-review can actually use it; a
       // misconfigured/removed model resolves to undefined, so auto-review simply
       // falls back to prompting rather than failing the turn.
@@ -143,6 +147,27 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
       const finished = startThreadRun(
         threadId,
         async (piLog) => {
+          // The conversation lives in the thread's session, created with its
+          // first turn. Opening the run and appending the turn that started it
+          // happen before the history is read, so the loop sees them.
+          const session = await openThreadSession(db, threadId, workspaceRoot);
+          const journal = createRunJournal({
+            session,
+            runId,
+            resuming: request.resumeRunId !== undefined,
+          });
+          const prompt = request.userMessage
+            ? {
+                id: request.userMessage.id,
+                message: splitUserMessage(request.userMessage).message as Message,
+              }
+            : undefined;
+          await journal.begin(prompt);
+          // Sending counts as reading: a thread must never flash unread from
+          // the user's own message.
+          touchThread(db, threadId, { markRead: prompt !== undefined });
+          const openedAt = await runStartedAt(session, runId);
+
           result = await runAgent({
             runId,
             providerId,
@@ -150,7 +175,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
             piModel,
             streamFn: piStreamFn,
             getApiKey: makeGetApiKey(db),
-            messages: entries.map((entry) => entry.message),
+            messages: runnableHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' })),
             workspaceRoot,
             threadId,
             db,
@@ -159,12 +184,11 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
             permissionMode: mode,
             permission: { mode, rules: getSettings('permissions.trustRules'), review },
             resolutions: request.resolutions,
-            resumeRows,
+            journal,
+            openedAt,
+            persistCheckpoint: (fold) => compactThread(db, threadId, fold),
             abortSignal: abort.signal,
             emit: piLog.append,
-            persist: (rows, opts) => persistRun(db, threadId, runId, rows, opts),
-            persistCheckpoint: (checkpoint) =>
-              persistCheckpoint(db, threadId, checkpoint, entries[checkpoint.coveredThrough].id),
             recordUsage: (u) =>
               recordUsage(db, { threadId, kind: 'chat', ...u }, modelPricing(u.modelId)),
             generateTitle: getSettings('general.autoGenerateTitle')

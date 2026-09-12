@@ -1,8 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import { and, eq, inArray, or } from 'drizzle-orm';
 import { z } from 'zod';
-import { messages, threads } from '../../db/schema';
-import { loadThreadMessageDtos } from '../../server/persist';
+import { rewindThread, threadMessages } from '../../session/threads';
 import { publicProcedure, router } from '../trpc';
 
 export const messagesRouter = router({
@@ -13,68 +10,17 @@ export const messagesRouter = router({
    */
   listByThread: publicProcedure
     .input(z.object({ threadId: z.string() }))
-    .query(({ ctx, input }) => loadThreadMessageDtos(ctx.db, input.threadId)),
+    .query(({ ctx, input }) => threadMessages(ctx.db, input.threadId)),
 
   /**
-   * Append a message. parts / metadata are arbitrary JSON; runtime callers
-   * are responsible for shaping them (UIMessage.parts on the agent loop side,
-   * the chat-types shapes on the mock side).
-   *
-   * Also bumps the parent thread's updatedAt so the sidebar floats this
-   * thread to the top.
+   * Take a thread back to just before one message — what editing an earlier
+   * message and re-running needs. The client sends the message it is rewriting;
+   * the conversation after it stops being part of the branch, so the re-run
+   * continues from the right place instead of replaying the stale tail.
    */
-  create: publicProcedure
-    .input(
-      z.object({
-        threadId: z.string(),
-        role: z.enum(['user', 'assistant', 'system']),
-        parts: z.unknown(),
-        metadata: z.unknown().optional(),
-      }),
-    )
-    .mutation(({ ctx, input }) => {
-      const id = randomUUID();
-      ctx.db
-        .insert(messages)
-        .values({
-          id,
-          threadId: input.threadId,
-          role: input.role,
-          parts: input.parts,
-          metadata: input.metadata,
-        })
-        .run();
-      ctx.db
-        .update(threads)
-        .set({ updatedAt: new Date() })
-        .where(eq(threads.id, input.threadId))
-        .run();
-      return { id };
-    }),
-
-  /**
-   * Delete a set of messages from a thread by id. Used when a user edits an
-   * earlier message and re-runs: the edited message and everything after it are
-   * dropped so the server rebuilds the correct forked history from the DB (the
-   * client sends only the latest message, so the DB is the source of truth).
-   * The id set comes from the client's own ordered message list, so truncation
-   * is exact — no timestamp comparison that could mis-slice same-millisecond
-   * inserts. Scoped to threadId so a stray id can't reach across threads.
-   */
-  deleteMany: publicProcedure
-    .input(z.object({ threadId: z.string(), ids: z.array(z.string()).min(1) }))
-    .mutation(({ ctx, input }) => {
-      // Client ids are run-shaped; a pi-native run spans several rows keyed by
-      // run_id, so the delete matches either generation.
-      const res = ctx.db
-        .delete(messages)
-        .where(
-          and(
-            eq(messages.threadId, input.threadId),
-            or(inArray(messages.id, input.ids), inArray(messages.runId, input.ids)),
-          ),
-        )
-        .run();
-      return { deleted: res.changes };
-    }),
+  rewind: publicProcedure
+    .input(z.object({ threadId: z.string(), messageId: z.string() }))
+    .mutation(async ({ ctx, input }) => ({
+      rewound: await rewindThread(ctx.db, input.threadId, input.messageId),
+    })),
 });

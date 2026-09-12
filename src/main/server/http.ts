@@ -1,11 +1,11 @@
 import { serve } from '@hono/node-server';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { PermissionMode } from '@shared/permissions';
-import type { ToolCall, ToolResultMessage } from '@shared/protocol';
+import type { ToolResultMessage } from '@shared/protocol';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Resolution } from '../agent/pi/approvals';
-import { openResolutions, resultFor, toolCallsById } from '../agent/pi/approvals';
+import { resultFor } from '../agent/pi/approvals';
 import { foldToCheckpoint } from '../agent/pi/compaction';
 import { createSummarizer } from '../agent/pi/summarize';
 import { preserveActiveSkill } from '../agent/tools/builtins/skill';
@@ -13,7 +13,12 @@ import { preserveTodos } from '../agent/tools/builtins/todo';
 import type { Db } from '../db';
 import { createLogger } from '../log';
 import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
-import { loadRunRows, loadThreadHistory, persistCheckpoint, settleRunCalls } from './persist';
+import {
+  compactThread,
+  openThreadCalls,
+  settleThreadCalls,
+  threadHistory,
+} from '../session/threads';
 import { subscribePiEvents } from './pi-events';
 import { abortThreadRun, isThreadRunning } from './resumable';
 import type { Runner } from './runner';
@@ -105,7 +110,8 @@ export function startHttpServer(deps: {
     const { providerId, modelId, permissionMode, runId, decisions } = await c.req.json<
       RunBody & DecisionsBody
     >();
-    const resolutions = openResolutions(loadRunRows(deps.db, runId), decisions ?? []);
+    const open = await openThreadCalls(deps.db, threadId);
+    const resolutions = (decisions ?? []).filter((d) => open.has(d.toolCallId));
     if (resolutions.length === 0) return c.text('no open call to resume', 409);
 
     deps.runner.start({
@@ -126,13 +132,16 @@ export function startHttpServer(deps: {
    * has to be closed, or the next request's history carries an unpaired call.
    */
   app.post('/api/chat/:threadId/decisions', async (c) => {
-    const { runId, decisions } = await c.req.json<DecisionsBody>();
-    const rows = loadRunRows(deps.db, runId);
-    const calls = toolCallsById(rows.map((r) => r.message));
-    const results = openResolutions(rows, decisions ?? [])
-      .map((d) => resultFor(calls.get(d.toolCallId) as ToolCall, d))
-      .filter((r): r is ToolResultMessage => r !== null);
-    settleRunCalls(deps.db, c.req.param('threadId'), runId, results);
+    const threadId = c.req.param('threadId');
+    const { decisions } = await c.req.json<DecisionsBody>();
+    const open = await openThreadCalls(deps.db, threadId);
+    const results = (decisions ?? [])
+      .flatMap((decision) => {
+        const call = open.get(decision.toolCallId);
+        return call ? [resultFor(call, decision)] : [];
+      })
+      .filter((result): result is ToolResultMessage => result !== null);
+    await settleThreadCalls(deps.db, threadId, results);
     return c.json({ settled: results.length });
   });
 
@@ -151,13 +160,13 @@ export function startHttpServer(deps: {
   app.post('/api/chat/:threadId/compact', async (c) => {
     const threadId = c.req.param('threadId');
     const { providerId, modelId } = await c.req.json<{ providerId: string; modelId: string }>();
-    const history = loadThreadHistory(deps.db, threadId);
+    const history = await threadHistory(deps.db, threadId);
     // Force-compact is aggressive on purpose: the automatic path keeps a quarter
     // of the window (so a short chat folds nothing), but the user asked to
     // compact now — keep only the recent floor and fold everything before it.
     const piModel = resolvePiModel(deps.db, providerId, modelId);
     const folded = await foldToCheckpoint({
-      messages: history.map((entry) => entry.message),
+      messages: history,
       summarize: createSummarizer({
         model: piModel,
         streamFn: piStreamFn,
@@ -168,14 +177,9 @@ export function startHttpServer(deps: {
       keepRecentTokens: 0,
     });
     if (!folded) return c.json({ compacted: false });
-    persistCheckpoint(
-      deps.db,
-      threadId,
-      folded.checkpoint,
-      history[folded.checkpoint.coveredThrough].id,
-    );
+    await compactThread(deps.db, threadId, folded);
     log.info(
-      `forced compaction folded ${folded.checkpoint.coveredThrough + 1} of ${history.length} messages`,
+      `forced compaction folded ${history.length - folded.retainedTail.length} of ${history.length} messages`,
     );
     return c.json({ compacted: true });
   });

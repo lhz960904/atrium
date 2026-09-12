@@ -1,11 +1,10 @@
+import { convertToLlm, createCompactionSummaryMessage } from '@earendil-works/pi-agent-core';
 import type {
-  AssistantMessage,
   Content,
   ImageContent,
   Message,
   TextContent,
   ToolResultMessage,
-  UserMessage,
 } from '@shared/protocol';
 import { createLogger } from '../../log';
 import type { ContextTransform } from './context';
@@ -14,10 +13,6 @@ import { countTokens, estimateContextTokens } from './tokens';
 import { asPi, asStored } from './vocabulary';
 
 const log = createLogger('compaction');
-
-export const SUMMARY_PREAMBLE =
-  'Earlier conversation was compacted to save context. Summary of what came before:\n\n';
-const ACK_TEXT = 'Understood — I have the summary above and will continue from here.';
 
 export const COMPACT_AT_RATIO = 0.8;
 const KEEP_RECENT_RATIO = 0.25;
@@ -154,9 +149,15 @@ function renderMessage(message: Message): string {
  * Flatten a fold into a plain-text transcript. Flattening sidesteps
  * cross-provider role-alternation and dangling tool-call pitfalls, and a
  * summary is prose anyway.
+ *
+ * Run through pi's converter first: a region being re-folded can hold pi's own
+ * message roles — an earlier compaction summary — and this way the renderer
+ * only ever sees the three it knows.
  */
 export function renderTranscript(messages: Message[]): string {
-  return messages.map(renderMessage).join('\n\n');
+  return asStored(convertToLlm(asPi(messages)))
+    .map(renderMessage)
+    .join('\n\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -173,33 +174,29 @@ async function summarizeFold(
 ): Promise<string> {
   const carried = preservers.map((p) => p(fold, recent)).filter(isText);
   const summary = await summarize(renderTranscript(fold), AbortSignal.timeout(SUMMARY_TIMEOUT_MS));
-  return [SUMMARY_PREAMBLE + summary, ...carried].join('\n\n');
+  // No preamble of our own: the summary is framed by whatever renders it, and
+  // for a stored checkpoint that is pi's compaction wording.
+  return [summary, ...carried].join('\n\n');
 }
 
-/** The persisted pair a fold leaves behind: the summary, and the ack that keeps roles alternating. */
-export type Checkpoint = { summary: UserMessage; ack: AssistantMessage; coveredThrough: number };
+/**
+ * What a fold leaves behind: prose standing in for the region that was folded
+ * away, and the window kept verbatim after it. Stored as one entry, from which
+ * the transcript is rebuilt deterministically — no separate acknowledgement is
+ * needed, because the summary is not a turn in the conversation.
+ */
+export type Fold = {
+  summary: string;
+  retainedTail: Message[];
+  /** What the context measured before folding, for the reader to report. */
+  tokensBefore: number;
+};
 
-const checkpointPair = (text: string, coveredThrough: number): Checkpoint => ({
-  summary: { role: 'user', content: [{ type: 'text', text }], timestamp: Date.now() },
-  ack: {
-    role: 'assistant',
-    content: [{ type: 'text', text: ACK_TEXT }],
-    api: '',
-    provider: '',
-    model: '',
-    usage: {
-      input: 0,
-      output: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
-      totalTokens: 0,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-    },
-    stopReason: 'stop',
-    timestamp: Date.now(),
-  },
-  coveredThrough,
-});
+/** The transcript a fold stands for: the summary, then everything it kept. */
+export const foldedView = (fold: Fold): Message[] => [
+  createCompactionSummaryMessage(fold.summary, fold.tokensBefore, Date.now()) as unknown as Message,
+  ...fold.retainedTail,
+];
 
 export type FoldOptions = {
   messages: Message[];
@@ -216,17 +213,15 @@ export type FoldOptions = {
  * caller decides when. Returns the pair to persist plus the window it keeps, or
  * null when there is nothing left to fold.
  */
-export async function foldToCheckpoint(
-  opts: FoldOptions,
-): Promise<{ checkpoint: Checkpoint; recent: Message[] } | null> {
+export async function foldToCheckpoint(opts: FoldOptions): Promise<Fold | null> {
   const selected = selectFold(opts.messages, pickRecentWindow, {
     keepRecentTokens: opts.keepRecentTokens ?? Math.floor(opts.contextWindow * KEEP_RECENT_RATIO),
     minKeepMessages: opts.minKeepMessages ?? MIN_KEEP_MESSAGES,
   });
   if (!selected) return null;
   const { fold, recent } = selected;
-  const text = await summarizeFold(fold, recent, opts.summarize, opts.preservers ?? []);
-  return { checkpoint: checkpointPair(text, fold.length - 1), recent };
+  const summary = await summarizeFold(fold, recent, opts.summarize, opts.preservers ?? []);
+  return { summary, retainedTail: recent, tokensBefore: countTokens(opts.messages) };
 }
 
 /**
@@ -240,7 +235,7 @@ export async function foldToCheckpoint(
 export async function compactForTurn(
   opts: FoldOptions & {
     emit: (phase: 'start' | 'done') => void;
-    persist: (checkpoint: Checkpoint) => void;
+    persist: (fold: Fold) => Promise<void> | void;
   },
 ): Promise<Message[]> {
   const tokens = countTokens(opts.messages);
@@ -251,8 +246,10 @@ export async function compactForTurn(
   try {
     const folded = await foldToCheckpoint(opts);
     if (!folded) return opts.messages;
-    opts.persist(folded.checkpoint);
-    return [folded.checkpoint.summary, folded.checkpoint.ack, ...folded.recent];
+    await opts.persist(folded);
+    // The same view a later read rebuilds from the stored entry, so the prefix
+    // the provider caches stays byte-stable across the turn boundary.
+    return foldedView(folded);
   } catch (err) {
     log.warn(`cross-turn fold failed, proceeding uncompacted: ${(err as Error).message}`);
     return opts.messages;

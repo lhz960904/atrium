@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { messages, projects, threads } from '../../db/schema';
-import { loadThreadMessageDtos } from '../../server/persist';
+import { projects, threads } from '../../db/schema';
 import { getRunningThreadIds } from '../../server/resumable';
+import { deleteThreadSession, threadMessages } from '../../session/threads';
 import { publicProcedure, router } from '../trpc';
 
 /** A thread's bound model; null = inherit general.defaultModel. */
@@ -27,10 +27,10 @@ export const threadsRouter = router({
   /** One thread + its messages ordered chronologically. Returns null if not found.
    *  Messages go through the persistence merge layer, so pi-native rows and
    *  legacy rows come back in the same run-shaped form. */
-  get: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
+  get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
     const thread = ctx.db.select().from(threads).where(eq(threads.id, input.id)).get();
     if (!thread) return null;
-    return { ...thread, messages: loadThreadMessageDtos(ctx.db, input.id) };
+    return { ...thread, messages: await threadMessages(ctx.db, input.id) };
   }),
 
   /** Create an empty thread. Returns the new id. */
@@ -63,44 +63,11 @@ export const threadsRouter = router({
    * Atomically create a thread + its first message. Used by the home composer
    * so we never leave empty threads behind when the message insert fails.
    */
-  createWithFirstMessage: publicProcedure
-    .input(
-      z.object({
-        title: z.string().optional(),
-        projectId: z.string().optional(),
-        message: z.object({
-          role: z.enum(['user', 'assistant', 'system']),
-          parts: z.unknown(),
-          metadata: z.unknown().optional(),
-        }),
-      }),
-    )
-    .mutation(({ ctx, input }) => {
-      const threadId = randomUUID();
-      const messageId = randomUUID();
-      ctx.db.transaction((tx) => {
-        tx.insert(threads)
-          .values({
-            id: threadId,
-            title: input.title ?? null,
-            projectId: input.projectId ?? null,
-          })
-          .run();
-        tx.insert(messages)
-          .values({
-            id: messageId,
-            threadId,
-            role: input.message.role,
-            parts: input.message.parts,
-            metadata: input.message.metadata,
-          })
-          .run();
-      });
-      return { threadId, messageId };
-    }),
-
-  /** Delete a thread; messages / artifacts cascade. */
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+  /** Delete a thread; its conversation and artifacts go with it. */
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    // The conversation goes first: the thread row is what names it, so dropping
+    // that first would strand the session in the store.
+    await deleteThreadSession(ctx.db, input.id);
     ctx.db.delete(threads).where(eq(threads.id, input.id)).run();
   }),
 

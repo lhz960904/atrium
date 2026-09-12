@@ -9,7 +9,6 @@ import type {
 } from '@shared/protocol';
 import { createLogger } from '../../log';
 import type { AtriumTool } from '../tools';
-import type { RunRow } from './recorder';
 
 const log = createLogger('approval');
 
@@ -68,19 +67,6 @@ function resultMessage(
     timestamp: Date.now(),
     ...parts,
   };
-}
-
-/**
- * The decisions that still apply, given what the run actually stored. The rows
- * are the authority: a call the client claims to have answered may already have
- * a result (a double-click, a stale view) or may not exist at all, and either
- * would put a second result on the transcript.
- */
-export function openResolutions(rows: RunRow[], decisions: Resolution[]): Resolution[] {
-  if (decisions.length === 0) return [];
-  const answered = new Set(rows.flatMap((r) => (r.role === 'toolResult' ? [r.id] : [])));
-  const calls = toolCallsById(rows.map((r) => r.message));
-  return decisions.filter((d) => calls.has(d.toolCallId) && !answered.has(d.toolCallId));
 }
 
 /**

@@ -6,32 +6,22 @@ import type {
   TextContent,
   ToolCall,
   ToolResultMessage,
-  Usage,
   UserMessage,
 } from '@shared/protocol';
 
 /**
- * Converters between the run-shaped UIMessage the renderer consumes and the
- * pi-native rows the DB stores: one row per pi message — the user message, one
- * assistant message per step, and each tool result its own row — grouped by the
- * run id. Both directions are mechanical and round-trip exactly over the part
- * inventory real threads contain.
+ * Between the run-shaped message the renderer consumes and the per-message
+ * shape everything else speaks: the user's turn, one assistant message per
+ * step, and each tool result on its own.
  *
- * Merging serves the renderer. Splitting has two remaining callers: the user's
- * own turn, which arrives in the composer's part shape, and a legacy row (run
- * id null, still holding a flat part array) being read back as history — which
- * is why an assistant split stamps `api: 'ai-sdk'`, the engine those rows were
- * actually produced by. Nothing else writes through this file any more.
+ * Splitting is now only the user's own turn, which arrives in the composer's
+ * part shape. Merging is what the session projection folds a run back together
+ * with, which is why it still lives here: there is one implementation of that
+ * fold and this is it.
  *
- * UI-only tool state pi has no slot for (pending/answered approvals, a call
- * still streaming its input) lives in the row's metadata under `toolStates`,
- * next to the run metadata on the first row — the pi message JSON stays a
- * clean subset-plus-nothing of pi's vocabulary.
- *
- * Known, deliberate losses when splitting (documented, not accidental):
- * reasoning providerMetadata is reduced to the anthropic signature
- * (thinkingSignature), and tool-part provider bookkeeping
- * (callProviderMetadata, toolMetadata, providerExecuted) is dropped.
+ * UI-only tool state pi has no slot for — a pending or answered approval, a
+ * call still streaming its input — is carried alongside under `toolStates`, so
+ * the message JSON itself stays a clean subset of pi's vocabulary.
  */
 
 export type PiRow = {
@@ -47,23 +37,6 @@ type LoosePart = Record<string, unknown>;
 
 /** UI tool state that has no pi slot, keyed by toolCallId in row metadata. */
 type ToolStateExtras = Record<string, { state: string; approval?: unknown }>;
-
-const isToolPart = (part: LoosePart): boolean =>
-  typeof part.type === 'string' &&
-  (part.type.startsWith('tool-') || part.type === 'dynamic-tool') &&
-  typeof part.toolCallId === 'string';
-
-const toolNameOf = (part: LoosePart): string =>
-  part.type === 'dynamic-tool' ? String(part.toolName) : String(part.type).slice('tool-'.length);
-
-const zeroUsage = (): Usage => ({
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-});
 
 // ---------------------------------------------------------------------------
 // user messages
@@ -105,129 +78,6 @@ export function mergeUserMessage(row: PiRow): AtriumUIMessage {
 // ---------------------------------------------------------------------------
 // assistant runs → per-turn assistant rows + toolResult rows
 // ---------------------------------------------------------------------------
-
-export function splitAssistantMessage(msg: AtriumUIMessage): PiRow[] {
-  const metadata = (msg.metadata ?? {}) as Record<string, unknown>;
-  const createdAt = (metadata.createdAt as number | undefined) ?? 0;
-
-  // Cut the flat part list into turns at step-start markers.
-  const turns: LoosePart[][] = [];
-  let current: LoosePart[] = [];
-  for (const part of msg.parts as LoosePart[]) {
-    if (part.type === 'step-start') {
-      if (current.length > 0) turns.push(current);
-      current = [];
-      continue;
-    }
-    current.push(part);
-  }
-  if (current.length > 0) turns.push(current);
-  if (turns.length === 0) turns.push([]);
-
-  // Row order is chronological: each turn's assistant row, then the tool
-  // results its calls produced, then the next turn.
-  const rows: PiRow[] = [];
-  turns.forEach((turnParts, turnIndex) => {
-    const content: Content[] = [];
-    const resultRows: PiRow[] = [];
-    const toolStates: ToolStateExtras = {};
-    let hadToolCall = false;
-
-    for (const part of turnParts) {
-      if (part.type === 'text') {
-        content.push({ type: 'text', text: String(part.text ?? '') });
-      } else if (part.type === 'reasoning') {
-        const signature = (part.providerMetadata as { anthropic?: { signature?: string } })
-          ?.anthropic?.signature;
-        content.push({
-          type: 'thinking',
-          thinking: String(part.text ?? ''),
-          ...(signature ? { thinkingSignature: signature } : {}),
-        });
-      } else if (isToolPart(part)) {
-        hadToolCall = true;
-        const toolCallId = String(part.toolCallId);
-        const toolName = toolNameOf(part);
-        content.push({
-          type: 'toolCall',
-          id: toolCallId,
-          name: toolName,
-          arguments: (part.input as Record<string, unknown>) ?? {},
-        });
-        const state = String(part.state ?? 'input-available');
-        if (state === 'output-available' || state === 'output-error' || state === 'output-denied') {
-          resultRows.push({
-            id: toolCallId,
-            runId: msg.id,
-            role: 'toolResult',
-            message: {
-              role: 'toolResult',
-              toolCallId,
-              toolName,
-              content: [],
-              details:
-                state === 'output-available'
-                  ? part.output
-                  : state === 'output-error'
-                    ? { errorText: String(part.errorText ?? '') }
-                    : { denied: true },
-              isError: state !== 'output-available',
-              timestamp: createdAt + turnIndex,
-            },
-            metadata: null,
-          });
-        }
-        // States (and approvals) pi cannot express are carried alongside.
-        if (state !== 'output-available' && state !== 'output-error') {
-          toolStates[toolCallId] = {
-            state,
-            ...(part.approval !== undefined ? { approval: part.approval } : {}),
-          };
-        }
-      } else {
-        // file parts, data-* parts and anything newer pass through verbatim.
-        content.push(part as Content);
-      }
-    }
-
-    const isLast = turnIndex === turns.length - 1;
-    const rowMetadata: Record<string, unknown> = {};
-    if (turnIndex === 0 && Object.keys(metadata).length > 0) Object.assign(rowMetadata, metadata);
-    if (Object.keys(toolStates).length > 0) rowMetadata.toolStates = toolStates;
-
-    rows.push({
-      id: `${msg.id}:${turnIndex}`,
-      runId: msg.id,
-      role: 'assistant',
-      message: {
-        role: 'assistant',
-        content,
-        api: 'ai-sdk',
-        provider: String(metadata.providerId ?? 'unknown'),
-        model: String(metadata.modelId ?? 'unknown'),
-        usage: isLast ? usageFromRunMetadata(metadata) : zeroUsage(),
-        stopReason: hadToolCall ? 'toolUse' : 'stop',
-        timestamp: createdAt + turnIndex,
-      },
-      metadata: Object.keys(rowMetadata).length > 0 ? rowMetadata : null,
-    });
-    rows.push(...resultRows);
-  });
-
-  return rows;
-}
-
-function usageFromRunMetadata(metadata: Record<string, unknown>): Usage {
-  const n = (key: string) => (metadata[key] as number | undefined) ?? 0;
-  return {
-    input: n('inputTokens'),
-    output: n('outputTokens'),
-    cacheRead: n('cacheReadTokens'),
-    cacheWrite: n('cacheCreationTokens'),
-    totalTokens: n('totalTokens'),
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
-  };
-}
 
 export function mergeAssistantMessage(runId: string, rows: PiRow[]): AtriumUIMessage {
   const results = new Map<string, ToolResultMessage>();

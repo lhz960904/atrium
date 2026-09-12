@@ -59,6 +59,7 @@
     "@codemirror/view": "^6.43.5",
     "@earendil-works/pi-agent-core": "0.84.2",
     "@earendil-works/pi-ai": "0.84.2",
+    "@earendil-works/pi-session-backend-sqlite-node": "0.84.2",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@hono/node-server": "^1",
