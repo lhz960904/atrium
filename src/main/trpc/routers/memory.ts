@@ -1,6 +1,6 @@
+import { listProjects, memoryDirByKey } from '@main/agent/memory/paths';
+import { deleteMemory, listTopics } from '@main/agent/memory/store';
 import { z } from 'zod';
-import { listProjects, memoryDirByKey } from '../../agent/memory/paths';
-import { deleteMemory, listTopics } from '../../agent/memory/store';
 import { publicProcedure, router } from '../trpc';
 
 // 'global' or a project dir name; the dir is resolved by memoryDirByKey.

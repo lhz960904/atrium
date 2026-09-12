@@ -15,9 +15,9 @@ import { deepseekProvider } from '@earendil-works/pi-ai/providers/deepseek';
 import { googleProvider } from '@earendil-works/pi-ai/providers/google';
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
 import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-codex';
+import type { Db } from '@main/db';
+import { providers } from '@main/db/schema';
 import { eq } from 'drizzle-orm';
-import type { Db } from '../db';
-import { providers } from '../db/schema';
 import { decryptCredentials } from './credentials';
 import { getProviderManifest, type ManifestModel, PROVIDER_MANIFEST } from './manifest';
 

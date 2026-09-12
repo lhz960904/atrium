@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
-import { composeContext } from './context';
+import { composeContext } from './compose';
 
 const user = (text: string): AgentMessage => ({ role: 'user', content: text, timestamp: 0 });
 

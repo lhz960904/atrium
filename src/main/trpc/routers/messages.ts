@@ -1,5 +1,5 @@
+import { rewindThread, threadMessages } from '@main/session/threads';
 import { z } from 'zod';
-import { rewindThread, threadMessages } from '../../session/threads';
 import { publicProcedure, router } from '../trpc';
 
 export const messagesRouter = router({

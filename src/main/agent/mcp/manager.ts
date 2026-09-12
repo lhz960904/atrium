@@ -1,7 +1,7 @@
+import type { Db } from '@main/db';
+import { createLogger } from '@main/log';
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { Db } from '../../db';
-import { createLogger } from '../../log';
 import { buildCatalog, type McpToolEntry } from './catalog';
 import type { ResolvedMcpServer } from './config';
 import { httpHeaders, McpConnection } from './connection';

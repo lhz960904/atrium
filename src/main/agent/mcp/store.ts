@@ -1,8 +1,8 @@
+import type { Db } from '@main/db';
+import { mcpServers } from '@main/db/schema';
+import { createLogger } from '@main/log';
+import { decryptCredentials, encryptCredentials } from '@main/providers/credentials';
 import { eq } from 'drizzle-orm';
-import type { Db } from '../../db';
-import { mcpServers } from '../../db/schema';
-import { createLogger } from '../../log';
-import { decryptCredentials, encryptCredentials } from '../../providers/credentials';
 import { type ResolvedMcpServer, resolveMcpServer } from './config';
 import type { McpOAuthState, McpOAuthStore } from './oauth';
 import { decryptSecrets } from './secrets';

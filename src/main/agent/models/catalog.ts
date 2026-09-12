@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createLogger } from '@main/log';
 import { app } from 'electron';
-import { createLogger } from '../../log';
 import snapshotData from './litellm.snapshot.json';
 import { capabilitiesFrom, maxContextTokensFrom, modelPricingFrom } from './lookup';
 import type { ModelCapabilities, ModelPricing, ModelsCatalog } from './types';

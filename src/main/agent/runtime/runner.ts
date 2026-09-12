@@ -1,25 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { Session } from '@earendil-works/pi-agent-core';
-import type { AtriumUIMessage } from '@shared/chat';
-import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
-import type { Message } from '@shared/protocol';
-import { mcpManager } from '../agent/mcp/manager';
-import { buildMcpTools } from '../agent/mcp/tool-adapter';
-import { modelPricing } from '../agent/models/catalog';
-import type { Resolution } from '../agent/pi/approvals';
-import { type Complete, createCompleter } from '../agent/pi/complete';
-import { generateThreadTitle } from '../agent/pi/title';
-import { runAgent } from '../agent/run';
-import { BackgroundShells, LocalSandbox } from '../agent/sandbox';
-import { getSkills } from '../agent/skills/registry';
-import { getTools } from '../agent/tools';
-import { getComputerUseHelper } from '../computer-use';
-import type { Db } from '../db';
-import { recordUsage } from '../db/usage';
-import { createLogger } from '../log';
-import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
-import { supportsImageToolResults } from '../providers/resolve';
-import { createRunJournal } from '../session/journal';
+import { getComputerUseHelper } from '@main/computer-use';
+import type { Db } from '@main/db';
+import { recordUsage } from '@main/db/usage';
+import { createLogger } from '@main/log';
+import { makeGetApiKey, piStreamFn, resolvePiModel } from '@main/providers/pi-model';
+import { supportsImageToolResults } from '@main/providers/resolve';
+import { splitUserMessage } from '@main/server/persist-convert';
+import { createRunJournal } from '@main/session/journal';
 import {
   compactThread,
   openThreadSession,
@@ -27,10 +15,22 @@ import {
   runnableHistory,
   setThreadTitle,
   touchThread,
-} from '../session/threads';
-import { getSettings } from '../settings/conf';
-import { splitUserMessage } from './persist-convert';
-import { startThreadRun } from './resumable';
+} from '@main/session/threads';
+import { getSettings } from '@main/settings/conf';
+import type { AtriumUIMessage } from '@shared/chat';
+import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
+import type { Message } from '@shared/protocol';
+import { mcpManager } from '../mcp/manager';
+import { buildMcpTools } from '../mcp/tool-adapter';
+import { modelPricing } from '../models/catalog';
+import { BackgroundShells, LocalSandbox } from '../sandbox';
+import { getSkills } from '../skills/registry';
+import { getTools } from '../tools';
+import type { Resolution } from './approvals';
+import { type Complete, createCompleter } from './complete';
+import { runAgent } from './run';
+import { startThreadRun } from './runs';
+import { generateThreadTitle } from './title';
 
 const log = createLogger('runner');
 

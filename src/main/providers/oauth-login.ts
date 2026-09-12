@@ -1,5 +1,5 @@
 import type { AuthEvent, AuthInteraction, AuthPrompt } from '@earendil-works/pi-ai';
-import { createLogger } from '../log';
+import { createLogger } from '@main/log';
 import { piModels } from './pi-model';
 
 const log = createLogger('providers');

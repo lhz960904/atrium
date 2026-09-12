@@ -1,4 +1,4 @@
-import { type ManifestModel, PROVIDER_MANIFEST } from '../../providers/manifest';
+import { type ManifestModel, PROVIDER_MANIFEST } from '@main/providers/manifest';
 import type { Modality, ModelCapabilities, ModelInfo, ModelPricing, ModelsCatalog } from './types';
 
 /** Conservative window for ids the dataset doesn't know — compact early, never overflow. */

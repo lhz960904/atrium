@@ -1,3 +1,4 @@
+import { createLogger } from '@main/log';
 import type {
   AgentSessionEvent,
   AssistantMessage,
@@ -7,7 +8,6 @@ import type {
   ToolDecision,
   ToolResultMessage,
 } from '@shared/protocol';
-import { createLogger } from '../../log';
 import type { AtriumTool } from '../tools';
 
 const log = createLogger('approval');

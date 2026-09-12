@@ -1,5 +1,5 @@
-import type { Db } from '../db';
-import type { Sandbox } from './sandbox/types';
+import type { Db } from '@main/db';
+import type { Sandbox } from '../sandbox/types';
 
 /**
  * The turn's own context, closed over by everything built per run: the tools,

@@ -1,7 +1,7 @@
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { ImageContent, TextContent, ToolResultMessage } from '@shared/protocol';
-import { persistToolImage } from '../mcp/spill';
-import type { ContextTransform } from './context';
+import { persistToolImage } from '../../mcp/spill';
+import type { ContextTransform } from './compose';
 
 const KEEP_RECENT_IMAGES = 2;
 

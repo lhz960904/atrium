@@ -9,7 +9,7 @@ import type { Api, Model } from '@earendil-works/pi-ai';
 import type { Message } from '@shared/protocol';
 import { currentDateNote } from '../prompts';
 import type { AtriumTool } from '../tools';
-import { type ContextTransform, composeContext } from './context';
+import { type ContextTransform, composeContext } from './context/compose';
 import { injectSystemReminder } from './history';
 import { createLoopDetector } from './loop-detection';
 import { asPi } from './vocabulary';
@@ -17,7 +17,7 @@ import { asPi } from './vocabulary';
 /** Complex work routinely runs a dozen turns; this is the runaway brake. */
 const MAX_TURNS = 100;
 
-export type AgentRuntimeOptions = {
+export type AgentLoopOptions = {
   systemPrompt: string;
   model: Model<Api>;
   streamFn: StreamFn;
@@ -39,7 +39,7 @@ export type AgentRuntimeOptions = {
   beforeToolCall?: AgentOptions['beforeToolCall'];
 };
 
-export type AgentRuntime = {
+export type AgentLoop = {
   subscribe(listener: (event: AgentEvent) => void): void;
   /** Run to completion, forwarding an outer stop to the engine. Errors from the
    *  loop itself propagate — what to do about one differs per caller. */
@@ -58,7 +58,7 @@ export type AgentRuntime = {
  * `prepareNextTurnWithContext` and, once tripped, offers no tools at all — the
  * model then has to answer in text.
  */
-export function createAgentRuntime(opts: AgentRuntimeOptions): AgentRuntime {
+export function createAgentLoop(opts: AgentLoopOptions): AgentLoop {
   const loop = createLoopDetector();
   let turns = 0;
 

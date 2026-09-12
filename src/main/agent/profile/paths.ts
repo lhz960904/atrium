@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parseFrontmatter } from '../../shared/frontmatter';
+import { parseFrontmatter } from '@main/shared/frontmatter';
 
 export const SOUL_FILE = 'SOUL.md';
 export const USER_FILE = 'USER.md';

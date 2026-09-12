@@ -1,7 +1,7 @@
+import type { Db } from '@main/db';
+import { subagents } from '@main/db/schema';
 import type { ToolName } from '@shared/tools';
 import { eq } from 'drizzle-orm';
-import type { Db } from '../../db';
-import { subagents } from '../../db/schema';
 import type { AtriumTool } from '../tools/define';
 
 /**

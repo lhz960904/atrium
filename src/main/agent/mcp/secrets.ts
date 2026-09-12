@@ -1,4 +1,4 @@
-import { decryptCredentials, encryptCredentials } from '../../providers/credentials';
+import { decryptCredentials, encryptCredentials } from '@main/providers/credentials';
 import { type McpSecrets, mcpSecretsSchema } from './config';
 
 /*

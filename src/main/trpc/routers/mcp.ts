@@ -1,29 +1,29 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
-import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
-import { z } from 'zod';
 import {
   type ImportSourceId,
   listImportSources,
   readImportFile,
   readImportSource,
-} from '../../agent/mcp/client-imports';
+} from '@main/agent/mcp/client-imports';
 import {
   type McpSecrets,
   type McpTransport,
   mcpSecretsSchema,
   parseConfig,
-} from '../../agent/mcp/config';
+} from '@main/agent/mcp/config';
 import {
   type ExportServer,
   parseMcpJson,
   planSync,
   serializeMcpServers,
-} from '../../agent/mcp/json-config';
-import { type McpServerStatus, mcpManager } from '../../agent/mcp/manager';
-import { decryptSecrets, encryptSecrets } from '../../agent/mcp/secrets';
-import type { Db } from '../../db';
-import { mcpServers } from '../../db/schema';
+} from '@main/agent/mcp/json-config';
+import { type McpServerStatus, mcpManager } from '@main/agent/mcp/manager';
+import { decryptSecrets, encryptSecrets } from '@main/agent/mcp/secrets';
+import type { Db } from '@main/db';
+import { mcpServers } from '@main/db/schema';
+import { eq } from 'drizzle-orm';
+import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
+import { z } from 'zod';
 import { badRequest, conflict } from '../errors';
 import { publicProcedure, router } from '../trpc';
 

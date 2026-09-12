@@ -1,16 +1,16 @@
 import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
+import { recordUsage } from '@main/db/usage';
+import { createLogger } from '@main/log';
 import type { AssistantMessage, Message, TextContent, Usage } from '@shared/protocol';
 import type { ToolName } from '@shared/tools';
-import { recordUsage } from '../../db/usage';
-import { createLogger } from '../../log';
 import type { ModelPricing } from '../models/types';
-import { withinTurnFold } from '../pi/compaction';
-import { createAgentRuntime } from '../pi/runtime';
-import { createSummarizer } from '../pi/summarize';
-import { storedMessage } from '../pi/vocabulary';
 import { workspaceGuidance } from '../prompts';
-import type { RunContext } from '../run-context';
+import { withinTurnFold } from '../runtime/compaction';
+import { createAgentLoop } from '../runtime/loop';
+import type { RunContext } from '../runtime/run-context';
+import { createSummarizer } from '../runtime/summarize';
+import { storedMessage } from '../runtime/vocabulary';
 import type { AtriumTool } from '../tools';
 import { preserveTodos } from '../tools/builtins/todo';
 import type { SubagentDef } from './defs';
@@ -94,7 +94,7 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   let modelId = parent.modelId;
   if (agent.providerId && agent.modelId) {
     try {
-      const { resolvePiModel } = await import('../../providers/pi-model');
+      const { resolvePiModel } = await import('@main/providers/pi-model');
       model = resolvePiModel(parent.db, agent.providerId, agent.modelId);
       providerId = agent.providerId;
       modelId = agent.modelId;
@@ -113,7 +113,7 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   const emit = (data: Record<string, unknown>): void =>
     parent.notice('subagent', { id: opts.subagentId, ...data });
 
-  const child = createAgentRuntime({
+  const child = createAgentLoop({
     systemPrompt,
     model,
     streamFn: opts.engine.streamFn,

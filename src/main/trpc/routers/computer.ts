@@ -1,9 +1,9 @@
+import { disposeComputerUseHelper } from '@main/computer-use';
+import { hideDragOverlay, showDragOverlay } from '@main/computer-use/drag-overlay';
+import { computerPermissions } from '@main/computer-use/permissions';
 import { PRIVACY_PANES } from '@shared/computer-use';
 import { app, shell } from 'electron';
 import { z } from 'zod';
-import { disposeComputerUseHelper } from '../../computer-use';
-import { hideDragOverlay, showDragOverlay } from '../../computer-use/drag-overlay';
-import { computerPermissions } from '../../computer-use/permissions';
 import { publicProcedure, router } from '../trpc';
 
 // Deep links into the exact privacy list for each grant, so the drag-to-grant

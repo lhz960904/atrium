@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import type { Db } from '@main/db';
+import type { ScheduledTask, ScheduledTaskRun } from '@main/db/schema';
+import { scheduledTaskRuns, scheduledTasks, threads } from '@main/db/schema';
+import { createLogger } from '@main/log';
 import type { PermissionMode } from '@shared/permissions';
 import type { SelectedModel } from '@shared/settings';
 import { Cron } from 'croner';
 import { desc, eq, sql } from 'drizzle-orm';
-import type { Db } from '../../db';
-import type { ScheduledTask, ScheduledTaskRun } from '../../db/schema';
-import { scheduledTaskRuns, scheduledTasks, threads } from '../../db/schema';
-import { createLogger } from '../../log';
-import type { Runner } from '../../server/runner';
+import type { Runner } from '../runtime/runner';
 import { computeNextRun } from './cron';
 import { runScheduledTask, type ScheduledRunResult } from './run';
 
@@ -24,7 +24,7 @@ export type ScheduledManagerDeps = {
   /** Fired after each run settles, for the notification layer. */
   onComplete?: (task: ScheduledTask, run: ScheduledTaskRun) => void;
   /** Ids of threads currently generating — injected (not imported) so the manager
-   *  stays decoupled from the resumable-stream store. Defaults to none. */
+   *  stays decoupled from the run registry. Defaults to none. */
   runningThreadIds?: () => string[];
   /** Injectable runner (tests); defaults to the real headless runner. */
   run?: (task: ScheduledTask) => Promise<ScheduledRunResult>;
@@ -197,7 +197,7 @@ export class ScheduledTaskManager {
 
   /**
    * A run still marked 'running' at startup is an orphan: the in-flight state
-   * lives only in memory (the `firing` set + resumable's running threads), so
+   * lives only in memory (the `firing` set + the run registry), so
    * nothing survived the restart to finish it — fire()'s terminal write never
    * ran because the process died mid-run (quit, crash, or kill). Settle them so
    * the detail panel stops spinning (and polling) on a run that will never

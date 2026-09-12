@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'bun:test';
-import type { RunContext } from '../run-context';
+import type { RunContext } from '../runtime/run-context';
 import type { ToolCtx } from './context';
 import type { AtriumTool } from './define';
 

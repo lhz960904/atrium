@@ -1,7 +1,7 @@
+import { parseDisplayName, readSoul, readUser } from '@main/agent/profile';
+import { profileDir } from '@main/agent/profile/paths';
+import { dispatchProfile } from '@main/agent/tools/builtins/profile';
 import { z } from 'zod';
-import { parseDisplayName, readSoul, readUser } from '../../agent/profile';
-import { profileDir } from '../../agent/profile/paths';
-import { dispatchProfile } from '../../agent/tools/builtins/profile';
 import { publicProcedure, router } from '../trpc';
 
 const target = z.enum(['soul', 'user']);

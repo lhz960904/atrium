@@ -1,8 +1,8 @@
+import { createLogger } from '@main/log';
 import type { PermissionMode } from '@shared/permissions';
 import type { CrossingCode } from '@shared/permissions/analyze';
 import { isAllowed, type TrustRule } from '@shared/permissions/rules';
-import { createLogger } from '../../log';
-import type { Complete } from '../pi/complete';
+import type { Complete } from '../runtime/complete';
 import { type Classification, classifyToolCall } from './classify';
 import { reviewBoundaryCrossing } from './reviewer';
 

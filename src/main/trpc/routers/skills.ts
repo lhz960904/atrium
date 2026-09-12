@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { getSkills } from '../../agent/skills/registry';
-import { SKILL_FILE } from '../../agent/skills/types';
-import { stripFrontmatter } from '../../shared/frontmatter';
+import { getSkills } from '@main/agent/skills/registry';
+import { SKILL_FILE } from '@main/agent/skills/types';
+import { stripFrontmatter } from '@main/shared/frontmatter';
 import { publicProcedure, router } from '../trpc';
 
 export const skillsRouter = router({

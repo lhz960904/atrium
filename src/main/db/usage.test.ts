@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { ModelPricing } from '../agent/models/types';
+import type { ModelPricing } from '@main/agent/models/types';
 import { costMicros } from './usage';
 
 // claude-opus-4-5 rates (per token) from the litellm snapshot.

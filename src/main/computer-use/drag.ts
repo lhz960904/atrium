@@ -1,7 +1,7 @@
 import { dirname, resolve } from 'node:path';
+import { createLogger } from '@main/log';
 import { COMPUTER_USE_DRAG_CHANNEL } from '@shared/computer-use';
 import { app, ipcMain, type NativeImage, nativeImage } from 'electron';
-import { createLogger } from '../log';
 
 const log = createLogger('computer-use-drag');
 

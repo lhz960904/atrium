@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
+import { projects, threads } from '@main/db/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { z } from 'zod';
-import { projects, threads } from '../../db/schema';
 import { publicProcedure, router } from '../trpc';
 
 export const projectsRouter = router({

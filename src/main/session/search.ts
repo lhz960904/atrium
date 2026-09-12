@@ -1,5 +1,5 @@
+import { createLogger } from '@main/log';
 import type Database from 'better-sqlite3';
-import { createLogger } from '../log';
 
 const log = createLogger('search');
 

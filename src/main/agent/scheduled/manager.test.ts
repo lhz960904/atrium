@@ -1,11 +1,11 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, expect, test } from 'bun:test';
+import type { Db } from '@main/db';
+import type { ScheduledTask } from '@main/db/schema';
+import * as schema from '@main/db/schema';
+import { threads } from '@main/db/schema';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
-import type { Db } from '../../db';
-import type { ScheduledTask } from '../../db/schema';
-import * as schema from '../../db/schema';
-import { threads } from '../../db/schema';
 import { ScheduledTaskManager, type ScheduledTaskView } from './manager';
 import type { ScheduledRunResult } from './run';
 

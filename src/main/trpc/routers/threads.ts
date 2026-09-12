@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { getRunningThreadIds } from '@main/server/resumable';
+import { getRunningThreadIds } from '@main/agent/runtime/runs';
+import { projects, threads } from '@main/db/schema';
+import { deleteThreadSession, threadMessages } from '@main/session/threads';
 import { desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { projects, threads } from '../../db/schema';
-import { deleteThreadSession, threadMessages } from '../../session/threads';
 import { publicProcedure, router } from '../trpc';
 
 /** A thread's bound model; null = inherit general.defaultModel. */

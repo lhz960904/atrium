@@ -1,6 +1,6 @@
 import type { Todo, TodoStatus } from '@shared/chat-types';
 import type { AssistantMessage, Message } from '@shared/protocol';
-import type { ContextPreserver } from '../../pi/compaction';
+import type { ContextPreserver } from '../../runtime/compaction';
 
 /**
  * The todo domain: how a plan renders as text, how to find the active plan in a

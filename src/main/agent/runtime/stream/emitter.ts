@@ -1,6 +1,6 @@
 import type { AgentEvent } from '@earendil-works/pi-agent-core';
 import type { AgentSessionEvent } from '@shared/protocol';
-import type { ParkedCall } from './approvals';
+import type { ParkedCall } from '../approvals';
 import { projectAgentEvent } from './projector';
 import { withErrorText } from './tool-result';
 

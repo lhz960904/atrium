@@ -1,5 +1,5 @@
+import type { McpServerRow } from '@main/db/schema';
 import { z } from 'zod';
-import type { McpServerRow } from '../../db/schema';
 
 /*
  * The shape of an MCP server's stored configuration. A row's non-secret config

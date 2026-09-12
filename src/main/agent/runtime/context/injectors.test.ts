@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
-import type { Skill } from '../skills/types';
+import type { Skill } from '../../skills/types';
 import {
   injectContextBlocks,
   instructionsBlock,

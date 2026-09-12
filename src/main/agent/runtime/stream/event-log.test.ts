@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { AgentSessionEvent, EventEnvelope } from '@shared/protocol';
-import { subscribePiEvents, withRunLog } from '../pi-events';
+import { subscribePiEvents, withRunLog } from './event-log';
 
 const turn = (messageId: string): AgentSessionEvent[] => [
   { type: 'agent_start' },

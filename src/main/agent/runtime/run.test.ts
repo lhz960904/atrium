@@ -5,11 +5,11 @@ import {
   createAssistantMessageEventStream,
   type Model,
 } from '@earendil-works/pi-ai';
+import type { Db } from '@main/db';
+import type { RunJournal } from '@main/session/journal';
 import type { AgentSessionEvent, Message } from '@shared/protocol';
-import type { Db } from '../db';
-import type { RunJournal } from '../session/journal';
+import type { Sandbox } from '../sandbox/types';
 import { runAgent } from './run';
-import type { Sandbox } from './sandbox/types';
 
 const MODEL = {
   id: 'm1',

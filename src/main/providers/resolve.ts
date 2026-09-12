@@ -1,8 +1,8 @@
+import { modelCapabilities } from '@main/agent/models/catalog';
+import type { Db } from '@main/db';
+import { providers } from '@main/db/schema';
 import type { SelectedModel } from '@shared/settings';
 import { eq } from 'drizzle-orm';
-import { modelCapabilities } from '../agent/models/catalog';
-import type { Db } from '../db';
-import { providers } from '../db/schema';
 import { getProviderManifest } from './manifest';
 
 /**

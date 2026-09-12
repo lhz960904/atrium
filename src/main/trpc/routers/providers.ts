@@ -1,27 +1,27 @@
-import { TRPCError } from '@trpc/server';
-import { eq } from 'drizzle-orm';
-import { shell } from 'electron';
-import { z } from 'zod';
-import { providers } from '../../db/schema';
-import { decryptCredentials, encryptCredentials } from '../../providers/credentials';
+import { providers } from '@main/db/schema';
+import { decryptCredentials, encryptCredentials } from '@main/providers/credentials';
 import {
   fetchOllamaModels,
   type LocalServiceStatus,
   type ModelProbe,
   pingOllama,
   probeOllamaRegistryCached,
-} from '../../providers/local-service';
-import { PROVIDER_MANIFEST, type ProviderManifest } from '../../providers/manifest';
-import { fetchModelIds } from '../../providers/model-fetcher';
+} from '@main/providers/local-service';
+import { PROVIDER_MANIFEST, type ProviderManifest } from '@main/providers/manifest';
+import { fetchModelIds } from '@main/providers/model-fetcher';
 import {
   answerLogin,
   cancelLogin,
   logout,
   readLogin,
   startLogin,
-} from '../../providers/oauth-login';
-import { piModels } from '../../providers/pi-model';
-import { type PullState, pullManager } from '../../providers/pull-manager';
+} from '@main/providers/oauth-login';
+import { piModels } from '@main/providers/pi-model';
+import { type PullState, pullManager } from '@main/providers/pull-manager';
+import { TRPCError } from '@trpc/server';
+import { eq } from 'drizzle-orm';
+import { shell } from 'electron';
+import { z } from 'zod';
 import { badRequest, internalError, preconditionFailed } from '../errors';
 import { publicProcedure, router } from '../trpc';
 

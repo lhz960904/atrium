@@ -1,5 +1,5 @@
+import { maxContextTokens, modelPricing } from '@main/agent/models/catalog';
 import { z } from 'zod';
-import { maxContextTokens, modelPricing } from '../../agent/models/catalog';
 import { publicProcedure, router } from '../trpc';
 
 /**

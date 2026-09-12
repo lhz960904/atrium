@@ -1,4 +1,4 @@
-import { updaterManager } from '../../updater';
+import { updaterManager } from '@main/updater';
 import { publicProcedure, router } from '../trpc';
 
 /**

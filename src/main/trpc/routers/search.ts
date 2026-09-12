@@ -1,6 +1,6 @@
+import { buildSnippet, queryTokens, type Snippet, toMatchExpr } from '@main/db/jieba';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { buildSnippet, queryTokens, type Snippet, toMatchExpr } from '../../db/jieba';
 import { publicProcedure, router } from '../trpc';
 
 /** How many recent chats to show when the query is empty. */

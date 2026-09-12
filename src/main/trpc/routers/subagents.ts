@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { BUILTIN_SUBAGENTS, SUBAGENT_DENIED_TOOLS } from '@main/agent/subagent/defs';
+import { subagents } from '@main/db/schema';
 import { TOOL_NAMES } from '@shared/tools';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { BUILTIN_SUBAGENTS, SUBAGENT_DENIED_TOOLS } from '../../agent/subagent/defs';
-import { subagents } from '../../db/schema';
 import { conflict } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
@@ -94,7 +94,7 @@ export const subagentsRouter = router({
 });
 
 /** Reject a name that collides with a built-in or another custom subagent. */
-function assertNameFree(db: import('../../db').Db, name: string, excludeId?: string): void {
+function assertNameFree(db: import('@main/db').Db, name: string, excludeId?: string): void {
   if (BUILTIN_SUBAGENTS[name]) {
     throw conflict(`'${name}' is a built-in subagent name.`);
   }

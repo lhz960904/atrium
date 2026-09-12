@@ -1,8 +1,8 @@
 import type { Credential, CredentialInfo, CredentialStore } from '@earendil-works/pi-ai';
+import type { Db } from '@main/db';
+import { providers } from '@main/db/schema';
+import { createLogger } from '@main/log';
 import { eq } from 'drizzle-orm';
-import type { Db } from '../db';
-import { providers } from '../db/schema';
-import { createLogger } from '../log';
 import { decryptCredentials, encryptCredentials } from './credentials';
 
 const log = createLogger('providers');

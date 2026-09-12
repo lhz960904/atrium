@@ -10,6 +10,8 @@ import { syncBrowserProvisioning } from './agent/mcp/browser-provisioner';
 import { mcpManager } from './agent/mcp/manager';
 import { runDream, startDreamScheduler } from './agent/memory';
 import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
+import { createRunner, type Runner } from './agent/runtime/runner';
+import { getRunningThreadIds } from './agent/runtime/runs';
 import { scheduledManager, startScheduledTasks } from './agent/scheduled';
 import { refreshSkills } from './agent/skills/registry';
 import { disposeComputerUseHelper } from './computer-use';
@@ -30,8 +32,6 @@ import {
 } from './providers/pi-model';
 import { firstEnabledModel } from './providers/resolve';
 import { startHttpServer } from './server/http';
-import { getRunningThreadIds } from './server/resumable';
-import { createRunner, type Runner } from './server/runner';
 import { closeSessionStore } from './session/repo';
 import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';

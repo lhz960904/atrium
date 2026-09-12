@@ -1,9 +1,9 @@
+import { syncBrowserProvisioning } from '@main/agent/mcp/browser-provisioner';
+import { getSettings } from '@main/settings/conf';
 import type { TrustRule } from '@shared/permissions/rules';
 import { type Settings, SettingsPatchSchema } from '@shared/settings';
 import { app } from 'electron';
 import { z } from 'zod';
-import { syncBrowserProvisioning } from '../../agent/mcp/browser-provisioner';
-import { getSettings } from '../../settings/conf';
 import { publicProcedure, router } from '../trpc';
 
 const ruleInput = z.object({ tool: z.string(), matcher: z.string() });

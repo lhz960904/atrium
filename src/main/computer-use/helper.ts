@@ -1,6 +1,6 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import readline from 'node:readline';
-import { createLogger } from '../log';
+import { createLogger } from '@main/log';
 
 const log = createLogger('computer-use-helper');
 

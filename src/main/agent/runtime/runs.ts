@@ -1,11 +1,10 @@
-import { type RunLog, withRunLog } from './pi-events';
+import { type RunLog, withRunLog } from './stream/event-log';
 
 /**
  * Run lifetime registry — the producer side of a turn. A run writes into the
  * thread's event log decoupled from any client: a renderer disconnect can't
  * cancel generation, and persistence always completes. Reconnecting clients
- * replay the event log (see pi-events), which replaced the old resumable
- * UIMessage SSE store.
+ * replay the event log (see stream/event-log) from any seq.
  */
 
 type Run = { abort: AbortController };

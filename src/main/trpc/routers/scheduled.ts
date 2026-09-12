@@ -1,8 +1,8 @@
+import type { UpdateScheduledTaskInput } from '@main/agent/scheduled';
+import { scheduledManager } from '@main/agent/scheduled';
+import { isRecurringCron } from '@main/agent/scheduled/cron';
 import { PERMISSION_MODES } from '@shared/permissions';
 import { z } from 'zod';
-import type { UpdateScheduledTaskInput } from '../../agent/scheduled';
-import { scheduledManager } from '../../agent/scheduled';
-import { isRecurringCron } from '../../agent/scheduled/cron';
 import { badRequest } from '../errors';
 import { publicProcedure, router } from '../trpc';
 

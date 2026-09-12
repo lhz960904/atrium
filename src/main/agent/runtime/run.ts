@@ -1,32 +1,32 @@
 import { randomUUID } from 'node:crypto';
 import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
+import type { Db } from '@main/db';
+import { createLogger } from '@main/log';
+import type { RunJournal } from '@main/session/journal';
 import type { PermissionMode } from '@shared/permissions';
 import type { AgentSessionEvent, Message } from '@shared/protocol';
-import type { Db } from '../db';
-import { createLogger } from '../log';
-import type { RunJournal } from '../session/journal';
-import { recordTurn } from './memory/state';
-import { type ApprovalContext, approvalGate } from './permissions';
-import { applyResolutions, type ParkedCall, type Resolution } from './pi/approvals';
-import { compactForTurn, type Fold, withinTurnFold } from './pi/compaction';
-import { type Complete, createCompleter } from './pi/complete';
-import { wireEmitter } from './pi/emitter';
-import { withSettledResults } from './pi/history';
-import { injectContextBlocks, loadContextBlocks } from './pi/injectors';
-import { createAgentRuntime } from './pi/runtime';
-import { screenshotTrim } from './pi/screenshot-trim';
-import { summarizerFrom } from './pi/summarize';
-import { estimateTokens } from './pi/tokens';
-import { scopeToolsToSkill } from './pi/tool-scope';
-import { readSoul } from './profile/paths';
-import { buildSystemPrompt } from './prompts';
+import { recordTurn } from '../memory/state';
+import { type ApprovalContext, approvalGate } from '../permissions';
+import { readSoul } from '../profile/paths';
+import { buildSystemPrompt } from '../prompts';
+import type { Sandbox } from '../sandbox/types';
+import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from '../skills/types';
+import type { AtriumTool } from '../tools';
+import { preserveActiveSkill } from '../tools/builtins/skill';
+import { preserveTodos } from '../tools/builtins/todo';
+import { applyResolutions, type ParkedCall, type Resolution } from './approvals';
+import { compactForTurn, type Fold, withinTurnFold } from './compaction';
+import { type Complete, createCompleter } from './complete';
+import { injectContextBlocks, loadContextBlocks } from './context/injectors';
+import { screenshotTrim } from './context/screenshot-trim';
+import { withSettledResults } from './history';
+import { createAgentLoop } from './loop';
 import type { RunContext } from './run-context';
-import type { Sandbox } from './sandbox/types';
-import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from './skills/types';
-import type { AtriumTool } from './tools';
-import { preserveActiveSkill } from './tools/builtins/skill';
-import { preserveTodos } from './tools/builtins/todo';
+import { wireEmitter } from './stream/emitter';
+import { summarizerFrom } from './summarize';
+import { estimateTokens } from './tokens';
+import { scopeToolsToSkill } from './tool-scope';
 
 const log = createLogger('agent');
 
@@ -200,7 +200,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
     await opts.journal.observe({ type: 'message_end', message } as never);
   }
 
-  const runtime = createAgentRuntime({
+  const loop = createAgentLoop({
     systemPrompt: ctx.system,
     model: opts.piModel,
     streamFn: opts.streamFn,
@@ -241,16 +241,16 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
     },
   });
 
-  runtime.subscribe(wireEmitter({ runId: opts.runId, parked, emit: opts.emit }));
+  loop.subscribe(wireEmitter({ runId: opts.runId, parked, emit: opts.emit }));
   // Second, so a reader sees the turn as soon as it lands while the loop still
   // waits for it to be stored before going on.
-  runtime.subscribe(opts.journal.observe);
+  loop.subscribe(opts.journal.observe);
 
   opts.emit({ type: 'notice', name: 'message-metadata', payload: { createdAt: openedAt } });
 
   let loopError: string | undefined;
   try {
-    await runtime.run(opts.abortSignal);
+    await loop.run(opts.abortSignal);
   } catch (err) {
     // pi encodes model failures in the stream; reaching here means the loop
     // itself broke, and the renderer needs to hear about it.

@@ -1,11 +1,11 @@
 import { join } from 'node:path';
+import { isChromeInstalled } from '@main/browser/detect';
+import type { Db } from '@main/db';
+import { mcpServers } from '@main/db/schema';
+import { createLogger } from '@main/log';
+import { getSettings } from '@main/settings/conf';
 import { eq } from 'drizzle-orm';
 import { app } from 'electron';
-import { isChromeInstalled } from '../../browser/detect';
-import type { Db } from '../../db';
-import { mcpServers } from '../../db/schema';
-import { createLogger } from '../../log';
-import { getSettings } from '../../settings/conf';
 import { mcpManager } from './manager';
 import { encryptSecrets } from './secrets';
 

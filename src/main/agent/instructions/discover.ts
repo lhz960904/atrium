@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join, parse } from 'node:path';
-import { createLogger } from '../../log';
+import { createLogger } from '@main/log';
 import {
   INSTRUCTION_MAX_BYTES,
   type InstructionFile,

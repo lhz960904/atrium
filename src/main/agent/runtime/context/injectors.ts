@@ -1,12 +1,17 @@
 import { homedir } from 'node:os';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
-import { discoverInstructions, type InstructionFile } from '../instructions';
-import { MEMORY_INDEX_BUDGET, MEMORY_SCOPES, type MemoryScope, memoryDir } from '../memory/paths';
-import { readIndexClipped } from '../memory/store';
-import { readUser as readUserProfile } from '../profile/paths';
-import type { Skill } from '../skills/types';
-import type { ContextTransform } from './context';
-import { injectSystemReminder } from './history';
+import { discoverInstructions, type InstructionFile } from '../../instructions';
+import {
+  MEMORY_INDEX_BUDGET,
+  MEMORY_SCOPES,
+  type MemoryScope,
+  memoryDir,
+} from '../../memory/paths';
+import { readIndexClipped } from '../../memory/store';
+import { readUser as readUserProfile } from '../../profile/paths';
+import type { Skill } from '../../skills/types';
+import { injectSystemReminder } from '../history';
+import type { ContextTransform } from './compose';
 
 /**
  * The standing context a turn carries beyond the transcript itself: available

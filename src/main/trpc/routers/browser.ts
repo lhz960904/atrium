@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process';
+import { syncBrowserProvisioning } from '@main/agent/mcp/browser-provisioner';
+import { isChromeInstalled, isPlaywrightExtensionInstalled } from '@main/browser/detect';
+import { getSettings } from '@main/settings/conf';
 import { clipboard } from 'electron';
 import { z } from 'zod';
-import { syncBrowserProvisioning } from '../../agent/mcp/browser-provisioner';
-import { isChromeInstalled, isPlaywrightExtensionInstalled } from '../../browser/detect';
-import { getSettings } from '../../settings/conf';
 import { publicProcedure, router } from '../trpc';
 
 const EXTENSION_ID = 'mmlmfjhmonkocbjadbfplnigmagldckm';

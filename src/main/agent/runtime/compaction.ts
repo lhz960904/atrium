@@ -1,4 +1,5 @@
 import { convertToLlm, createCompactionSummaryMessage } from '@earendil-works/pi-agent-core';
+import { createLogger } from '@main/log';
 import type {
   Content,
   ImageContent,
@@ -6,8 +7,7 @@ import type {
   TextContent,
   ToolResultMessage,
 } from '@shared/protocol';
-import { createLogger } from '../../log';
-import type { ContextTransform } from './context';
+import type { ContextTransform } from './context/compose';
 import type { Summarize } from './summarize';
 import { countTokens, estimateContextTokens } from './tokens';
 import { asPi, asStored } from './vocabulary';

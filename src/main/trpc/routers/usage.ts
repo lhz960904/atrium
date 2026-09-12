@@ -1,6 +1,6 @@
+import { modelPricing } from '@main/agent/models/catalog';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { modelPricing } from '../../agent/models/catalog';
 import { publicProcedure, router } from '../trpc';
 
 /** Period the usage page aggregates over; `year` also drives the heatmap. */

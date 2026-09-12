@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
+import type { Db } from '@main/db';
 import type { ToolName } from '@shared/tools';
-import type { Db } from '../../db';
 import type { AtriumTool } from '../tools/define';
 import { BUILTIN_SUBAGENTS, filterToolsForSubagent, resolveSubagentDef } from './defs';
 

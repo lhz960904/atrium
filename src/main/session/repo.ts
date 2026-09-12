@@ -1,8 +1,8 @@
 import { dirname } from 'node:path';
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
+import { createLogger } from '@main/log';
 import type Database from 'better-sqlite3';
-import { createLogger } from '../log';
 import { attachChatSearch } from './search';
 import { sessionSqlite } from './sqlite-driver';
 

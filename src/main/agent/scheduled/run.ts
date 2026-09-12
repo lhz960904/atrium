@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import type { Db } from '@main/db';
+import type { ScheduledTask } from '@main/db/schema';
+import { scheduledTaskRuns } from '@main/db/schema';
+import { createLogger } from '@main/log';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { SelectedModel } from '@shared/settings';
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
-import type { Db } from '../../db';
-import type { ScheduledTask } from '../../db/schema';
-import { scheduledTaskRuns } from '../../db/schema';
-import { createLogger } from '../../log';
-import type { Runner } from '../../server/runner';
+import type { Runner } from '../runtime/runner';
 
 const log = createLogger('scheduled');
 

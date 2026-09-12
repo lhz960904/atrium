@@ -1,5 +1,5 @@
+import type { ScheduledTask } from '@main/db/schema';
 import { Cron } from 'croner';
-import type { ScheduledTask } from '../../db/schema';
 
 /**
  * Schedule helpers over croner. A recurring task carries a 5-field cron string;

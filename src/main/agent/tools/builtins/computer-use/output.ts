@@ -1,8 +1,8 @@
+import type { HelperResponse } from '@main/computer-use';
+import { computerPermissions, promptPermissionGrant } from '@main/computer-use/permissions';
+import { captureWindow } from '@main/computer-use/screenshot';
+import { getSettings } from '@main/settings/conf';
 import type { ImageToolOutput } from '@shared/chat-types';
-import type { HelperResponse } from '../../../../computer-use';
-import { computerPermissions, promptPermissionGrant } from '../../../../computer-use/permissions';
-import { captureWindow } from '../../../../computer-use/screenshot';
-import { getSettings } from '../../../../settings/conf';
 import { spillOversizedImages } from '../../../mcp/spill';
 import type { ToolCtx } from '../../context';
 

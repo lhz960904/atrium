@@ -1,6 +1,6 @@
+import type { Db } from '@main/db';
+import type { ChatEndpoint } from '@main/server/http';
 import { initTRPC } from '@trpc/server';
-import type { Db } from '../db';
-import type { ChatEndpoint } from '../server/http';
 
 /**
  * tRPC context — what every procedure receives.

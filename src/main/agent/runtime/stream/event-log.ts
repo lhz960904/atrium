@@ -1,5 +1,5 @@
+import { createLogger } from '@main/log';
 import type { AgentSessionEvent, EventEnvelope } from '@shared/protocol';
-import { createLogger } from '../log';
 
 /**
  * The wire's event store: a run appends its events to the thread's envelope
@@ -8,7 +8,7 @@ import { createLogger } from '../log';
  *
  * Memory bounds: one log per thread, superseded by the thread's next run, and
  * ended logs beyond a fixed count are evicted oldest-first. A single log holds
- * one run — the same per-run bound the old resumable store accepted.
+ * exactly one run.
  */
 
 const log = createLogger('pi-events');

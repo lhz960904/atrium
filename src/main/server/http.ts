@@ -1,27 +1,27 @@
 import { serve } from '@hono/node-server';
-import type { AtriumUIMessage } from '@shared/chat';
-import type { PermissionMode } from '@shared/permissions';
-import type { ToolResultMessage } from '@shared/protocol';
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
-import type { Resolution } from '../agent/pi/approvals';
-import { resultFor } from '../agent/pi/approvals';
-import { foldToCheckpoint } from '../agent/pi/compaction';
-import { createSummarizer } from '../agent/pi/summarize';
-import { preserveActiveSkill } from '../agent/tools/builtins/skill';
-import { preserveTodos } from '../agent/tools/builtins/todo';
-import type { Db } from '../db';
-import { createLogger } from '../log';
-import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
+import type { Resolution } from '@main/agent/runtime/approvals';
+import { resultFor } from '@main/agent/runtime/approvals';
+import { foldToCheckpoint } from '@main/agent/runtime/compaction';
+import type { Runner } from '@main/agent/runtime/runner';
+import { abortThreadRun, isThreadRunning } from '@main/agent/runtime/runs';
+import { subscribePiEvents } from '@main/agent/runtime/stream/event-log';
+import { createSummarizer } from '@main/agent/runtime/summarize';
+import { preserveActiveSkill } from '@main/agent/tools/builtins/skill';
+import { preserveTodos } from '@main/agent/tools/builtins/todo';
+import type { Db } from '@main/db';
+import { createLogger } from '@main/log';
+import { makeGetApiKey, piStreamFn, resolvePiModel } from '@main/providers/pi-model';
 import {
   compactThread,
   openThreadCalls,
   settleThreadCalls,
   threadHistory,
-} from '../session/threads';
-import { subscribePiEvents } from './pi-events';
-import { abortThreadRun, isThreadRunning } from './resumable';
-import type { Runner } from './runner';
+} from '@main/session/threads';
+import type { AtriumUIMessage } from '@shared/chat';
+import type { PermissionMode } from '@shared/permissions';
+import type { ToolResultMessage } from '@shared/protocol';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 
 export type ChatEndpoint = { port: number; token: string };
 

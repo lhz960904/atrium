@@ -1,11 +1,11 @@
 import { join } from 'node:path';
+import { createLogger } from '@main/log';
 import {
   COMPUTER_USE_CLOSE_OVERLAY_CHANNEL,
   COMPUTER_USE_DRAG_CHANNEL,
   COMPUTER_USE_OVERLAY_CLOSED_CHANNEL,
 } from '@shared/computer-use';
 import { app, BrowserWindow, ipcMain, type Rectangle, screen } from 'electron';
-import { createLogger } from '../log';
 import { resolveSelfBundlePath } from './drag';
 import { getComputerUseHelper } from './index';
 
