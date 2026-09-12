@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.15.0](https://github.com/lhz960904/atrium/compare/v0.14.3...v0.15.0) (2026-09-12)
+
+
+### Features
+
+* migrate ai layer to the pi protocol and engine ([#101](https://github.com/lhz960904/atrium/issues/101)) ([f7392a8](https://github.com/lhz960904/atrium/commit/f7392a82ac2f35334a2cfcf5bf57b8a3294aa666))
+* **session:** move the conversation onto pi's session layer ([#105](https://github.com/lhz960904/atrium/issues/105)) ([243d092](https://github.com/lhz960904/atrium/commit/243d0927b8bcbecdf268a1344360491b458cf74e))
+
+
+### Bug Fixes
+
+* **chat:** send composer attachments in the engine's content vocabulary ([#103](https://github.com/lhz960904/atrium/issues/103)) ([3395a19](https://github.com/lhz960904/atrium/commit/3395a1964625acc6472b587d8e4d1b07cb76e8bb))
+
 ## [0.14.3](https://github.com/lhz960904/atrium/compare/v0.14.2...v0.14.3) (2026-07-13)
 
 
