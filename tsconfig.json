@@ -3,6 +3,6 @@
   "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }],
   "compilerOptions": {
     "baseUrl": ".",
-    "paths": { "@shared/*": ["src/shared/*"] }
+    "paths": { "@main/*": ["src/main/*"], "@shared/*": ["src/shared/*"] }
   }
 }

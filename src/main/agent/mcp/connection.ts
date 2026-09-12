@@ -1,3 +1,4 @@
+import { createLogger } from '@main/utils/log';
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -8,7 +9,6 @@ import {
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js';
-import { createLogger } from '../../log';
 import { CLIENT_INFO } from './client-info';
 import type { ResolvedMcpServer } from './config';
 import { McpOAuthProvider, type McpOAuthStore } from './oauth';

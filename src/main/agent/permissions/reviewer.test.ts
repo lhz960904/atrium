@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { Complete } from '../pi/complete';
+import type { Complete } from '../runtime/complete';
 import { reviewBoundaryCrossing } from './reviewer';
 
 function verdictModel(

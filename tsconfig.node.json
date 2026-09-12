@@ -6,6 +6,7 @@
     "types": ["electron-vite/node", "bun"],
     "baseUrl": ".",
     "paths": {
+      "@main/*": ["src/main/*"],
       "@shared/*": ["src/shared/*"]
     }
   }

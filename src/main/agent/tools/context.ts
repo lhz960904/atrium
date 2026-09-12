@@ -1,7 +1,7 @@
 import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
-import type { ComputerUseHelper } from '../../computer-use';
-import type { RunContext } from '../run-context';
+import type { ComputerUseHelper } from '@main/platform/computer-use';
+import type { RunContext } from '../runtime/run-context';
 import type { BackgroundShells } from '../sandbox/background-shells';
 import type { Sandbox } from '../sandbox/types';
 import type { Skill } from '../skills/types';

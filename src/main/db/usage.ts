@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import type { ModelPricing } from '@main/agent/providers/models/types';
 import { costUsd, type TokenCounts } from '../../shared/cost';
-import type { ModelPricing } from '../agent/models/types';
 import type { Db } from '.';
 import { usage } from './schema';
 

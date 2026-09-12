@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { McpServerRow } from '../../db/schema';
+import type { McpServerRow } from '@main/db/schema';
 import { httpConfigSchema, mcpSecretsSchema, resolveMcpServer, stdioConfigSchema } from './config';
 
 const row = (over: Partial<McpServerRow>): McpServerRow =>

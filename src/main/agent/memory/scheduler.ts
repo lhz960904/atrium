@@ -1,4 +1,4 @@
-import { createLogger } from '../../log';
+import { createLogger } from '@main/utils/log';
 import type { SubagentEngine } from '../subagent/run';
 import { acquireLock, releaseLock } from './lock';
 import { listMemoryDirs } from './paths';

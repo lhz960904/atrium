@@ -1,4 +1,4 @@
-import type { RunContext } from '../run-context';
+import type { RunContext } from '../runtime/run-context';
 import type { AtriumTool } from './define';
 
 /** Test-only helpers for driving a tool the way the engine does. */

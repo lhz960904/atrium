@@ -1,7 +1,7 @@
 import { readdir, readFile, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createLogger } from '../../log';
-import { parseFrontmatter } from '../../shared/frontmatter';
+import { parseFrontmatter } from '@main/utils/frontmatter';
+import { createLogger } from '@main/utils/log';
 import {
   SKILL_FILE,
   type Skill,

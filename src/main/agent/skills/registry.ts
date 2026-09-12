@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { createLogger } from '../../log';
+import { createLogger } from '@main/utils/log';
 import { discoverSkills } from './discover';
 import type { Skill, SkillRoots } from './types';
 

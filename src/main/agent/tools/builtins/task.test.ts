@@ -5,8 +5,8 @@ import {
   createAssistantMessageEventStream,
   type Model,
 } from '@earendil-works/pi-ai';
-import type { Db } from '../../../db';
-import type { RunContext } from '../../run-context';
+import type { Db } from '@main/db';
+import type { RunContext } from '../../runtime/run-context';
 import type { Sandbox } from '../../sandbox/types';
 import { runTool } from '../testing';
 import { taskTool } from './task';

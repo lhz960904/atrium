@@ -1,5 +1,5 @@
 import { Agent } from '@earendil-works/pi-agent-core';
-import { createLogger } from '../../log';
+import { createLogger } from '@main/utils/log';
 import type { SubagentEngine } from '../subagent/run';
 import { memoryDirTool } from '../tools/builtins/memory';
 import { clearSnapshot, rollback, snapshot } from './backup';

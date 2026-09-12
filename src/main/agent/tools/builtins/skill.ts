@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { stripFrontmatter } from '@main/utils/frontmatter';
 import type { Message, TextContent, ToolResultMessage } from '@shared/protocol';
-import { stripFrontmatter } from '../../../shared/frontmatter';
-import type { ContextPreserver } from '../../pi/compaction';
-import type { RunContext } from '../../run-context';
+import type { ContextPreserver } from '../../runtime/compaction';
+import type { RunContext } from '../../runtime/run-context';
 import { type ActiveSkill, SKILL_FILE, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
 import { defineTool, Type, textResult } from '../define';
 

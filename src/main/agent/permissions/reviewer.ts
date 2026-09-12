@@ -1,4 +1,4 @@
-import type { Complete } from '../pi/complete';
+import type { Complete } from '../runtime/complete';
 
 /** allow = auto-approve; deny = fall back to a user prompt. There is no third
  *  state — uncertainty, timeout, and failure all resolve to deny. */
@@ -26,7 +26,7 @@ DENY operations that could cause real harm, exfiltrate data, or that you cannot 
 When genuinely unsure, reply DENY — a human will then confirm.`;
 
 export type ReviewArgs = {
-  /** The one-shot call this verdict rides on; see agent/pi/complete. */
+  /** The one-shot call this verdict rides on; see agent/runtime/complete. */
   complete: Complete;
   /** The command or path to judge, shown to the reviewer verbatim. */
   subject: string;

@@ -1,6 +1,6 @@
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parseFrontmatter, renderFrontmatter } from '../../shared/frontmatter';
+import { parseFrontmatter, renderFrontmatter } from '@main/utils/frontmatter';
 import { MEMORY_INDEX } from './paths';
 
 export const MEMORY_TYPES = ['preference', 'project', 'reference'] as const;
