@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { getRunningThreadIds } from '@main/server/resumable';
 import { desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { projects, threads } from '../../db/schema';
-import { getRunningThreadIds } from '../../server/resumable';
 import { deleteThreadSession, threadMessages } from '../../session/threads';
 import { publicProcedure, router } from '../trpc';
 
