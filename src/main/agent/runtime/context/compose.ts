@@ -1,5 +1,5 @@
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
-import { createLogger } from '@main/log';
+import { createLogger } from '@main/utils/log';
 
 const log = createLogger('context');
 

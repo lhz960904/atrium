@@ -14,7 +14,7 @@ import type { AtriumTool } from './define';
  * stubbed so the toolset can be assembled outside Electron.
  */
 
-mock.module('../scheduled', () => ({ scheduledManager: {} }));
+mock.module('../automation', () => ({ scheduledManager: {} }));
 mock.module('./builtins/computer-use/output', () => ({ runComputerAction: async () => '' }));
 
 const { askClarificationTool } = await import('./builtins/ask-clarification');

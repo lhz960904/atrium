@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { stripFrontmatter } from '@main/shared/frontmatter';
+import { stripFrontmatter } from '@main/utils/frontmatter';
 import type { Message, TextContent, ToolResultMessage } from '@shared/protocol';
 import type { ContextPreserver } from '../../runtime/compaction';
 import type { RunContext } from '../../runtime/run-context';

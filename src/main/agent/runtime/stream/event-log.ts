@@ -1,4 +1,4 @@
-import { createLogger } from '@main/log';
+import { createLogger } from '@main/utils/log';
 import type { AgentSessionEvent, EventEnvelope } from '@shared/protocol';
 
 /**

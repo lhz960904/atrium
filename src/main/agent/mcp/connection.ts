@@ -1,4 +1,4 @@
-import { createLogger } from '@main/log';
+import { createLogger } from '@main/utils/log';
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';

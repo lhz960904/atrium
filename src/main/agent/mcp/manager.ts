@@ -1,5 +1,5 @@
 import type { Db } from '@main/db';
-import { createLogger } from '@main/log';
+import { createLogger } from '@main/utils/log';
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { buildCatalog, type McpToolEntry } from './catalog';

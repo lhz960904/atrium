@@ -6,38 +6,38 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { app, BrowserWindow, shell } from 'electron';
 import { createIPCHandler } from 'electron-trpc/main';
 import icon from '../../resources/icon.png?asset';
+import { scheduledManager, startScheduledTasks } from './agent/automation';
 import { syncBrowserProvisioning } from './agent/mcp/browser-provisioner';
 import { mcpManager } from './agent/mcp/manager';
 import { runDream, startDreamScheduler } from './agent/memory';
-import { populateModelCatalog, startModelCatalogRefresh } from './agent/models/catalog';
-import { createRunner, type Runner } from './agent/runtime/runner';
-import { getRunningThreadIds } from './agent/runtime/runs';
-import { scheduledManager, startScheduledTasks } from './agent/scheduled';
-import { refreshSkills } from './agent/skills/registry';
-import { disposeComputerUseHelper } from './computer-use';
-import { registerComputerUseDrag } from './computer-use/drag';
-import { registerDragOverlay } from './computer-use/drag-overlay';
-import { registerPermissionBridge } from './computer-use/permissions';
-import { closeSessionStore } from './conversation/store/repo';
-import { closeDb, openDb } from './db';
-import { registerFaviconScheme, serveFavicons } from './favicons';
-import { initLogging } from './log';
-import { setupMenuBar } from './menu-bar';
-import { notifyScheduledRun } from './notifications';
-import { createCredentialStore } from './providers/credential-store';
+import { createCredentialStore } from './agent/providers/credential-store';
+import { populateModelCatalog, startModelCatalogRefresh } from './agent/providers/models/catalog';
 import {
   makeGetApiKey,
   piStreamFn,
   resolvePiModel,
   useCredentialStore,
-} from './providers/pi-model';
-import { firstEnabledModel } from './providers/resolve';
-import { startHttpServer } from './server/http';
+} from './agent/providers/pi-model';
+import { firstEnabledModel } from './agent/providers/resolve';
+import { createRunner, type Runner } from './agent/runtime/runner';
+import { getRunningThreadIds } from './agent/runtime/runs';
+import { refreshSkills } from './agent/skills/registry';
+import { startHttpServer } from './api/http';
+import { appRouter } from './api/trpc/router';
+import { closeSessionStore } from './conversation/store/repo';
+import { closeDb, openDb } from './db';
+import { disposeComputerUseHelper } from './platform/computer-use';
+import { registerComputerUseDrag } from './platform/computer-use/drag';
+import { registerDragOverlay } from './platform/computer-use/drag-overlay';
+import { registerPermissionBridge } from './platform/computer-use/permissions';
+import { registerFaviconScheme, serveFavicons } from './platform/favicons';
+import { setupMenuBar } from './platform/menu-bar';
+import { notifyScheduledRun } from './platform/notifications';
+import { loadShellEnv } from './platform/shell-env';
+import { updaterManager } from './platform/updater';
 import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
-import { loadShellEnv } from './shell-path';
-import { appRouter } from './trpc/router';
-import { updaterManager } from './updater';
+import { initLogging } from './utils/log';
 
 // Kept alive across hide/show so reopening from the Dock restores the exact
 // prior view instead of booting a fresh window. isQuitting lets the real quit

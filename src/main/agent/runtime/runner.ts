@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type { Session } from '@earendil-works/pi-agent-core';
-import { getComputerUseHelper } from '@main/computer-use';
 import { createRunJournal } from '@main/conversation/journal';
 import {
   compactThread,
@@ -16,16 +15,17 @@ import {
 import { splitUserMessage } from '@main/conversation/ui-messages';
 import type { Db } from '@main/db';
 import { recordUsage } from '@main/db/usage';
-import { createLogger } from '@main/log';
-import { makeGetApiKey, piStreamFn, resolvePiModel } from '@main/providers/pi-model';
-import { supportsImageToolResults } from '@main/providers/resolve';
+import { getComputerUseHelper } from '@main/platform/computer-use';
 import { getSettings } from '@main/settings/conf';
+import { createLogger } from '@main/utils/log';
 import type { AtriumUIMessage } from '@shared/chat';
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
 import type { Message } from '@shared/protocol';
 import { mcpManager } from '../mcp/manager';
 import { buildMcpTools } from '../mcp/tool-adapter';
-import { modelPricing } from '../models/catalog';
+import { modelPricing } from '../providers/models/catalog';
+import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
+import { supportsImageToolResults } from '../providers/resolve';
 import { BackgroundShells, LocalSandbox } from '../sandbox';
 import { getSkills } from '../skills/registry';
 import { getTools } from '../tools';

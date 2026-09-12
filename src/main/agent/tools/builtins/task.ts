@@ -1,4 +1,4 @@
-import type { ModelPricing } from '../../models/types';
+import type { ModelPricing } from '../../providers/models/types';
 import type { RunContext } from '../../runtime/run-context';
 import { filterToolsForSubagent, resolveSubagentDef } from '../../subagent/defs';
 import { runSubagent, type SubagentEngine } from '../../subagent/run';

@@ -1,5 +1,5 @@
 import { convertToLlm, createCompactionSummaryMessage } from '@earendil-works/pi-agent-core';
-import { createLogger } from '@main/log';
+import { createLogger } from '@main/utils/log';
 import type {
   Content,
   ImageContent,

@@ -1,11 +1,11 @@
 import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import { recordUsage } from '@main/db/usage';
-import { createLogger } from '@main/log';
+import { createLogger } from '@main/utils/log';
 import type { AssistantMessage, Message, TextContent, Usage } from '@shared/protocol';
 import type { ToolName } from '@shared/tools';
-import type { ModelPricing } from '../models/types';
 import { workspaceGuidance } from '../prompts';
+import type { ModelPricing } from '../providers/models/types';
 import { withinTurnFold } from '../runtime/compaction';
 import { createAgentLoop } from '../runtime/loop';
 import type { RunContext } from '../runtime/run-context';
@@ -94,7 +94,7 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   let modelId = parent.modelId;
   if (agent.providerId && agent.modelId) {
     try {
-      const { resolvePiModel } = await import('@main/providers/pi-model');
+      const { resolvePiModel } = await import('../providers/pi-model');
       model = resolvePiModel(parent.db, agent.providerId, agent.modelId);
       providerId = agent.providerId;
       modelId = agent.modelId;

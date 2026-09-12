@@ -1,4 +1,4 @@
-import { modelPricing } from '../models/catalog';
+import { modelPricing } from '../providers/models/catalog';
 import { listSubagentDefs } from '../subagent/defs';
 import { askClarificationTool } from './builtins/ask-clarification';
 import { bashTool } from './builtins/bash';

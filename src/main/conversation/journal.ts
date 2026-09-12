@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentEvent, AgentMessage, Session } from '@earendil-works/pi-agent-core';
-import { createLogger } from '@main/log';
+import { createLogger } from '@main/utils/log';
 import type { AssistantMessage, Message } from '@shared/protocol';
 import { durable } from './durable';
 import { APPROVAL_ENTRY, type ApprovalEntryData } from './project';

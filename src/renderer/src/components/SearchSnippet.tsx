@@ -1,5 +1,5 @@
 import type { inferRouterOutputs } from '@trpc/server';
-import type { AppRouter } from '../../../main/trpc/router';
+import type { AppRouter } from '../../../main/api/trpc/router';
 
 type SearchHit = inferRouterOutputs<AppRouter>['search']['chats']['hits'][number];
 export type Snippet = NonNullable<SearchHit['snippet']>;

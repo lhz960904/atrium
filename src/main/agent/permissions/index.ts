@@ -1,4 +1,4 @@
-import { createLogger } from '@main/log';
+import { createLogger } from '@main/utils/log';
 import type { PermissionMode } from '@shared/permissions';
 import type { CrossingCode } from '@shared/permissions/analyze';
 import { isAllowed, type TrustRule } from '@shared/permissions/rules';

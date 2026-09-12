@@ -1,6 +1,6 @@
-import type { UpdateScheduledTaskInput } from '../../scheduled';
-import { scheduledManager } from '../../scheduled';
-import { isRecurringCron } from '../../scheduled/cron';
+import type { UpdateScheduledTaskInput } from '../../automation';
+import { scheduledManager } from '../../automation';
+import { isRecurringCron } from '../../automation/cron';
 import { defineTool, Type, textResult } from '../define';
 
 const systemTimeZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;

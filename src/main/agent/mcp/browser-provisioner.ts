@@ -1,9 +1,9 @@
 import { join } from 'node:path';
-import { isChromeInstalled } from '@main/browser/detect';
 import type { Db } from '@main/db';
 import { mcpServers } from '@main/db/schema';
-import { createLogger } from '@main/log';
+import { isChromeInstalled } from '@main/platform/browser';
 import { getSettings } from '@main/settings/conf';
+import { createLogger } from '@main/utils/log';
 import { eq } from 'drizzle-orm';
 import { app } from 'electron';
 import { mcpManager } from './manager';

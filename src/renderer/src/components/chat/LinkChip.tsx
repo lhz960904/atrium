@@ -54,7 +54,7 @@ function inspect(img: HTMLImageElement): Verdict {
 }
 
 // The favicon is served by the main process over the atrium-favicon:// scheme
-// (see main/favicons.ts). A host with no icon 404s — swap in a neutral globe.
+// (see main/platform/favicons.ts). A host with no icon 404s — swap in a neutral globe.
 function Favicon({ host }: { host: string }): React.JSX.Element {
   const [verdict, setVerdict] = useState<Verdict>(() => verdicts.get(host) ?? 'ok');
   const cls = 'mr-1 inline-block h-[0.95em] w-[0.95em] shrink-0 align-[-0.15em]';

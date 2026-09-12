@@ -1,6 +1,9 @@
-import type { HelperResponse } from '@main/computer-use';
-import { computerPermissions, promptPermissionGrant } from '@main/computer-use/permissions';
-import { captureWindow } from '@main/computer-use/screenshot';
+import type { HelperResponse } from '@main/platform/computer-use';
+import {
+  computerPermissions,
+  promptPermissionGrant,
+} from '@main/platform/computer-use/permissions';
+import { captureWindow } from '@main/platform/computer-use/screenshot';
 import { getSettings } from '@main/settings/conf';
 import type { ImageToolOutput } from '@shared/chat-types';
 import { spillOversizedImages } from '../../../mcp/spill';

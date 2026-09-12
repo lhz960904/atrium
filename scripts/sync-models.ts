@@ -2,7 +2,7 @@
 /**
  * Refresh the vendored litellm model catalog snapshot (the offline fallback
  * baked into the build). Runtime freshness comes from the live fetch in
- * agent/models/catalog.ts — this only re-bakes the floor. Run when shipping a
+ * agent/providers/models/catalog.ts — this only re-bakes the floor. Run when shipping a
  * release:
  *   bun run sync:models
  */
@@ -11,7 +11,16 @@ import { join } from 'node:path';
 
 const URL =
   'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json';
-const OUT = join(import.meta.dir, '..', 'src', 'main', 'agent', 'models', 'litellm.snapshot.json');
+const OUT = join(
+  import.meta.dir,
+  '..',
+  'src',
+  'main',
+  'agent',
+  'providers',
+  'models',
+  'litellm.snapshot.json',
+);
 
 const res = await fetch(URL, { headers: { 'User-Agent': 'atrium' } });
 if (!res.ok) {
