@@ -47,30 +47,6 @@ export const projects = sqliteTable('projects', {
   createdAt: timestamp(),
 });
 
-export const messages = sqliteTable(
-  'messages',
-  {
-    id: text().primaryKey(),
-    threadId: text('thread_id')
-      .notNull()
-      .references(() => threads.id, { onDelete: 'cascade' }),
-    role: text({ enum: ['system', 'user', 'assistant', 'toolResult'] }).notNull(),
-    /** pi-native rows store the full pi message JSON here; legacy rows (runId
-     *  null) still hold the flat UIMessage part array. */
-    parts: text({ mode: 'json' }).notNull(),
-    /** Per-message observability: tokens, model name, finish reason, latency, … */
-    metadata: text({ mode: 'json' }),
-    /** Groups one agent run's rows (per-step assistant + tool results) under
-     *  the run id the renderer and edit/delete flows address. Null = legacy row. */
-    runId: text('run_id'),
-    createdAt: timestamp(),
-  },
-  (table) => [
-    index('messages_thread_created_at_idx').on(table.threadId, table.createdAt),
-    index('messages_run_id_idx').on(table.runId),
-  ],
-);
-
 export const artifacts = sqliteTable('artifacts', {
   id: text().primaryKey(),
   threadId: text('thread_id')
@@ -255,8 +231,6 @@ export type Thread = typeof threads.$inferSelect;
 export type NewThread = typeof threads.$inferInsert;
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
-export type Message = typeof messages.$inferSelect;
-export type NewMessage = typeof messages.$inferInsert;
 export type Artifact = typeof artifacts.$inferSelect;
 export type NewArtifact = typeof artifacts.$inferInsert;
 export type Provider = typeof providers.$inferSelect;

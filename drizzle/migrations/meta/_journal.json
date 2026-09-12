@@ -113,6 +113,13 @@
       "when": 1788827532972,
       "tag": "0015_steep_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1789182651666,
+      "tag": "0016_parched_ikaris",
+      "breakpoints": true
     }
   ]
 }

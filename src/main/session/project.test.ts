@@ -8,6 +8,7 @@ import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import { APPROVAL_ENTRY, openToolCalls, projectHistory, projectMessages } from './project';
 import { sessionSqlite } from './sqlite-driver';
+import { runnableHistory } from './threads';
 
 /**
  * The projection is exercised against a real session rather than hand-built
@@ -340,6 +341,30 @@ test('rewinding the branch drops the tail from the conversation but keeps it sto
     'user',
     'assistant',
   ]);
+  await repo.close();
+});
+
+test('a call cut off mid-run is closed before the transcript is reused', async () => {
+  const { repo, session: s } = await session();
+  await run(
+    s,
+    'r1',
+    async (s) => {
+      await s.appendMessage(user('do a thing'));
+      await s.appendMessage(
+        assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }]),
+      );
+      // The process died here: the call never got its result.
+    },
+    { finish: false },
+  );
+
+  const { entries } = await read(s);
+  // Left alone, the next request would carry an unpaired call and be rejected.
+  expect(projectHistory(entries).filter((m) => m.role === 'toolResult')).toHaveLength(0);
+  const runnable = runnableHistory(entries);
+  expect(runnable.map((m) => m.role)).toEqual(['user', 'assistant', 'toolResult']);
+  expect(runnable.at(-1)).toMatchObject({ toolCallId: 'c1', isError: true });
   await repo.close();
 });
 

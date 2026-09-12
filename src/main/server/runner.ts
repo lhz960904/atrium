@@ -9,7 +9,6 @@ import { modelPricing } from '../agent/models/catalog';
 import type { Resolution } from '../agent/pi/approvals';
 import { type Complete, createCompleter } from '../agent/pi/complete';
 import { generateThreadTitle } from '../agent/pi/title';
-import { asStored } from '../agent/pi/vocabulary';
 import { runAgent } from '../agent/run';
 import { BackgroundShells, LocalSandbox } from '../agent/sandbox';
 import { getSkills } from '../agent/skills/registry';
@@ -21,10 +20,15 @@ import { createLogger } from '../log';
 import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
 import { supportsImageToolResults } from '../providers/resolve';
 import { createRunJournal } from '../session/journal';
-import { projectHistory } from '../session/project';
-import { compactThread, openThreadSession, touchThread } from '../session/threads';
+import {
+  compactThread,
+  openThreadSession,
+  resolveThreadWorkspace,
+  runnableHistory,
+  setThreadTitle,
+  touchThread,
+} from '../session/threads';
 import { getSettings } from '../settings/conf';
-import { resolveThreadWorkspace, setThreadTitle } from './persist';
 import { splitUserMessage } from './persist-convert';
 import { startThreadRun } from './resumable';
 
@@ -168,9 +172,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
             piModel,
             streamFn: piStreamFn,
             getApiKey: makeGetApiKey(db),
-            messages: asStored(
-              projectHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' })),
-            ),
+            messages: runnableHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' })),
             workspaceRoot,
             threadId,
             db,

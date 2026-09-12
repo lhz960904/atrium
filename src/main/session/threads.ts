@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentMessage, Session } from '@earendil-works/pi-agent-core';
+import type { AgentMessage, Entry, Session } from '@earendil-works/pi-agent-core';
 import type { SqliteSessionMetadata } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { Message, ToolCall, ToolResultMessage } from '@shared/protocol';
 import { eq } from 'drizzle-orm';
 import type { Fold } from '../agent/pi/compaction';
+import { sealDanglingToolCalls } from '../agent/pi/history';
 import { asStored } from '../agent/pi/vocabulary';
 import type { Db } from '../db';
-import { threads } from '../db/schema';
+import { projects, threads } from '../db/schema';
 import { openToolCalls, projectHistory, projectMessages } from './project';
 import { sessionStore } from './repo';
 
@@ -30,6 +31,31 @@ export function touchThread(db: Db, threadId: string, opts: { markRead?: boolean
     .set(opts.markRead ? { updatedAt: now, lastReadAt: now } : { updatedAt: now })
     .where(eq(threads.id, threadId))
     .run();
+}
+
+/**
+ * The workspace root a thread runs in: its project's directory, or the
+ * projectless fallback when it has no project (or the project was deleted).
+ * All file tools, the sandbox, and the system prompt for a turn scope to this.
+ */
+export function resolveThreadWorkspace(db: Db, threadId: string, projectlessRoot: string): string {
+  const row = db
+    .select({ projectId: threads.projectId })
+    .from(threads)
+    .where(eq(threads.id, threadId))
+    .get();
+  if (!row?.projectId) return projectlessRoot;
+  const project = db
+    .select({ path: projects.path })
+    .from(projects)
+    .where(eq(projects.id, row.projectId))
+    .get();
+  return project?.path ?? projectlessRoot;
+}
+
+/** Replace a thread's title with the model-generated summary of its first message. */
+export function setThreadTitle(db: Db, threadId: string, title: string): void {
+  db.update(threads).set({ title }).where(eq(threads.id, threadId)).run();
 }
 
 /** The session a thread's conversation lives in, or undefined if it has none yet. */
@@ -126,7 +152,20 @@ export async function compactThread(db: Db, threadId: string, fold: Fold): Promi
 export async function threadHistory(db: Db, threadId: string): Promise<Message[]> {
   const session = await findThreadSession(db, threadId);
   if (!session) return [];
-  return asStored(projectHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' })));
+  return runnableHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' }));
+}
+
+/**
+ * The transcript with every unanswered tool call closed.
+ *
+ * A run cut off mid-tool — a crash, a kill — leaves a call whose result never
+ * arrived, and a provider rejects any later request whose history holds one, so
+ * one interrupted turn would wedge the thread for good. A call the user is
+ * being asked about is closed here too; when their answer arrives it replaces
+ * the placeholder rather than joining it.
+ */
+export function runnableHistory(entries: Entry[]): Message[] {
+  return sealDanglingToolCalls(asStored(projectHistory(entries)));
 }
 
 /**
