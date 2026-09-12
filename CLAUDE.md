@@ -10,6 +10,29 @@
 
 - **Read the docs before writing.** Any Vercel AI SDK code MUST be preceded by reading the official docs (ai-sdk.dev) and using the latest documented best practice — proactively, before writing or changing it, not after being told. *Why: this is the software's core code region, so it must always be correct and best-practice.*
 
+## Main-process layout
+
+`src/main` is organised by ownership, not by dependency. Put a new file where its
+responsibility lives, not next to whatever it already imports.
+
+| Module | Owns |
+| --- | --- |
+| `api/` | The renderer-facing surface: the chat endpoints and every tRPC router. |
+| `agent/runtime/` | How a turn is assembled and executed — plus `context/` (what goes into the prompt) and `stream/` (the run's outward event path). |
+| `agent/<capability>/` | One thing the agent can do or be configured with: tools, mcp, skills, subagent, sandbox, memory, profile, instructions, prompts, permissions, providers, automation. |
+| `conversation/` | The durable conversation: threads, sessions, the journal a run writes, the projection a reader gets back. |
+| `db/`, `settings/` | Schema and access; user and window settings. |
+| `platform/` | Modules whose whole job is a boundary with Electron, the OS or a native process. Not "anything that imports electron" — `db`, `settings` and others do too, and own a domain of their own. |
+| `utils/` | Depends on no top-level module. Anyone may import it; it imports nobody. |
+
+Rules, each of which currently holds:
+
+- `agent/runtime` is the **only** turn-level composition layer, and `index.ts` the only process-level one.
+- `api` owns no state and makes no domain decisions — it translates a request into a call and a result into a response. Model resolution, folding, persistence and "which calls are still open" belong to the layer that owns a turn.
+- `conversation` must not depend on providers, MCP servers, skills or tools.
+- `platform` must not depend on `agent` or `conversation`.
+- Cross-module imports use `@main/*`; inside a module, relative paths. Root-level `index.ts` keeps plain relative paths.
+
 ## Code comments
 
 - **Placement decides the style.** Inside a function body, prefer single-line comments. At a function head/top, or for hack / trick / non-obvious logic, use a multi-line comment that fully explains the *why* — don't truncate where understanding is at stake.
