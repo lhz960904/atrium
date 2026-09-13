@@ -1,9 +1,9 @@
 import type { Credential, CredentialInfo, CredentialStore } from '@earendil-works/pi-ai';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
+import { decryptJson, encryptJson } from '@main/platform/safe-storage';
 import { createLogger } from '@main/utils/log';
 import { eq } from 'drizzle-orm';
-import { decryptCredentials, encryptCredentials } from './credentials';
 
 const log = createLogger('providers');
 
@@ -40,7 +40,7 @@ export function createCredentialStore(db: Db): CredentialStore {
       .get();
     if (!row?.blob) return undefined;
     try {
-      return toCredential(decryptCredentials<unknown>(row.blob as Buffer));
+      return toCredential(decryptJson<unknown>(row.blob as Buffer));
     } catch (err) {
       log.warn(`credential for ${providerId} is unreadable: ${err}`);
       return undefined;
@@ -48,7 +48,7 @@ export function createCredentialStore(db: Db): CredentialStore {
   };
 
   const writeRow = (providerId: string, credential: Credential | undefined): void => {
-    const blob = credential === undefined ? null : encryptCredentials(credential);
+    const blob = credential === undefined ? null : encryptJson(credential);
     db.insert(providers)
       .values({ id: providerId, enabled: true, credentialsEncrypted: blob })
       .onConflictDoUpdate({

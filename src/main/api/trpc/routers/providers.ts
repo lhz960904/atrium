@@ -1,4 +1,3 @@
-import { decryptCredentials, encryptCredentials } from '@main/agent/providers/credentials';
 import {
   fetchOllamaModels,
   type LocalServiceStatus,
@@ -18,6 +17,7 @@ import {
 import { piModels } from '@main/agent/providers/pi-model';
 import { type PullState, pullManager } from '@main/agent/providers/pull-manager';
 import { providers } from '@main/db/schema';
+import { decryptJson, encryptJson } from '@main/platform/safe-storage';
 import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
 import { shell } from 'electron';
@@ -156,7 +156,7 @@ export const providersRouter = router({
   setCredentials: publicProcedure
     .input(z.object({ id: z.string(), plaintext: z.string() }))
     .mutation(({ ctx, input }) => {
-      const blob = encryptCredentials({ key: input.plaintext });
+      const blob = encryptJson({ key: input.plaintext });
       ctx.db
         .insert(providers)
         .values({ id: input.id, credentialsEncrypted: blob })
@@ -182,7 +182,7 @@ export const providersRouter = router({
         .get();
       if (!row?.blob) return null;
       try {
-        return decryptCredentials<{ key: string }>(row.blob).key;
+        return decryptJson<{ key: string }>(row.blob).key;
       } catch {
         // The blob can't be decrypted — the safeStorage key was removed or
         // rotated in the OS keychain, so the ciphertext is unrecoverable.
@@ -310,7 +310,7 @@ export const providersRouter = router({
           if (!row?.blob) {
             throw preconditionFailed('Add an API key first.');
           }
-          const apiKey = decryptCredentials<{ key: string }>(row.blob).key;
+          const apiKey = decryptJson<{ key: string }>(row.blob).key;
           modelIds = await fetchModelIds({ protocol: manifest.protocol, baseUrl, apiKey });
         }
       } catch (err) {

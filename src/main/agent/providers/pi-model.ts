@@ -17,8 +17,8 @@ import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
 import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-codex';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
+import { decryptJson } from '@main/platform/safe-storage';
 import { eq } from 'drizzle-orm';
-import { decryptCredentials } from './credentials';
 import { getProviderManifest, type ManifestModel, PROVIDER_MANIFEST } from './manifest';
 
 /**
@@ -243,6 +243,6 @@ export function makeGetApiKey(db: Db): (provider: string) => string | undefined 
       .where(eq(providers.id, provider))
       .get();
     if (!row?.blob) return undefined;
-    return decryptCredentials<{ key: string }>(row.blob).key;
+    return decryptJson<{ key: string }>(row.blob).key;
   };
 }

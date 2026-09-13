@@ -1,8 +1,8 @@
 import type { Db } from '@main/db';
 import { mcpServers } from '@main/db/schema';
+import { decryptJson, encryptJson } from '@main/platform/safe-storage';
 import { createLogger } from '@main/utils/log';
 import { eq } from 'drizzle-orm';
-import { decryptCredentials, encryptCredentials } from '../providers/credentials';
 import { type ResolvedMcpServer, resolveMcpServer } from './config';
 import type { McpOAuthState, McpOAuthStore } from './oauth';
 import { decryptSecrets } from './secrets';
@@ -39,12 +39,12 @@ export function oauthStore(db: Db, id: string): McpOAuthStore {
         .from(mcpServers)
         .where(eq(mcpServers.id, id))
         .get();
-      return row?.blob ? decryptCredentials<McpOAuthState>(row.blob) : {};
+      return row?.blob ? decryptJson<McpOAuthState>(row.blob) : {};
     },
     save(state: McpOAuthState): void {
       const hasAny = Boolean(state.clientInformation || state.tokens);
       db.update(mcpServers)
-        .set({ oauthEncrypted: hasAny ? encryptCredentials(state) : null, updatedAt: new Date() })
+        .set({ oauthEncrypted: hasAny ? encryptJson(state) : null, updatedAt: new Date() })
         .where(eq(mcpServers.id, id))
         .run();
     },
