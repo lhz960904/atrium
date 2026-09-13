@@ -14,10 +14,11 @@ export type ProviderKind = 'cloud-api' | 'local-service' | 'subscription';
 export type CloudApiProtocol = 'anthropic' | 'openai-compatible' | 'google-gemini';
 
 /**
- * A model a provider is known to serve. An id and nothing else: window,
- * price and capabilities belong to the catalog entry the engine resolves,
- * where one (provider, model) pair has exactly one record. This list only
- * says which ids to offer for a provider whose endpoint can't be asked.
+ * A model to offer that **no catalog covers** — an id and nothing else, since
+ * window, price and capabilities belong to the catalog record the engine
+ * resolves. Where a catalog exists it is the whole answer, so nearly every
+ * provider leaves this empty; what stays are ids no catalog has an entry for,
+ * such as a vendor's floating alias.
  */
 export type ManifestModel = { id: string };
 
@@ -31,7 +32,7 @@ export type CloudApiManifest = {
   defaultBaseUrl: string;
   /** Where the user goes to generate their API key. */
   consoleUrl: string;
-  /** Models Atrium knows about for this provider; user toggles a subset on. */
+  /** Ids to offer beyond the engine's catalog for this provider; usually empty. */
   models: readonly ManifestModel[];
 };
 
@@ -77,7 +78,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'anthropic',
     defaultBaseUrl: 'https://api.anthropic.com',
     consoleUrl: 'https://console.anthropic.com/settings/keys',
-    models: [{ id: 'claude-opus-4-7' }, { id: 'claude-sonnet-4-6' }, { id: 'claude-haiku-4-5' }],
+    models: [],
   },
   {
     id: 'openai',
@@ -87,7 +88,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://api.openai.com/v1',
     consoleUrl: 'https://platform.openai.com/api-keys',
-    models: [{ id: 'gpt-5' }, { id: 'gpt-4.1' }, { id: 'o4-mini' }],
+    models: [],
   },
   {
     id: 'deepseek',
@@ -107,7 +108,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'google-gemini',
     defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     consoleUrl: 'https://aistudio.google.com/apikey',
-    models: [{ id: 'gemini-2.5-pro' }, { id: 'gemini-2.5-flash' }],
+    models: [],
   },
   {
     id: 'moonshot',
@@ -117,7 +118,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://api.moonshot.cn/v1',
     consoleUrl: 'https://platform.moonshot.cn/console/api-keys',
-    // Catalog comes from the engine; nothing to list here.
     models: [],
   },
   {
@@ -149,22 +149,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
     consoleUrl:
       'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=agentPlan',
-    // No listing API; the set is the console's 可用模型 panel. Per-model
-    // windows live in volcengine.models.ts, which explains how to refresh both.
-    models: [
-      { id: 'auto' },
-      { id: 'doubao-seed-2.0-lite' },
-      { id: 'doubao-seed-2.0-mini' },
-      { id: 'kimi-k2.7-code' },
-      { id: 'minimax-m3' },
-      { id: 'doubao-seed-evolving' },
-      { id: 'kimi-k3' },
-      { id: 'doubao-seed-2.1-turbo' },
-      { id: 'deepseek-v4-flash' },
-      { id: 'glm-5.3' },
-      { id: 'deepseek-v4-pro' },
-      { id: 'glm-5.3-flash' },
-    ],
+    models: [],
   },
   {
     id: 'volcengine-coding',
@@ -175,20 +160,7 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
     consoleUrl:
       'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=subscribe',
-    // Same set as the agent plan minus the mini; see volcengine.models.ts.
-    models: [
-      { id: 'auto' },
-      { id: 'doubao-seed-2.0-lite' },
-      { id: 'kimi-k2.7-code' },
-      { id: 'minimax-m3' },
-      { id: 'doubao-seed-evolving' },
-      { id: 'kimi-k3' },
-      { id: 'doubao-seed-2.1-turbo' },
-      { id: 'deepseek-v4-flash' },
-      { id: 'glm-5.3' },
-      { id: 'deepseek-v4-pro' },
-      { id: 'glm-5.3-flash' },
-    ],
+    models: [],
   },
   // ── Subscriptions (signed into, not keyed) ───────────────────────────────
   // A vendor that sells both a key and a subscription gets one row per
