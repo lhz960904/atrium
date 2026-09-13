@@ -659,6 +659,7 @@ export const en: typeof zh = {
       arguments: 'Arguments',
       baseUrlHint: 'Leave empty to use the default endpoint.',
       customProvider: {
+        addHint: 'Any endpoint, with the models you give it.',
         add: 'Add provider',
         edit: 'Edit {{name}}',
         id: 'Provider ID',
@@ -668,10 +669,12 @@ export const en: typeof zh = {
         baseUrl: 'Base URL',
         baseUrlHint: 'The endpoint root, starting with http:// or https://.',
         afterHint: 'Add its models from the list below once saved.',
-        remove: 'Delete provider',
-        removeConfirm: 'Delete this provider and its stored key?',
       },
       emptyCatalog: 'No models yet. Add one with the button above.',
+      addProvider: 'Add provider',
+      noneAdded: 'No providers yet. Add one to start.',
+      remove: 'Remove provider',
+      removeConfirm: 'Remove {{name}} and the key it holds?',
       custom: {
         add: 'Add model',
         edit: 'Edit {{id}}',

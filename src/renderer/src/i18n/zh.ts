@@ -662,6 +662,7 @@ export const zh = {
         openrouter: '统一 API 路由 300+ 模型。',
       },
       customProvider: {
+        addHint: '任意端点,模型由你填写。',
         add: '添加供应商',
         edit: '编辑 {{name}}',
         id: '供应商 ID',
@@ -671,10 +672,12 @@ export const zh = {
         baseUrl: 'Base URL',
         baseUrlHint: '端点根地址,以 http:// 或 https:// 开头。',
         afterHint: '保存后在下方列表里添加它的模型。',
-        remove: '删除供应商',
-        removeConfirm: '删除这个供应商及其已保存的密钥?',
       },
       emptyCatalog: '还没有模型,用上方按钮添加。',
+      addProvider: '添加供应商',
+      noneAdded: '还没有供应商,添加一个开始使用。',
+      remove: '移除供应商',
+      removeConfirm: '移除 {{name}} 及其保存的密钥?',
       custom: {
         add: '添加模型',
         edit: '编辑 {{id}}',

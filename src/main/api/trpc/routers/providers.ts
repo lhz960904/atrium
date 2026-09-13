@@ -66,6 +66,12 @@ export const providersRouter = router({
    * raw encrypted credentials blob — callers ask for plaintext explicitly
    * via `getCredentials` when (and only when) they need to display it.
    */
+  /**
+   * The providers the user has added, in manifest order. Adding one is what
+   * makes it exist here — there is no separate step that turns it on, because
+   * a provider sitting in the list doing nothing is the state everyone forgets
+   * to leave.
+   */
   list: publicProcedure.query(({ ctx }): ProviderView[] => {
     const rows = ctx.db.select().from(providers).all();
     const byId = new Map(rows.map((r) => [r.id, r]));
@@ -93,7 +99,7 @@ export const providersRouter = router({
         },
       ];
     });
-    const shipped: ProviderView[] = PROVIDER_MANIFEST.map((m) => {
+    const shipped: ProviderView[] = PROVIDER_MANIFEST.filter((m) => byId.has(m.id)).map((m) => {
       const row = byId.get(m.id);
       // The endpoint comes from the registry, which is the only place it is
       // written down: the manifest describes a provider, it doesn't say how to
@@ -113,6 +119,39 @@ export const providersRouter = router({
     return [...shipped, ...defined];
   }),
 
+  /** The shipped providers not added yet — the choices in the add picker. */
+  available: publicProcedure.query(({ ctx }) => {
+    const taken = new Set(
+      ctx.db
+        .select({ id: providers.id })
+        .from(providers)
+        .all()
+        .map((r) => r.id),
+    );
+    return PROVIDER_MANIFEST.filter((m) => !taken.has(m.id)).map((m) => ({
+      id: m.id,
+      name: m.name,
+      kind: m.kind,
+      descriptionKey: m.descriptionKey,
+    }));
+  }),
+
+  /** Add a shipped provider. Adding is the whole step: it is on from here. */
+  add: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    if (!getProviderManifest(input.id)) throw badRequest(`"${input.id}" is not a known provider.`);
+    ctx.db
+      .insert(providers)
+      .values({ id: input.id, enabled: true })
+      .onConflictDoUpdate({ target: providers.id, set: { enabled: true, updatedAt: new Date() } })
+      .run();
+  }),
+
+  /** Remove a provider from the list, and with it the key it was holding. */
+  remove: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    ctx.db.delete(providers).where(eq(providers.id, input.id)).run();
+    refreshProviders(ctx.db);
+  }),
+
   /** Define a provider Atrium doesn't ship: an endpoint, a request format, and
    *  whatever models the user adds to it. */
   createCustomProvider: publicProcedure
@@ -127,7 +166,12 @@ export const providersRouter = router({
         .where(eq(providers.id, input.id))
         .get();
       if (taken) throw badRequest(`"${input.id}" is already in use.`);
-      writeConfig(ctx.db, input.id, { customProvider: input.provider });
+      // Defining one is adding it, so it is on — the same rule as picking a
+      // shipped provider.
+      ctx.db
+        .insert(providers)
+        .values({ id: input.id, enabled: true, config: { customProvider: input.provider } })
+        .run();
       refreshProviders(ctx.db);
     }),
 
@@ -137,16 +181,6 @@ export const providersRouter = router({
       const { config } = storedModels(ctx.db, input.id);
       if (!config.customProvider) throw badRequest('Not a provider you defined.');
       writeConfig(ctx.db, input.id, { ...config, customProvider: input.provider });
-      refreshProviders(ctx.db);
-    }),
-
-  /** Removes the row outright, so the stored credential goes with it. */
-  deleteCustomProvider: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) => {
-      const { config } = storedModels(ctx.db, input.id);
-      if (!config.customProvider) throw badRequest('Not a provider you defined.');
-      ctx.db.delete(providers).where(eq(providers.id, input.id)).run();
       refreshProviders(ctx.db);
     }),
 

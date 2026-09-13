@@ -47,7 +47,7 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1 pt-1">
-          {'custom' in provider && provider.custom && <CustomProviderActions provider={provider} />}
+          <ProviderActions provider={provider} />
           <EnableSwitch
             on={provider.enabled}
             onToggle={() => setEnabled.mutate({ id: provider.id, enabled: !provider.enabled })}
@@ -101,39 +101,47 @@ function CloudApiForm({
   );
 }
 
-/** Edit and delete, for a provider the user defined. */
-function CustomProviderActions({ provider }: { provider: ProviderView }): React.JSX.Element | null {
+/**
+ * Remove, for any added provider, and edit for one the user defined. Removing a
+ * shipped provider is how it leaves the list — the same gesture as deleting a
+ * defined one, since being in the list is all that "added" means.
+ */
+function ProviderActions({ provider }: { provider: ProviderView }): React.JSX.Element {
   const { t } = useTranslation();
   const utils = trpc.useUtils();
   const [editing, setEditing] = useState(false);
-  const remove = trpc.providers.deleteCustomProvider.useMutation({
-    onSuccess: () => utils.providers.list.invalidate(),
+  const remove = trpc.providers.remove.useMutation({
+    onSuccess: () => {
+      utils.providers.list.invalidate();
+      utils.providers.available.invalidate();
+    },
   });
   const stored = (provider.config as { customProvider?: CustomProvider } | null)?.customProvider;
-  if (!stored) return null;
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        title={t('common.edit')}
-        className="rounded p-1.5 text-fg-tertiary hover:bg-surface-strong hover:text-fg-secondary"
-      >
-        <Pencil className="size-[14px]" />
-      </button>
+      {stored && (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          title={t('common.edit')}
+          className="rounded p-1.5 text-fg-tertiary hover:bg-surface-strong hover:text-fg-secondary"
+        >
+          <Pencil className="size-[14px]" />
+        </button>
+      )}
       <button
         type="button"
         onClick={() => {
-          if (confirm(t('settings.providers.customProvider.removeConfirm'))) {
+          if (confirm(t('settings.providers.removeConfirm', { name: provider.name }))) {
             remove.mutate({ id: provider.id });
           }
         }}
-        title={t('settings.providers.customProvider.remove')}
+        title={t('settings.providers.remove')}
         className="rounded p-1.5 text-fg-tertiary hover:bg-danger/10 hover:text-danger"
       >
         <Trash2 className="size-[14px]" />
       </button>
-      {editing && (
+      {editing && stored && (
         <CustomProviderDialog
           editing={{ id: provider.id, ...stored }}
           onClose={() => setEditing(false)}
