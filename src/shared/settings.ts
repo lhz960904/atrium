@@ -14,7 +14,6 @@ const windowStateShape = z.object({
   width: z.number(),
   height: z.number(),
   maximized: z.boolean(),
-  fullscreen: z.boolean(),
 });
 
 const selectedModelShape = z.object({ providerId: z.string(), modelId: z.string() });
@@ -77,7 +76,6 @@ const appearanceShape = z.object({
     width: 1280,
     height: 800,
     maximized: false,
-    fullscreen: false,
   }),
   /** Custom app-chrome font family, typed by the user (they install the font
    *  themselves). Empty = OS default stack. Applied with the system stack

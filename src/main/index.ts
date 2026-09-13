@@ -69,14 +69,8 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  // Fullscreen takes precedence over maximize — they're mutually exclusive
-  // on macOS, and entering fullscreen on a non-maximized window gives the
-  // user the Space-aware mode they expect.
-  if (initial.fullscreen) {
-    win.setFullScreen(true);
-  } else if (initial.maximized) {
-    win.maximize();
-  }
+  // Fullscreen is never restored; window-state.ts explains why.
+  if (initial.maximized) win.maximize();
   attachWindowStatePersistence(win);
 
   win.on('ready-to-show', () => {
