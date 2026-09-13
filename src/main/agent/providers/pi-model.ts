@@ -5,6 +5,7 @@ import {
   createProvider,
   envApiKeyAuth,
   type Model,
+  type Provider,
 } from '@earendil-works/pi-ai';
 import { anthropicMessagesApi } from '@earendil-works/pi-ai/api/anthropic-messages.lazy';
 import { googleGenerativeAIApi } from '@earendil-works/pi-ai/api/google-generative-ai.lazy';
@@ -13,8 +14,10 @@ import { registerBunOAuthFlows } from '@earendil-works/pi-ai/bun-oauth';
 import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
 import { deepseekProvider } from '@earendil-works/pi-ai/providers/deepseek';
 import { googleProvider } from '@earendil-works/pi-ai/providers/google';
+import { moonshotaiCnProvider } from '@earendil-works/pi-ai/providers/moonshotai-cn';
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
 import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-codex';
+import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
 import { decryptJson } from '@main/platform/safe-storage';
@@ -97,11 +100,37 @@ const SUBSCRIPTION_ANTHROPIC = 'anthropic-subscription';
 
 const anthropic = anthropicProvider();
 
+/**
+ * Serve an engine-maintained catalog under the id Atrium already uses. A
+ * provider id is written into every stored thread and credential row, so it
+ * can't follow the engine's naming — but the catalog behind it can.
+ *
+ * The engine's provider is wrapped rather than rebuilt: only the identity and
+ * the model list are ours, while streaming, headers and auth stay whatever it
+ * configured for that endpoint. Models are re-stamped because a request routes
+ * on the model's own `provider`, which also decides the credential it resolves.
+ */
+function adopt(source: Provider, id: string, name: string): Provider {
+  const models = source.getModels().map((model) => ({ ...model, provider: id }));
+  return {
+    ...source,
+    id,
+    name,
+    getModels: () => models,
+    stream: (model, context, options) => source.stream(model, context, options),
+    streamSimple: (model, context, options) => source.streamSimple(model, context, options),
+  };
+}
+
 for (const provider of [
   anthropic,
   openaiProvider(),
   deepseekProvider(),
   googleProvider(),
+  // Same endpoint and protocol as the manifest already declared, so adopting
+  // the engine's catalog only adds the metadata we had no source for.
+  adopt(moonshotaiCnProvider(), 'moonshot', 'Moonshot'),
+  openrouterProvider(),
   // Subscriptions the user signs into; their catalogs and auth are pi's.
   openaiCodexProvider(),
   /**

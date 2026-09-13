@@ -117,7 +117,8 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://api.moonshot.cn/v1',
     consoleUrl: 'https://platform.moonshot.cn/console/api-keys',
-    models: [{ id: 'moonshot-v1-128k' }, { id: 'moonshot-v1-32k' }],
+    // Catalog comes from the engine; nothing to list here.
+    models: [],
   },
   {
     id: 'kimi-coding',
