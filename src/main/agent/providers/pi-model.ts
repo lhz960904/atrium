@@ -25,16 +25,22 @@ import { arkAgentPlanModels, arkCodingPlanModels } from './volcengine.models';
 /**
  * Model resolution for the engine.
  *
- * Model metadata comes from pi itself, not the litellm catalog: the builtin
- * entry when pi ships the provider (compat quirks included); otherwise the
- * same model id borrowed from a registered builtin catalog (aggregators like
- * aihubmix serve openai/anthropic/google models under their own roof); then
- * the manifest entry's declared fields; then hard defaults.
+ * One (provider, model) pair has exactly one catalog entry, and nothing is
+ * inferred across providers: the entry pi ships for its own providers, the
+ * entry Atrium writes for an endpoint pi doesn't cover, then the provider's
+ * own manifest declaration, then a deliberately small default. A model id
+ * appearing under two providers is two independent records, because two
+ * endpoints serving the same id routinely differ in window and price.
  *
  * baseUrl follows pi's convention — no path suffix (the api modules append
  * their own: /chat/completions, /v1/messages). Stored overrides are used
  * verbatim; validating what the user types is the settings panel's job.
  */
+
+/** Conservative defaults for an id no catalog covers — small enough to fold
+ *  early rather than overflow, since overflowing fails silently. */
+const FALLBACK_CONTEXT_TOKENS = 128_000;
+const FALLBACK_MAX_TOKENS = 8192;
 
 const PROTOCOL_API = {
   anthropic: 'anthropic-messages',
@@ -191,24 +197,17 @@ export function resolvePiModel(db: Db, providerId: string, modelId: string): Mod
   );
 }
 
-/** Origin vendors ordered for metadata borrowing; only registered catalogs
- *  (the builtin four) are searched, so relay re-listings never collide. */
-const BORROW_PREFERENCE = ['openai', 'anthropic', 'google', 'deepseek'];
-
-/** The same model id in a registered builtin catalog — how an aggregator's
- *  models inherit cost/window/modalities pi already maintains. Same-api
- *  entries win (compat transfers), then vendor order. */
-function borrowBuiltinEntry(modelId: string, api: Api): Model<Api> | undefined {
-  const candidates = piModels.getModels().filter((m) => m.id === modelId);
-  if (candidates.length === 0) return undefined;
-  const rank = (m: Model<Api>): number => {
-    if (m.api === api) return 0;
-    const at = BORROW_PREFERENCE.indexOf(m.provider);
-    return at === -1 ? BORROW_PREFERENCE.length + 1 : at + 1;
-  };
-  return [...candidates].sort((a, b) => rank(a) - rank(b))[0];
-}
-
+/**
+ * A model nobody has a catalog entry for. Metadata is never inferred from
+ * another provider serving the same id: an aggregator or a subscription plan
+ * routinely serves a model at a different window and a different price than
+ * its origin vendor, and inheriting the origin's numbers is wrong in the
+ * direction that fails silently — an over-large window is truncated, not
+ * rejected, and an origin's per-token rate misprices a plan that charges none.
+ *
+ * So the only inputs are what the provider itself declares and a deliberately
+ * small default.
+ */
 function buildModel(
   providerId: string,
   modelId: string,
@@ -216,27 +215,17 @@ function buildModel(
   baseUrl: string,
   declared?: ManifestModel,
 ): Model<Api> {
-  const borrowed = borrowBuiltinEntry(modelId, api);
-  // compat and thinking maps are api-specific; they only transfer when the
-  // borrowed entry speaks the same api we do.
-  const base = borrowed?.api === api ? borrowed : undefined;
   return {
-    ...base,
     id: modelId,
-    name: borrowed?.name ?? modelId,
+    name: modelId,
     api,
     provider: providerId,
     baseUrl,
-    reasoning: declared?.reasoning ?? borrowed?.reasoning ?? false,
-    input:
-      declared?.vision != null
-        ? declared.vision
-          ? ['text', 'image']
-          : ['text']
-        : (borrowed?.input ?? ['text']),
-    cost: borrowed?.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: declared?.contextTokens ?? borrowed?.contextWindow ?? 128_000,
-    maxTokens: declared?.outputTokens ?? borrowed?.maxTokens ?? 8192,
+    reasoning: declared?.reasoning ?? false,
+    input: declared?.vision ? ['text', 'image'] : ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: declared?.contextTokens ?? FALLBACK_CONTEXT_TOKENS,
+    maxTokens: declared?.outputTokens ?? FALLBACK_MAX_TOKENS,
   } as Model<Api>;
 }
 

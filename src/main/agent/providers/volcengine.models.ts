@@ -3,25 +3,28 @@ import type { Model } from '@earendil-works/pi-ai';
 /**
  * Ark's two subscription plans, as real engine catalog entries.
  *
- * The plan endpoints expose no `/models` listing, so this file is the catalog:
- * without it every id falls through to the engine's 128k/8k/zero-cost default,
- * which folds a 256k model at half its window and prices its turns at nothing.
+ * The plan endpoints expose no `/models` listing, so this file is the catalog.
+ * Without it an id falls through to the engine's generic default and a 256k
+ * model gets folded at half its window.
  *
- * Provenance, because these are hand-written and will go stale:
- *   - the doubao-seed-2.0 family is litellm's Ark-keyed data
- *     (`volcengine/doubao-seed-2-0-*-260215`): 256k window, 128k output,
- *     multimodal, tools, reasoning.
- *   - `ark-code-latest` is an auto-dispatch alias no catalog can know; the
- *     vendor doc's numbers, sized to the smallest window in its dispatch pool.
- *   - `doubao-seed-code` is retired from litellm; window from the vendor doc,
- *     output taken from its generation's family.
- * Models the plans serve on other vendors' behalf (deepseek, minimax, glm,
- * kimi) are deliberately absent: what Ark serves them with is not what their
- * own endpoints do, and guessing high is the dangerous direction — an
- * over-large window is silently truncated, not rejected.
+ * Every number here is copied in deliberately and dated, because nothing
+ * upstream will correct it (checked 2026-09-13):
+ *   - doubao-seed-2.0 family — 256k window, 128k output, multimodal, reasoning.
+ *   - `ark-code-latest` — an auto-dispatch alias no catalog can know, sized to
+ *     the smallest window in its dispatch pool.
+ *   - `doubao-seed-code` — window per the vendor doc, output from its
+ *     generation's family.
+ *   - `deepseek-v4-*` — the one cross-vendor pair the plans serve at the same
+ *     window as DeepSeek's own endpoint.
  *
- * Cost is zero across the board: a plan is a subscription, so per-token
- * pricing would misreport every turn.
+ * The rest of what the plans serve for other vendors (minimax, glm, kimi) is
+ * absent on purpose: a plan does not necessarily serve a model at its origin
+ * window — Ark is known to cut some of them to a fraction — and guessing high
+ * is the dangerous direction, since an over-large window is silently truncated
+ * rather than rejected.
+ *
+ * Cost is zero throughout: a plan is a subscription, so per-token pricing
+ * would misreport every turn.
  */
 
 // No `/v1`: the anthropic api appends `/v1/messages` itself, so a base
@@ -64,6 +67,21 @@ function arkCodeLatest(provider: string, baseUrl: string): ArkModel {
   };
 }
 
+function deepseekV4(id: string, provider: string, baseUrl: string, name: string): ArkModel {
+  return {
+    id,
+    name,
+    api: 'anthropic-messages',
+    provider,
+    baseUrl,
+    reasoning: true,
+    input: ['text'],
+    cost: FREE,
+    contextWindow: 1_000_000,
+    maxTokens: 384_000,
+  };
+}
+
 export function arkAgentPlanModels(): ArkModel[] {
   const p = 'volcengine-agent';
   const b = AGENT_PLAN_BASE;
@@ -73,6 +91,8 @@ export function arkAgentPlanModels(): ArkModel[] {
     doubaoSeed2('doubao-seed-2.0-lite', p, b, 'Doubao Seed 2.0 lite'),
     doubaoSeed2('doubao-seed-2.0-code', p, b, 'Doubao Seed 2.0 code'),
     doubaoSeed2('doubao-seed-2.0-pro', p, b, 'Doubao Seed 2.0 pro'),
+    deepseekV4('deepseek-v4-flash', p, b, 'DeepSeek V4 Flash'),
+    deepseekV4('deepseek-v4-pro', p, b, 'DeepSeek V4 Pro'),
   ];
 }
 
@@ -96,5 +116,7 @@ export function arkCodingPlanModels(): ArkModel[] {
     doubaoSeed2('doubao-seed-2.0-code', p, b, 'Doubao Seed 2.0 code'),
     doubaoSeed2('doubao-seed-2.0-lite', p, b, 'Doubao Seed 2.0 lite'),
     doubaoSeed2('doubao-seed-2.0-pro', p, b, 'Doubao Seed 2.0 pro'),
+    deepseekV4('deepseek-v4-flash', p, b, 'DeepSeek V4 Flash'),
+    deepseekV4('deepseek-v4-pro', p, b, 'DeepSeek V4 Pro'),
   ];
 }
