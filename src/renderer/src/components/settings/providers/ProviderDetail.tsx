@@ -1,9 +1,12 @@
-import type { CustomModel } from '@shared/custom-model';
+import type { CustomModel, CustomProvider } from '@shared/custom-model';
 import type { ParseKeys } from 'i18next';
+import { Pencil, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 import { ApiKeyField } from './ApiKeyField';
 import { BaseUrlField } from './BaseUrlField';
+import { CustomProviderDialog } from './CustomProviderDialog';
 import { EnableSwitch } from './EnableSwitch';
 import { LocalServiceForm } from './LocalServiceForm';
 import { ModelsBlock } from './ModelsBlock';
@@ -44,7 +47,8 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
             {t(provider.descriptionKey as ParseKeys)}
           </p>
         </div>
-        <div className="shrink-0 pt-1">
+        <div className="flex shrink-0 items-center gap-1 pt-1">
+          {'custom' in provider && provider.custom && <CustomProviderActions provider={provider} />}
           <EnableSwitch
             on={provider.enabled}
             onToggle={() => setEnabled.mutate({ id: provider.id, enabled: !provider.enabled })}
@@ -107,6 +111,48 @@ function CloudApiForm({
         customModels={config.customModels ?? []}
       />
     </div>
+  );
+}
+
+/** Edit and delete, for a provider the user defined. */
+function CustomProviderActions({ provider }: { provider: ProviderView }): React.JSX.Element | null {
+  const { t } = useTranslation();
+  const utils = trpc.useUtils();
+  const [editing, setEditing] = useState(false);
+  const remove = trpc.providers.deleteCustomProvider.useMutation({
+    onSuccess: () => utils.providers.list.invalidate(),
+  });
+  const stored = (provider.config as { customProvider?: CustomProvider } | null)?.customProvider;
+  if (!stored) return null;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        title={t('common.edit')}
+        className="rounded p-1.5 text-fg-tertiary hover:bg-surface-strong hover:text-fg-secondary"
+      >
+        <Pencil className="size-[14px]" />
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (confirm(t('settings.providers.customProvider.removeConfirm'))) {
+            remove.mutate({ id: provider.id });
+          }
+        }}
+        title={t('settings.providers.customProvider.remove')}
+        className="rounded p-1.5 text-fg-tertiary hover:bg-danger/10 hover:text-danger"
+      >
+        <Trash2 className="size-[14px]" />
+      </button>
+      {editing && (
+        <CustomProviderDialog
+          editing={{ id: provider.id, ...stored }}
+          onClose={() => setEditing(false)}
+        />
+      )}
+    </>
   );
 }
 

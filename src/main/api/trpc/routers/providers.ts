@@ -5,7 +5,11 @@ import {
   pingOllama,
   probeOllamaRegistryCached,
 } from '@main/agent/providers/local-service';
-import { PROVIDER_MANIFEST, type ProviderManifest } from '@main/agent/providers/manifest';
+import {
+  getProviderManifest,
+  PROVIDER_MANIFEST,
+  type ProviderManifest,
+} from '@main/agent/providers/manifest';
 import { fetchModelIds } from '@main/agent/providers/model-fetcher';
 import {
   answerLogin,
@@ -19,7 +23,11 @@ import { type PullState, pullManager } from '@main/agent/providers/pull-manager'
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
 import { decryptJson, encryptJson } from '@main/platform/safe-storage';
-import { customModelSchema } from '@shared/custom-model';
+import {
+  customModelSchema,
+  customProviderIdSchema,
+  customProviderSchema,
+} from '@shared/custom-model';
 import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
 import { shell } from 'electron';
@@ -34,6 +42,8 @@ type ProviderView = ProviderManifest & {
   hasCredentials: boolean;
   /** The catalog the engine resolves for this provider — the only source. */
   models?: readonly { id: string }[];
+  /** Defined by the user, so it can be edited and deleted. */
+  custom?: boolean;
 };
 
 const configSchema = z.record(z.string(), z.unknown());
@@ -66,7 +76,31 @@ export const providersRouter = router({
   list: publicProcedure.query(({ ctx }): ProviderView[] => {
     const rows = ctx.db.select().from(providers).all();
     const byId = new Map(rows.map((r) => [r.id, r]));
-    return PROVIDER_MANIFEST.map((m) => {
+    // A provider the user defined has no manifest entry, so one is made for it
+    // from what they gave: the panel treats both the same from here on.
+    const defined: ProviderView[] = rows.flatMap((row) => {
+      const parsed = customProviderSchema.safeParse(
+        (row.config as { customProvider?: unknown } | null)?.customProvider,
+      );
+      if (!parsed.success || getProviderManifest(row.id)) return [];
+      return [
+        {
+          id: row.id,
+          kind: 'cloud-api' as const,
+          name: parsed.data.name,
+          descriptionKey: 'settings.providers.desc.custom',
+          protocol: 'openai-compatible' as const,
+          defaultBaseUrl: parsed.data.baseUrl,
+          consoleUrl: '',
+          enabled: row.enabled,
+          config: (row.config as Record<string, unknown> | null) ?? null,
+          hasCredentials: !!row.credentialsEncrypted,
+          models: piModels.getModels(row.id).map((model) => ({ id: model.id })),
+          custom: true,
+        },
+      ];
+    });
+    const shipped: ProviderView[] = PROVIDER_MANIFEST.map((m) => {
       const row = byId.get(m.id);
       // The endpoint comes from the registry, not the manifest: the manifest
       // declares it, but what the engine resolved is what a request will use,
@@ -83,7 +117,45 @@ export const providersRouter = router({
         hasCredentials: !!row?.credentialsEncrypted,
       };
     });
+    return [...shipped, ...defined];
   }),
+
+  /** Define a provider Atrium doesn't ship: an endpoint, a request format, and
+   *  whatever models the user adds to it. */
+  createCustomProvider: publicProcedure
+    .input(z.object({ id: customProviderIdSchema, provider: customProviderSchema }))
+    .mutation(({ ctx, input }) => {
+      if (getProviderManifest(input.id)) {
+        throw badRequest(`"${input.id}" is already the id of a built-in provider.`);
+      }
+      const taken = ctx.db
+        .select({ id: providers.id })
+        .from(providers)
+        .where(eq(providers.id, input.id))
+        .get();
+      if (taken) throw badRequest(`"${input.id}" is already in use.`);
+      writeConfig(ctx.db, input.id, { customProvider: input.provider });
+      refreshProviders(ctx.db);
+    }),
+
+  updateCustomProvider: publicProcedure
+    .input(z.object({ id: z.string(), provider: customProviderSchema }))
+    .mutation(({ ctx, input }) => {
+      const { config } = storedModels(ctx.db, input.id);
+      if (!config.customProvider) throw badRequest('Not a provider you defined.');
+      writeConfig(ctx.db, input.id, { ...config, customProvider: input.provider });
+      refreshProviders(ctx.db);
+    }),
+
+  /** Removes the row outright, so the stored credential goes with it. */
+  deleteCustomProvider: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(({ ctx, input }) => {
+      const { config } = storedModels(ctx.db, input.id);
+      if (!config.customProvider) throw badRequest('Not a provider you defined.');
+      ctx.db.delete(providers).where(eq(providers.id, input.id)).run();
+      refreshProviders(ctx.db);
+    }),
 
   /**
    * Subscription login. `start` kicks the flow off and opens the browser; the

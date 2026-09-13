@@ -650,6 +650,7 @@ export const zh = {
       localNoKey: '无需 API key —— 复用你本地已登录的 CLI。',
       localAfterInstall: '安装并登录后(如 {{login}}),启用本项,即可在对话框的模型选择里选它。',
       desc: {
+        custom: '你添加的供应商。',
         openaiCodex: '用 ChatGPT Plus/Pro 订阅登录，不需要 API key。',
         anthropicSubscription: '用 Claude Pro/Max 订阅登录，不需要 API key。',
         anthropic: 'Claude 系列模型 — Opus、Sonnet、Haiku。官方 API 直连。',
@@ -664,6 +665,18 @@ export const zh = {
         openrouter: '统一 API 路由 300+ 模型。',
         aihubmix: '一站式 LLM 聚合，单 key 调多家模型。',
         ollama: '本地运行开源模型（Qwen、Gemma、DeepSeek 等）。检测到服务即可用，无需 API key。',
+      },
+      customProvider: {
+        add: '添加供应商',
+        edit: '编辑 {{name}}',
+        id: '供应商 ID',
+        idHint: '小写字母、数字和连字符。创建后不可修改。',
+        idFixed: '不可修改:它关联着已保存的密钥和所有用过它的会话。',
+        name: '显示名称',
+        baseUrl: 'Base URL',
+        afterHint: '保存后在下方列表里添加它的模型。',
+        remove: '删除供应商',
+        removeConfirm: '删除这个供应商及其已保存的密钥?',
       },
       custom: {
         add: '添加模型',

@@ -58,3 +58,24 @@ export const DEFAULT_CUSTOM_MODEL: Omit<CustomModel, 'id' | 'name'> = {
   contextWindow: 128_000,
   maxTokens: 8_192,
 };
+
+/**
+ * A provider the user defined: an endpoint, a request format, and whatever
+ * models they add to it. Nothing else, because nothing else can be known
+ * about an endpoint Atrium has never seen — the catalog is entirely theirs.
+ */
+export const customProviderSchema = z.object({
+  name: z.string().min(1).max(80),
+  baseUrl: z.string().url(),
+  api: z.enum(CUSTOM_MODEL_APIS),
+});
+
+export type CustomProvider = z.infer<typeof customProviderSchema>;
+
+/** Ids are keys in the providers table and are written into stored threads, so
+ *  they have to be stable, unique and free of path or display surprises. */
+export const customProviderIdSchema = z
+  .string()
+  .min(1)
+  .max(60)
+  .regex(/^[a-z0-9][a-z0-9-]*$/, 'lowercase letters, digits and hyphens');

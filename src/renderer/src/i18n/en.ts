@@ -661,6 +661,18 @@ export const en: typeof zh = {
       baseUrlHint: 'Leave empty to use the default endpoint.',
       fetchHint: 'Click Fetch to pull the available models.',
       fetchHintNoKey: 'Add the API key, then Fetch models.',
+      customProvider: {
+        add: 'Add provider',
+        edit: 'Edit {{name}}',
+        id: 'Provider ID',
+        idHint: 'Lowercase letters, digits and hyphens. Cannot be changed later.',
+        idFixed: 'Fixed: it keys the stored key and every thread that ran on it.',
+        name: 'Display name',
+        baseUrl: 'Base URL',
+        afterHint: 'Add its models from the list below once saved.',
+        remove: 'Delete provider',
+        removeConfirm: 'Delete this provider and its stored key?',
+      },
       custom: {
         add: 'Add model',
         edit: 'Edit {{id}}',
@@ -685,6 +697,7 @@ export const en: typeof zh = {
       localAfterInstall:
         'After installing and logging in (e.g. {{login}}), enable this and pick it in the composer model menu.',
       desc: {
+        custom: 'A provider you added.',
         openaiCodex: 'Sign in with a ChatGPT Plus/Pro subscription — no API key.',
         anthropicSubscription: 'Sign in with a Claude Pro/Max subscription — no API key.',
         anthropic: 'Claude models — Opus, Sonnet, Haiku. Direct API.',

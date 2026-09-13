@@ -23,9 +23,9 @@ import { zaiCodingCnProvider } from '@earendil-works/pi-ai/providers/zai-coding-
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
 import { decryptJson } from '@main/platform/safe-storage';
-import type { CustomModel } from '@shared/custom-model';
+import type { CustomModel, CustomProvider } from '@shared/custom-model';
 import { eq } from 'drizzle-orm';
-import { readAddedModels } from './custom-models';
+import { readAddedModels, readCustomProviders } from './custom-models';
 import {
   type CloudApiManifest,
   getProviderManifest,
@@ -223,10 +223,45 @@ function withAddedModels(base: Provider, added: readonly CustomModel[]): Provide
   };
 }
 
-function registerAll(added: ReadonlyMap<string, readonly CustomModel[]>): void {
+/** A provider that exists only because the user defined it: the endpoint and
+ *  the request format are theirs, and so is every model on it. */
+function userProvider(id: string, def: CustomProvider, models: readonly CustomModel[]): Provider {
+  return createProvider({
+    id,
+    name: def.name,
+    baseUrl: def.baseUrl,
+    auth: { apiKey: envApiKeyAuth(`${def.name} API key`, []) },
+    models: models.map((model) => ({
+      ...model,
+      provider: id,
+      baseUrl: model.baseUrl ?? def.baseUrl,
+      api: def.api,
+    })),
+    api: API_STREAMS[def.api](),
+  });
+}
+
+function registerAll(
+  added: ReadonlyMap<string, readonly CustomModel[]>,
+  defined: ReadonlyMap<string, CustomProvider> = new Map(),
+): void {
   for (const base of SHIPPED) {
     const extra = added.get(base.id);
     piModels.setProvider(extra?.length ? withAddedModels(base, extra) : base);
+  }
+  const shipped = new Set(SHIPPED.map((p) => p.id));
+  for (const [id, def] of defined) {
+    // A user-defined id that collides with a shipped one is ignored rather
+    // than allowed to shadow it: threads already name that id.
+    if (shipped.has(id)) continue;
+    piModels.setProvider(userProvider(id, def, added.get(id) ?? []));
+  }
+  // A provider the user deleted has to leave the registry too — it holds a
+  // snapshot, so an unregistered id would keep answering until restart.
+  for (const provider of piModels.getProviders()) {
+    if (!shipped.has(provider.id) && !defined.has(provider.id)) {
+      piModels.deleteProvider(provider.id);
+    }
   }
 }
 
@@ -242,7 +277,7 @@ registerAll(new Map());
  * until it is set again.
  */
 export function refreshProviders(db: Db): void {
-  registerAll(readAddedModels(db));
+  registerAll(readAddedModels(db), readCustomProviders(db));
 }
 
 export const piStreamFn = piModels.streamSimple.bind(piModels);
@@ -258,7 +293,14 @@ function configuredBaseUrl(db: Db, providerId: string): string | undefined {
 
 export function resolvePiModel(db: Db, providerId: string, modelId: string): Model<Api> {
   const manifest = getProviderManifest(providerId);
-  if (!manifest) throw new Error(`Provider "${providerId}" is unknown.`);
+  if (!manifest) {
+    // No manifest entry means the user defined this provider. Its catalog is
+    // entirely theirs, so the registry is the whole answer.
+    const model = piModels.getModel(providerId, modelId);
+    if (!model) throw new Error(`Provider "${providerId}" is unknown.`);
+    const override = configuredBaseUrl(db, providerId);
+    return override ? { ...model, baseUrl: override } : model;
+  }
 
   if (manifest.kind === 'local-service') {
     const base = (configuredBaseUrl(db, providerId) ?? manifest.defaultBaseUrl).replace(/\/+$/, '');
