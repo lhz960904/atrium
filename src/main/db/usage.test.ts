@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
-import type { ModelPricing } from '@main/agent/providers/models/types';
+import type { TokenRates } from '@shared/cost';
 import { costMicros } from './usage';
 
 // claude-opus-4-5 rates (per token) from the litellm snapshot.
-const OPUS: ModelPricing = {
+const OPUS: TokenRates = {
   input: 0.000005,
   output: 0.000025,
   cacheRead: 0.0000005,
@@ -43,7 +43,7 @@ test('costMicros: cache creation billed at the dear tier', () => {
 });
 
 test('costMicros: unknown model (zero pricing) costs nothing', () => {
-  const free: ModelPricing = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
+  const free: TokenRates = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
   expect(
     costMicros(
       { inputTokens: 9999, outputTokens: 9999, cacheReadTokens: 1, cacheCreationTokens: 1 },

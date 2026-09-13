@@ -11,7 +11,6 @@ import { syncBrowserProvisioning } from './agent/mcp/browser-provisioner';
 import { mcpManager } from './agent/mcp/manager';
 import { runDream, startDreamScheduler } from './agent/memory';
 import { createCredentialStore } from './agent/providers/credential-store';
-import { populateModelCatalog, startModelCatalogRefresh } from './agent/providers/models/catalog';
 import {
   makeGetApiKey,
   piStreamFn,
@@ -212,8 +211,6 @@ app.whenReady().then(async () => {
 
   // Warm model metadata from the disk cache (falls back to the bundled
   // snapshot), then let it refresh from the litellm catalog in the background.
-  populateModelCatalog();
-  startModelCatalogRefresh();
 
   // Connect configured MCP servers once the shell env is merged — stdio servers
   // read PATH from process.env at spawn, so they must not start before it. A

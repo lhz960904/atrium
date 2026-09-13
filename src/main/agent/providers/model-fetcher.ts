@@ -1,4 +1,15 @@
-import { anthropicApiBase, type CloudApiProtocol } from './manifest';
+import type { CloudApiProtocol } from './manifest';
+
+/**
+ * Anthropic-compatible listing lives at `${base}/v1/models`, but vendors
+ * advertise their bases without the `/v1` segment (Claude Code appends the
+ * whole path itself) and users paste the documented URL. Accept both shapes.
+ * Listing only — the engine's anthropic api builds its own request path.
+ */
+function anthropicApiBase(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, '');
+  return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
+}
 
 /**
  * Fetch the available model id list from a cloud provider's `/models`-style

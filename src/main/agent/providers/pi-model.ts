@@ -19,7 +19,7 @@ import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
 import { decryptJson } from '@main/platform/safe-storage';
 import { eq } from 'drizzle-orm';
-import { getProviderManifest, type ManifestModel, PROVIDER_MANIFEST } from './manifest';
+import { getProviderManifest, PROVIDER_MANIFEST } from './manifest';
 import { arkAgentPlanModels, arkCodingPlanModels } from './volcengine.models';
 
 /**
@@ -193,7 +193,6 @@ export function resolvePiModel(db: Db, providerId: string, modelId: string): Mod
     modelId,
     PROTOCOL_API[manifest.protocol],
     override ?? manifest.defaultBaseUrl,
-    manifest.models.find((m) => m.id === modelId),
   );
 }
 
@@ -205,27 +204,20 @@ export function resolvePiModel(db: Db, providerId: string, modelId: string): Mod
  * direction that fails silently — an over-large window is truncated, not
  * rejected, and an origin's per-token rate misprices a plan that charges none.
  *
- * So the only inputs are what the provider itself declares and a deliberately
- * small default.
+ * So the endpoint is addressable and nothing about the model is claimed.
  */
-function buildModel(
-  providerId: string,
-  modelId: string,
-  api: Api,
-  baseUrl: string,
-  declared?: ManifestModel,
-): Model<Api> {
+function buildModel(providerId: string, modelId: string, api: Api, baseUrl: string): Model<Api> {
   return {
     id: modelId,
     name: modelId,
     api,
     provider: providerId,
     baseUrl,
-    reasoning: declared?.reasoning ?? false,
-    input: declared?.vision ? ['text', 'image'] : ['text'],
+    reasoning: false,
+    input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: declared?.contextTokens ?? FALLBACK_CONTEXT_TOKENS,
-    maxTokens: declared?.outputTokens ?? FALLBACK_MAX_TOKENS,
+    contextWindow: FALLBACK_CONTEXT_TOKENS,
+    maxTokens: FALLBACK_MAX_TOKENS,
   } as Model<Api>;
 }
 

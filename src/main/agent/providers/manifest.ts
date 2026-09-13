@@ -14,36 +14,12 @@ export type ProviderKind = 'cloud-api' | 'local-service' | 'subscription';
 export type CloudApiProtocol = 'anthropic' | 'openai-compatible' | 'google-gemini';
 
 /**
- * The model-listing call requests `${baseURL}/models`, and the engine's
- * anthropic api appends `/v1/messages`, so both want a base that already
- * contains the `/v1` segment — but vendors advertise their
- * Anthropic-compatible bases without it (Claude Code appends `/v1/messages`
- * itself), and users paste those documented URLs. Accept both shapes by
- * appending `/v1` unless the base already ends with it.
+ * A model a provider is known to serve. An id and nothing else: window,
+ * price and capabilities belong to the catalog entry the engine resolves,
+ * where one (provider, model) pair has exactly one record. This list only
+ * says which ids to offer for a provider whose endpoint can't be asked.
  */
-export function anthropicApiBase(baseUrl: string): string {
-  const trimmed = baseUrl.replace(/\/+$/, '');
-  return trimmed.endsWith('/v1') ? trimmed : `${trimmed}/v1`;
-}
-
-/**
- * A model in a provider's curated catalog. `catalogId` maps the vendor's
- * serving id to the litellm catalog key that carries its metadata, for when
- * the two spellings differ (litellm pins versions: `doubao-seed-2.0-code` is
- * keyed `volcengine/doubao-seed-2-0-code-preview-260215`). The remaining
- * fields are vendor-documented facts for ids litellm doesn't carry at all;
- * anything declared overrides the litellm entry, undeclared fields still
- * resolve through it (see models/lookup.ts).
- */
-export type ManifestModel = {
-  id: string;
-  catalogId?: string;
-  contextTokens?: number;
-  outputTokens?: number;
-  vision?: boolean;
-  toolCall?: boolean;
-  reasoning?: boolean;
-};
+export type ManifestModel = { id: string };
 
 export type CloudApiManifest = {
   id: string;
@@ -64,8 +40,8 @@ export type CloudApiManifest = {
  * openai-compatible protocol on a localhost port — no API key, no spawned
  * process; Atrium just detects whether the service is up and talks HTTP.
  * Endpoint paths (health probe, model listing) live with the service's API
- * knowledge in local-service.ts, like the cloud listing paths live in
- * model-fetcher.ts — the manifest only carries what varies or is user-facing.
+ * knowledge in local-service.ts — the manifest only carries what varies or is
+ * user-facing.
  */
 export type LocalServiceManifest = {
   id: string;
@@ -90,28 +66,6 @@ export type SubscriptionManifest = {
 };
 
 export type ProviderManifest = CloudApiManifest | LocalServiceManifest | SubscriptionManifest;
-
-/**
- * The Ark plans serve the doubao-seed-2.0 family under bare ids while litellm
- * keys them version-pinned, so the bare-name join misses; map to the litellm
- * keys so window/capability/pricing data flows from the catalog.
- */
-const DOUBAO_SEED_2 = {
-  mini: { id: 'doubao-seed-2.0-mini', catalogId: 'volcengine/doubao-seed-2-0-mini-260215' },
-  lite: { id: 'doubao-seed-2.0-lite', catalogId: 'volcengine/doubao-seed-2-0-lite-260215' },
-  code: { id: 'doubao-seed-2.0-code', catalogId: 'volcengine/doubao-seed-2-0-code-preview-260215' },
-  pro: { id: 'doubao-seed-2.0-pro', catalogId: 'volcengine/doubao-seed-2-0-pro-260215' },
-} satisfies Record<string, ManifestModel>;
-
-// Auto-dispatch alias litellm can't know; sized to the smallest window in its
-// dispatch pool.
-const ARK_CODE_LATEST: ManifestModel = {
-  id: 'ark-code-latest',
-  contextTokens: 200_000,
-  outputTokens: 131_072,
-  toolCall: true,
-  reasoning: true,
-};
 
 export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
   // ── Cloud API ────────────────────────────────────────────────────────────
@@ -197,11 +151,11 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     // The plan endpoint has no model-listing API; this is the doc's supported
     // text-generation set (each id verified against the live endpoint).
     models: [
-      ARK_CODE_LATEST,
-      DOUBAO_SEED_2.mini,
-      DOUBAO_SEED_2.lite,
-      DOUBAO_SEED_2.code,
-      DOUBAO_SEED_2.pro,
+      { id: 'ark-code-latest' },
+      { id: 'doubao-seed-2.0-mini' },
+      { id: 'doubao-seed-2.0-lite' },
+      { id: 'doubao-seed-2.0-code' },
+      { id: 'doubao-seed-2.0-pro' },
       { id: 'deepseek-v4-flash' },
       { id: 'deepseek-v4-pro' },
       { id: 'minimax-m2.7' },
@@ -222,18 +176,11 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
       'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=subscribe',
     // Like the agent plan: no model-listing API, doc's text-generation set.
     models: [
-      ARK_CODE_LATEST,
-      // Retired from litellm's dataset; vendor doc: 256k window, multimodal.
-      {
-        id: 'doubao-seed-code',
-        contextTokens: 262_144,
-        vision: true,
-        toolCall: true,
-        reasoning: true,
-      },
-      DOUBAO_SEED_2.code,
-      DOUBAO_SEED_2.lite,
-      DOUBAO_SEED_2.pro,
+      { id: 'ark-code-latest' },
+      { id: 'doubao-seed-code' },
+      { id: 'doubao-seed-2.0-code' },
+      { id: 'doubao-seed-2.0-lite' },
+      { id: 'doubao-seed-2.0-pro' },
       { id: 'deepseek-v4-flash' },
       { id: 'deepseek-v4-pro' },
       { id: 'minimax-m2.7' },
