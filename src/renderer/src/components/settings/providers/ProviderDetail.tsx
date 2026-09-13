@@ -1,3 +1,4 @@
+import type { CustomModel } from '@shared/custom-model';
 import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
@@ -73,6 +74,7 @@ function CloudApiForm({
     fetchedModels?: string[];
     fetchedFrom?: string;
     enabledModels?: string[];
+    customModels?: CustomModel[];
   };
   // The catalog is the list; a fetch only reaches providers that have none.
   // A listing pulled from a different endpoint than the one now configured is
@@ -102,6 +104,7 @@ function CloudApiForm({
         }
         models={models}
         enabledModels={config.enabledModels ?? []}
+        customModels={config.customModels ?? []}
       />
     </div>
   );

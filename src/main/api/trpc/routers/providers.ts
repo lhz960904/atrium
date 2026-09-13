@@ -14,10 +14,12 @@ import {
   readLogin,
   startLogin,
 } from '@main/agent/providers/oauth-login';
-import { piModels } from '@main/agent/providers/pi-model';
+import { piModels, refreshProviders } from '@main/agent/providers/pi-model';
 import { type PullState, pullManager } from '@main/agent/providers/pull-manager';
+import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
 import { decryptJson, encryptJson } from '@main/platform/safe-storage';
+import { customModelSchema } from '@shared/custom-model';
 import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
 import { shell } from 'electron';
@@ -35,6 +37,25 @@ type ProviderView = ProviderManifest & {
 };
 
 const configSchema = z.record(z.string(), z.unknown());
+
+/** Upsert a provider's whole config blob; the row may not exist yet. */
+function writeConfig(db: Db, id: string, config: Record<string, unknown>): void {
+  db.insert(providers)
+    .values({ id, config })
+    .onConflictDoUpdate({ target: providers.id, set: { config, updatedAt: new Date() } })
+    .run();
+}
+
+/** The models this provider has stored, as untyped rows — callers filter. */
+function storedModels(db: Db, id: string): { config: Record<string, unknown>; models: unknown[] } {
+  const row = db
+    .select({ config: providers.config })
+    .from(providers)
+    .where(eq(providers.id, id))
+    .get();
+  const config = (row?.config as Record<string, unknown> | null) ?? {};
+  return { config, models: Array.isArray(config.customModels) ? config.customModels : [] };
+}
 
 export const providersRouter = router({
   /**
@@ -119,18 +140,10 @@ export const providersRouter = router({
         .from(providers)
         .where(eq(providers.id, input.id))
         .get();
-      const merged = {
+      writeConfig(ctx.db, input.id, {
         ...((existing?.config as Record<string, unknown> | null) ?? {}),
         ...input.partial,
-      };
-      ctx.db
-        .insert(providers)
-        .values({ id: input.id, config: merged })
-        .onConflictDoUpdate({
-          target: providers.id,
-          set: { config: merged, updatedAt: new Date() },
-        })
-        .run();
+      });
     }),
 
   /**
@@ -270,6 +283,40 @@ export const providersRouter = router({
    * lists its installed models keylessly. Failures surface as TRPCErrors the
    * renderer renders verbatim.
    */
+  /**
+   * Add or replace a model on a provider. Stored on the provider's config and
+   * folded into its catalog, replacing a catalog entry of the same id — which
+   * is how a wrong window gets corrected, not just how a missing model is
+   * added. `previousId` lets the editor rename one without leaving the old
+   * entry behind.
+   */
+  upsertCustomModel: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        model: customModelSchema,
+        previousId: z.string().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      const { config, models } = storedModels(ctx.db, input.id);
+      const dropped = new Set([input.model.id, input.previousId].filter(Boolean));
+      const kept = models.filter((m) => !dropped.has(String((m as { id?: unknown }).id)));
+      writeConfig(ctx.db, input.id, { ...config, customModels: [...kept, input.model] });
+      refreshProviders(ctx.db);
+    }),
+
+  removeCustomModel: publicProcedure
+    .input(z.object({ id: z.string(), modelId: z.string() }))
+    .mutation(({ ctx, input }) => {
+      const { config, models } = storedModels(ctx.db, input.id);
+      writeConfig(ctx.db, input.id, {
+        ...config,
+        customModels: models.filter((m) => String((m as { id?: unknown }).id) !== input.modelId),
+      });
+      refreshProviders(ctx.db);
+    }),
+
   fetchModels: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }): Promise<string[]> => {

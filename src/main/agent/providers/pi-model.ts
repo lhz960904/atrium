@@ -197,18 +197,24 @@ const SHIPPED: readonly Provider[] = (() => {
   return [...engine, ...rest];
 })();
 
-/** A shipped provider with the user's own models appended to its catalog. */
+/**
+ * A shipped provider with the user's own models folded into its catalog. An
+ * added model replaces a catalog entry of the same id rather than sitting
+ * behind it — that is what makes correcting a wrong window possible, and it
+ * avoids an entry that can never be resolved.
+ */
 function withAddedModels(base: Provider, added: readonly CustomModel[]): Provider {
-  const models = [
-    ...base.getModels(),
-    ...added.map((model) => ({
+  const byId = new Map<string, Model<Api>>(base.getModels().map((m) => [m.id, m]));
+  for (const model of added) {
+    byId.set(model.id, {
       ...model,
       provider: base.id,
       // An added model follows the provider's endpoint unless it names its own,
       // so changing the endpoint doesn't strand it on a stale copy.
       baseUrl: model.baseUrl ?? base.baseUrl ?? '',
-    })),
-  ];
+    });
+  }
+  const models = [...byId.values()];
   return {
     ...base,
     getModels: () => models,

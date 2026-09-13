@@ -10,7 +10,9 @@ import { z } from 'zod';
  * `provider` is its id, and `baseUrl` defaults to its endpoint, so a model
  * follows a changed endpoint instead of pinning a stale copy of it.
  */
-export type CustomModel = Omit<Model<Api>, 'provider' | 'baseUrl'> & {
+export type CustomModel = Omit<Model<Api>, 'provider' | 'baseUrl' | 'api'> & {
+  /** Narrowed: the engine names many request shapes, Atrium registers three. */
+  api: CustomModelApi;
   baseUrl?: string;
 };
 
@@ -20,6 +22,8 @@ export const CUSTOM_MODEL_APIS = [
   'openai-completions',
   'google-generative-ai',
 ] as const;
+
+export type CustomModelApi = (typeof CUSTOM_MODEL_APIS)[number];
 
 const rates = z.object({
   input: z.number().min(0),
