@@ -11,6 +11,7 @@ export function ModelsBlock({
   emptyHint,
   models,
   enabledModels,
+  allWhenUnpicked = false,
   customModels,
   grow = true,
 }: {
@@ -19,6 +20,8 @@ export function ModelsBlock({
   emptyHint: string;
   models: string[];
   enabledModels: string[];
+  /** No picks means every model, not none — a subscription is granted whole. */
+  allWhenUnpicked?: boolean;
   /** The models the user added here, so they can be edited and removed. */
   customModels?: readonly CustomModel[];
   /** Fill the remaining panel height and scroll the list internally (cloud
@@ -48,7 +51,13 @@ export function ModelsBlock({
   });
   const [editing, setEditing] = useState<CustomModel | 'new' | null>(null);
 
-  const enabledSet = useMemo(() => new Set(enabledModels), [enabledModels]);
+  // Shown as on, because that is what the picker offers. The first model turned
+  // off writes the rest down, which is the point at which narrowing begins.
+  const showAll = allWhenUnpicked && enabledModels.length === 0;
+  const enabledSet = useMemo(
+    () => new Set(showAll ? models : enabledModels),
+    [showAll, models, enabledModels],
+  );
   const customById = useMemo(
     () => new Map((customModels ?? []).map((m) => [m.id, m])),
     [customModels],
@@ -62,9 +71,10 @@ export function ModelsBlock({
   );
 
   const toggleModel = (modelId: string): void => {
+    const current = showAll ? models : enabledModels;
     const next = enabledSet.has(modelId)
-      ? enabledModels.filter((m) => m !== modelId)
-      : [...enabledModels, modelId];
+      ? current.filter((m) => m !== modelId)
+      : [...current, modelId];
     updateConfig.mutate({ id: providerId, partial: { enabledModels: next } });
   };
 

@@ -4,7 +4,8 @@ import { providers } from '@main/db/schema';
 import type { TokenRates } from '@shared/cost';
 import type { SelectedModel } from '@shared/settings';
 import { eq } from 'drizzle-orm';
-import { resolvePiModel } from './pi-model';
+import { getProviderManifest } from './manifest';
+import { piModels, resolvePiModel } from './pi-model';
 
 /**
  * Whether tool results for this model may carry inline image parts. Both halves
@@ -58,9 +59,13 @@ export function firstEnabledModel(db: Db): SelectedModel | null {
     .where(eq(providers.enabled, true))
     .all();
   for (const row of rows) {
-    const enabled = (row.config as { enabledModels?: string[] } | null)?.enabledModels ?? [];
-    for (const modelId of enabled) {
-      return { providerId: row.id, modelId };
+    const picked = (row.config as { enabledModels?: string[] } | null)?.enabledModels ?? [];
+    if (picked[0]) return { providerId: row.id, modelId: picked[0] };
+    // A subscription is granted by signing in, not by picking models, so an
+    // untouched one still offers its catalog.
+    if (getProviderManifest(row.id)?.kind === 'subscription') {
+      const first = piModels.getModels(row.id)[0];
+      if (first) return { providerId: row.id, modelId: first.id };
     }
   }
   return null;

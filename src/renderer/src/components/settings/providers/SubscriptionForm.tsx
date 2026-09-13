@@ -177,6 +177,7 @@ export function SubscriptionForm({ provider }: { provider: Provider }): React.JS
         emptyHint={t('settings.providers.emptyCatalog')}
         models={models}
         enabledModels={config.enabledModels ?? []}
+        allWhenUnpicked
       />
     </div>
   );
