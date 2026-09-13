@@ -148,21 +148,21 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
     consoleUrl:
       'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=agentPlan',
-    // The plan endpoint has no model-listing API; this is the doc's supported
-    // text-generation set (each id verified against the live endpoint).
+    // No listing API; the set is the console's 可用模型 panel. Per-model
+    // windows live in volcengine.models.ts, which explains how to refresh both.
     models: [
-      { id: 'ark-code-latest' },
-      { id: 'doubao-seed-2.0-mini' },
+      { id: 'auto' },
       { id: 'doubao-seed-2.0-lite' },
-      { id: 'doubao-seed-2.0-code' },
-      { id: 'doubao-seed-2.0-pro' },
-      { id: 'deepseek-v4-flash' },
-      { id: 'deepseek-v4-pro' },
-      { id: 'minimax-m2.7' },
-      { id: 'minimax-m3' },
-      { id: 'glm-5.2' },
-      { id: 'kimi-k2.6' },
+      { id: 'doubao-seed-2.0-mini' },
       { id: 'kimi-k2.7-code' },
+      { id: 'minimax-m3' },
+      { id: 'doubao-seed-evolving' },
+      { id: 'kimi-k3' },
+      { id: 'doubao-seed-2.1-turbo' },
+      { id: 'deepseek-v4-flash' },
+      { id: 'glm-5.3' },
+      { id: 'deepseek-v4-pro' },
+      { id: 'glm-5.3-flash' },
     ],
   },
   {
@@ -174,20 +174,19 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
     consoleUrl:
       'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=subscribe',
-    // Like the agent plan: no model-listing API, doc's text-generation set.
+    // Same set as the agent plan minus the mini; see volcengine.models.ts.
     models: [
-      { id: 'ark-code-latest' },
-      { id: 'doubao-seed-code' },
-      { id: 'doubao-seed-2.0-code' },
+      { id: 'auto' },
       { id: 'doubao-seed-2.0-lite' },
-      { id: 'doubao-seed-2.0-pro' },
-      { id: 'deepseek-v4-flash' },
-      { id: 'deepseek-v4-pro' },
-      { id: 'minimax-m2.7' },
-      { id: 'minimax-m3' },
-      { id: 'glm-5.2' },
-      { id: 'kimi-k2.6' },
       { id: 'kimi-k2.7-code' },
+      { id: 'minimax-m3' },
+      { id: 'doubao-seed-evolving' },
+      { id: 'kimi-k3' },
+      { id: 'doubao-seed-2.1-turbo' },
+      { id: 'deepseek-v4-flash' },
+      { id: 'glm-5.3' },
+      { id: 'deepseek-v4-pro' },
+      { id: 'glm-5.3-flash' },
     ],
   },
   // ── Subscriptions (signed into, not keyed) ───────────────────────────────

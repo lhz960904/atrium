@@ -1,122 +1,145 @@
 import type { Model } from '@earendil-works/pi-ai';
 
 /**
- * Ark's two subscription plans, as real engine catalog entries.
+ * Ark's two subscription plans, as engine catalog entries.
  *
- * The plan endpoints expose no `/models` listing, so this file is the catalog.
- * Without it an id falls through to the engine's generic default and a 256k
- * model gets folded at half its window.
+ * The plans expose no listing API — `api/plan/v3/models` and `api/v1/models`
+ * both 404 for a plan key, and the regular Ark endpoints reject one outright —
+ * and no public dataset carries them: models.dev has no Ark provider at all.
+ * So this file is the catalog, and it can only be refreshed by hand.
  *
- * Every number here is copied in deliberately and dated, because nothing
- * upstream will correct it (checked 2026-09-13):
- *   - doubao-seed-2.0 family — 256k window, 128k output, multimodal, reasoning.
- *   - `ark-code-latest` — an auto-dispatch alias no catalog can know, sized to
- *     the smallest window in its dispatch pool.
- *   - `doubao-seed-code` — window per the vendor doc, output from its
- *     generation's family.
- *   - `deepseek-v4-*` — the one cross-vendor pair the plans serve at the same
- *     window as DeepSeek's own endpoint.
+ * To refresh: open the plan's console page, expand 可用模型, and lowercase each
+ * display name — that is the serving id, dots included (Doubao-Seed-2.0-lite is
+ * `doubao-seed-2.0-lite`). The console also answers `ListAgentPlanLatestModel`
+ * with a version-pinned form (`doubao-seed-2-0-lite-260215`); both resolve, and
+ * the bare alias is the one that survives a version bump.
  *
- * The rest of what the plans serve for other vendors (minimax, glm, kimi) is
- * absent on purpose: a plan does not necessarily serve a model at its origin
- * window — Ark is known to cut some of them to a fraction — and guessing high
- * is the dangerous direction, since an over-large window is silently truncated
- * rather than rejected.
+ * Windows are each model's own vendor figure rather than anything Ark states,
+ * since Ark publishes none. Values marked ESTIMATE below have no vendor source
+ * yet and are deliberately set low: folding early only costs a little context,
+ * while a window that is too large is silently truncated rather than rejected.
  *
- * Cost is zero throughout: a plan is a subscription, so per-token pricing
- * would misreport every turn.
+ * Checked against the console on 2026-09-13.
  */
 
-// No `/v1`: the anthropic api appends `/v1/messages` itself, so a base
-// carrying the segment would request it twice. Matches the manifest defaults,
-// which is what a user without a configured override gets.
+// No `/v1`: the anthropic api appends `/v1/messages` itself.
 const AGENT_PLAN_BASE = 'https://ark.cn-beijing.volces.com/api/plan';
 const CODING_PLAN_BASE = 'https://ark.cn-beijing.volces.com/api/coding';
 
+/** A plan is a subscription: per-token pricing would misreport every turn. */
 const FREE = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } as const;
 
 type ArkModel = Model<'anthropic-messages'>;
 
-function doubaoSeed2(id: string, provider: string, baseUrl: string, name: string): ArkModel {
-  return {
-    id,
-    name,
-    api: 'anthropic-messages',
-    provider,
-    baseUrl,
-    reasoning: true,
-    input: ['text', 'image'],
-    cost: FREE,
+type Spec = {
+  id: string;
+  name: string;
+  contextWindow: number;
+  maxTokens: number;
+  vision: boolean;
+};
+
+/** Served by both plans, in the console's own order. */
+const SHARED: readonly Spec[] = [
+  // ESTIMATE — a dispatch alias over the whole pool, so it is sized to the
+  // smallest window in it rather than to whatever it happens to route to.
+  { id: 'auto', name: 'Auto', contextWindow: 256_000, maxTokens: 131_072, vision: false },
+  // ESTIMATE — same generation and version stamp as the mini below, which the
+  // vendor documents at 256k.
+  {
+    id: 'doubao-seed-2.0-lite',
+    name: 'Doubao Seed 2.0 lite',
     contextWindow: 256_000,
     maxTokens: 128_000,
-  };
-}
-
-function arkCodeLatest(provider: string, baseUrl: string): ArkModel {
-  return {
-    id: 'ark-code-latest',
-    name: 'Ark Code (latest)',
-    api: 'anthropic-messages',
-    provider,
-    baseUrl,
-    reasoning: true,
-    input: ['text'],
-    cost: FREE,
-    contextWindow: 200_000,
+    vision: true,
+  },
+  {
+    id: 'kimi-k2.7-code',
+    name: 'Kimi K2.7 Code',
+    contextWindow: 262_144,
+    maxTokens: 262_144,
+    vision: true,
+  },
+  {
+    id: 'minimax-m3',
+    name: 'MiniMax M3',
+    contextWindow: 1_000_000,
+    maxTokens: 128_000,
+    vision: true,
+  },
+  {
+    id: 'doubao-seed-evolving',
+    name: 'Doubao Seed Evolving',
+    contextWindow: 1_000_000,
     maxTokens: 131_072,
-  };
-}
-
-function deepseekV4(id: string, provider: string, baseUrl: string, name: string): ArkModel {
-  return {
-    id,
-    name,
-    api: 'anthropic-messages',
-    provider,
-    baseUrl,
-    reasoning: true,
-    input: ['text'],
-    cost: FREE,
+    vision: true,
+  },
+  { id: 'kimi-k3', name: 'Kimi K3', contextWindow: 1_048_576, maxTokens: 131_072, vision: true },
+  // ESTIMATE — newer than the 2.0 family and undocumented; held at the family's
+  // window until the vendor states one.
+  {
+    id: 'doubao-seed-2.1-turbo',
+    name: 'Doubao Seed 2.1 turbo',
+    contextWindow: 256_000,
+    maxTokens: 131_072,
+    vision: true,
+  },
+  {
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash',
     contextWindow: 1_000_000,
     maxTokens: 384_000,
-  };
+    vision: false,
+  },
+  { id: 'glm-5.3', name: 'GLM-5.3', contextWindow: 1_000_000, maxTokens: 131_072, vision: false },
+  {
+    id: 'deepseek-v4-pro',
+    name: 'DeepSeek V4 Pro',
+    contextWindow: 1_000_000,
+    maxTokens: 384_000,
+    vision: false,
+  },
+  // ESTIMATE — too new for any catalog; the output cap is the vendor's own
+  // sample call, the window is held low until they publish one.
+  {
+    id: 'glm-5.3-flash',
+    name: 'GLM-5.3-Flash',
+    contextWindow: 200_000,
+    maxTokens: 65_536,
+    vision: true,
+  },
+];
+
+/** Offered by the agent plan only. */
+const AGENT_ONLY: readonly Spec[] = [
+  {
+    id: 'doubao-seed-2.0-mini',
+    name: 'Doubao Seed 2.0 mini',
+    contextWindow: 256_000,
+    maxTokens: 128_000,
+    vision: true,
+  },
+];
+
+function toModels(specs: readonly Spec[], provider: string, baseUrl: string): ArkModel[] {
+  return specs.map((s) => ({
+    id: s.id,
+    name: s.name,
+    api: 'anthropic-messages',
+    provider,
+    baseUrl,
+    reasoning: true,
+    input: s.vision ? ['text', 'image'] : ['text'],
+    cost: FREE,
+    contextWindow: s.contextWindow,
+    maxTokens: s.maxTokens,
+  }));
 }
 
 export function arkAgentPlanModels(): ArkModel[] {
-  const p = 'volcengine-agent';
-  const b = AGENT_PLAN_BASE;
-  return [
-    arkCodeLatest(p, b),
-    doubaoSeed2('doubao-seed-2.0-mini', p, b, 'Doubao Seed 2.0 mini'),
-    doubaoSeed2('doubao-seed-2.0-lite', p, b, 'Doubao Seed 2.0 lite'),
-    doubaoSeed2('doubao-seed-2.0-code', p, b, 'Doubao Seed 2.0 code'),
-    doubaoSeed2('doubao-seed-2.0-pro', p, b, 'Doubao Seed 2.0 pro'),
-    deepseekV4('deepseek-v4-flash', p, b, 'DeepSeek V4 Flash'),
-    deepseekV4('deepseek-v4-pro', p, b, 'DeepSeek V4 Pro'),
-  ];
+  return toModels([...SHARED, ...AGENT_ONLY], 'volcengine-agent', AGENT_PLAN_BASE);
 }
 
 export function arkCodingPlanModels(): ArkModel[] {
-  const p = 'volcengine-coding';
-  const b = CODING_PLAN_BASE;
-  return [
-    arkCodeLatest(p, b),
-    {
-      id: 'doubao-seed-code',
-      name: 'Doubao Seed Code',
-      api: 'anthropic-messages',
-      provider: p,
-      baseUrl: b,
-      reasoning: true,
-      input: ['text', 'image'],
-      cost: FREE,
-      contextWindow: 262_144,
-      maxTokens: 128_000,
-    },
-    doubaoSeed2('doubao-seed-2.0-code', p, b, 'Doubao Seed 2.0 code'),
-    doubaoSeed2('doubao-seed-2.0-lite', p, b, 'Doubao Seed 2.0 lite'),
-    doubaoSeed2('doubao-seed-2.0-pro', p, b, 'Doubao Seed 2.0 pro'),
-    deepseekV4('deepseek-v4-flash', p, b, 'DeepSeek V4 Flash'),
-    deepseekV4('deepseek-v4-pro', p, b, 'DeepSeek V4 Pro'),
-  ];
+  return toModels(SHARED, 'volcengine-coding', CODING_PLAN_BASE);
 }
