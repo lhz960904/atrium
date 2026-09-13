@@ -10,7 +10,6 @@ import {
   PROVIDER_MANIFEST,
   type ProviderManifest,
 } from '@main/agent/providers/manifest';
-import { fetchModelIds } from '@main/agent/providers/model-fetcher';
 import {
   answerLogin,
   cancelLogin,
@@ -32,7 +31,7 @@ import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
 import { shell } from 'electron';
 import { z } from 'zod';
-import { badRequest, internalError, preconditionFailed } from '../errors';
+import { badRequest, internalError } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 /** A user-friendly view of a provider that merges manifest + DB row. */
@@ -389,51 +388,32 @@ export const providersRouter = router({
       refreshProviders(ctx.db);
     }),
 
+  /** Ollama's installed list — what this machine has pulled, not what an
+   *  endpoint claims to serve. Cloud providers answer from their catalog. */
   fetchModels: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }): Promise<string[]> => {
       const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind === 'subscription') {
-        // A subscription's catalog is the engine's, fixed by the vendor.
+      if (manifest?.kind !== 'local-service') {
         throw badRequest('Provider has no model listing.');
       }
-
       const row = ctx.db
-        .select({ blob: providers.credentialsEncrypted, config: providers.config })
+        .select({ config: providers.config })
         .from(providers)
         .where(eq(providers.id, input.id))
         .get();
-      const config = (row?.config as { baseUrl?: string } | null) ?? {};
-      const baseUrl = config.baseUrl?.trim() || manifest.defaultBaseUrl;
+      const config = (row?.config as Record<string, unknown> | null) ?? {};
+      const baseUrl =
+        (typeof config.baseUrl === 'string' && config.baseUrl.trim()) || manifest.defaultBaseUrl;
 
       let modelIds: string[];
       try {
-        if (manifest.kind === 'local-service') {
-          modelIds = await fetchOllamaModels(baseUrl);
-        } else {
-          if (!row?.blob) {
-            throw preconditionFailed('Add an API key first.');
-          }
-          const apiKey = decryptJson<{ key: string }>(row.blob).key;
-          modelIds = await fetchModelIds({ protocol: manifest.protocol, baseUrl, apiKey });
-        }
+        modelIds = await fetchOllamaModels(baseUrl);
       } catch (err) {
         if (err instanceof TRPCError) throw err;
         throw internalError(err instanceof Error ? err.message : 'Fetch failed.');
       }
-
-      // Tie the listing to the endpoint it came from: point a provider at a
-      // relay and back, and the relay's catalog must not linger as its own.
-      const mergedConfig = { ...config, fetchedModels: modelIds, fetchedFrom: baseUrl };
-      ctx.db
-        .insert(providers)
-        .values({ id: input.id, config: mergedConfig })
-        .onConflictDoUpdate({
-          target: providers.id,
-          set: { config: mergedConfig, updatedAt: new Date() },
-        })
-        .run();
-
+      writeConfig(ctx.db, input.id, { ...config, fetchedModels: modelIds });
       return modelIds;
     }),
 });

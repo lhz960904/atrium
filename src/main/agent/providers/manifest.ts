@@ -173,15 +173,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
     consoleUrl: 'https://openrouter.ai/keys',
   },
-  {
-    id: 'aihubmix',
-    kind: 'cloud-api',
-    name: 'AiHubMix',
-    descriptionKey: 'settings.providers.desc.aihubmix',
-    protocol: 'openai-compatible',
-    defaultBaseUrl: 'https://aihubmix.com/v1',
-    consoleUrl: 'https://aihubmix.com/',
-  },
   // ── Local services ───────────────────────────────────────────────────────
   {
     id: 'ollama',

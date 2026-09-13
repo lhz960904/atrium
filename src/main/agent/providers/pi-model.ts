@@ -32,6 +32,7 @@ import {
   type LocalServiceManifest,
   PROVIDER_MANIFEST,
 } from './manifest';
+import { adoptRetiredProviders } from './retired';
 import { arkAgentPlanModels, arkCodingPlanModels } from './volcengine.models';
 
 /**
@@ -277,6 +278,7 @@ registerAll(new Map());
  * until it is set again.
  */
 export function refreshProviders(db: Db): void {
+  adoptRetiredProviders(db);
   registerAll(readAddedModels(db), readCustomProviders(db));
 }
 

@@ -674,6 +674,7 @@ export const en: typeof zh = {
         remove: 'Delete provider',
         removeConfirm: 'Delete this provider and its stored key?',
       },
+      emptyCatalog: 'No models yet. Add one with the button above.',
       custom: {
         add: 'Add model',
         edit: 'Edit {{id}}',
@@ -711,7 +712,6 @@ export const en: typeof zh = {
         volcengineAgent: 'Volcengine Ark · Agent Plan subscription (Anthropic-compatible).',
         volcengineCoding: 'Volcengine Ark · Coding Plan subscription (Anthropic-compatible).',
         openrouter: 'One API that routes to 300+ models.',
-        aihubmix: 'One-stop LLM aggregator — one key, many models.',
         ollama:
           'Run open models locally (Qwen, Gemma, DeepSeek…). Works once the service is detected — no API key.',
       },

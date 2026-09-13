@@ -16,8 +16,9 @@ export function ModelsBlock({
   grow = true,
 }: {
   providerId: string;
-  /** Whether the fetch action is currently possible (key saved / service up). */
-  canFetch: boolean;
+  /** Whether a refresh is possible right now. Absent hides the action entirely:
+   *  only a local service has an installed list to read. */
+  canFetch?: boolean;
   /** Shown in the empty state — the caller knows why the list is empty. */
   emptyHint: string;
   models: string[];
@@ -99,19 +100,21 @@ export function ModelsBlock({
               {t('settings.providers.custom.add')}
             </button>
           )}
-          <button
-            type="button"
-            disabled={fetchDisabled}
-            onClick={() => fetchModels.mutate({ id: providerId })}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border-default bg-elevated px-2.5 py-1 text-fg-secondary text-xs hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {fetchModels.isLoading ? (
-              <Loader2 className="size-[12px] animate-spin" />
-            ) : (
-              <Download className="size-[12px]" />
-            )}
-            {t('settings.providers.fetch')}
-          </button>
+          {canFetch !== undefined && (
+            <button
+              type="button"
+              disabled={fetchDisabled}
+              onClick={() => fetchModels.mutate({ id: providerId })}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border-default bg-elevated px-2.5 py-1 text-fg-secondary text-xs hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {fetchModels.isLoading ? (
+                <Loader2 className="size-[12px] animate-spin" />
+              ) : (
+                <Download className="size-[12px]" />
+              )}
+              {t('settings.providers.fetch')}
+            </button>
+          )}
         </div>
       </div>
 

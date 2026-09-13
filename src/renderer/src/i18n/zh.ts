@@ -663,7 +663,6 @@ export const zh = {
         volcengineAgent: '火山方舟 · Agent Plan 订阅版（Anthropic 兼容）。',
         volcengineCoding: '火山方舟 · Coding Plan 订阅版（Anthropic 兼容）。',
         openrouter: '统一 API 路由 300+ 模型。',
-        aihubmix: '一站式 LLM 聚合，单 key 调多家模型。',
         ollama: '本地运行开源模型（Qwen、Gemma、DeepSeek 等）。检测到服务即可用，无需 API key。',
       },
       customProvider: {
@@ -679,6 +678,7 @@ export const zh = {
         remove: '删除供应商',
         removeConfirm: '删除这个供应商及其已保存的密钥?',
       },
+      emptyCatalog: '还没有模型,用上方按钮添加。',
       custom: {
         add: '添加模型',
         edit: '编辑 {{id}}',

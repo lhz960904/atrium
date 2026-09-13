@@ -19,7 +19,9 @@ import zhipuSvg from '@lobehub/icons-static-svg/icons/zhipu-color.svg?raw';
  * wrapper just controls font-size + color.
  *
  * Mapping is by provider id; unknown ids fall back to a letter tile so
- * custom providers added later still render something.
+ * custom providers added later still render something. Ids Atrium no longer
+ * ships stay listed — a carried-over provider keeps its id, so it keeps its
+ * brand mark.
  */
 const SVG_BY_ID: Record<string, string> = {
   anthropic: anthropicSvg,

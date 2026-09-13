@@ -75,17 +75,12 @@ function CloudApiForm({
   const { t } = useTranslation();
   const config = (provider.config ?? {}) as {
     baseUrl?: string;
-    fetchedModels?: string[];
-    fetchedFrom?: string;
     enabledModels?: string[];
     customModels?: CustomModel[];
   };
-  // The catalog is the list; a fetch only reaches providers that have none.
-  // A listing pulled from a different endpoint than the one now configured is
-  // someone else's catalog (a relay's, typically) and is not shown.
-  const base = config.baseUrl?.trim() || provider.defaultBaseUrl;
-  const fetched = config.fetchedFrom === base ? (config.fetchedModels ?? []) : [];
-  const models = [...new Set([...(provider.models ?? []).map((m) => m.id), ...fetched])];
+  // The catalog is the whole list. An endpoint that serves something it doesn't
+  // cover is what the add-model editor is for.
+  const models = (provider.models ?? []).map((m) => m.id);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
       <ApiKeyField
@@ -100,12 +95,7 @@ function CloudApiForm({
       />
       <ModelsBlock
         providerId={provider.id}
-        canFetch={provider.hasCredentials}
-        emptyHint={
-          provider.hasCredentials
-            ? t('settings.providers.fetchHint')
-            : t('settings.providers.fetchHintNoKey')
-        }
+        emptyHint={t('settings.providers.emptyCatalog')}
         models={models}
         enabledModels={config.enabledModels ?? []}
         customModels={config.customModels ?? []}
