@@ -47,8 +47,13 @@ export function CustomProviderDialog({
   const pending = create.isLoading || update.isLoading;
   const error = create.error ?? update.error;
 
+  // Shown per field rather than only as a disabled button: a save that is off
+  // with no reason given is the same as a save that is broken.
   const idOk = /^[a-z0-9][a-z0-9-]*$/.test(id);
-  const valid = idOk && draft.name.trim().length > 0 && /^https?:\/\//.test(draft.baseUrl.trim());
+  const urlOk = /^https?:\/\/.+/.test(draft.baseUrl.trim());
+  const idError = id.length > 0 && !idOk;
+  const urlError = draft.baseUrl.trim().length > 0 && !urlOk;
+  const valid = idOk && draft.name.trim().length > 0 && urlOk;
 
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
@@ -82,7 +87,7 @@ export function CustomProviderDialog({
                 placeholder="my-relay"
                 onChange={(e) => setId(e.target.value.toLowerCase().trim())}
               />
-              <p className="mt-1 text-[11px] text-fg-tertiary">
+              <p className={`mt-1 text-[11px] ${idError ? 'text-danger' : 'text-fg-tertiary'}`}>
                 {existing
                   ? t('settings.providers.customProvider.idFixed')
                   : t('settings.providers.customProvider.idHint')}
@@ -106,6 +111,9 @@ export function CustomProviderDialog({
                 placeholder="https://example.com/v1"
                 onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value.trim() })}
               />
+              <p className={`mt-1 text-[11px] ${urlError ? 'text-danger' : 'text-fg-tertiary'}`}>
+                {t('settings.providers.customProvider.baseUrlHint')}
+              </p>
             </div>
 
             <div className="mt-3">

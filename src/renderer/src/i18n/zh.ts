@@ -674,6 +674,7 @@ export const zh = {
         idFixed: '不可修改:它关联着已保存的密钥和所有用过它的会话。',
         name: '显示名称',
         baseUrl: 'Base URL',
+        baseUrlHint: '端点根地址,以 http:// 或 https:// 开头。',
         afterHint: '保存后在下方列表里添加它的模型。',
         remove: '删除供应商',
         removeConfirm: '删除这个供应商及其已保存的密钥?',

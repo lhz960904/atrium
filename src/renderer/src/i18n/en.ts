@@ -669,6 +669,7 @@ export const en: typeof zh = {
         idFixed: 'Fixed: it keys the stored key and every thread that ran on it.',
         name: 'Display name',
         baseUrl: 'Base URL',
+        baseUrlHint: 'The endpoint root, starting with http:// or https://.',
         afterHint: 'Add its models from the list below once saved.',
         remove: 'Delete provider',
         removeConfirm: 'Delete this provider and its stored key?',
