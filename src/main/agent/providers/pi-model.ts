@@ -20,6 +20,7 @@ import { providers } from '@main/db/schema';
 import { decryptJson } from '@main/platform/safe-storage';
 import { eq } from 'drizzle-orm';
 import { getProviderManifest, type ManifestModel, PROVIDER_MANIFEST } from './manifest';
+import { arkAgentPlanModels, arkCodingPlanModels } from './volcengine.models';
 
 /**
  * Model resolution for the engine.
@@ -118,6 +119,13 @@ for (const provider of [
   piModels.setProvider(provider);
 }
 
+/** Catalogs Atrium maintains itself, for endpoints the engine doesn't ship and
+ *  that expose no listing of their own. */
+const OWN_CATALOG: Record<string, () => Model<'anthropic-messages'>[]> = {
+  'volcengine-agent': arkAgentPlanModels,
+  'volcengine-coding': arkCodingPlanModels,
+};
+
 for (const manifest of PROVIDER_MANIFEST) {
   if (piModels.getProvider(manifest.id)) continue;
   const api =
@@ -132,7 +140,7 @@ for (const manifest of PROVIDER_MANIFEST) {
       id: manifest.id,
       name: manifest.name,
       auth: { apiKey: envApiKeyAuth(`${manifest.name} API key`, []) },
-      models: [],
+      models: OWN_CATALOG[manifest.id]?.() ?? [],
       api: API_STREAMS[api](),
     }),
   );
