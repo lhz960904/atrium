@@ -26,7 +26,7 @@ import { decryptJson } from '@main/platform/safe-storage';
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
 import { eq } from 'drizzle-orm';
 import { readAddedModels, readCustomProviders } from './custom-models';
-import { type CloudApiManifest, getProviderManifest, PROVIDER_MANIFEST } from './manifest';
+import { getProviderManifest } from './manifest';
 import { adoptRetiredProviders } from './retired';
 import { arkAgentPlanModels, arkCodingPlanModels } from './volcengine.models';
 
@@ -49,12 +49,6 @@ import { arkAgentPlanModels, arkCodingPlanModels } from './volcengine.models';
  *  early rather than overflow, since overflowing fails silently. */
 const FALLBACK_CONTEXT_TOKENS = 128_000;
 const FALLBACK_MAX_TOKENS = 8192;
-
-const PROTOCOL_API = {
-  anthropic: 'anthropic-messages',
-  'openai-compatible': 'openai-completions',
-  'google-gemini': 'google-generative-ai',
-} as const;
 
 const API_STREAMS = {
   'anthropic-messages': anthropicMessagesApi,
@@ -127,11 +121,28 @@ function adopt(source: Provider, id: string, name: string): Provider {
   };
 }
 
-/** Catalogs Atrium maintains itself, for endpoints the engine doesn't ship and
- *  that expose no listing of their own. */
-const OWN_CATALOG: Record<string, (baseUrl: string) => Model<'anthropic-messages'>[]> = {
-  'volcengine-agent': arkAgentPlanModels,
-  'volcengine-coding': arkCodingPlanModels,
+/**
+ * Catalogs Atrium maintains itself, for endpoints the engine doesn't ship and
+ * that expose no listing of their own. Each carries everything registering it
+ * needs, so a provider is defined in one place rather than half here and half
+ * in the manifest — which only describes providers, not how to reach them.
+ */
+const OWN_CATALOG: Record<
+  string,
+  { name: string; baseUrl: string; api: Api; models: (baseUrl: string) => Model<Api>[] }
+> = {
+  'volcengine-agent': {
+    name: 'Volcengine Agent Plan',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
+    api: 'anthropic-messages',
+    models: arkAgentPlanModels,
+  },
+  'volcengine-coding': {
+    name: 'Volcengine Coding Plan',
+    baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
+    api: 'anthropic-messages',
+    models: arkCodingPlanModels,
+  },
 };
 
 /** Every provider Atrium ships, before anything the user has added. */
@@ -170,25 +181,18 @@ const SHIPPED: readonly Provider[] = (() => {
     }),
   ];
 
-  const known = new Set(engine.map((p) => p.id));
-  const rest = PROVIDER_MANIFEST.filter(
-    (m): m is CloudApiManifest => !known.has(m.id) && m.kind === 'cloud-api',
-  ).map((manifest) => {
-    const api = PROTOCOL_API[manifest.protocol];
-    // Carrying the endpoint on the provider is what lets everything downstream
-    // ask the registry for it instead of reading the manifest a second time.
-    const baseUrl = manifest.defaultBaseUrl;
-    return createProvider({
-      id: manifest.id,
-      name: manifest.name,
-      baseUrl,
-      auth: { apiKey: envApiKeyAuth(`${manifest.name} API key`, []) },
-      models: OWN_CATALOG[manifest.id]?.(baseUrl) ?? [],
-      api: API_STREAMS[api](),
-    });
-  });
+  const ours = Object.entries(OWN_CATALOG).map(([id, own]) =>
+    createProvider({
+      id,
+      name: own.name,
+      baseUrl: own.baseUrl,
+      auth: { apiKey: envApiKeyAuth(`${own.name} API key`, []) },
+      models: own.models(own.baseUrl),
+      api: API_STREAMS[own.api as keyof typeof API_STREAMS](),
+    }),
+  );
 
-  return [...engine, ...rest];
+  return [...engine, ...ours];
 })();
 
 /**
@@ -287,34 +291,28 @@ function configuredBaseUrl(db: Db, providerId: string): string | undefined {
 }
 
 export function resolvePiModel(db: Db, providerId: string, modelId: string): Model<Api> {
-  const manifest = getProviderManifest(providerId);
-  if (!manifest) {
-    // No manifest entry means the user defined this provider. Its catalog is
-    // entirely theirs, so the registry is the whole answer.
-    const model = piModels.getModel(providerId, modelId);
-    if (!model) throw new Error(`Provider "${providerId}" is unknown.`);
-    const override = configuredBaseUrl(db, providerId);
-    return override ? { ...model, baseUrl: override } : model;
-  }
-
-  // A subscription's catalog is entirely pi's — nothing here to merge.
-  if (manifest.kind === 'subscription') {
-    const model = piModels.getModel(providerId, modelId);
-    if (!model) throw new Error(`Model "${modelId}" is not offered by ${manifest.name}.`);
-    return model;
-  }
+  const provider = piModels.getProvider(providerId);
+  if (!provider) throw new Error(`Provider "${providerId}" is unknown.`);
   const override = configuredBaseUrl(db, providerId);
 
-  // A builtin entry under a builtin provider is complete as-is (its api has
-  // registered streams, compat and cost are pi-maintained).
-  const builtin = piModels.getModel(providerId, modelId);
-  if (builtin) return override ? { ...builtin, baseUrl: override } : builtin;
+  // A catalog entry is complete as-is: its api has registered streams, and its
+  // window, price and compat came from whoever maintains that catalog.
+  const known = piModels.getModel(providerId, modelId);
+  if (known) return override ? { ...known, baseUrl: override } : known;
 
+  // A subscription's catalog is the vendor's and can't be added to, so an id
+  // outside it is a mistake rather than something to build a request for.
+  if (getProviderManifest(providerId)?.kind === 'subscription') {
+    throw new Error(`Model "${modelId}" is not offered by ${provider.name}.`);
+  }
+
+  // Everything a request needs is on the provider: an id no catalog lists still
+  // reaches the same endpoint, spoken the same way.
   return buildModel(
     providerId,
     modelId,
-    PROTOCOL_API[manifest.protocol],
-    override ?? manifest.defaultBaseUrl,
+    provider.getModels()[0]?.api ?? 'openai-completions',
+    override ?? provider.baseUrl ?? '',
   );
 }
 

@@ -15,16 +15,11 @@
  */
 
 export type ProviderKind = 'cloud-api' | 'subscription';
-export type CloudApiProtocol = 'anthropic' | 'openai-compatible' | 'google-gemini';
-
 export type CloudApiManifest = {
   id: string;
   kind: 'cloud-api';
   name: string;
   descriptionKey: string;
-  /** Decides how the `/models` listing request is shaped + parsed. */
-  protocol: CloudApiProtocol;
-  defaultBaseUrl: string;
   /** Where the user goes to generate their API key. */
   consoleUrl: string;
 };
@@ -52,8 +47,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     kind: 'cloud-api',
     name: 'Anthropic',
     descriptionKey: 'settings.providers.desc.anthropic',
-    protocol: 'anthropic',
-    defaultBaseUrl: 'https://api.anthropic.com',
     consoleUrl: 'https://console.anthropic.com/settings/keys',
   },
   {
@@ -61,8 +54,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     kind: 'cloud-api',
     name: 'OpenAI',
     descriptionKey: 'settings.providers.desc.openai',
-    protocol: 'openai-compatible',
-    defaultBaseUrl: 'https://api.openai.com/v1',
     consoleUrl: 'https://platform.openai.com/api-keys',
   },
   {
@@ -70,8 +61,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     kind: 'cloud-api',
     name: 'DeepSeek',
     descriptionKey: 'settings.providers.desc.deepseek',
-    protocol: 'openai-compatible',
-    defaultBaseUrl: 'https://api.deepseek.com',
     consoleUrl: 'https://platform.deepseek.com/api_keys',
   },
   {
@@ -79,8 +68,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     kind: 'cloud-api',
     name: 'Google Gemini',
     descriptionKey: 'settings.providers.desc.google',
-    protocol: 'google-gemini',
-    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     consoleUrl: 'https://aistudio.google.com/apikey',
   },
   {
@@ -88,8 +75,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     kind: 'cloud-api',
     name: 'Moonshot',
     descriptionKey: 'settings.providers.desc.moonshot',
-    protocol: 'openai-compatible',
-    defaultBaseUrl: 'https://api.moonshot.cn/v1',
     consoleUrl: 'https://platform.moonshot.cn/console/api-keys',
   },
   {
@@ -97,8 +82,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     kind: 'cloud-api',
     name: 'Kimi Coding Plan',
     descriptionKey: 'settings.providers.desc.kimiCoding',
-    protocol: 'anthropic',
-    defaultBaseUrl: 'https://api.kimi.com/coding',
     consoleUrl: 'https://platform.moonshot.cn/',
   },
   {
@@ -106,8 +89,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     kind: 'cloud-api',
     name: 'Z.AI Coding Plan',
     descriptionKey: 'settings.providers.desc.zaiCoding',
-    protocol: 'openai-compatible',
-    defaultBaseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
     consoleUrl: 'https://open.bigmodel.cn/',
   },
   {
@@ -115,8 +96,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     kind: 'cloud-api',
     name: 'Volcengine Agent Plan',
     descriptionKey: 'settings.providers.desc.volcengineAgent',
-    protocol: 'anthropic',
-    defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
     consoleUrl:
       'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=agentPlan',
   },
@@ -125,8 +104,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     kind: 'cloud-api',
     name: 'Volcengine Coding Plan',
     descriptionKey: 'settings.providers.desc.volcengineCoding',
-    protocol: 'anthropic',
-    defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
     consoleUrl:
       'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=subscribe',
   },
@@ -153,8 +130,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     kind: 'cloud-api',
     name: 'OpenRouter',
     descriptionKey: 'settings.providers.desc.openrouter',
-    protocol: 'openai-compatible',
-    defaultBaseUrl: 'https://openrouter.ai/api/v1',
     consoleUrl: 'https://openrouter.ai/keys',
   },
 ] as const;

@@ -34,6 +34,9 @@ type ProviderView = ProviderManifest & {
   models?: readonly { id: string }[];
   /** Defined by the user, so it can be edited and deleted. */
   custom?: boolean;
+  /** The endpoint the engine resolved for this provider — the only source, and
+   *  what the settings panel shows as the default. */
+  defaultBaseUrl?: string;
 };
 
 const configSchema = z.record(z.string(), z.unknown());
@@ -92,13 +95,13 @@ export const providersRouter = router({
     });
     const shipped: ProviderView[] = PROVIDER_MANIFEST.map((m) => {
       const row = byId.get(m.id);
-      // The endpoint comes from the registry, not the manifest: the manifest
-      // declares it, but what the engine resolved is what a request will use,
-      // and a copy read separately is a copy that can be wrong.
+      // The endpoint comes from the registry, which is the only place it is
+      // written down: the manifest describes a provider, it doesn't say how to
+      // reach one.
       const registered = piModels.getProvider(m.id);
       return {
         ...m,
-        ...(registered?.baseUrl ? { defaultBaseUrl: registered.baseUrl } : {}),
+        defaultBaseUrl: registered?.baseUrl,
         ...(m.kind === 'cloud-api' || m.kind === 'subscription'
           ? { models: piModels.getModels(m.id).map((model) => ({ id: model.id })) }
           : {}),

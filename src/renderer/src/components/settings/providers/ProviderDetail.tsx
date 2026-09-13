@@ -88,7 +88,7 @@ function CloudApiForm({
       <BaseUrlField
         providerId={provider.id}
         initialValue={config.baseUrl ?? ''}
-        defaultBaseUrl={provider.defaultBaseUrl}
+        defaultBaseUrl={provider.defaultBaseUrl ?? ''}
       />
       <ModelsBlock
         providerId={provider.id}
