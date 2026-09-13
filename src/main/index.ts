@@ -48,6 +48,19 @@ let isQuitting = false;
 // Privileged scheme registration has to happen before the app is ready.
 registerFaviconScheme();
 
+/** Ignores hash and query: a reload or a route change, not a link leading out.
+ *  `file:` URLs both report a null origin, so the path is what separates
+ *  the renderer's own document from any other file on disk. */
+function isSameDocument(target: string, current: string): boolean {
+  try {
+    const a = new URL(target);
+    const b = new URL(current);
+    return a.origin === b.origin && a.pathname === b.pathname;
+  } catch {
+    return false;
+  }
+}
+
 function createWindow(): BrowserWindow {
   const initial = getInitialWindowState();
   const win = new BrowserWindow({
@@ -99,6 +112,21 @@ function createWindow(): BrowserWindow {
   win.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
     return { action: 'deny' };
+  });
+
+  /**
+   * The window-open handler above only covers content asking for a *new*
+   * window; a link without `target` navigates this one instead, and there is no
+   * chrome here to come back from — the app would be stranded on a remote page
+   * with its own preload still attached. Electron fires this for the main frame
+   * only and never for hash-route changes, so the router and the PDF preview
+   * iframe are untouched; a dev-server reload lands on the same document and
+   * passes through.
+   */
+  win.webContents.on('will-navigate', (details) => {
+    if (isSameDocument(details.url, win.webContents.getURL())) return;
+    details.preventDefault();
+    shell.openExternal(details.url);
   });
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
