@@ -174,11 +174,16 @@ export function ModelsBlock({
         </ul>
       )}
 
-      <CustomModelDialog
-        providerId={providerId}
-        editing={editing}
-        onClose={() => setEditing(null)}
-      />
+      {/* Mounted per edit: the form holds a draft, and a reused instance would
+          open the next model with the previous one's values still in it. */}
+      {editing && (
+        <CustomModelDialog
+          key={editing === 'new' ? 'new' : editing.id}
+          providerId={providerId}
+          editing={editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }

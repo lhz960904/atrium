@@ -33,13 +33,13 @@ export function CustomModelDialog({
   onClose,
 }: {
   providerId: string;
-  /** The model being edited, or 'new'. null keeps the dialog closed. */
-  editing: CustomModel | 'new' | null;
+  /** The model being edited, or 'new' for a blank one. */
+  editing: CustomModel | 'new';
   onClose: () => void;
 }): React.JSX.Element {
   const { t } = useTranslation();
   const utils = trpc.useUtils();
-  const existing = editing === 'new' || editing === null ? null : editing;
+  const existing = editing === 'new' ? null : editing;
   const upsert = trpc.providers.upsertCustomModel.useMutation({
     onSuccess: () => {
       utils.providers.list.invalidate();
@@ -47,7 +47,8 @@ export function CustomModelDialog({
     },
   });
 
-  // Keyed on the model being edited so reopening starts from its values.
+  // The caller mounts this per edit, so the draft starts from the right values
+  // instead of holding whatever was open last.
   const [draft, setDraft] = useState<CustomModel>(
     existing ?? { id: '', name: '', ...DEFAULT_CUSTOM_MODEL },
   );
@@ -56,7 +57,7 @@ export function CustomModelDialog({
   const valid = draft.id.trim().length > 0 && draft.contextWindow > 0 && draft.maxTokens > 0;
 
   return (
-    <Dialog.Root open={editing !== null} onOpenChange={(o) => !o && onClose()}>
+    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[var(--z-modal)] bg-black/40 backdrop-blur-sm" />
         <Dialog.Content
