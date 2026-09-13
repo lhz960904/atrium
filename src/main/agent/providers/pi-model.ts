@@ -160,26 +160,28 @@ for (const provider of [
 
 /** Catalogs Atrium maintains itself, for endpoints the engine doesn't ship and
  *  that expose no listing of their own. */
-const OWN_CATALOG: Record<string, () => Model<'anthropic-messages'>[]> = {
+const OWN_CATALOG: Record<string, (baseUrl: string) => Model<'anthropic-messages'>[]> = {
   'volcengine-agent': arkAgentPlanModels,
   'volcengine-coding': arkCodingPlanModels,
 };
 
 for (const manifest of PROVIDER_MANIFEST) {
   if (piModels.getProvider(manifest.id)) continue;
+  // A subscription's provider is the engine's and is already registered above;
+  // the rest speak a protocol the manifest names.
+  if (manifest.kind === 'subscription') continue;
   const api =
-    manifest.kind === 'cloud-api'
-      ? PROTOCOL_API[manifest.protocol]
-      : manifest.kind === 'local-service'
-        ? 'openai-completions'
-        : undefined;
-  if (!api) continue;
+    manifest.kind === 'cloud-api' ? PROTOCOL_API[manifest.protocol] : 'openai-completions';
+  // Carrying the endpoint on the provider is what lets everything downstream
+  // ask the registry for it instead of reading the manifest a second time.
+  const baseUrl = manifest.defaultBaseUrl;
   piModels.setProvider(
     createProvider({
       id: manifest.id,
       name: manifest.name,
+      baseUrl,
       auth: { apiKey: envApiKeyAuth(`${manifest.name} API key`, []) },
-      models: OWN_CATALOG[manifest.id]?.() ?? [],
+      models: OWN_CATALOG[manifest.id]?.(baseUrl) ?? [],
       api: API_STREAMS[api](),
     }),
   );

@@ -22,10 +22,6 @@ import type { Model } from '@earendil-works/pi-ai';
  * Checked against the console on 2026-09-13.
  */
 
-// No `/v1`: the anthropic api appends `/v1/messages` itself.
-const AGENT_PLAN_BASE = 'https://ark.cn-beijing.volces.com/api/plan';
-const CODING_PLAN_BASE = 'https://ark.cn-beijing.volces.com/api/coding';
-
 /** A plan is a subscription: per-token pricing would misreport every turn. */
 const FREE = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } as const;
 
@@ -136,10 +132,12 @@ function toModels(specs: readonly Spec[], provider: string, baseUrl: string): Ar
   }));
 }
 
-export function arkAgentPlanModels(): ArkModel[] {
-  return toModels([...SHARED, ...AGENT_ONLY], 'volcengine-agent', AGENT_PLAN_BASE);
+/** The endpoint is passed in rather than repeated here: the manifest declares
+ *  it once, and every model is stamped with the same one. */
+export function arkAgentPlanModels(baseUrl: string): ArkModel[] {
+  return toModels([...SHARED, ...AGENT_ONLY], 'volcengine-agent', baseUrl);
 }
 
-export function arkCodingPlanModels(): ArkModel[] {
-  return toModels(SHARED, 'volcengine-coding', CODING_PLAN_BASE);
+export function arkCodingPlanModels(baseUrl: string): ArkModel[] {
+  return toModels(SHARED, 'volcengine-coding', baseUrl);
 }

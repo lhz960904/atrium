@@ -47,8 +47,13 @@ export const providersRouter = router({
     const byId = new Map(rows.map((r) => [r.id, r]));
     return PROVIDER_MANIFEST.map((m) => {
       const row = byId.get(m.id);
+      // The endpoint comes from the registry, not the manifest: the manifest
+      // declares it, but what the engine resolved is what a request will use,
+      // and a copy read separately is a copy that can be wrong.
+      const registered = piModels.getProvider(m.id);
       return {
         ...m,
+        ...(registered?.baseUrl ? { defaultBaseUrl: registered.baseUrl } : {}),
         ...(m.kind === 'cloud-api' || m.kind === 'subscription'
           ? { models: piModels.getModels(m.id).map((model) => ({ id: model.id })) }
           : {}),
