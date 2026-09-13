@@ -23,9 +23,8 @@ import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permission
 import type { Message } from '@shared/protocol';
 import { mcpManager } from '../mcp/manager';
 import { buildMcpTools } from '../mcp/tool-adapter';
-import { modelPricing } from '../providers/models/catalog';
 import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
-import { supportsImageToolResults } from '../providers/resolve';
+import { modelRates, supportsImageToolResults } from '../providers/resolve';
 import { BackgroundShells, LocalSandbox } from '../sandbox';
 import { getSkills } from '../skills/registry';
 import { getTools } from '../tools';
@@ -161,12 +160,12 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
     const sandbox = new LocalSandbox(workspaceRoot);
     const skills = getSkills();
     const mode = request.permissionMode ?? DEFAULT_PERMISSION_MODE;
-    const supportsImages = supportsImageToolResults(providerId, modelId);
     const computerUse =
       process.platform === 'darwin' && getSettings('computerUse.enabled')
         ? getComputerUseHelper()
         : undefined;
     const piModel = resolvePiModel(db, providerId, modelId);
+    const supportsImages = supportsImageToolResults(piModel);
     // A continuation extends the run it answers, so the model's next turns
     // land in that same stored run instead of opening a second one.
     const runId = request.resumeRunId ?? randomUUID();
@@ -223,7 +222,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
           abortSignal: abort.signal,
           emit: piLog.append,
           recordUsage: (u) =>
-            recordUsage(db, { threadId, kind: 'chat', ...u }, modelPricing(u.modelId)),
+            recordUsage(db, { threadId, kind: 'chat', ...u }, modelRates(piModel)),
           generateTitle: getSettings('general.autoGenerateTitle')
             ? ({ messages, complete }) =>
                 generateThreadTitle({

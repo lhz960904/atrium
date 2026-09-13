@@ -1,4 +1,4 @@
-import { modelPricing } from '@main/agent/providers/models/catalog';
+import { ratesFor } from '@main/agent/providers/resolve';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
@@ -37,7 +37,7 @@ type SummaryRow = {
   chatCalls: number;
   subagentCalls: number;
 };
-type ModelRow = { modelId: string; cacheRead: number };
+type ModelRow = { providerId: string; modelId: string; cacheRead: number };
 type DayRow = { day: string; tokens: number; costMicros: number };
 type DayModelRow = { day: string; modelId: string; tokens: number; costMicros: number };
 
@@ -63,12 +63,13 @@ export const usageRouter = router({
     // input rate; it was billed at the (much cheaper) cache-read rate instead.
     // Uses current pricing — an estimate, like the rest of the cost display.
     const byModel = ctx.db.all(sql`
-      SELECT model_id AS "modelId", COALESCE(SUM(cache_read_tokens), 0) AS "cacheRead"
+      SELECT provider_id AS "providerId", model_id AS "modelId",
+             COALESCE(SUM(cache_read_tokens), 0) AS "cacheRead"
       FROM usage WHERE created_at >= ${start} AND cache_read_tokens > 0
-      GROUP BY model_id`) as ModelRow[];
+      GROUP BY provider_id, model_id`) as ModelRow[];
     let cacheSavedUsd = 0;
     for (const m of byModel) {
-      const p = modelPricing(m.modelId);
+      const p = ratesFor(ctx.db, m.providerId, m.modelId);
       cacheSavedUsd += Number(m.cacheRead) * Math.max(0, p.input - p.cacheRead);
     }
 

@@ -1,24 +1,48 @@
+import type { Api, Model } from '@earendil-works/pi-ai';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
+import type { TokenRates } from '@shared/cost';
 import type { SelectedModel } from '@shared/settings';
 import { eq } from 'drizzle-orm';
-import { getProviderManifest } from './manifest';
-import { modelCapabilities } from './models/catalog';
+import { resolvePiModel } from './pi-model';
 
 /**
- * Whether tool results for this provider+model may carry inline image parts.
- * Both halves matter: the model needs vision, and the provider conversion must
- * support content-type tool results with images — the anthropic and google
- * apis do, while openai-compatible JSON-stringifies content parts, which would
- * dump raw base64 into the prompt as text.
+ * Whether tool results for this model may carry inline image parts. Both halves
+ * matter: the model needs vision, and the api module must be able to send a
+ * content-typed tool result — the anthropic and google apis can, while
+ * openai-completions JSON-stringifies content parts, which would dump raw
+ * base64 into the prompt as text. Both facts live on the model, so a provider
+ * serving one model per api answers correctly per model.
  */
-export function supportsImageToolResults(providerId: string, modelId: string): boolean {
-  const manifest = getProviderManifest(providerId);
-  if (manifest?.kind !== 'cloud-api') return false;
+export function supportsImageToolResults(model: Model<Api>): boolean {
   return (
-    (manifest.protocol === 'anthropic' || manifest.protocol === 'google-gemini') &&
-    modelCapabilities(modelId).vision
+    (model.api === 'anthropic-messages' || model.api === 'google-generative-ai') &&
+    model.input.includes('image')
   );
+}
+
+/** The engine prices per million tokens; the ledger and the renderer's readout
+ *  both work per token. */
+export function modelRates(model: Model<Api>): TokenRates {
+  return {
+    input: model.cost.input / 1e6,
+    output: model.cost.output / 1e6,
+    cacheRead: model.cost.cacheRead / 1e6,
+    cacheCreation: model.cost.cacheWrite / 1e6,
+  };
+}
+
+const NO_RATES: TokenRates = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
+
+/** Rates for a (provider, model) pair named only by id — for the ledger's
+ *  injection points, which record a call after the fact. An unresolvable pair
+ *  prices at zero rather than failing the call that is being recorded. */
+export function ratesFor(db: Db, providerId: string, modelId: string): TokenRates {
+  try {
+    return modelRates(resolvePiModel(db, providerId, modelId));
+  } catch {
+    return NO_RATES;
+  }
 }
 
 /**

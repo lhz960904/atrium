@@ -2,7 +2,7 @@ import type { AtriumUIMessage } from '@shared/chat';
 import { costBreakdownUsd } from '@shared/cost';
 import type { RouterOutputs } from './trpc';
 
-/** modelId → { maxContextTokens, pricing } from the models.info tRPC query. */
+/** `providerId/modelId` → { maxContextTokens, pricing } from models.info. */
 export type ModelInfoMap = RouterOutputs['models']['info'];
 
 export type UsageAggregate = {
@@ -32,14 +32,22 @@ const ZERO: UsageAggregate = {
   costComplete: true,
 };
 
-/** Distinct model ids that produced assistant turns in this thread. */
-export function sessionModelIds(messages: AtriumUIMessage[]): string[] {
-  const ids = new Set<string>();
+/** The key a models.info answer is stored under. A bare model id is ambiguous:
+ *  two providers serving one id are two products with different windows. */
+export function modelKey(providerId: string, modelId: string): string {
+  return `${providerId}/${modelId}`;
+}
+
+export type SessionModel = { providerId: string; modelId: string };
+
+/** Distinct (provider, model) pairs that produced assistant turns here. */
+export function sessionModels(messages: AtriumUIMessage[]): SessionModel[] {
+  const seen = new Map<string, SessionModel>();
   for (const m of messages) {
-    const id = m.metadata?.modelId;
-    if (id) ids.add(id);
+    const { providerId, modelId } = m.metadata ?? {};
+    if (providerId && modelId) seen.set(modelKey(providerId, modelId), { providerId, modelId });
   }
-  return [...ids];
+  return [...seen.values()];
 }
 
 /**
@@ -65,7 +73,10 @@ export function aggregateUsage(
     acc.cacheReadTokens += cacheRead;
     acc.cacheCreationTokens += cacheCreation;
     acc.totalTokens += md.totalTokens;
-    const pricing = md.modelId ? info?.[md.modelId]?.pricing : undefined;
+    const pricing =
+      md.providerId && md.modelId
+        ? info?.[modelKey(md.providerId, md.modelId)]?.pricing
+        : undefined;
     if (pricing) {
       const c = costBreakdownUsd(
         {
@@ -99,8 +110,8 @@ export function contextOccupancy(
 ): ContextOccupancy | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const md = messages[i].metadata;
-    if (md?.contextTokens == null || !md.modelId) continue;
-    const max = info?.[md.modelId]?.maxContextTokens ?? 0;
+    if (md?.contextTokens == null || !md.providerId || !md.modelId) continue;
+    const max = info?.[modelKey(md.providerId, md.modelId)]?.maxContextTokens ?? 0;
     const pct = max > 0 ? Math.min(100, Math.round((md.contextTokens / max) * 100)) : 0;
     return { used: md.contextTokens, max, pct };
   }
