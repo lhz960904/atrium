@@ -14,10 +14,12 @@ import { registerBunOAuthFlows } from '@earendil-works/pi-ai/bun-oauth';
 import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
 import { deepseekProvider } from '@earendil-works/pi-ai/providers/deepseek';
 import { googleProvider } from '@earendil-works/pi-ai/providers/google';
+import { kimiCodingProvider } from '@earendil-works/pi-ai/providers/kimi-coding';
 import { moonshotaiCnProvider } from '@earendil-works/pi-ai/providers/moonshotai-cn';
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
 import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-codex';
 import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
+import { zaiCodingCnProvider } from '@earendil-works/pi-ai/providers/zai-coding-cn';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
 import { decryptJson } from '@main/platform/safe-storage';
@@ -130,7 +132,9 @@ for (const provider of [
   // Same endpoint and protocol as the manifest already declared, so adopting
   // the engine's catalog only adds the metadata we had no source for.
   adopt(moonshotaiCnProvider(), 'moonshot', 'Moonshot'),
+  adopt(zaiCodingCnProvider(), 'zai-coding', 'Z.AI Coding Plan'),
   openrouterProvider(),
+  kimiCodingProvider(),
   // Subscriptions the user signs into; their catalogs and auth are pi's.
   openaiCodexProvider(),
   /**

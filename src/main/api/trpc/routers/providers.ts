@@ -25,32 +25,12 @@ import { z } from 'zod';
 import { badRequest, internalError, preconditionFailed } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
-/**
- * The vendor's own catalog, where the engine maintains one. It is the better
- * source — kept current with the vendor and carrying real cost/window data —
- * so it leads, and the manifest supplies the rest: models the engine doesn't
- * know (Atrium-only plans) and any field we override.
- */
-function withEngineCatalog(
-  providerId: string,
-  declared: readonly { id: string }[],
-): { id: string }[] {
-  const ids = new Set<string>();
-  const out: { id: string }[] = [];
-  for (const model of [...piModels.getModels(providerId), ...declared]) {
-    if (ids.has(model.id)) continue;
-    ids.add(model.id);
-    out.push({ id: model.id });
-  }
-  return out;
-}
-
 /** A user-friendly view of a provider that merges manifest + DB row. */
 type ProviderView = ProviderManifest & {
   enabled: boolean;
   config: Record<string, unknown> | null;
   hasCredentials: boolean;
-  /** A subscription's catalog is the engine's, so it is filled in here. */
+  /** The catalog the engine resolves for this provider — the only source. */
   models?: readonly { id: string }[];
 };
 
@@ -70,7 +50,7 @@ export const providersRouter = router({
       return {
         ...m,
         ...(m.kind === 'cloud-api' || m.kind === 'subscription'
-          ? { models: withEngineCatalog(m.id, 'models' in m ? m.models : []) }
+          ? { models: piModels.getModels(m.id).map((model) => ({ id: model.id })) }
           : {}),
         enabled: row?.enabled ?? false,
         config: (row?.config as Record<string, unknown> | null) ?? null,

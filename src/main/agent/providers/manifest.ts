@@ -1,6 +1,10 @@
 /**
  * Static metadata for every well-known provider Atrium can talk to.
  *
+ * No model lists live here. A provider the engine ships answers for its own
+ * catalog; one it doesn't gets a catalog Atrium writes, next to the provider
+ * it belongs to. There is no third case and nothing to merge.
+ *
  * The `providers` table only stores the user's runtime configuration
  * (enabled flag, base URL, visible models, encrypted credentials). Display
  * name, kind, default endpoints, console URLs, etc. live here so the table
@@ -13,15 +17,6 @@
 export type ProviderKind = 'cloud-api' | 'local-service' | 'subscription';
 export type CloudApiProtocol = 'anthropic' | 'openai-compatible' | 'google-gemini';
 
-/**
- * A model to offer that **no catalog covers** — an id and nothing else, since
- * window, price and capabilities belong to the catalog record the engine
- * resolves. Where a catalog exists it is the whole answer, so nearly every
- * provider leaves this empty; what stays are ids no catalog has an entry for,
- * such as a vendor's floating alias.
- */
-export type ManifestModel = { id: string };
-
 export type CloudApiManifest = {
   id: string;
   kind: 'cloud-api';
@@ -32,8 +27,6 @@ export type CloudApiManifest = {
   defaultBaseUrl: string;
   /** Where the user goes to generate their API key. */
   consoleUrl: string;
-  /** Ids to offer beyond the engine's catalog for this provider; usually empty. */
-  models: readonly ManifestModel[];
 };
 
 /**
@@ -78,7 +71,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'anthropic',
     defaultBaseUrl: 'https://api.anthropic.com',
     consoleUrl: 'https://console.anthropic.com/settings/keys',
-    models: [],
   },
   {
     id: 'openai',
@@ -88,7 +80,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://api.openai.com/v1',
     consoleUrl: 'https://platform.openai.com/api-keys',
-    models: [],
   },
   {
     id: 'deepseek',
@@ -98,7 +89,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://api.deepseek.com',
     consoleUrl: 'https://platform.deepseek.com/api_keys',
-    models: [{ id: 'deepseek-chat' }, { id: 'deepseek-reasoner' }],
   },
   {
     id: 'google',
@@ -108,7 +98,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'google-gemini',
     defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     consoleUrl: 'https://aistudio.google.com/apikey',
-    models: [],
   },
   {
     id: 'moonshot',
@@ -118,7 +107,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://api.moonshot.cn/v1',
     consoleUrl: 'https://platform.moonshot.cn/console/api-keys',
-    models: [],
   },
   {
     id: 'kimi-coding',
@@ -126,19 +114,17 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     name: 'Kimi Coding Plan',
     descriptionKey: 'settings.providers.desc.kimiCoding',
     protocol: 'anthropic',
-    defaultBaseUrl: 'https://api.moonshot.cn/anthropic',
+    defaultBaseUrl: 'https://api.kimi.com/coding',
     consoleUrl: 'https://platform.moonshot.cn/',
-    models: [{ id: 'kimi-k2' }],
   },
   {
     id: 'zai-coding',
     kind: 'cloud-api',
     name: 'Z.AI Coding Plan',
     descriptionKey: 'settings.providers.desc.zaiCoding',
-    protocol: 'anthropic',
-    defaultBaseUrl: 'https://open.bigmodel.cn/api/anthropic',
+    protocol: 'openai-compatible',
+    defaultBaseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
     consoleUrl: 'https://open.bigmodel.cn/',
-    models: [{ id: 'glm-4.6' }],
   },
   {
     id: 'volcengine-agent',
@@ -149,7 +135,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
     consoleUrl:
       'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=agentPlan',
-    models: [],
   },
   {
     id: 'volcengine-coding',
@@ -160,7 +145,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
     consoleUrl:
       'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=subscribe',
-    models: [],
   },
   // ── Subscriptions (signed into, not keyed) ───────────────────────────────
   // A vendor that sells both a key and a subscription gets one row per
@@ -188,7 +172,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
     consoleUrl: 'https://openrouter.ai/keys',
-    models: [],
   },
   {
     id: 'aihubmix',
@@ -198,7 +181,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://aihubmix.com/v1',
     consoleUrl: 'https://aihubmix.com/',
-    models: [],
   },
   // ── Local services ───────────────────────────────────────────────────────
   {
