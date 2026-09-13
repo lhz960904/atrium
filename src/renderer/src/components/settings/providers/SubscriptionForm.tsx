@@ -174,7 +174,7 @@ export function SubscriptionForm({ provider }: { provider: Provider }): React.JS
 
       <ModelsBlock
         providerId={provider.id}
-        emptyHint={t('settings.providers.fetchHintNoKey')}
+        emptyHint={t('settings.providers.emptyCatalog')}
         models={models}
         enabledModels={config.enabledModels ?? []}
       />

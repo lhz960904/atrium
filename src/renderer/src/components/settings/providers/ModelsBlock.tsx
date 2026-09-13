@@ -1,5 +1,5 @@
 import type { CustomModel } from '@shared/custom-model';
-import { AlertCircle, Download, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
@@ -8,7 +8,6 @@ import { EnableSwitch } from './EnableSwitch';
 
 export function ModelsBlock({
   providerId,
-  canFetch,
   emptyHint,
   models,
   enabledModels,
@@ -16,9 +15,6 @@ export function ModelsBlock({
   grow = true,
 }: {
   providerId: string;
-  /** Whether a refresh is possible right now. Absent hides the action entirely:
-   *  only a local service has an installed list to read. */
-  canFetch?: boolean;
   /** Shown in the empty state — the caller knows why the list is empty. */
   emptyHint: string;
   models: string[];
@@ -32,10 +28,6 @@ export function ModelsBlock({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const utils = trpc.useUtils();
-  const fetchModels = trpc.providers.fetchModels.useMutation({
-    onSuccess: () => utils.providers.list.invalidate(),
-  });
-
   const updateConfig = trpc.providers.updateConfig.useMutation({
     onMutate: async ({ id, partial }) => {
       await utils.providers.list.cancel();
@@ -76,8 +68,6 @@ export function ModelsBlock({
     updateConfig.mutate({ id: providerId, partial: { enabledModels: next } });
   };
 
-  const fetchDisabled = !canFetch || fetchModels.isLoading;
-
   return (
     <div className={grow ? 'flex min-h-0 flex-1 flex-col' : 'flex shrink-0 flex-col'}>
       <div className="mb-2 flex shrink-0 items-center justify-between">
@@ -100,30 +90,8 @@ export function ModelsBlock({
               {t('settings.providers.custom.add')}
             </button>
           )}
-          {canFetch !== undefined && (
-            <button
-              type="button"
-              disabled={fetchDisabled}
-              onClick={() => fetchModels.mutate({ id: providerId })}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border-default bg-elevated px-2.5 py-1 text-fg-secondary text-xs hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {fetchModels.isLoading ? (
-                <Loader2 className="size-[12px] animate-spin" />
-              ) : (
-                <Download className="size-[12px]" />
-              )}
-              {t('settings.providers.fetch')}
-            </button>
-          )}
         </div>
       </div>
-
-      {fetchModels.error && (
-        <div className="mb-2 flex shrink-0 items-start gap-2 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-danger text-xs">
-          <AlertCircle className="mt-0.5 size-[13px] shrink-0" />
-          <span className="min-w-0 break-words">{fetchModels.error.message}</span>
-        </div>
-      )}
 
       {models.length === 0 ? (
         <div className="shrink-0 rounded-lg border border-border-default border-dashed bg-surface px-6 py-8 text-center">

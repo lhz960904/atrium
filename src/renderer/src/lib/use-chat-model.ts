@@ -14,7 +14,7 @@ export function deriveGroups(
   providers: {
     id: string;
     name: string;
-    kind: 'cloud-api' | 'local-service' | 'subscription';
+    kind: 'cloud-api' | 'subscription';
     enabled: boolean;
     config: Record<string, unknown> | null;
   }[],

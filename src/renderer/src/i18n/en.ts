@@ -650,7 +650,6 @@ export const en: typeof zh = {
       signedIn: 'Signed in.',
       submitCode: 'Submit',
       models: 'Models',
-      fetch: 'Fetch',
       enabledCount: '{{on}} / {{total}} enabled',
       apiKey: 'API Key',
       getKeyFrom: 'Get your API key from',
@@ -659,8 +658,6 @@ export const en: typeof zh = {
       command: 'Command',
       arguments: 'Arguments',
       baseUrlHint: 'Leave empty to use the default endpoint.',
-      fetchHint: 'Click Fetch to pull the available models.',
-      fetchHintNoKey: 'Add the API key, then Fetch models.',
       customProvider: {
         add: 'Add provider',
         edit: 'Edit {{name}}',
@@ -712,24 +709,6 @@ export const en: typeof zh = {
         volcengineAgent: 'Volcengine Ark · Agent Plan subscription (Anthropic-compatible).',
         volcengineCoding: 'Volcengine Ark · Coding Plan subscription (Anthropic-compatible).',
         openrouter: 'One API that routes to 300+ models.',
-        ollama:
-          'Run open models locally (Qwen, Gemma, DeepSeek…). Works once the service is detected — no API key.',
-      },
-      localService: {
-        running: 'Service running · v{{version}}',
-        notRunning: 'Local service not detected',
-        installHint: 'Install and start Ollama and it will be detected automatically:',
-        emptyModels: 'No installed models detected.',
-        downloadTitle: 'Download models',
-        downloadHint: 'Full catalog:',
-        download: 'Download',
-        customPlaceholder: 'Type a model name, e.g. qwen3:4b',
-        verifying: 'Checking…',
-        foundSize: '✓ Available · {{size}}',
-        foundCloud:
-          '✓ Cloud-hosted model · no local weights, inference runs on ollama.com (Ollama account required)',
-        notFound: '✗ Not in the model library',
-        verifyFailed: "Couldn't reach the library to verify — you can still try",
       },
     },
     subagents: {

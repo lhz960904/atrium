@@ -14,7 +14,7 @@
  * it, keeping this main-side catalog free of localized strings.
  */
 
-export type ProviderKind = 'cloud-api' | 'local-service' | 'subscription';
+export type ProviderKind = 'cloud-api' | 'subscription';
 export type CloudApiProtocol = 'anthropic' | 'openai-compatible' | 'google-gemini';
 
 export type CloudApiManifest = {
@@ -27,22 +27,6 @@ export type CloudApiManifest = {
   defaultBaseUrl: string;
   /** Where the user goes to generate their API key. */
   consoleUrl: string;
-};
-
-/**
- * A model server running on the user's machine (Ollama). Speaks the
- * openai-compatible protocol on a localhost port — no API key, no spawned
- * process; Atrium just detects whether the service is up and talks HTTP.
- * Endpoint paths (health probe, model listing) live with the service's API
- * knowledge in local-service.ts — the manifest only carries what varies or is
- * user-facing.
- */
-export type LocalServiceManifest = {
-  id: string;
-  kind: 'local-service';
-  name: string;
-  descriptionKey: string;
-  defaultBaseUrl: string;
 };
 
 /**
@@ -59,7 +43,7 @@ export type SubscriptionManifest = {
   consoleUrl: string;
 };
 
-export type ProviderManifest = CloudApiManifest | LocalServiceManifest | SubscriptionManifest;
+export type ProviderManifest = CloudApiManifest | SubscriptionManifest;
 
 export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
   // ── Cloud API ────────────────────────────────────────────────────────────
@@ -172,14 +156,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     protocol: 'openai-compatible',
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
     consoleUrl: 'https://openrouter.ai/keys',
-  },
-  // ── Local services ───────────────────────────────────────────────────────
-  {
-    id: 'ollama',
-    kind: 'local-service',
-    name: 'Ollama',
-    descriptionKey: 'settings.providers.desc.ollama',
-    defaultBaseUrl: 'http://localhost:11434',
   },
 ] as const;
 

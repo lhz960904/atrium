@@ -8,7 +8,6 @@ import { ApiKeyField } from './ApiKeyField';
 import { BaseUrlField } from './BaseUrlField';
 import { CustomProviderDialog } from './CustomProviderDialog';
 import { EnableSwitch } from './EnableSwitch';
-import { LocalServiceForm } from './LocalServiceForm';
 import { ModelsBlock } from './ModelsBlock';
 import { SubscriptionForm } from './SubscriptionForm';
 import type { ProviderView } from './types';
@@ -58,10 +57,8 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
 
       {provider.kind === 'cloud-api' ? (
         <CloudApiForm key={provider.id} provider={provider} />
-      ) : provider.kind === 'subscription' ? (
-        <SubscriptionForm key={provider.id} provider={provider} />
       ) : (
-        <LocalServiceForm key={provider.id} provider={provider} />
+        <SubscriptionForm key={provider.id} provider={provider} />
       )}
     </div>
   );

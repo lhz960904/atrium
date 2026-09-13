@@ -26,12 +26,7 @@ import { decryptJson } from '@main/platform/safe-storage';
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
 import { eq } from 'drizzle-orm';
 import { readAddedModels, readCustomProviders } from './custom-models';
-import {
-  type CloudApiManifest,
-  getProviderManifest,
-  type LocalServiceManifest,
-  PROVIDER_MANIFEST,
-} from './manifest';
+import { type CloudApiManifest, getProviderManifest, PROVIDER_MANIFEST } from './manifest';
 import { adoptRetiredProviders } from './retired';
 import { arkAgentPlanModels, arkCodingPlanModels } from './volcengine.models';
 
@@ -177,11 +172,9 @@ const SHIPPED: readonly Provider[] = (() => {
 
   const known = new Set(engine.map((p) => p.id));
   const rest = PROVIDER_MANIFEST.filter(
-    (m): m is CloudApiManifest | LocalServiceManifest =>
-      !known.has(m.id) && m.kind !== 'subscription',
+    (m): m is CloudApiManifest => !known.has(m.id) && m.kind === 'cloud-api',
   ).map((manifest) => {
-    const api =
-      manifest.kind === 'cloud-api' ? PROTOCOL_API[manifest.protocol] : 'openai-completions';
+    const api = PROTOCOL_API[manifest.protocol];
     // Carrying the endpoint on the provider is what lets everything downstream
     // ask the registry for it instead of reading the manifest a second time.
     const baseUrl = manifest.defaultBaseUrl;
@@ -304,20 +297,12 @@ export function resolvePiModel(db: Db, providerId: string, modelId: string): Mod
     return override ? { ...model, baseUrl: override } : model;
   }
 
-  if (manifest.kind === 'local-service') {
-    const base = (configuredBaseUrl(db, providerId) ?? manifest.defaultBaseUrl).replace(/\/+$/, '');
-    return buildModel(providerId, modelId, 'openai-completions', `${base}/v1`);
-  }
   // A subscription's catalog is entirely pi's — nothing here to merge.
   if (manifest.kind === 'subscription') {
     const model = piModels.getModel(providerId, modelId);
     if (!model) throw new Error(`Model "${modelId}" is not offered by ${manifest.name}.`);
     return model;
   }
-  if (manifest.kind !== 'cloud-api') {
-    throw new Error(`Provider "${providerId}" is not a model provider.`);
-  }
-
   const override = configuredBaseUrl(db, providerId);
 
   // A builtin entry under a builtin provider is complete as-is (its api has

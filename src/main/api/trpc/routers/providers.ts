@@ -1,11 +1,4 @@
 import {
-  fetchOllamaModels,
-  type LocalServiceStatus,
-  type ModelProbe,
-  pingOllama,
-  probeOllamaRegistryCached,
-} from '@main/agent/providers/local-service';
-import {
   getProviderManifest,
   PROVIDER_MANIFEST,
   type ProviderManifest,
@@ -18,7 +11,6 @@ import {
   startLogin,
 } from '@main/agent/providers/oauth-login';
 import { piModels, refreshProviders } from '@main/agent/providers/pi-model';
-import { type PullState, pullManager } from '@main/agent/providers/pull-manager';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
 import { decryptJson, encryptJson } from '@main/platform/safe-storage';
@@ -27,11 +19,10 @@ import {
   customProviderIdSchema,
   customProviderSchema,
 } from '@shared/custom-model';
-import { TRPCError } from '@trpc/server';
 import { eq } from 'drizzle-orm';
 import { shell } from 'electron';
 import { z } from 'zod';
-import { badRequest, internalError } from '../errors';
+import { badRequest } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 /** A user-friendly view of a provider that merges manifest + DB row. */
@@ -272,82 +263,6 @@ export const providersRouter = router({
     }),
 
   /**
-   * Liveness probe for a local model service (Ollama). Read-only and cheap, so
-   * the settings UI can poll it; "not running" is a normal answer, not an error.
-   */
-  detectLocalService: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }): Promise<LocalServiceStatus> => {
-      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind !== 'local-service') {
-        throw badRequest('Unknown local service id.');
-      }
-      const row = ctx.db
-        .select({ config: providers.config })
-        .from(providers)
-        .where(eq(providers.id, input.id))
-        .get();
-      const baseUrl =
-        (row?.config as { baseUrl?: string } | null)?.baseUrl?.trim() || manifest.defaultBaseUrl;
-      return pingOllama(baseUrl);
-    }),
-
-  /** Kick off a model download on the local service; progress is polled via
-   *  pullStates (the pull runs for minutes — far beyond any request). */
-  pullModel: publicProcedure
-    .input(z.object({ id: z.string(), model: z.string().min(1) }))
-    .mutation(({ ctx, input }): { started: boolean } => {
-      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind !== 'local-service') {
-        throw badRequest('Unknown local service id.');
-      }
-      const row = ctx.db
-        .select({ config: providers.config })
-        .from(providers)
-        .where(eq(providers.id, input.id))
-        .get();
-      const baseUrl =
-        (row?.config as { baseUrl?: string } | null)?.baseUrl?.trim() || manifest.defaultBaseUrl;
-      return { started: pullManager.start(baseUrl, input.model.trim()) };
-    }),
-
-  /** Snapshot of in-flight (and just-finished) downloads for the polling UI. */
-  pullStates: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(({ input }): PullState[] => {
-      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind !== 'local-service') {
-        throw badRequest('Unknown local service id.');
-      }
-      return pullManager.list();
-    }),
-
-  /**
-   * Validate model names against the public registry and read their download
-   * sizes. Backs the curated rows (live sizes instead of hardcoded ones) and
-   * the validating autocomplete. A registry failure yields exists=null —
-   * "couldn't verify", which never blocks a download attempt.
-   */
-  probeModels: publicProcedure
-    .input(z.object({ id: z.string(), models: z.array(z.string().min(1)).max(20) }))
-    .query(async ({ input }): Promise<Record<string, ModelProbe>> => {
-      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind !== 'local-service') {
-        throw badRequest('Unknown local service id.');
-      }
-      const entries = await Promise.all(
-        input.models.map(async (m): Promise<[string, ModelProbe]> => {
-          try {
-            return [m, await probeOllamaRegistryCached(m.trim())];
-          } catch {
-            return [m, { exists: null }];
-          }
-        }),
-      );
-      return Object.fromEntries(entries);
-    }),
-
-  /**
    * List the provider's available models and persist them to
    * `config.fetchedModels`. Cloud providers call their `/models` endpoint with
    * the saved credentials (doubling as a connection test); a local service
@@ -386,34 +301,5 @@ export const providersRouter = router({
         customModels: models.filter((m) => String((m as { id?: unknown }).id) !== input.modelId),
       });
       refreshProviders(ctx.db);
-    }),
-
-  /** Ollama's installed list — what this machine has pulled, not what an
-   *  endpoint claims to serve. Cloud providers answer from their catalog. */
-  fetchModels: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }): Promise<string[]> => {
-      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (manifest?.kind !== 'local-service') {
-        throw badRequest('Provider has no model listing.');
-      }
-      const row = ctx.db
-        .select({ config: providers.config })
-        .from(providers)
-        .where(eq(providers.id, input.id))
-        .get();
-      const config = (row?.config as Record<string, unknown> | null) ?? {};
-      const baseUrl =
-        (typeof config.baseUrl === 'string' && config.baseUrl.trim()) || manifest.defaultBaseUrl;
-
-      let modelIds: string[];
-      try {
-        modelIds = await fetchOllamaModels(baseUrl);
-      } catch (err) {
-        if (err instanceof TRPCError) throw err;
-        throw internalError(err instanceof Error ? err.message : 'Fetch failed.');
-      }
-      writeConfig(ctx.db, input.id, { ...config, fetchedModels: modelIds });
-      return modelIds;
     }),
 });
