@@ -23,8 +23,15 @@ import { zaiCodingCnProvider } from '@earendil-works/pi-ai/providers/zai-coding-
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
 import { decryptJson } from '@main/platform/safe-storage';
+import type { CustomModel } from '@shared/custom-model';
 import { eq } from 'drizzle-orm';
-import { getProviderManifest, PROVIDER_MANIFEST } from './manifest';
+import { readAddedModels } from './custom-models';
+import {
+  type CloudApiManifest,
+  getProviderManifest,
+  type LocalServiceManifest,
+  PROVIDER_MANIFEST,
+} from './manifest';
 import { arkAgentPlanModels, arkCodingPlanModels } from './volcengine.models';
 
 /**
@@ -124,40 +131,6 @@ function adopt(source: Provider, id: string, name: string): Provider {
   };
 }
 
-for (const provider of [
-  anthropic,
-  openaiProvider(),
-  deepseekProvider(),
-  googleProvider(),
-  // Same endpoint and protocol as the manifest already declared, so adopting
-  // the engine's catalog only adds the metadata we had no source for.
-  adopt(moonshotaiCnProvider(), 'moonshot', 'Moonshot'),
-  adopt(zaiCodingCnProvider(), 'zai-coding', 'Z.AI Coding Plan'),
-  openrouterProvider(),
-  kimiCodingProvider(),
-  // Subscriptions the user signs into; their catalogs and auth are pi's.
-  openaiCodexProvider(),
-  /**
-   * Claude Pro/Max as its own provider, reusing Anthropic's OAuth flow, models
-   * and endpoint. pi offers both auth kinds under one provider, but a
-   * credential store holds exactly one credential per provider id — so a user
-   * who has both a key and a subscription needs two entries, or signing in
-   * would overwrite the key.
-   */
-  createProvider({
-    id: SUBSCRIPTION_ANTHROPIC,
-    name: 'Claude Pro/Max',
-    baseUrl: anthropic.baseUrl,
-    auth: { oauth: anthropic.auth.oauth },
-    // Re-stamped: a request is routed by the model's own `provider`, so a
-    // borrowed model would resolve auth against the api-key entry instead.
-    models: anthropic.getModels().map((model) => ({ ...model, provider: SUBSCRIPTION_ANTHROPIC })),
-    api: anthropicMessagesApi(),
-  }),
-]) {
-  piModels.setProvider(provider);
-}
-
 /** Catalogs Atrium maintains itself, for endpoints the engine doesn't ship and
  *  that expose no listing of their own. */
 const OWN_CATALOG: Record<string, (baseUrl: string) => Model<'anthropic-messages'>[]> = {
@@ -165,26 +138,105 @@ const OWN_CATALOG: Record<string, (baseUrl: string) => Model<'anthropic-messages
   'volcengine-coding': arkCodingPlanModels,
 };
 
-for (const manifest of PROVIDER_MANIFEST) {
-  if (piModels.getProvider(manifest.id)) continue;
-  // A subscription's provider is the engine's and is already registered above;
-  // the rest speak a protocol the manifest names.
-  if (manifest.kind === 'subscription') continue;
-  const api =
-    manifest.kind === 'cloud-api' ? PROTOCOL_API[manifest.protocol] : 'openai-completions';
-  // Carrying the endpoint on the provider is what lets everything downstream
-  // ask the registry for it instead of reading the manifest a second time.
-  const baseUrl = manifest.defaultBaseUrl;
-  piModels.setProvider(
+/** Every provider Atrium ships, before anything the user has added. */
+const SHIPPED: readonly Provider[] = (() => {
+  const engine: Provider[] = [
+    anthropic,
+    openaiProvider(),
+    deepseekProvider(),
+    googleProvider(),
+    // Same endpoint and protocol as the manifest already declared, so adopting
+    // the engine's catalog only adds the metadata we had no source for.
+    adopt(moonshotaiCnProvider(), 'moonshot', 'Moonshot'),
+    adopt(zaiCodingCnProvider(), 'zai-coding', 'Z.AI Coding Plan'),
+    openrouterProvider(),
+    kimiCodingProvider(),
+    // Subscriptions the user signs into; their catalogs and auth are pi's.
+    openaiCodexProvider(),
+    /**
+     * Claude Pro/Max as its own provider, reusing Anthropic's OAuth flow,
+     * models and endpoint. pi offers both auth kinds under one provider, but a
+     * credential store holds exactly one credential per provider id — so a user
+     * who has both a key and a subscription needs two entries, or signing in
+     * would overwrite the key.
+     */
     createProvider({
+      id: SUBSCRIPTION_ANTHROPIC,
+      name: 'Claude Pro/Max',
+      baseUrl: anthropic.baseUrl,
+      auth: { oauth: anthropic.auth.oauth },
+      // Re-stamped: a request is routed by the model's own `provider`, so a
+      // borrowed model would resolve auth against the api-key entry instead.
+      models: anthropic
+        .getModels()
+        .map((model) => ({ ...model, provider: SUBSCRIPTION_ANTHROPIC })),
+      api: anthropicMessagesApi(),
+    }),
+  ];
+
+  const known = new Set(engine.map((p) => p.id));
+  const rest = PROVIDER_MANIFEST.filter(
+    (m): m is CloudApiManifest | LocalServiceManifest =>
+      !known.has(m.id) && m.kind !== 'subscription',
+  ).map((manifest) => {
+    const api =
+      manifest.kind === 'cloud-api' ? PROTOCOL_API[manifest.protocol] : 'openai-completions';
+    // Carrying the endpoint on the provider is what lets everything downstream
+    // ask the registry for it instead of reading the manifest a second time.
+    const baseUrl = manifest.defaultBaseUrl;
+    return createProvider({
       id: manifest.id,
       name: manifest.name,
       baseUrl,
       auth: { apiKey: envApiKeyAuth(`${manifest.name} API key`, []) },
       models: OWN_CATALOG[manifest.id]?.(baseUrl) ?? [],
       api: API_STREAMS[api](),
-    }),
-  );
+    });
+  });
+
+  return [...engine, ...rest];
+})();
+
+/** A shipped provider with the user's own models appended to its catalog. */
+function withAddedModels(base: Provider, added: readonly CustomModel[]): Provider {
+  const models = [
+    ...base.getModels(),
+    ...added.map((model) => ({
+      ...model,
+      provider: base.id,
+      // An added model follows the provider's endpoint unless it names its own,
+      // so changing the endpoint doesn't strand it on a stale copy.
+      baseUrl: model.baseUrl ?? base.baseUrl ?? '',
+    })),
+  ];
+  return {
+    ...base,
+    getModels: () => models,
+    stream: (model, context, options) => base.stream(model, context, options),
+    streamSimple: (model, context, options) => base.streamSimple(model, context, options),
+  };
+}
+
+function registerAll(added: ReadonlyMap<string, readonly CustomModel[]>): void {
+  for (const base of SHIPPED) {
+    const extra = added.get(base.id);
+    piModels.setProvider(extra?.length ? withAddedModels(base, extra) : base);
+  }
+}
+
+// The registry has to answer before the database is open — a scheduled run can
+// resolve a model during startup — so it starts at what Atrium ships and is
+// rebuilt once the stored additions are readable.
+registerAll(new Map());
+
+/**
+ * Rebuild the registry from what the user has stored. Called once the database
+ * is open and again after anything changes a provider's models, because the
+ * registry is a snapshot: a provider it already holds keeps its old catalog
+ * until it is set again.
+ */
+export function refreshProviders(db: Db): void {
+  registerAll(readAddedModels(db));
 }
 
 export const piStreamFn = piModels.streamSimple.bind(piModels);
