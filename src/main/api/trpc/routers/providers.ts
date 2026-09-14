@@ -98,7 +98,7 @@ export const providersRouter = router({
       return [
         {
           id: row.id,
-          kind: 'cloud-api' as const,
+          authMode: 'api-key' as const,
           name: parsed.data.name,
           protocol: 'openai-compatible' as const,
           defaultBaseUrl: parsed.data.baseUrl,
@@ -120,9 +120,7 @@ export const providersRouter = router({
       return {
         ...m,
         defaultBaseUrl: registered?.baseUrl,
-        ...(m.kind === 'cloud-api' || m.kind === 'subscription'
-          ? { models: piModels.getModels(m.id).map((model) => ({ id: model.id })) }
-          : {}),
+        models: piModels.getModels(m.id).map((model) => ({ id: model.id })),
         enabled: row?.enabled ?? false,
         config: (row?.config as Record<string, unknown> | null) ?? null,
         hasCredentials: keyed.has(m.id),
@@ -143,7 +141,7 @@ export const providersRouter = router({
     return PROVIDER_MANIFEST.filter((m) => !taken.has(m.id)).map((m) => ({
       id: m.id,
       name: m.name,
-      kind: m.kind,
+      authMode: m.authMode,
     }));
   }),
 

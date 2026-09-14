@@ -88,9 +88,9 @@ export function firstEnabledModel(db: Db): SelectedModel | null {
     // deleted, so only one the registry still lists counts.
     const usable = picked.find((modelId) => piModels.getModel(row.id, modelId));
     if (usable) return { providerId: row.id, modelId: usable };
-    // A subscription is granted by signing in, not by picking models, so an
+    // An OAuth provider is granted by signing in, not by picking models, so an
     // untouched one still offers its catalog.
-    if (picked.length === 0 && getProviderManifest(row.id)?.kind === 'subscription') {
+    if (picked.length === 0 && getProviderManifest(row.id)?.authMode === 'oauth') {
       const first = piModels.getModels(row.id)[0];
       if (first) return { providerId: row.id, modelId: first.id };
     }

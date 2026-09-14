@@ -5,7 +5,7 @@
  * from a catalog — the engine's, or one written beside the provider it belongs
  * to — and the endpoint is carried by the registered provider itself. What is
  * left is a name, a link to where the vendor explains itself, and the one
- * distinction that changes behaviour, which is how it is paid for.
+ * distinction that changes behaviour, which is how the user connects it.
  *
  * There is deliberately no description. A sentence Atrium writes about someone
  * else's product is out of date the week they change it, and the console link
@@ -13,16 +13,16 @@
  */
 
 /**
- * How a provider is paid for, which is the only thing that changes how Atrium
- * treats one. A subscription is signed into instead of keyed: the engine owns
- * the whole auth flow, and the vendor's catalog is fixed — there is nothing to
- * add to it and nothing to pick from it.
+ * How the user connects a provider, which decides the settings form and what a
+ * model pick means. An OAuth provider is signed into and the engine owns the
+ * whole flow, so its catalog is granted whole until the user narrows it; an
+ * API-key provider offers only the models the user turns on.
  */
-export type ProviderKind = 'cloud-api' | 'subscription';
+export type ProviderAuthMode = 'api-key' | 'oauth';
 
 export type ProviderManifest = {
   id: string;
-  kind: ProviderKind;
+  authMode: ProviderAuthMode;
   /**
    * The vendor's own name for the thing, matching what the engine calls it
    * where the engine ships one. A locale that says it differently overrides it
@@ -30,79 +30,79 @@ export type ProviderManifest = {
    * this, since a brand rarely needs translating.
    */
   name: string;
-  /** Where the user goes for a key, or to manage the subscription. */
+  /** Where the user goes for a key, or to manage the account they sign in with. */
   consoleUrl: string;
 };
 
 export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
-  // ── Cloud API ────────────────────────────────────────────────────────────
+  // ── API key ──────────────────────────────────────────────────────────────
   {
     id: 'anthropic',
-    kind: 'cloud-api',
+    authMode: 'api-key',
     name: 'Anthropic',
     consoleUrl: 'https://console.anthropic.com/settings/keys',
   },
   {
     id: 'openai',
-    kind: 'cloud-api',
+    authMode: 'api-key',
     name: 'OpenAI',
     consoleUrl: 'https://platform.openai.com/api-keys',
   },
   {
     id: 'deepseek',
-    kind: 'cloud-api',
+    authMode: 'api-key',
     name: 'DeepSeek',
     consoleUrl: 'https://platform.deepseek.com/api_keys',
   },
   {
     id: 'google',
-    kind: 'cloud-api',
+    authMode: 'api-key',
     name: 'Google',
     consoleUrl: 'https://aistudio.google.com/apikey',
   },
   {
     id: 'moonshotai-cn',
-    kind: 'cloud-api',
+    authMode: 'api-key',
     name: 'Moonshot AI',
     consoleUrl: 'https://platform.kimi.com/console/api-keys',
   },
   {
     id: 'zai-coding-cn',
-    kind: 'cloud-api',
+    authMode: 'api-key',
     name: 'Z.AI Coding',
     consoleUrl: 'https://open.bigmodel.cn/console/overview',
   },
   {
     id: 'volcengine-agent',
-    kind: 'cloud-api',
+    authMode: 'api-key',
     name: 'VolcEngine Ark - Agent Plan',
     consoleUrl: 'https://console.volcengine.com/ark/region:cn-beijing/subscription/agent-plan',
   },
   {
     id: 'volcengine-coding',
-    kind: 'cloud-api',
+    authMode: 'api-key',
     name: 'VolcEngine Ark - Coding Plan',
     consoleUrl: 'https://console.volcengine.com/ark/region:cn-beijing/subscription/coding-plan',
   },
-  // ── Subscriptions (signed into, not keyed) ───────────────────────────────
+  // ── OAuth (signed into, not keyed) ───────────────────────────────────────
   // A vendor that sells both a key and a subscription gets one row per
   // credential, not one row with two: the engine stores exactly one credential
   // per provider id, so the two cannot coexist under the same entry.
   {
     id: 'anthropic-subscription',
-    kind: 'subscription',
+    authMode: 'oauth',
     name: 'Claude Pro/Max',
     consoleUrl: 'https://claude.ai/settings/billing',
   },
   {
     id: 'openai-codex',
-    kind: 'subscription',
+    authMode: 'oauth',
     name: 'OpenAI Codex',
     consoleUrl: 'https://chatgpt.com/codex',
   },
   {
     id: 'openrouter',
-    kind: 'cloud-api',
+    authMode: 'api-key',
     name: 'OpenRouter',
     consoleUrl: 'https://openrouter.ai/keys',
   },

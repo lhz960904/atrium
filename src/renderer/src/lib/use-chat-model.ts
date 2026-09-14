@@ -14,7 +14,7 @@ export function deriveGroups(
   providers: {
     id: string;
     name: string;
-    kind: 'cloud-api' | 'subscription';
+    authMode: 'api-key' | 'oauth';
     enabled: boolean;
     config: Record<string, unknown> | null;
     models?: readonly { id: string }[];
@@ -25,16 +25,12 @@ export function deriveGroups(
     if (!p.enabled) continue;
     const picked = (p.config as { enabledModels?: string[] } | null)?.enabledModels ?? [];
     // Picking models is how a key-based provider is narrowed — an aggregator
-    // serves hundreds and only a few are wanted. A subscription has nothing to
+    // serves hundreds and only a few are wanted. An OAuth provider has nothing to
     // narrow: its catalog is the vendor's, signing in is what grants it, and
     // the vendor adding a model shouldn't need the user to go tick it. So an
-    // untouched subscription offers everything it has.
+    // untouched OAuth provider offers everything it has.
     const models =
-      picked.length > 0
-        ? picked
-        : p.kind === 'subscription'
-          ? (p.models ?? []).map((m) => m.id)
-          : [];
+      picked.length > 0 ? picked : p.authMode === 'oauth' ? (p.models ?? []).map((m) => m.id) : [];
     if (models.length > 0) groups.push({ providerId: p.id, providerName: p.name, models });
   }
   return groups;

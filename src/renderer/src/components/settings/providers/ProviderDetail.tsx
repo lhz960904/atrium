@@ -52,7 +52,7 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
         </div>
       </div>
 
-      {provider.kind === 'cloud-api' ? (
+      {provider.authMode === 'api-key' ? (
         <CloudApiForm key={provider.id} provider={provider} />
       ) : (
         <SubscriptionForm key={provider.id} provider={provider} />
