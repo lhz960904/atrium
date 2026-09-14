@@ -5,7 +5,7 @@ import type { TokenRates } from '@shared/cost';
 import type { SelectedModel } from '@shared/settings';
 import { eq } from 'drizzle-orm';
 import { getProviderManifest } from './manifest';
-import { piModels } from './pi-model';
+import { piModels } from './registry';
 
 function configuredBaseUrl(db: Db, providerId: string): string | undefined {
   const row = db

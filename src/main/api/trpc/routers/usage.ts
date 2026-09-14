@@ -1,4 +1,4 @@
-import { ratesFor } from '@main/agent/providers/resolve';
+import { ratesFor } from '@main/agent/providers/models';
 import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';

@@ -84,6 +84,12 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     name: 'VolcEngine Ark - Coding Plan',
     consoleUrl: 'https://console.volcengine.com/ark/region:cn-beijing/subscription/coding-plan',
   },
+  {
+    id: 'openrouter',
+    authMode: 'api-key',
+    name: 'OpenRouter',
+    consoleUrl: 'https://openrouter.ai/keys',
+  },
   // ── OAuth (signed into, not keyed) ───────────────────────────────────────
   // A vendor that sells both a key and a subscription gets one row per
   // credential, not one row with two: the engine stores exactly one credential
@@ -99,12 +105,6 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     authMode: 'oauth',
     name: 'OpenAI Codex',
     consoleUrl: 'https://chatgpt.com/codex',
-  },
-  {
-    id: 'openrouter',
-    authMode: 'api-key',
-    name: 'OpenRouter',
-    consoleUrl: 'https://openrouter.ai/keys',
   },
 ] as const;
 

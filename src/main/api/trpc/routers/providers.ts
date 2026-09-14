@@ -10,7 +10,7 @@ import {
   readLogin,
   startLogin,
 } from '@main/agent/providers/oauth-login';
-import { piModels, refreshProviders } from '@main/agent/providers/pi-model';
+import { piModels, refreshProviders } from '@main/agent/providers/registry';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
 import {
@@ -100,7 +100,6 @@ export const providersRouter = router({
           id: row.id,
           authMode: 'api-key' as const,
           name: parsed.data.name,
-          protocol: 'openai-compatible' as const,
           defaultBaseUrl: parsed.data.baseUrl,
           consoleUrl: '',
           enabled: row.enabled,
@@ -111,7 +110,7 @@ export const providersRouter = router({
         },
       ];
     });
-    const shipped: ProviderView[] = PROVIDER_MANIFEST.filter((m) => byId.has(m.id)).map((m) => {
+    const builtin: ProviderView[] = PROVIDER_MANIFEST.filter((m) => byId.has(m.id)).map((m) => {
       const row = byId.get(m.id);
       // The endpoint comes from the registry, which is the only place it is
       // written down: the manifest describes a provider, it doesn't say how to
@@ -126,10 +125,10 @@ export const providersRouter = router({
         hasCredentials: keyed.has(m.id),
       };
     });
-    return [...shipped, ...defined];
+    return [...builtin, ...defined];
   }),
 
-  /** The shipped providers not added yet — the choices in the add picker. */
+  /** The built-in providers not added yet — the choices in the add picker. */
   available: publicProcedure.query(({ ctx }) => {
     const taken = new Set(
       ctx.db
@@ -145,7 +144,7 @@ export const providersRouter = router({
     }));
   }),
 
-  /** Add a shipped provider. Adding is the whole step: it is on from here. */
+  /** Add a built-in provider. Adding is the whole step: it is on from here. */
   add: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     if (!getProviderManifest(input.id)) throw badRequest(`"${input.id}" is not a known provider.`);
     ctx.db
@@ -176,7 +175,7 @@ export const providersRouter = router({
         .get();
       if (taken) throw badRequest(`"${input.id}" is already in use.`);
       // Defining one is adding it, so it is on — the same rule as picking a
-      // shipped provider.
+      // built-in provider.
       ctx.db
         .insert(providers)
         .values({ id: input.id, enabled: true, config: { customProvider: input.provider } })

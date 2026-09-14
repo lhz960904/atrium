@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Db } from '@main/db';
-import { piModels } from '../pi-model';
-import { firstEnabledModel, resolvePiModel } from '../resolve';
+import { firstEnabledModel, resolvePiModel } from '../models';
+import { piModels } from '../registry';
 
 /** A database whose provider row, whichever is asked for, holds `config`. */
 const dbWith = (config: Record<string, unknown> | null = null): Db =>

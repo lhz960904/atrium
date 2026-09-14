@@ -6,7 +6,7 @@ import type { TokenRates } from '@shared/cost';
 import type { AssistantMessage, Message, TextContent, Usage } from '@shared/protocol';
 import type { ToolName } from '@shared/tools';
 import { workspaceGuidance } from '../prompts';
-import { resolvePiModel } from '../providers/resolve';
+import { resolvePiModel } from '../providers/models';
 import { withinTurnFold } from '../runtime/compaction';
 import { createAgentLoop } from '../runtime/loop';
 import type { RunContext } from '../runtime/run-context';

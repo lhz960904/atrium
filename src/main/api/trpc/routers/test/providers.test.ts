@@ -4,7 +4,7 @@ import type { Db } from '@main/db';
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
 
 mock.module('electron', () => ({ shell: { openExternal: () => undefined } }));
-const { providersRouter } = await import('./providers');
+const { providersRouter } = await import('../providers');
 
 const definition: CustomProvider = {
   name: 'Relay',
