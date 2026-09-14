@@ -1,7 +1,8 @@
 import type { Model } from '@earendil-works/pi-ai';
 
 /**
- * Ark's two subscription plans, as engine catalog entries.
+ * Ark's two subscription plans: each one's endpoint, request format and
+ * catalog, which is everything registering it needs.
  *
  * The plans expose no listing API — `api/plan/v3/models` and `api/v1/models`
  * both 404 for a plan key, and the regular Ark endpoints reject one outright —
@@ -132,12 +133,26 @@ function toModels(specs: readonly Spec[], provider: string, baseUrl: string): Ar
   }));
 }
 
-/** The endpoint is passed in rather than repeated here: the manifest declares
- *  it once, and every model is stamped with the same one. */
-export function arkAgentPlanModels(baseUrl: string): ArkModel[] {
-  return toModels([...SHARED, ...AGENT_ONLY], 'volcengine-agent', baseUrl);
-}
+const AGENT_PLAN = {
+  id: 'volcengine-agent',
+  name: 'Volcengine Agent Plan',
+  baseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
+} as const;
 
-export function arkCodingPlanModels(baseUrl: string): ArkModel[] {
-  return toModels(SHARED, 'volcengine-coding', baseUrl);
-}
+const CODING_PLAN = {
+  id: 'volcengine-coding',
+  name: 'Volcengine Coding Plan',
+  baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
+} as const;
+
+export const volcengineAgentProviderConfig = {
+  ...AGENT_PLAN,
+  api: 'anthropic-messages',
+  models: toModels([...SHARED, ...AGENT_ONLY], AGENT_PLAN.id, AGENT_PLAN.baseUrl),
+} as const;
+
+export const volcengineCodingProviderConfig = {
+  ...CODING_PLAN,
+  api: 'anthropic-messages',
+  models: toModels(SHARED, CODING_PLAN.id, CODING_PLAN.baseUrl),
+} as const;

@@ -25,7 +25,7 @@ import type { CustomModel, CustomProvider } from '@shared/custom-model';
 import { eq } from 'drizzle-orm';
 import { readAddedModels, readCustomProviders } from './custom-models';
 import { getProviderManifest } from './manifest';
-import { arkAgentPlanModels, arkCodingPlanModels } from './volcengine.models';
+import { volcengineAgentProviderConfig, volcengineCodingProviderConfig } from './volcengine';
 
 /**
  * Model resolution for the engine.
@@ -89,32 +89,27 @@ const SUBSCRIPTION_ANTHROPIC = 'anthropic-subscription';
 
 const anthropic = anthropicProvider();
 
-/**
- * Catalogs Atrium maintains itself, for endpoints the engine doesn't ship and
- * that expose no listing of their own. Each carries everything registering it
- * needs, so a provider is defined in one place rather than half here and half
- * in the manifest — which only describes providers, not how to reach them.
- */
-const OWN_CATALOG: Record<
-  string,
-  { name: string; baseUrl: string; api: Api; models: (baseUrl: string) => Model<Api>[] }
-> = {
-  'volcengine-agent': {
-    name: 'Volcengine Agent Plan',
-    baseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
-    api: 'anthropic-messages',
-    models: arkAgentPlanModels,
-  },
-  'volcengine-coding': {
-    name: 'Volcengine Coding Plan',
-    baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
-    api: 'anthropic-messages',
-    models: arkCodingPlanModels,
-  },
+/** Everything registering a provider Atrium maintains itself takes. */
+type OwnProviderConfig = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  api: keyof typeof API_STREAMS;
+  models: readonly Model<Api>[];
 };
 
+/**
+ * Providers Atrium maintains itself, for endpoints the engine doesn't ship and
+ * that expose no listing of their own. Each vendor's file owns its endpoint,
+ * request format and catalog; this list only gathers them.
+ */
+const OWN_PROVIDERS = [
+  volcengineAgentProviderConfig,
+  volcengineCodingProviderConfig,
+] satisfies readonly OwnProviderConfig[];
+
 /** Every provider Atrium ships, before anything the user has added. */
-const SHIPPED: readonly Provider[] = (() => {
+const BUILTIN_PROVIDERS: readonly Provider[] = (() => {
   const engine: Provider[] = [
     anthropic,
     openaiProvider(),
@@ -146,18 +141,15 @@ const SHIPPED: readonly Provider[] = (() => {
     }),
   ];
 
-  const ours = Object.entries(OWN_CATALOG).map(([id, own]) =>
+  const own = OWN_PROVIDERS.map(({ api, ...config }) =>
     createProvider({
-      id,
-      name: own.name,
-      baseUrl: own.baseUrl,
-      auth: { apiKey: envApiKeyAuth(`${own.name} API key`, []) },
-      models: own.models(own.baseUrl),
-      api: API_STREAMS[own.api as keyof typeof API_STREAMS](),
+      ...config,
+      auth: { apiKey: envApiKeyAuth(`${config.name} API key`, []) },
+      api: API_STREAMS[api](),
     }),
   );
 
-  return [...engine, ...ours];
+  return [...engine, ...own];
 })();
 
 /**
@@ -208,11 +200,11 @@ function registerAll(
   added: ReadonlyMap<string, readonly CustomModel[]>,
   defined: ReadonlyMap<string, CustomProvider> = new Map(),
 ): void {
-  for (const base of SHIPPED) {
+  for (const base of BUILTIN_PROVIDERS) {
     const extra = added.get(base.id);
     piModels.setProvider(extra?.length ? withAddedModels(base, extra) : base);
   }
-  const shipped = new Set(SHIPPED.map((p) => p.id));
+  const shipped = new Set(BUILTIN_PROVIDERS.map((p) => p.id));
   for (const [id, def] of defined) {
     // A user-defined id that collides with a shipped one is ignored rather
     // than allowed to shadow it: threads already name that id.
