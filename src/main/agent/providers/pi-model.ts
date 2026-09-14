@@ -20,25 +20,21 @@ import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-code
 import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
 import { zaiCodingCnProvider } from '@earendil-works/pi-ai/providers/zai-coding-cn';
 import type { Db } from '@main/db';
-import { providers } from '@main/db/schema';
-import { eq } from 'drizzle-orm';
 import { type CustomProviderCatalog, readCustomProviderCatalogs } from './custom-providers';
 import { volcengineAgentProviderConfig, volcengineCodingProviderConfig } from './volcengine';
 
 /**
- * Model resolution for the engine.
+ * The engine's provider registry.
  *
  * One (provider, model) pair has exactly one catalog entry, and nothing is
  * inferred across providers: the entry pi ships for its own providers, the
  * entry Atrium writes for an endpoint pi doesn't cover, or the one the user
- * wrote on a provider they defined. An id none of them lists is refused rather
- * than run on guessed metadata, since a wrong window or price fails silently.
- * A model id appearing under two providers is two independent records, because
- * two endpoints serving the same id routinely differ in window and price.
+ * wrote on a provider they defined. A model id appearing under two providers is
+ * two independent records, because two endpoints serving the same id routinely
+ * differ in window and price.
  *
- * baseUrl follows pi's convention — no path suffix (the api modules append
- * their own: /chat/completions, /v1/messages). Stored overrides are used
- * verbatim; validating what the user types is the settings panel's job.
+ * baseUrl follows pi's convention: no path suffix, since each api module
+ * appends its own.
  */
 
 const API_STREAMS = {
@@ -197,22 +193,3 @@ export function refreshProviders(db: Db): void {
 }
 
 export const piStreamFn = piModels.streamSimple.bind(piModels);
-
-function configuredBaseUrl(db: Db, providerId: string): string | undefined {
-  const row = db
-    .select({ config: providers.config })
-    .from(providers)
-    .where(eq(providers.id, providerId))
-    .get();
-  return (row?.config as { baseUrl?: string } | null)?.baseUrl?.trim() || undefined;
-}
-
-/** A model the registry lists, on the endpoint the user configured if they did. */
-export function resolvePiModel(db: Db, providerId: string, modelId: string): Model<Api> {
-  const provider = piModels.getProvider(providerId);
-  if (!provider) throw new Error(`Provider "${providerId}" is unknown.`);
-  const model = piModels.getModel(providerId, modelId);
-  if (!model) throw new Error(`Model "${modelId}" is not registered for ${provider.name}.`);
-  const baseUrl = configuredBaseUrl(db, providerId);
-  return baseUrl ? { ...model, baseUrl } : model;
-}

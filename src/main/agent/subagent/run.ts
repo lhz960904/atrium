@@ -6,6 +6,7 @@ import type { TokenRates } from '@shared/cost';
 import type { AssistantMessage, Message, TextContent, Usage } from '@shared/protocol';
 import type { ToolName } from '@shared/tools';
 import { workspaceGuidance } from '../prompts';
+import { resolvePiModel } from '../providers/resolve';
 import { withinTurnFold } from '../runtime/compaction';
 import { createAgentLoop } from '../runtime/loop';
 import type { RunContext } from '../runtime/run-context';
@@ -85,15 +86,12 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   const { parent, agent } = opts;
 
   // Pin the subagent to its own model if it has a valid one, else inherit the
-  // parent's. resolvePiModel is imported lazily — it pulls in the Electron-bound
-  // credential store, which we don't want loaded when there's nothing to resolve
-  // (and which would break non-Electron unit tests on import).
+  // parent's.
   let { model } = opts.engine;
   let providerId = parent.providerId;
   let modelId = parent.modelId;
   if (agent.providerId && agent.modelId) {
     try {
-      const { resolvePiModel } = await import('../providers/pi-model');
       model = resolvePiModel(parent.db, agent.providerId, agent.modelId);
       providerId = agent.providerId;
       modelId = agent.modelId;

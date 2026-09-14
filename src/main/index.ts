@@ -11,13 +11,8 @@ import { syncBrowserProvisioning } from './agent/mcp/browser-provisioner';
 import { mcpManager } from './agent/mcp/manager';
 import { runDream, startDreamScheduler } from './agent/memory';
 import { createCredentialStore } from './agent/providers/credential-store';
-import {
-  piStreamFn,
-  refreshProviders,
-  resolvePiModel,
-  useCredentialStore,
-} from './agent/providers/pi-model';
-import { firstEnabledModel } from './agent/providers/resolve';
+import { piStreamFn, refreshProviders, useCredentialStore } from './agent/providers/pi-model';
+import { firstEnabledModel, resolvePiModel } from './agent/providers/resolve';
 import { createRunner, type Runner } from './agent/runtime/runner';
 import { getRunningThreadIds } from './agent/runtime/runs';
 import { refreshSkills } from './agent/skills/registry';

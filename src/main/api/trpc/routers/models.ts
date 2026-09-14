@@ -1,5 +1,4 @@
-import { resolvePiModel } from '@main/agent/providers/pi-model';
-import { modelRates } from '@main/agent/providers/resolve';
+import { modelRates, resolvePiModel } from '@main/agent/providers/resolve';
 import type { TokenRates } from '@shared/cost';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';

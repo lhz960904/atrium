@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { Db } from '@main/db';
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
-import { piModels, refreshProviders, resolvePiModel } from '../pi-model';
+import { piModels, refreshProviders } from '../pi-model';
 
 const definition: CustomProvider = {
   name: 'Relay',
@@ -21,22 +21,13 @@ const model: CustomModel = {
 
 type Row = { id: string; config: unknown };
 
-// The registry reads every row, while a resolve reads one row's config; the
-// fake answers the second from `own` since it can't see the id being asked for.
-const dbWith = (rows: Row[], own: Record<string, unknown> | null = null): Db =>
-  ({
-    select: () => ({
-      from: () => ({
-        all: () => rows,
-        where: () => ({ get: () => (own ? { config: own } : undefined) }),
-      }),
-    }),
-  }) as unknown as Db;
+const dbWith = (rows: Row[]): Db =>
+  ({ select: () => ({ from: () => ({ all: () => rows }) }) }) as unknown as Db;
 
-const relay = (config: Record<string, unknown> = {}): Row => ({
+const relay: Row = {
   id: 'relay',
-  config: { customProvider: definition, customModels: [model], ...config },
-});
+  config: { customProvider: definition, customModels: [model] },
+};
 
 afterEach(() => refreshProviders(dbWith([])));
 
@@ -56,10 +47,9 @@ test('both Ark plans register their own catalog and endpoint', () => {
   expect(piModels.getModel('volcengine-coding', 'doubao-seed-2.0-mini')).toBeUndefined();
 });
 
-test('a defined provider’s model resolves with the provider’s format and endpoint', () => {
-  refreshProviders(dbWith([relay()]));
-  expect(resolvePiModel(dbWith([]), 'relay', 'relay-chat')).toMatchObject({
-    id: 'relay-chat',
+test('a defined provider registers its models with its own format and endpoint', () => {
+  refreshProviders(dbWith([relay]));
+  expect(piModels.getModel('relay', 'relay-chat')).toMatchObject({
     provider: 'relay',
     api: 'anthropic-messages',
     baseUrl: definition.baseUrl,
@@ -68,13 +58,13 @@ test('a defined provider’s model resolves with the provider’s format and end
 });
 
 test('a defined provider cannot shadow a built-in one', () => {
-  refreshProviders(dbWith([{ ...relay(), id: 'deepseek' }]));
+  refreshProviders(dbWith([{ ...relay, id: 'deepseek' }]));
   expect(piModels.getProvider('deepseek')?.name).not.toBe('Relay');
   expect(piModels.getModel('deepseek', 'relay-chat')).toBeUndefined();
 });
 
 test('a removed provider leaves the registry', () => {
-  refreshProviders(dbWith([relay()]));
+  refreshProviders(dbWith([relay]));
   expect(piModels.getProvider('relay')).toBeDefined();
   refreshProviders(dbWith([]));
   expect(piModels.getProvider('relay')).toBeUndefined();
@@ -82,20 +72,5 @@ test('a removed provider leaves the registry', () => {
 
 test('models stored on a built-in provider are not registered', () => {
   refreshProviders(dbWith([{ id: 'deepseek', config: { customModels: [model] } }]));
-  expect(() => resolvePiModel(dbWith([]), 'deepseek', 'relay-chat')).toThrow('not registered');
-});
-
-test('an unknown provider or model throws instead of falling back', () => {
-  expect(() => resolvePiModel(dbWith([]), 'nowhere', 'anything')).toThrow('unknown');
-  expect(() => resolvePiModel(dbWith([]), 'deepseek', 'no-such-model')).toThrow('not registered');
-});
-
-test('a configured endpoint overrides the catalog one', () => {
-  const [first] = piModels.getModels('deepseek');
-  const resolved = resolvePiModel(
-    dbWith([], { baseUrl: ' https://proxy.example.test ' }),
-    'deepseek',
-    first.id,
-  );
-  expect(resolved.baseUrl).toBe('https://proxy.example.test');
+  expect(piModels.getModel('deepseek', 'relay-chat')).toBeUndefined();
 });
