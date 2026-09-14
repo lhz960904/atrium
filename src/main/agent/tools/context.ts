@@ -33,7 +33,6 @@ export type ToolCtx = {
   engine?: {
     model: Model<Api>;
     streamFn: StreamFn;
-    getApiKey: (provider: string) => string | undefined;
   };
   /** The Computer Use helper (macOS desktop automation); absent off macOS. */
   computerUse?: ComputerUseHelper;

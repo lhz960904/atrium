@@ -17,7 +17,6 @@ export type Complete = (input: {
 export type CompleteDeps = {
   model: Model<Api>;
   streamFn: StreamFn;
-  getApiKey: (provider: string) => string | undefined;
 };
 
 export function createCompleter(deps: CompleteDeps): Complete {
@@ -28,7 +27,7 @@ export function createCompleter(deps: CompleteDeps): Complete {
         systemPrompt: system,
         messages: [{ role: 'user', content: prompt, timestamp: Date.now() }],
       },
-      { apiKey: deps.getApiKey(deps.model.provider), signal },
+      { signal },
     );
     const message = await stream.result();
     if (message.stopReason === 'error' || message.stopReason === 'aborted') {

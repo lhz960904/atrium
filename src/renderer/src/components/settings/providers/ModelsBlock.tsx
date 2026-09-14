@@ -64,7 +64,7 @@ export function ModelsBlock({
   );
 
   // Enabled-first sort keeps the user's picks pinned to the top of a long
-  // aggregator list (OpenRouter / AiHubMix easily ship 300+ models).
+  // aggregator list (OpenRouter ships 300+ models).
   const sortedModels = useMemo(
     () => [...models].sort((a, b) => Number(enabledSet.has(b)) - Number(enabledSet.has(a))),
     [models, enabledSet],

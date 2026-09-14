@@ -60,6 +60,19 @@ function storedModels(db: Db, id: string): { config: Record<string, unknown>; mo
   return { config, models: Array.isArray(config.customModels) ? config.customModels : [] };
 }
 
+/** A defined provider's stored models. A built-in provider's catalog is the
+ *  engine's alone, so asking to change one is refused. */
+function storedCustomModels(
+  db: Db,
+  id: string,
+): { config: Record<string, unknown>; models: unknown[] } {
+  const stored = storedModels(db, id);
+  if (!customProviderSchema.safeParse(stored.config.customProvider).success) {
+    throw badRequest('Only a provider you defined has models to change.');
+  }
+  return stored;
+}
+
 export const providersRouter = router({
   /**
    * Manifest ⋈ DB config, in manifest declaration order. Never includes the
@@ -298,18 +311,8 @@ export const providersRouter = router({
     }),
 
   /**
-   * List the provider's available models and persist them to
-   * `config.fetchedModels`. Cloud providers call their `/models` endpoint with
-   * the saved credentials (doubling as a connection test); a local service
-   * lists its installed models keylessly. Failures surface as TRPCErrors the
-   * renderer renders verbatim.
-   */
-  /**
-   * Add or replace a model on a provider. Stored on the provider's config and
-   * folded into its catalog, replacing a catalog entry of the same id — which
-   * is how a wrong window gets corrected, not just how a missing model is
-   * added. `previousId` lets the editor rename one without leaving the old
-   * entry behind.
+   * Add or replace a model on a provider the user defined, stored on its config.
+   * `previousId` lets the editor rename one without leaving the old entry behind.
    */
   upsertCustomModel: publicProcedure
     .input(
@@ -320,7 +323,7 @@ export const providersRouter = router({
       }),
     )
     .mutation(({ ctx, input }) => {
-      const { config, models } = storedModels(ctx.db, input.id);
+      const { config, models } = storedCustomModels(ctx.db, input.id);
       const dropped = new Set([input.model.id, input.previousId].filter(Boolean));
       const kept = models.filter((m) => !dropped.has(String((m as { id?: unknown }).id)));
       writeConfig(ctx.db, input.id, { ...config, customModels: [...kept, input.model] });
@@ -330,7 +333,7 @@ export const providersRouter = router({
   removeCustomModel: publicProcedure
     .input(z.object({ id: z.string(), modelId: z.string() }))
     .mutation(({ ctx, input }) => {
-      const { config, models } = storedModels(ctx.db, input.id);
+      const { config, models } = storedCustomModels(ctx.db, input.id);
       writeConfig(ctx.db, input.id, {
         ...config,
         customModels: models.filter((m) => String((m as { id?: unknown }).id) !== input.modelId),

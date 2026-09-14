@@ -1,10 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import {
-  CUSTOM_MODEL_APIS,
-  type CustomModel,
-  type CustomModelApi,
-  DEFAULT_CUSTOM_MODEL,
-} from '@shared/custom-model';
+import { type CustomModel, DEFAULT_CUSTOM_MODEL } from '@shared/custom-model';
 import { X } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -23,9 +18,10 @@ const RATE_FIELDS = [
 ] as const;
 
 /**
- * Add or correct one model on a provider. The fields are the engine's own
- * model record, so what the user types is what a turn runs with: the window
- * feeds compaction and the rates feed the ledger.
+ * Add or edit one model on a provider the user defined. The fields are the
+ * engine's own model record, so what the user types is what a turn runs with:
+ * the window feeds compaction and the rates feed the ledger. The request format
+ * is the provider's, so it isn't asked for again here.
  */
 export function CustomModelDialog({
   providerId,
@@ -97,21 +93,6 @@ export function CustomModelDialog({
                   onChange={(e) => patch({ name: e.target.value })}
                 />
               </div>
-            </div>
-
-            <div className="mt-3">
-              <span className={label}>{t('settings.providers.custom.api')}</span>
-              <select
-                className={input}
-                value={draft.api}
-                onChange={(e) => patch({ api: e.target.value as CustomModelApi })}
-              >
-                {CUSTOM_MODEL_APIS.map((api) => (
-                  <option key={api} value={api}>
-                    {api}
-                  </option>
-                ))}
-              </select>
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-3">

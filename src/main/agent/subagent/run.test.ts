@@ -59,7 +59,6 @@ function scripted(messages: AssistantMessage[], seen: Context[] = []): StreamFn 
 const engineWith = (streamFn: StreamFn) => ({
   model: MODEL,
   streamFn,
-  getApiKey: () => 'key',
 });
 
 const echoTool = {

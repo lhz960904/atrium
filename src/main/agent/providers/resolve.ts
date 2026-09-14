@@ -5,7 +5,31 @@ import type { TokenRates } from '@shared/cost';
 import type { SelectedModel } from '@shared/settings';
 import { eq } from 'drizzle-orm';
 import { getProviderManifest } from './manifest';
-import { piModels, resolvePiModel } from './pi-model';
+import { piModels } from './pi-model';
+
+function configuredBaseUrl(db: Db, providerId: string): string | undefined {
+  const row = db
+    .select({ config: providers.config })
+    .from(providers)
+    .where(eq(providers.id, providerId))
+    .get();
+  return (row?.config as { baseUrl?: string } | null)?.baseUrl?.trim() || undefined;
+}
+
+/**
+ * The registry's entry for a (provider, model) pair, on the endpoint the user
+ * configured if they did. A pair the registry doesn't list is refused rather
+ * than run on guessed metadata, since a wrong window or price fails silently.
+ * The stored endpoint is used verbatim; validating it is the settings panel's job.
+ */
+export function resolvePiModel(db: Db, providerId: string, modelId: string): Model<Api> {
+  const provider = piModels.getProvider(providerId);
+  if (!provider) throw new Error(`Provider "${providerId}" is unknown.`);
+  const model = piModels.getModel(providerId, modelId);
+  if (!model) throw new Error(`Model "${modelId}" is not registered for ${provider.name}.`);
+  const baseUrl = configuredBaseUrl(db, providerId);
+  return baseUrl ? { ...model, baseUrl } : model;
+}
 
 /**
  * Whether tool results for this model may carry inline image parts. Both halves

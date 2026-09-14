@@ -66,7 +66,6 @@ export type RunAgentOptions = {
    *  the caller so this layer stays clear of the credential store. */
   piModel: Model<Api>;
   streamFn: StreamFn;
-  getApiKey: (provider: string) => string | undefined;
   /** The thread's transcript as pi messages: what the engine runs on. */
   messages: Message[];
   workspaceRoot: string;
@@ -154,7 +153,6 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
   const complete = createCompleter({
     model: opts.piModel,
     streamFn: opts.streamFn,
-    getApiKey: opts.getApiKey,
   });
   const summarize = summarizerFrom(complete);
   opts.generateTitle?.({ messages: opts.messages, complete });
@@ -204,7 +202,6 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
     systemPrompt: ctx.system,
     model: opts.piModel,
     streamFn: opts.streamFn,
-    getApiKey: opts.getApiKey,
     messages,
     tools,
     /**

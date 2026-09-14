@@ -1,23 +1,15 @@
 import type { Model } from '@earendil-works/pi-ai';
 
 /**
- * Ark's two subscription plans, as engine catalog entries.
+ * Ark's two subscription plans: each one's endpoint, request format and catalog.
  *
- * The plans expose no listing API — `api/plan/v3/models` and `api/v1/models`
- * both 404 for a plan key, and the regular Ark endpoints reject one outright —
- * and no public dataset carries them: models.dev has no Ark provider at all.
- * So this file is the catalog, and it can only be refreshed by hand.
+ * Neither plan exposes a model listing and no public catalog covers them, so
+ * this file is the catalog. Refresh it by hand from each plan's console page,
+ * where a model's serving id is its display name lowercased.
  *
- * To refresh: open the plan's console page, expand 可用模型, and lowercase each
- * display name — that is the serving id, dots included (Doubao-Seed-2.0-lite is
- * `doubao-seed-2.0-lite`). The console also answers `ListAgentPlanLatestModel`
- * with a version-pinned form (`doubao-seed-2-0-lite-260215`); both resolve, and
- * the bare alias is the one that survives a version bump.
- *
- * Windows are each model's own vendor figure rather than anything Ark states,
- * since Ark publishes none. Values marked ESTIMATE below have no vendor source
- * yet and are deliberately set low: folding early only costs a little context,
- * while a window that is too large is silently truncated rather than rejected.
+ * Windows are each model's own vendor figure, since Ark publishes none. Those
+ * marked ESTIMATE have no vendor source yet and are set low on purpose: a window
+ * too small only folds early, while one too large is silently truncated.
  *
  * Checked against the console on 2026-09-13.
  */
@@ -37,11 +29,9 @@ type Spec = {
 
 /** Served by both plans, in the console's own order. */
 const SHARED: readonly Spec[] = [
-  // ESTIMATE — a dispatch alias over the whole pool, so it is sized to the
-  // smallest window in it rather than to whatever it happens to route to.
+  // ESTIMATE: routes across the whole pool, so it is sized to the smallest window.
   { id: 'auto', name: 'Auto', contextWindow: 256_000, maxTokens: 131_072, vision: false },
-  // ESTIMATE — same generation and version stamp as the mini below, which the
-  // vendor documents at 256k.
+  // ESTIMATE: sized like the agent plan's mini of the same generation.
   {
     id: 'doubao-seed-2.0-lite',
     name: 'Doubao Seed 2.0 lite',
@@ -71,8 +61,7 @@ const SHARED: readonly Spec[] = [
     vision: true,
   },
   { id: 'kimi-k3', name: 'Kimi K3', contextWindow: 1_048_576, maxTokens: 131_072, vision: true },
-  // ESTIMATE — newer than the 2.0 family and undocumented; held at the family's
-  // window until the vendor states one.
+  // ESTIMATE: undocumented, so it is held at the previous generation's window.
   {
     id: 'doubao-seed-2.1-turbo',
     name: 'Doubao Seed 2.1 turbo',
@@ -95,8 +84,7 @@ const SHARED: readonly Spec[] = [
     maxTokens: 384_000,
     vision: false,
   },
-  // ESTIMATE — too new for any catalog; the output cap is the vendor's own
-  // sample call, the window is held low until they publish one.
+  // ESTIMATE: no published window yet.
   {
     id: 'glm-5.3-flash',
     name: 'GLM-5.3-Flash',
@@ -132,12 +120,26 @@ function toModels(specs: readonly Spec[], provider: string, baseUrl: string): Ar
   }));
 }
 
-/** The endpoint is passed in rather than repeated here: the manifest declares
- *  it once, and every model is stamped with the same one. */
-export function arkAgentPlanModels(baseUrl: string): ArkModel[] {
-  return toModels([...SHARED, ...AGENT_ONLY], 'volcengine-agent', baseUrl);
-}
+const AGENT_PLAN = {
+  id: 'volcengine-agent',
+  name: 'Volcengine Agent Plan',
+  baseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
+} as const;
 
-export function arkCodingPlanModels(baseUrl: string): ArkModel[] {
-  return toModels(SHARED, 'volcengine-coding', baseUrl);
-}
+const CODING_PLAN = {
+  id: 'volcengine-coding',
+  name: 'Volcengine Coding Plan',
+  baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
+} as const;
+
+export const volcengineAgentProviderConfig = {
+  ...AGENT_PLAN,
+  api: 'anthropic-messages',
+  models: toModels([...SHARED, ...AGENT_ONLY], AGENT_PLAN.id, AGENT_PLAN.baseUrl),
+} as const;
+
+export const volcengineCodingProviderConfig = {
+  ...CODING_PLAN,
+  api: 'anthropic-messages',
+  models: toModels(SHARED, CODING_PLAN.id, CODING_PLAN.baseUrl),
+} as const;

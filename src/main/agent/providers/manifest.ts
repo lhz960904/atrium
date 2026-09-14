@@ -61,13 +61,13 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     consoleUrl: 'https://aistudio.google.com/apikey',
   },
   {
-    id: 'moonshot',
+    id: 'moonshotai-cn',
     kind: 'cloud-api',
     name: 'Moonshot AI',
     consoleUrl: 'https://platform.kimi.com/console/api-keys',
   },
   {
-    id: 'zai-coding',
+    id: 'zai-coding-cn',
     kind: 'cloud-api',
     name: 'Z.AI Coding',
     consoleUrl: 'https://open.bigmodel.cn/console/overview',

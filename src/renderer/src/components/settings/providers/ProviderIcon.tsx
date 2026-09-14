@@ -1,11 +1,9 @@
-import aihubmixSvg from '@lobehub/icons-static-svg/icons/aihubmix-color.svg?raw';
 import anthropicSvg from '@lobehub/icons-static-svg/icons/anthropic.svg?raw';
 import claudeSvg from '@lobehub/icons-static-svg/icons/claude-color.svg?raw';
 import codexSvg from '@lobehub/icons-static-svg/icons/codex.svg?raw';
 import deepseekSvg from '@lobehub/icons-static-svg/icons/deepseek-color.svg?raw';
 import geminiSvg from '@lobehub/icons-static-svg/icons/gemini-color.svg?raw';
 import moonshotSvg from '@lobehub/icons-static-svg/icons/moonshot.svg?raw';
-import ollamaSvg from '@lobehub/icons-static-svg/icons/ollama.svg?raw';
 import openaiSvg from '@lobehub/icons-static-svg/icons/openai.svg?raw';
 import openrouterSvg from '@lobehub/icons-static-svg/icons/openrouter.svg?raw';
 import volcengineSvg from '@lobehub/icons-static-svg/icons/volcengine-color.svg?raw';
@@ -17,17 +15,15 @@ import zhipuSvg from '@lobehub/icons-static-svg/icons/zhipu-color.svg?raw';
  * wrapper just controls font-size + color.
  *
  * Mapping is by provider id; unknown ids fall back to a letter tile so
- * custom providers added later still render something. Ids Atrium no longer
- * ships stay listed — a carried-over provider keeps its id, so it keeps its
- * brand mark.
+ * custom providers still render something.
  */
 const SVG_BY_ID: Record<string, string> = {
   anthropic: anthropicSvg,
   openai: openaiSvg,
   deepseek: deepseekSvg,
   google: geminiSvg,
-  moonshot: moonshotSvg,
-  'zai-coding': zhipuSvg,
+  'moonshotai-cn': moonshotSvg,
+  'zai-coding-cn': zhipuSvg,
   'volcengine-agent': volcengineSvg,
   'volcengine-coding': volcengineSvg,
   openrouter: openrouterSvg,
@@ -35,8 +31,6 @@ const SVG_BY_ID: Record<string, string> = {
   // is also what tells them apart from the keyed entry for the same vendor.
   'anthropic-subscription': claudeSvg,
   'openai-codex': codexSvg,
-  aihubmix: aihubmixSvg,
-  ollama: ollamaSvg,
 };
 
 export function ProviderIcon({
