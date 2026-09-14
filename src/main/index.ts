@@ -12,7 +12,6 @@ import { mcpManager } from './agent/mcp/manager';
 import { runDream, startDreamScheduler } from './agent/memory';
 import { createCredentialStore } from './agent/providers/credential-store';
 import {
-  makeGetApiKey,
   piStreamFn,
   refreshProviders,
   resolvePiModel,
@@ -237,7 +236,6 @@ app.whenReady().then(async () => {
         return {
           model: resolvePiModel(db, sel.providerId, sel.modelId),
           streamFn: piStreamFn,
-          getApiKey: makeGetApiKey(db),
         };
       } catch {
         return null;

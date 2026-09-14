@@ -35,7 +35,6 @@ export async function runDream(dir: string, engine: SubagentEngine): Promise<voi
         ],
       },
       streamFn: engine.streamFn,
-      getApiKey: engine.getApiKey,
       shouldStopAfterTurn: () => ++turns >= DREAM_MAX_TURNS,
     });
     await agent.continue();

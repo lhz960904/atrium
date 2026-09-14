@@ -21,7 +21,6 @@ export type AgentLoopOptions = {
   systemPrompt: string;
   model: Model<Api>;
   streamFn: StreamFn;
-  getApiKey: (provider: string) => string | undefined;
   /** The transcript the loop starts from. */
   messages: Message[];
   tools: AtriumTool[];
@@ -70,7 +69,6 @@ export function createAgentLoop(opts: AgentLoopOptions): AgentLoop {
       messages: asPi(opts.messages),
     },
     streamFn: opts.streamFn,
-    getApiKey: opts.getApiKey,
     // pi's own converter, not the default: a transcript read back from the
     // session can hold pi's message roles — a compaction summary above all —
     // and the default would silently drop them instead of framing them.

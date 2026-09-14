@@ -46,8 +46,7 @@ function answering(
   };
 }
 
-const summarizerWith = (streamFn: StreamFn) =>
-  createSummarizer({ model: MODEL, streamFn, getApiKey: () => 'key' });
+const summarizerWith = (streamFn: StreamFn) => createSummarizer({ model: MODEL, streamFn });
 
 test('sends the transcript as one prompt and returns the trimmed text', async () => {
   let seen: Context | undefined;
@@ -64,7 +63,8 @@ test('sends the transcript as one prompt and returns the trimmed text', async ()
   expect(String(seen?.messages[0].content)).toContain('## user\nhello');
   // No tools: a summary must never trigger a call.
   expect(seen?.tools).toBeUndefined();
-  expect(key).toBe('key');
+  // Credentials come from the engine's store, never handed over per call.
+  expect(key).toBeUndefined();
 });
 
 test('joins every text block the model produced', async () => {

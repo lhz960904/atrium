@@ -23,7 +23,7 @@ import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permission
 import type { Message } from '@shared/protocol';
 import { mcpManager } from '../mcp/manager';
 import { buildMcpTools } from '../mcp/tool-adapter';
-import { makeGetApiKey, piStreamFn, resolvePiModel } from '../providers/pi-model';
+import { piStreamFn, resolvePiModel } from '../providers/pi-model';
 import { modelRates, supportsImageToolResults } from '../providers/resolve';
 import { BackgroundShells, LocalSandbox } from '../sandbox';
 import { getSkills } from '../skills/registry';
@@ -129,7 +129,7 @@ function resolveReviewer(
     log.info(
       `reviewer = ${picked.providerId}/${picked.modelId}${configured ? '' : ' (inherited chat model)'}`,
     );
-    return createCompleter({ model, streamFn: piStreamFn, getApiKey: makeGetApiKey(db) });
+    return createCompleter({ model, streamFn: piStreamFn });
   } catch (err) {
     log.info(`reviewer unresolved (${picked.providerId}/${picked.modelId}) → prompts: ${err}`);
     return undefined;
@@ -206,7 +206,6 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
           modelId,
           piModel,
           streamFn: piStreamFn,
-          getApiKey: makeGetApiKey(db),
           messages: runnableHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' })),
           workspaceRoot,
           threadId,
@@ -242,7 +241,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
               run,
               skills,
               // A nested loop (the task tool) runs on the same handles as this turn.
-              engine: { model: piModel, streamFn: piStreamFn, getApiKey: makeGetApiKey(db) },
+              engine: { model: piModel, streamFn: piStreamFn },
               bgShells,
               supportsImageToolResults: supportsImages,
               computerUse,
@@ -299,7 +298,6 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
         summarize: createSummarizer({
           model: piModel,
           streamFn: piStreamFn,
-          getApiKey: makeGetApiKey(db),
         }),
         contextWindow: piModel.contextWindow,
         preservers: [preserveTodos, preserveActiveSkill],

@@ -21,7 +21,6 @@ const log = createLogger('subagent');
 export type SubagentEngine = {
   model: Model<Api>;
   streamFn: StreamFn;
-  getApiKey: (provider: string) => string | undefined;
 };
 
 export type SubagentResult = { text: string; usage: Usage };
@@ -117,7 +116,6 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
     systemPrompt,
     model,
     streamFn: opts.engine.streamFn,
-    getApiKey: opts.engine.getApiKey,
     messages,
     tools: opts.tools,
     // The child can run many turns and overflow its own window, but it has no

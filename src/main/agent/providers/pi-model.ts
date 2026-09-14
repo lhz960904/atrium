@@ -21,7 +21,6 @@ import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
 import { zaiCodingCnProvider } from '@earendil-works/pi-ai/providers/zai-coding-cn';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
-import { decryptJson } from '@main/platform/safe-storage';
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
 import { eq } from 'drizzle-orm';
 import { readAddedModels, readCustomProviders } from './custom-models';
@@ -56,17 +55,10 @@ const API_STREAMS = {
 } as const;
 
 /**
- * The registry pi's streamSimple dispatches through — it refuses providers it
- * doesn't know, so registration is static and happens once at module load:
- * the pi builtin providers Atrium ships UI for (their maintained catalogs also
- * feed metadata), plus one same-protocol provider per remaining manifest entry
- * (relays and local services — empty model list; keys arrive per call via
- * getApiKey, so the env-var auth never fires).
- */
-/**
- * The engine's credential storage. Resolved lazily: the registry is assembled
- * at module load (before the database is open), while a credential is only ever
- * read when a request is actually made.
+ * The engine's credential storage, and the only path a request's key or OAuth
+ * token comes from. Resolved lazily: the registry is assembled at module load
+ * (before the database is open), while a credential is only ever read when a
+ * request is actually made.
  */
 let credentials: CredentialStore | undefined;
 
@@ -337,19 +329,4 @@ function buildModel(providerId: string, modelId: string, api: Api, baseUrl: stri
     contextWindow: FALLBACK_CONTEXT_TOKENS,
     maxTokens: FALLBACK_MAX_TOKENS,
   } as Model<Api>;
-}
-
-/** Per-call key resolution for pi's getApiKey hook; undefined = keyless. */
-export function makeGetApiKey(db: Db): (provider: string) => string | undefined {
-  return (provider) => {
-    const manifest = getProviderManifest(provider);
-    if (manifest?.kind !== 'cloud-api') return undefined;
-    const row = db
-      .select({ blob: providers.credentialsEncrypted })
-      .from(providers)
-      .where(eq(providers.id, provider))
-      .get();
-    if (!row?.blob) return undefined;
-    return decryptJson<{ key: string }>(row.blob).key;
-  };
 }
