@@ -68,8 +68,8 @@ function CloudApiForm({ provider }: { provider: ProviderView }): React.JSX.Eleme
     enabledModels?: string[];
     customModels?: CustomModel[];
   };
-  // The catalog is the whole list. An endpoint that serves something it doesn't
-  // cover is what the add-model editor is for.
+  // A built-in provider's catalog is the engine's whole list; only a provider the
+  // user defined takes models of their own.
   const models = (provider.models ?? []).map((m) => m.id);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
@@ -88,7 +88,7 @@ function CloudApiForm({ provider }: { provider: ProviderView }): React.JSX.Eleme
         emptyHint={t('settings.providers.emptyCatalog')}
         models={models}
         enabledModels={config.enabledModels ?? []}
-        customModels={config.customModels ?? []}
+        customModels={provider.custom ? (config.customModels ?? []) : undefined}
       />
     </div>
   );

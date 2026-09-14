@@ -2,21 +2,19 @@ import type { Api, Model } from '@earendil-works/pi-ai';
 import { z } from 'zod';
 
 /**
- * A model the user added to a provider whose catalog doesn't list it.
+ * A model the user added to a provider they defined.
  *
  * Derived from the engine's own `Model` rather than described again, so an
  * added model is the same kind of record as a shipped one and needs no
- * conversion. The two omitted fields are filled in from the owning provider:
- * `provider` is its id, and `baseUrl` defaults to its endpoint, so a model
- * follows a changed endpoint instead of pinning a stale copy of it.
+ * conversion. The omitted fields come from the owning provider: `provider` is
+ * its id, `api` is its request format, and `baseUrl` defaults to its endpoint,
+ * so a model follows a changed endpoint instead of pinning a stale copy of it.
  */
 export type CustomModel = Omit<Model<Api>, 'provider' | 'baseUrl' | 'api'> & {
-  /** Narrowed: the engine names many request shapes, Atrium registers three. */
-  api: CustomModelApi;
   baseUrl?: string;
 };
 
-/** The three request shapes Atrium can speak. Matches `PROTOCOL_API`. */
+/** The three request shapes Atrium can speak. */
 export const CUSTOM_MODEL_APIS = [
   'anthropic-messages',
   'openai-completions',
@@ -40,7 +38,6 @@ const rates = z.object({
 export const customModelSchema = z.object({
   id: z.string().min(1).max(200),
   name: z.string().min(1).max(200),
-  api: z.enum(CUSTOM_MODEL_APIS),
   reasoning: z.boolean(),
   input: z.array(z.enum(['text', 'image'])).min(1),
   cost: rates,
@@ -51,7 +48,6 @@ export const customModelSchema = z.object({
 });
 
 export const DEFAULT_CUSTOM_MODEL: Omit<CustomModel, 'id' | 'name'> = {
-  api: 'openai-completions',
   reasoning: false,
   input: ['text'],
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
