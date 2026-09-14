@@ -90,28 +90,6 @@ const SUBSCRIPTION_ANTHROPIC = 'anthropic-subscription';
 const anthropic = anthropicProvider();
 
 /**
- * Serve an engine-maintained catalog under the id Atrium already uses. A
- * provider id is written into every stored thread and credential row, so it
- * can't follow the engine's naming — but the catalog behind it can.
- *
- * The engine's provider is wrapped rather than rebuilt: only the identity and
- * the model list are ours, while streaming, headers and auth stay whatever it
- * configured for that endpoint. Models are re-stamped because a request routes
- * on the model's own `provider`, which also decides the credential it resolves.
- */
-function adopt(source: Provider, id: string, name: string): Provider {
-  const models = source.getModels().map((model) => ({ ...model, provider: id }));
-  return {
-    ...source,
-    id,
-    name,
-    getModels: () => models,
-    stream: (model, context, options) => source.stream(model, context, options),
-    streamSimple: (model, context, options) => source.streamSimple(model, context, options),
-  };
-}
-
-/**
  * Catalogs Atrium maintains itself, for endpoints the engine doesn't ship and
  * that expose no listing of their own. Each carries everything registering it
  * needs, so a provider is defined in one place rather than half here and half
@@ -142,10 +120,8 @@ const SHIPPED: readonly Provider[] = (() => {
     openaiProvider(),
     deepseekProvider(),
     googleProvider(),
-    // Same endpoint and protocol as the manifest already declared, so adopting
-    // the engine's catalog only adds the metadata we had no source for.
-    adopt(moonshotaiCnProvider(), 'moonshot', 'Moonshot'),
-    adopt(zaiCodingCnProvider(), 'zai-coding', 'Z.AI Coding Plan'),
+    moonshotaiCnProvider(),
+    zaiCodingCnProvider(),
     openrouterProvider(),
     // Subscriptions the user signs into; their catalogs and auth are pi's.
     openaiCodexProvider(),

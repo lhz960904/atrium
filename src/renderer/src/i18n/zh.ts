@@ -647,8 +647,8 @@ export const zh = {
       localNoKey: '无需 API key —— 复用你本地已登录的 CLI。',
       localAfterInstall: '安装并登录后(如 {{login}}),启用本项,即可在对话框的模型选择里选它。',
       name: {
-        moonshot: '月之暗面',
-        'zai-coding': '智谱 GLM 编程套餐',
+        'moonshotai-cn': '月之暗面',
+        'zai-coding-cn': '智谱 GLM 编程套餐',
         'volcengine-agent': '火山方舟 · Agent Plan',
         'volcengine-coding': '火山方舟 · Coding Plan',
       },

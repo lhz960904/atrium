@@ -676,8 +676,8 @@ export const en: typeof zh = {
       remove: 'Remove provider',
       removeConfirm: 'Remove {{name}} and the key it holds?',
       name: {
-        moonshot: 'Moonshot AI',
-        'zai-coding': 'Z.AI Coding',
+        'moonshotai-cn': 'Moonshot AI',
+        'zai-coding-cn': 'Z.AI Coding',
         'volcengine-agent': 'VolcEngine Ark - Agent Plan',
         'volcengine-coding': 'VolcEngine Ark - Coding Plan',
       },
