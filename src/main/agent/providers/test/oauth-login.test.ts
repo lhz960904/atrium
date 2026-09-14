@@ -113,7 +113,7 @@ test('cancelling drops the flow and rejects what it was waiting on', async () =>
   expect(readLogin('p4')).toBeNull();
 });
 
-test('a choice is surfaced as options and answered by id', async () => {
+test('a choice Atrium can only answer one way is answered without asking', async () => {
   let picked: string | undefined;
   startLogin(
     'p5',
@@ -131,17 +131,57 @@ test('a choice is surfaced as options and answered by id', async () => {
     },
   );
   await tick();
-  expect(readLogin('p5')).toMatchObject({
+  // A device code is for a machine with no browser; there is one here, so the
+  // question never reaches the panel.
+  expect(picked).toBe('browser');
+  expect(readLogin('p5')?.options).toBeUndefined();
+});
+
+test('a choice with more than one usable answer is still asked', async () => {
+  let picked: string | undefined;
+  startLogin(
+    'p6',
+    () => {},
+    () => {},
+    async (_id: string, i: AuthInteraction) => {
+      picked = await i.prompt({
+        type: 'select',
+        message: 'pick an account',
+        options: [
+          { id: 'personal', label: 'Personal' },
+          { id: 'work', label: 'Work' },
+        ],
+      });
+    },
+  );
+  await tick();
+  expect(readLogin('p6')).toMatchObject({
     status: 'awaiting-input',
-    inputPrompt: 'pick a way in',
+    inputPrompt: 'pick an account',
     options: [
-      { id: 'browser', label: 'Browser login' },
-      { id: 'device_code', label: 'Device code' },
+      { id: 'personal', label: 'Personal' },
+      { id: 'work', label: 'Work' },
     ],
   });
 
-  answerLogin('p5', 'browser');
+  answerLogin('p6', 'work');
   await tick();
-  expect(picked).toBe('browser');
-  expect(readLogin('p5')?.options).toBeUndefined();
+  expect(picked).toBe('work');
+});
+
+test('a login offering nothing usable fails instead of hanging', async () => {
+  startLogin(
+    'p7',
+    () => {},
+    () => {},
+    async (_id: string, i: AuthInteraction) => {
+      await i.prompt({
+        type: 'select',
+        message: 'pick a way in',
+        options: [{ id: 'device_code', label: 'Device code' }],
+      });
+    },
+  );
+  await tick();
+  expect(readLogin('p7')?.status).toBe('error');
 });

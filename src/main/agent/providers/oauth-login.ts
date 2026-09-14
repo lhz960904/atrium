@@ -39,6 +39,15 @@ type Pending = {
 /** The provider-owned flow; injectable so the state machine is testable alone. */
 export type LoginFn = (providerId: string, interaction: AuthInteraction) => Promise<unknown>;
 
+/**
+ * Sign-in methods Atrium doesn't offer. A device code is for a machine with no
+ * browser to hand — here there always is one, and the user is looking at it, so
+ * being asked to type a code into a second device is worse in every case. Pi
+ * offers the choice because its CLI can run headless; filtering it out is how
+ * that question stops reaching a window.
+ */
+const UNSUPPORTED_METHODS = new Set(['device_code']);
+
 const flows = new Map<string, Pending>();
 
 export function readLogin(providerId: string): LoginState | null {
@@ -93,12 +102,6 @@ export function startLogin(
       pending.state.message = event.message;
       return;
     }
-    if (event.type === 'device_code') {
-      pending.state.status = 'awaiting-browser';
-      pending.state.url = event.verificationUri;
-      pending.state.message = `Enter code ${event.userCode}`;
-      openUrl(event.verificationUri);
-    }
   };
 
   const prompt = (input: AuthPrompt): Promise<string> =>
@@ -107,12 +110,24 @@ export function startLogin(
       if (abort.signal.aborted) return fail();
       abort.signal.addEventListener('abort', fail, { once: true });
       input.signal?.addEventListener('abort', fail, { once: true });
+
+      if (input.type === 'select') {
+        const offered = input.options.filter((o) => !UNSUPPORTED_METHODS.has(o.id));
+        if (offered.length === 0) {
+          return reject(new Error('This provider only offers a sign-in Atrium cannot drive.'));
+        }
+        // Nothing to ask when one way is the only way. A flow that asks how to
+        // sign in is asking about the environment, and this one is known: there
+        // is a browser, and it is the browser the user is already looking at.
+        if (offered.length === 1) return resolve(offered[0].id);
+        pending.state.options = offered;
+      } else {
+        pending.state.options = undefined;
+      }
+
       pending.state.status = 'awaiting-input';
       pending.state.inputPrompt = input.message;
       pending.state.inputPlaceholder = 'placeholder' in input ? input.placeholder : undefined;
-      // A select is answered by picking, not by typing — the flow wants the
-      // option's id back, so the panel renders them as buttons.
-      pending.state.options = input.type === 'select' ? input.options : undefined;
       pending.answer = resolve;
     });
 
