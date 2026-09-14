@@ -13,7 +13,6 @@ import {
 import { piModels, refreshProviders } from '@main/agent/providers/pi-model';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
-import { decryptJson, encryptJson } from '@main/platform/safe-storage';
 import {
   customModelSchema,
   customProviderIdSchema,
@@ -85,8 +84,9 @@ export const providersRouter = router({
    * a provider sitting in the list doing nothing is the state everyone forgets
    * to leave.
    */
-  list: publicProcedure.query(({ ctx }): ProviderView[] => {
+  list: publicProcedure.query(async ({ ctx }): Promise<ProviderView[]> => {
     const rows = ctx.db.select().from(providers).all();
+    const keyed = new Set((await ctx.credentials.list()).map((c) => c.providerId));
     const byId = new Map(rows.map((r) => [r.id, r]));
     // A provider the user defined has no manifest entry, so one is made for it
     // from what they gave: the panel treats both the same from here on.
@@ -105,7 +105,7 @@ export const providersRouter = router({
           consoleUrl: '',
           enabled: row.enabled,
           config: (row.config as Record<string, unknown> | null) ?? null,
-          hasCredentials: !!row.credentialsEncrypted,
+          hasCredentials: keyed.has(row.id),
           models: piModels.getModels(row.id).map((model) => ({ id: model.id })),
           custom: true,
         },
@@ -125,7 +125,7 @@ export const providersRouter = router({
           : {}),
         enabled: row?.enabled ?? false,
         config: (row?.config as Record<string, unknown> | null) ?? null,
-        hasCredentials: !!row?.credentialsEncrypted,
+        hasCredentials: keyed.has(m.id),
       };
     });
     return [...shipped, ...defined];
@@ -256,58 +256,32 @@ export const providersRouter = router({
       });
     }),
 
-  /**
-   * Persist credentials encrypted via Electron safeStorage. The plaintext
-   * is the raw key (or a JSON object for richer payloads in the future);
-   * we wrap it in JSON so the same code path supports both shapes.
-   */
+  /** Save an API key in the store requests resolve it from. */
   setCredentials: publicProcedure
     .input(z.object({ id: z.string(), plaintext: z.string() }))
-    .mutation(({ ctx, input }) => {
-      const blob = encryptJson({ key: input.plaintext });
-      ctx.db
-        .insert(providers)
-        .values({ id: input.id, credentialsEncrypted: blob })
-        .onConflictDoUpdate({
-          target: providers.id,
-          set: { credentialsEncrypted: blob, updatedAt: new Date() },
-        })
-        .run();
+    .mutation(async ({ ctx, input }) => {
+      await ctx.credentials.modify(input.id, async () => ({
+        type: 'api_key',
+        key: input.plaintext,
+      }));
     }),
 
   /**
-   * Returns the plaintext credential (currently always the API key string)
-   * so the renderer can reveal it via the eye-toggle in the password field.
-   * Returns null if no credentials are stored.
+   * The saved API key in plaintext, so the password field's eye toggle can
+   * reveal it. Null when there is none, including when the provider holds an
+   * OAuth token instead.
    */
   getCredentials: publicProcedure
     .input(z.object({ id: z.string() }))
-    .query(({ ctx, input }): string | null => {
-      const row = ctx.db
-        .select({ blob: providers.credentialsEncrypted })
-        .from(providers)
-        .where(eq(providers.id, input.id))
-        .get();
-      if (!row?.blob) return null;
-      try {
-        return decryptJson<{ key: string }>(row.blob).key;
-      } catch {
-        // The blob can't be decrypted — the safeStorage key was removed or
-        // rotated in the OS keychain, so the ciphertext is unrecoverable.
-        // Report it as "no readable credential" so the field falls back to an
-        // empty, editable input and the user can re-enter the key.
-        return null;
-      }
+    .query(async ({ ctx, input }): Promise<string | null> => {
+      const credential = await ctx.credentials.read(input.id);
+      return credential?.type === 'api_key' ? (credential.key ?? null) : null;
     }),
 
   clearCredentials: publicProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) => {
-      ctx.db
-        .update(providers)
-        .set({ credentialsEncrypted: null, updatedAt: new Date() })
-        .where(eq(providers.id, input.id))
-        .run();
+    .mutation(async ({ ctx, input }) => {
+      await ctx.credentials.delete(input.id);
     }),
 
   /**

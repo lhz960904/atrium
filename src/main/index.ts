@@ -146,9 +146,10 @@ app.whenReady().then(async () => {
   serveFavicons();
 
   const db = openDb();
-  // The engine resolves provider credentials itself (an OAuth token is
-  // refreshed in place, so it can't be handed over once at call time).
-  useCredentialStore(createCredentialStore(db));
+  // One store for the engine and the settings panel: an OAuth token is refreshed
+  // in place, and the store only serializes the writes that go through it.
+  const credentials = createCredentialStore(db);
+  useCredentialStore(credentials);
   // The registry is built from what Atrium ships; the models the user added are
   // only readable once the database is open.
   refreshProviders(db);
@@ -180,7 +181,7 @@ app.whenReady().then(async () => {
   createIPCHandler({
     router: appRouter,
     windows: [win],
-    createContext: async () => ({ db, chatEndpoint }),
+    createContext: async () => ({ db, chatEndpoint, credentials }),
   });
   registerComputerUseDrag();
   registerDragOverlay(() => mainWindow ?? undefined);
@@ -250,7 +251,7 @@ app.whenReady().then(async () => {
     createIPCHandler({
       router: appRouter,
       windows: [next],
-      createContext: async () => ({ db, chatEndpoint }),
+      createContext: async () => ({ db, chatEndpoint, credentials }),
     });
   };
 

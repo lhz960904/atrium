@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'bun:test';
+import type { Credential, CredentialStore } from '@earendil-works/pi-ai';
 import type { Db } from '@main/db';
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
 
@@ -21,12 +22,15 @@ const model: CustomModel = {
   maxTokens: 8192,
 };
 
-/** A provider row holding `config`, recording every config it is asked to write. */
-function rowWith(config: Record<string, unknown>): { db: Db; writes: unknown[] } {
+/** Provider rows for listing plus one row holding `config`, recording config writes. */
+function rowWith(
+  config: Record<string, unknown>,
+  rows: unknown[] = [],
+): { db: Db; writes: unknown[] } {
   const writes: unknown[] = [];
   const db = {
     select: () => ({
-      from: () => ({ all: () => [], where: () => ({ get: () => ({ config }) }) }),
+      from: () => ({ all: () => rows, where: () => ({ get: () => ({ config }) }) }),
     }),
     insert: () => ({
       values: (value: unknown) => ({
@@ -37,7 +41,25 @@ function rowWith(config: Record<string, unknown>): { db: Db; writes: unknown[] }
   return { db, writes };
 }
 
-const caller = (db: Db) => providersRouter.createCaller({ db, chatEndpoint: {} as never });
+/** An in-memory credential store over `saved`. */
+function storeWith(saved = new Map<string, Credential>()): CredentialStore {
+  return {
+    read: async (id) => saved.get(id),
+    list: async () =>
+      [...saved].map(([providerId, credential]) => ({ providerId, type: credential.type })),
+    modify: async (id, fn) => {
+      const next = await fn(saved.get(id));
+      if (next) saved.set(id, next);
+      return next ?? saved.get(id);
+    },
+    delete: async (id) => {
+      saved.delete(id);
+    },
+  };
+}
+
+const caller = (db: Db, credentials: CredentialStore = storeWith()) =>
+  providersRouter.createCaller({ db, chatEndpoint: {} as never, credentials });
 
 test('a built-in provider takes no added models', async () => {
   const { db, writes } = rowWith({ enabledModels: ['deepseek-v4-flash'] });
@@ -46,9 +68,7 @@ test('a built-in provider takes no added models', async () => {
   });
   await expect(
     caller(db).removeCustomModel({ id: 'deepseek', modelId: 'relay-chat' }),
-  ).rejects.toMatchObject({
-    code: 'BAD_REQUEST',
-  });
+  ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   expect(writes).toHaveLength(0);
 });
 
@@ -77,4 +97,35 @@ test('a defined provider takes, renames and removes its models', async () => {
   expect(removed.writes).toEqual([
     { id: 'relay', config: { customProvider: definition, customModels: [] } },
   ]);
+});
+
+test('an api key is saved as a typed credential, revealed, and cleared', async () => {
+  const saved = new Map<string, Credential>();
+  const api = caller(rowWith({}).db, storeWith(saved));
+  await api.setCredentials({ id: 'deepseek', plaintext: 'sk-test' });
+  expect(saved.get('deepseek')).toEqual({ type: 'api_key', key: 'sk-test' });
+  expect(await api.getCredentials({ id: 'deepseek' })).toBe('sk-test');
+  await api.clearCredentials({ id: 'deepseek' });
+  expect(await api.getCredentials({ id: 'deepseek' })).toBeNull();
+});
+
+test('an oauth token is never revealed as a key', async () => {
+  const saved = new Map<string, Credential>([
+    ['openai-codex', { type: 'oauth', access: 'a', refresh: 'r', expires: 1 }],
+  ]);
+  const api = caller(rowWith({}).db, storeWith(saved));
+  expect(await api.getCredentials({ id: 'openai-codex' })).toBeNull();
+});
+
+test('the provider list reports credentials the store can read', async () => {
+  const rows = [
+    { id: 'deepseek', enabled: true, config: null, credentialsEncrypted: null },
+    { id: 'openai-codex', enabled: true, config: null, credentialsEncrypted: Buffer.from('x') },
+  ];
+  const saved = new Map<string, Credential>([['deepseek', { type: 'api_key', key: 'sk-test' }]]);
+  const listed = await caller(rowWith({}, rows).db, storeWith(saved)).list();
+  expect(Object.fromEntries(listed.map((p) => [p.id, p.hasCredentials]))).toEqual({
+    deepseek: true,
+    'openai-codex': false,
+  });
 });
