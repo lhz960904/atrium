@@ -1,5 +1,4 @@
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
-import type { ParseKeys } from 'i18next';
 import { Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +8,7 @@ import { BaseUrlField } from './BaseUrlField';
 import { CustomProviderDialog } from './CustomProviderDialog';
 import { EnableSwitch } from './EnableSwitch';
 import { ModelsBlock } from './ModelsBlock';
+import { providerLabel } from './provider-label';
 import { SubscriptionForm } from './SubscriptionForm';
 import type { ProviderView } from './types';
 
@@ -38,13 +38,10 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
             <h2 className="font-semibold text-fg-primary text-lg tracking-tight">
-              {provider.name}
+              {providerLabel(t, provider.id, provider.name)}
             </h2>
             <ActiveBadge enabled={provider.enabled} />
           </div>
-          <p className="text-fg-tertiary text-sm leading-snug">
-            {t(provider.descriptionKey as ParseKeys)}
-          </p>
         </div>
         <div className="flex shrink-0 items-center gap-1 pt-1">
           <ProviderActions provider={provider} />
@@ -128,7 +125,13 @@ function ProviderActions({ provider }: { provider: ProviderView }): React.JSX.El
       <button
         type="button"
         onClick={() => {
-          if (confirm(t('settings.providers.removeConfirm', { name: provider.name }))) {
+          if (
+            confirm(
+              t('settings.providers.removeConfirm', {
+                name: providerLabel(t, provider.id, provider.name),
+              }),
+            )
+          ) {
             remove.mutate({ id: provider.id });
           }
         }}

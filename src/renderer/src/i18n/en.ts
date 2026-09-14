@@ -675,6 +675,13 @@ export const en: typeof zh = {
       noneAdded: 'No providers yet. Add one to start.',
       remove: 'Remove provider',
       removeConfirm: 'Remove {{name}} and the key it holds?',
+      name: {
+        moonshot: 'Moonshot AI',
+        'kimi-coding': 'Kimi For Coding',
+        'zai-coding': 'Z.AI Coding',
+        'volcengine-agent': 'VolcEngine Ark - Agent Plan',
+        'volcengine-coding': 'VolcEngine Ark - Coding Plan',
+      },
       custom: {
         add: 'Add model',
         edit: 'Edit {{id}}',
@@ -698,21 +705,6 @@ export const en: typeof zh = {
       localNoKey: 'No API key needed — reuses your locally logged-in CLI.',
       localAfterInstall:
         'After installing and logging in (e.g. {{login}}), enable this and pick it in the composer model menu.',
-      desc: {
-        custom: 'A provider you added.',
-        openaiCodex: 'Sign in with a ChatGPT Plus/Pro subscription — no API key.',
-        anthropicSubscription: 'Sign in with a Claude Pro/Max subscription — no API key.',
-        anthropic: 'Claude models — Opus, Sonnet, Haiku. Direct API.',
-        openai: 'GPT-5, GPT-4.1 and o-series via OpenAI API.',
-        deepseek: 'DeepSeek-V3 / R1. Cost-effective, strong at code & reasoning.',
-        google: 'Gemini 2.5 Pro / Flash via Google AI Studio.',
-        moonshot: 'Kimi family (Moonshot AI). Long context.',
-        kimiCoding: 'Moonshot · Coding subscription (Anthropic-compatible).',
-        zaiCoding: 'Zhipu GLM Coding subscription (Anthropic-compatible).',
-        volcengineAgent: 'Volcengine Ark · Agent Plan subscription (Anthropic-compatible).',
-        volcengineCoding: 'Volcengine Ark · Coding Plan subscription (Anthropic-compatible).',
-        openrouter: 'One API that routes to 300+ models.',
-      },
     },
     subagents: {
       systemPrompt: 'System prompt',

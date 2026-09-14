@@ -87,7 +87,6 @@ export const providersRouter = router({
           id: row.id,
           kind: 'cloud-api' as const,
           name: parsed.data.name,
-          descriptionKey: 'settings.providers.desc.custom',
           protocol: 'openai-compatible' as const,
           defaultBaseUrl: parsed.data.baseUrl,
           consoleUrl: '',
@@ -132,7 +131,6 @@ export const providersRouter = router({
       id: m.id,
       name: m.name,
       kind: m.kind,
-      descriptionKey: m.descriptionKey,
     }));
   }),
 

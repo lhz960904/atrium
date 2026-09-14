@@ -1,9 +1,9 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import type { ParseKeys } from 'i18next';
 import { Plus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
 import { ProviderIcon } from './ProviderIcon';
+import { providerLabel } from './provider-label';
 
 /**
  * Pick a provider to add. Only the ones not added yet are listed, and adding is
@@ -58,16 +58,11 @@ export function AddProviderDialog({
                 type="button"
                 disabled={add.isLoading}
                 onClick={() => add.mutate({ id: p.id })}
-                className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-surface-strong disabled:opacity-50"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-surface-strong disabled:opacity-50"
               >
-                <ProviderIcon id={p.id} className="mt-0.5 size-4 shrink-0 text-fg-primary" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium text-fg-primary text-sm">
-                    {p.name}
-                  </span>
-                  <span className="block truncate text-fg-tertiary text-xs">
-                    {t(p.descriptionKey as ParseKeys)}
-                  </span>
+                <ProviderIcon id={p.id} className="size-4 shrink-0 text-fg-primary" />
+                <span className="min-w-0 flex-1 truncate font-medium text-fg-primary text-sm">
+                  {providerLabel(t, p.id, p.name)}
                 </span>
               </button>
             ))}

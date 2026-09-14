@@ -4,13 +4,12 @@
  * Nothing here says what a provider serves or how to reach it: models come
  * from a catalog — the engine's, or one written beside the provider it belongs
  * to — and the endpoint is carried by the registered provider itself. What is
- * left is what the settings panel needs to offer one, plus the one distinction
- * that changes behaviour, which is how it is paid for.
+ * left is a name, a link to where the vendor explains itself, and the one
+ * distinction that changes behaviour, which is how it is paid for.
  *
- * Keeping the copy here rather than in the `providers` table means it can be
- * updated in a release without a migration, and the table holds only what the
- * user chose. `descriptionKey` is an i18n key, so this stays free of localized
- * strings.
+ * There is deliberately no description. A sentence Atrium writes about someone
+ * else's product is out of date the week they change it, and the console link
+ * goes to the version that isn't.
  */
 
 /**
@@ -24,8 +23,13 @@ export type ProviderKind = 'cloud-api' | 'subscription';
 export type ProviderManifest = {
   id: string;
   kind: ProviderKind;
+  /**
+   * The vendor's own name for the thing, matching what the engine calls it
+   * where the engine ships one. A locale that says it differently overrides it
+   * under `settings.providers.name.<id>`; everywhere else falls through to
+   * this, since a brand rarely needs translating.
+   */
   name: string;
-  descriptionKey: string;
   /** Where the user goes for a key, or to manage the subscription. */
   consoleUrl: string;
 };
@@ -36,66 +40,49 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'anthropic',
     kind: 'cloud-api',
     name: 'Anthropic',
-    descriptionKey: 'settings.providers.desc.anthropic',
     consoleUrl: 'https://console.anthropic.com/settings/keys',
   },
   {
     id: 'openai',
     kind: 'cloud-api',
     name: 'OpenAI',
-    descriptionKey: 'settings.providers.desc.openai',
     consoleUrl: 'https://platform.openai.com/api-keys',
   },
   {
     id: 'deepseek',
     kind: 'cloud-api',
     name: 'DeepSeek',
-    descriptionKey: 'settings.providers.desc.deepseek',
     consoleUrl: 'https://platform.deepseek.com/api_keys',
   },
   {
     id: 'google',
     kind: 'cloud-api',
-    name: 'Google Gemini',
-    descriptionKey: 'settings.providers.desc.google',
+    name: 'Google',
     consoleUrl: 'https://aistudio.google.com/apikey',
   },
   {
     id: 'moonshot',
     kind: 'cloud-api',
-    name: 'Moonshot',
-    descriptionKey: 'settings.providers.desc.moonshot',
-    consoleUrl: 'https://platform.moonshot.cn/console/api-keys',
-  },
-  {
-    id: 'kimi-coding',
-    kind: 'cloud-api',
-    name: 'Kimi Coding Plan',
-    descriptionKey: 'settings.providers.desc.kimiCoding',
-    consoleUrl: 'https://platform.moonshot.cn/',
+    name: 'Moonshot AI',
+    consoleUrl: 'https://platform.kimi.com/console/api-keys',
   },
   {
     id: 'zai-coding',
     kind: 'cloud-api',
-    name: 'Z.AI Coding Plan',
-    descriptionKey: 'settings.providers.desc.zaiCoding',
-    consoleUrl: 'https://open.bigmodel.cn/',
+    name: 'Z.AI Coding',
+    consoleUrl: 'https://open.bigmodel.cn/console/overview',
   },
   {
     id: 'volcengine-agent',
     kind: 'cloud-api',
-    name: 'Volcengine Agent Plan',
-    descriptionKey: 'settings.providers.desc.volcengineAgent',
-    consoleUrl:
-      'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=agentPlan',
+    name: 'VolcEngine Ark - Agent Plan',
+    consoleUrl: 'https://console.volcengine.com/ark/region:cn-beijing/subscription/agent-plan',
   },
   {
     id: 'volcengine-coding',
     kind: 'cloud-api',
-    name: 'Volcengine Coding Plan',
-    descriptionKey: 'settings.providers.desc.volcengineCoding',
-    consoleUrl:
-      'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?LLM=%7B%7D&advancedActiveKey=subscribe',
+    name: 'VolcEngine Ark - Coding Plan',
+    consoleUrl: 'https://console.volcengine.com/ark/region:cn-beijing/subscription/coding-plan',
   },
   // ── Subscriptions (signed into, not keyed) ───────────────────────────────
   // A vendor that sells both a key and a subscription gets one row per
@@ -105,21 +92,18 @@ export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
     id: 'anthropic-subscription',
     kind: 'subscription',
     name: 'Claude Pro/Max',
-    descriptionKey: 'settings.providers.desc.anthropicSubscription',
     consoleUrl: 'https://claude.ai/settings/billing',
   },
   {
     id: 'openai-codex',
     kind: 'subscription',
     name: 'OpenAI Codex',
-    descriptionKey: 'settings.providers.desc.openaiCodex',
     consoleUrl: 'https://chatgpt.com/codex',
   },
   {
     id: 'openrouter',
     kind: 'cloud-api',
     name: 'OpenRouter',
-    descriptionKey: 'settings.providers.desc.openrouter',
     consoleUrl: 'https://openrouter.ai/keys',
   },
 ] as const;
