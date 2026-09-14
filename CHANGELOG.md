@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.16.0](https://github.com/lhz960904/atrium/compare/v0.15.1...v0.16.0) (2026-09-14)
+
+
+### Features
+
+* **providers:** one catalog per model, plus custom models and providers ([#110](https://github.com/lhz960904/atrium/issues/110)) ([91ea5fa](https://github.com/lhz960904/atrium/commit/91ea5fa0b47b0826996bac5e605db51bb11f3cef))
+
+
+### Bug Fixes
+
+* **window:** send off-document navigations to the browser ([f5532e9](https://github.com/lhz960904/atrium/commit/f5532e9bcc97469b43a8edffbbe61493f98444a0))
+* **window:** stop restoring the window into fullscreen ([38bfbdf](https://github.com/lhz960904/atrium/commit/38bfbdffa212f7c2f5902154429c4ad72f0ed3ba))
+
 ## [0.15.1](https://github.com/lhz960904/atrium/compare/v0.15.0...v0.15.1) (2026-09-12)
 
 
