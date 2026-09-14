@@ -677,7 +677,6 @@ export const en: typeof zh = {
       removeConfirm: 'Remove {{name}} and the key it holds?',
       name: {
         moonshot: 'Moonshot AI',
-        'kimi-coding': 'Kimi For Coding',
         'zai-coding': 'Z.AI Coding',
         'volcengine-agent': 'VolcEngine Ark - Agent Plan',
         'volcengine-coding': 'VolcEngine Ark - Coding Plan',

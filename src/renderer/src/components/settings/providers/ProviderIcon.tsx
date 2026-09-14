@@ -1,11 +1,9 @@
 import aihubmixSvg from '@lobehub/icons-static-svg/icons/aihubmix-color.svg?raw';
 import anthropicSvg from '@lobehub/icons-static-svg/icons/anthropic.svg?raw';
-import claudecodeSvg from '@lobehub/icons-static-svg/icons/claudecode-color.svg?raw';
-import codexSvg from '@lobehub/icons-static-svg/icons/codex-color.svg?raw';
+import claudeSvg from '@lobehub/icons-static-svg/icons/claude-color.svg?raw';
+import codexSvg from '@lobehub/icons-static-svg/icons/codex.svg?raw';
 import deepseekSvg from '@lobehub/icons-static-svg/icons/deepseek-color.svg?raw';
 import geminiSvg from '@lobehub/icons-static-svg/icons/gemini-color.svg?raw';
-import geminicliSvg from '@lobehub/icons-static-svg/icons/geminicli-color.svg?raw';
-import kimiSvg from '@lobehub/icons-static-svg/icons/kimi-color.svg?raw';
 import moonshotSvg from '@lobehub/icons-static-svg/icons/moonshot.svg?raw';
 import ollamaSvg from '@lobehub/icons-static-svg/icons/ollama.svg?raw';
 import openaiSvg from '@lobehub/icons-static-svg/icons/openai.svg?raw';
@@ -29,15 +27,15 @@ const SVG_BY_ID: Record<string, string> = {
   deepseek: deepseekSvg,
   google: geminiSvg,
   moonshot: moonshotSvg,
-  'kimi-coding': kimiSvg,
   'zai-coding': zhipuSvg,
   'volcengine-agent': volcengineSvg,
   'volcengine-coding': volcengineSvg,
   openrouter: openrouterSvg,
+  // The subscriptions carry the consumer brand rather than the API one, which
+  // is also what tells them apart from the keyed entry for the same vendor.
+  'anthropic-subscription': claudeSvg,
+  'openai-codex': codexSvg,
   aihubmix: aihubmixSvg,
-  'claude-code': claudecodeSvg,
-  'codex-cli': codexSvg,
-  'gemini-cli': geminicliSvg,
   ollama: ollamaSvg,
 };
 

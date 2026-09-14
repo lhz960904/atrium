@@ -648,7 +648,6 @@ export const zh = {
       localAfterInstall: '安装并登录后(如 {{login}}),启用本项,即可在对话框的模型选择里选它。',
       name: {
         moonshot: '月之暗面',
-        'kimi-coding': 'Kimi 编程套餐',
         'zai-coding': '智谱 GLM 编程套餐',
         'volcengine-agent': '火山方舟 · Agent Plan',
         'volcengine-coding': '火山方舟 · Coding Plan',
