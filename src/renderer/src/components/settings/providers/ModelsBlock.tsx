@@ -1,24 +1,29 @@
-import { AlertCircle, Download, Loader2 } from 'lucide-react';
-import { useMemo } from 'react';
+import type { CustomModel } from '@shared/custom-model';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { trpc } from '../../../lib/trpc';
+import { CustomModelDialog } from './CustomModelDialog';
 import { EnableSwitch } from './EnableSwitch';
 
 export function ModelsBlock({
   providerId,
-  canFetch,
   emptyHint,
   models,
   enabledModels,
+  allWhenUnpicked = false,
+  customModels,
   grow = true,
 }: {
   providerId: string;
-  /** Whether the fetch action is currently possible (key saved / service up). */
-  canFetch: boolean;
   /** Shown in the empty state — the caller knows why the list is empty. */
   emptyHint: string;
   models: string[];
   enabledModels: string[];
+  /** No picks means every model, not none — a subscription is granted whole. */
+  allWhenUnpicked?: boolean;
+  /** The models the user added here, so they can be edited and removed. */
+  customModels?: readonly CustomModel[];
   /** Fill the remaining panel height and scroll the list internally (cloud
    *  forms). false = natural height; the surrounding panel scrolls instead —
    *  required when content stacks below, which would crush a flex-1 block. */
@@ -26,10 +31,6 @@ export function ModelsBlock({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const utils = trpc.useUtils();
-  const fetchModels = trpc.providers.fetchModels.useMutation({
-    onSuccess: () => utils.providers.list.invalidate(),
-  });
-
   const updateConfig = trpc.providers.updateConfig.useMutation({
     onMutate: async ({ id, partial }) => {
       await utils.providers.list.cancel();
@@ -45,7 +46,22 @@ export function ModelsBlock({
     onSettled: () => utils.providers.list.invalidate(),
   });
 
-  const enabledSet = useMemo(() => new Set(enabledModels), [enabledModels]);
+  const removeModel = trpc.providers.removeCustomModel.useMutation({
+    onSuccess: () => utils.providers.list.invalidate(),
+  });
+  const [editing, setEditing] = useState<CustomModel | 'new' | null>(null);
+
+  // Shown as on, because that is what the picker offers. The first model turned
+  // off writes the rest down, which is the point at which narrowing begins.
+  const showAll = allWhenUnpicked && enabledModels.length === 0;
+  const enabledSet = useMemo(
+    () => new Set(showAll ? models : enabledModels),
+    [showAll, models, enabledModels],
+  );
+  const customById = useMemo(
+    () => new Map((customModels ?? []).map((m) => [m.id, m])),
+    [customModels],
+  );
 
   // Enabled-first sort keeps the user's picks pinned to the top of a long
   // aggregator list (OpenRouter / AiHubMix easily ship 300+ models).
@@ -55,13 +71,12 @@ export function ModelsBlock({
   );
 
   const toggleModel = (modelId: string): void => {
+    const current = showAll ? models : enabledModels;
     const next = enabledSet.has(modelId)
-      ? enabledModels.filter((m) => m !== modelId)
-      : [...enabledModels, modelId];
+      ? current.filter((m) => m !== modelId)
+      : [...current, modelId];
     updateConfig.mutate({ id: providerId, partial: { enabledModels: next } });
   };
-
-  const fetchDisabled = !canFetch || fetchModels.isLoading;
 
   return (
     <div className={grow ? 'flex min-h-0 flex-1 flex-col' : 'flex shrink-0 flex-col'}>
@@ -74,27 +89,19 @@ export function ModelsBlock({
             </span>
           )}
         </h3>
-        <button
-          type="button"
-          disabled={fetchDisabled}
-          onClick={() => fetchModels.mutate({ id: providerId })}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border-default bg-elevated px-2.5 py-1 text-fg-secondary text-xs hover:bg-surface-strong disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {fetchModels.isLoading ? (
-            <Loader2 className="size-[12px] animate-spin" />
-          ) : (
-            <Download className="size-[12px]" />
+        <div className="flex items-center gap-1.5">
+          {customModels && (
+            <button
+              type="button"
+              onClick={() => setEditing('new')}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border-default bg-elevated px-2.5 py-1 text-fg-secondary text-xs hover:bg-surface-strong"
+            >
+              <Plus className="size-[12px]" />
+              {t('settings.providers.custom.add')}
+            </button>
           )}
-          {t('settings.providers.fetch')}
-        </button>
-      </div>
-
-      {fetchModels.error && (
-        <div className="mb-2 flex shrink-0 items-start gap-2 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-danger text-xs">
-          <AlertCircle className="mt-0.5 size-[13px] shrink-0" />
-          <span className="min-w-0 break-words">{fetchModels.error.message}</span>
         </div>
-      )}
+      </div>
 
       {models.length === 0 ? (
         <div className="shrink-0 rounded-lg border border-border-default border-dashed bg-surface px-6 py-8 text-center">
@@ -109,6 +116,7 @@ export function ModelsBlock({
         >
           {sortedModels.map((m) => {
             const on = enabledSet.has(m);
+            const custom = customById.get(m);
             return (
               <li
                 key={m}
@@ -117,11 +125,45 @@ export function ModelsBlock({
                 <span className="min-w-0 flex-1 truncate font-mono text-fg-primary text-sm">
                   {m}
                 </span>
+                {custom && (
+                  <>
+                    <span className="shrink-0 rounded-full bg-surface-strong px-1.5 py-0.5 text-[10px] text-fg-tertiary uppercase tracking-wider">
+                      {t('settings.providers.custom.added')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(custom)}
+                      title={t('common.edit')}
+                      className="shrink-0 rounded p-1 text-fg-tertiary hover:bg-surface-strong hover:text-fg-secondary"
+                    >
+                      <Pencil className="size-[13px]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeModel.mutate({ id: providerId, modelId: m })}
+                      title={t('settings.providers.custom.remove')}
+                      className="shrink-0 rounded p-1 text-fg-tertiary hover:bg-danger/10 hover:text-danger"
+                    >
+                      <Trash2 className="size-[13px]" />
+                    </button>
+                  </>
+                )}
                 <EnableSwitch on={on} onToggle={() => toggleModel(m)} />
               </li>
             );
           })}
         </ul>
+      )}
+
+      {/* Mounted per edit: the form holds a draft, and a reused instance would
+          open the next model with the previous one's values still in it. */}
+      {editing && (
+        <CustomModelDialog
+          key={editing === 'new' ? 'new' : editing.id}
+          providerId={providerId}
+          editing={editing}
+          onClose={() => setEditing(null)}
+        />
       )}
     </div>
   );

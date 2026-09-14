@@ -1,4 +1,4 @@
-import type { ModelPricing } from '../../providers/models/types';
+import type { TokenRates } from '@shared/cost';
 import type { RunContext } from '../../runtime/run-context';
 import { filterToolsForSubagent, resolveSubagentDef } from '../../subagent/defs';
 import { runSubagent, type SubagentEngine } from '../../subagent/run';
@@ -9,7 +9,7 @@ const DEFAULT_SUBAGENT = 'general-purpose';
 
 export type TaskToolDeps = {
   /** Pricing lookup, forwarded so the subagent records its own usage. */
-  pricingOf?: (modelId: string) => ModelPricing;
+  pricingOf?: (providerId: string, modelId: string) => TokenRates;
   /** All delegatable subagents (built-in + custom), advertised in the description. */
   subagents: Array<{ name: string; description: string }>;
   /** The parent turn's context — the child reuses its sandbox / db / stream. */

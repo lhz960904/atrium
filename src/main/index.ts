@@ -11,10 +11,10 @@ import { syncBrowserProvisioning } from './agent/mcp/browser-provisioner';
 import { mcpManager } from './agent/mcp/manager';
 import { runDream, startDreamScheduler } from './agent/memory';
 import { createCredentialStore } from './agent/providers/credential-store';
-import { populateModelCatalog, startModelCatalogRefresh } from './agent/providers/models/catalog';
 import {
   makeGetApiKey,
   piStreamFn,
+  refreshProviders,
   resolvePiModel,
   useCredentialStore,
 } from './agent/providers/pi-model';
@@ -155,6 +155,9 @@ app.whenReady().then(async () => {
   // The engine resolves provider credentials itself (an OAuth token is
   // refreshed in place, so it can't be handed over once at call time).
   useCredentialStore(createCredentialStore(db));
+  // The registry is built from what Atrium ships; the models the user added are
+  // only readable once the database is open.
+  refreshProviders(db);
   openSettings();
 
   // Fallback workspace root for projectless conversations; project-scoped
@@ -212,8 +215,6 @@ app.whenReady().then(async () => {
 
   // Warm model metadata from the disk cache (falls back to the bundled
   // snapshot), then let it refresh from the litellm catalog in the background.
-  populateModelCatalog();
-  startModelCatalogRefresh();
 
   // Connect configured MCP servers once the shell env is merged — stdio servers
   // read PATH from process.env at spawn, so they must not start before it. A

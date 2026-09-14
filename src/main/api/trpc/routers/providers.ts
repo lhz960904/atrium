@@ -1,12 +1,8 @@
 import {
-  fetchOllamaModels,
-  type LocalServiceStatus,
-  type ModelProbe,
-  pingOllama,
-  probeOllamaRegistryCached,
-} from '@main/agent/providers/local-service';
-import { PROVIDER_MANIFEST, type ProviderManifest } from '@main/agent/providers/manifest';
-import { fetchModelIds } from '@main/agent/providers/model-fetcher';
+  getProviderManifest,
+  PROVIDER_MANIFEST,
+  type ProviderManifest,
+} from '@main/agent/providers/manifest';
 import {
   answerLogin,
   cancelLogin,
@@ -14,47 +10,55 @@ import {
   readLogin,
   startLogin,
 } from '@main/agent/providers/oauth-login';
-import { piModels } from '@main/agent/providers/pi-model';
-import { type PullState, pullManager } from '@main/agent/providers/pull-manager';
+import { piModels, refreshProviders } from '@main/agent/providers/pi-model';
+import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
 import { decryptJson, encryptJson } from '@main/platform/safe-storage';
-import { TRPCError } from '@trpc/server';
+import {
+  customModelSchema,
+  customProviderIdSchema,
+  customProviderSchema,
+} from '@shared/custom-model';
 import { eq } from 'drizzle-orm';
 import { shell } from 'electron';
 import { z } from 'zod';
-import { badRequest, internalError, preconditionFailed } from '../errors';
+import { badRequest } from '../errors';
 import { publicProcedure, router } from '../trpc';
-
-/**
- * The vendor's own catalog, where the engine maintains one. It is the better
- * source — kept current with the vendor and carrying real cost/window data —
- * so it leads, and the manifest supplies the rest: models the engine doesn't
- * know (Atrium-only plans) and any field we override.
- */
-function withEngineCatalog(
-  providerId: string,
-  declared: readonly { id: string }[],
-): { id: string }[] {
-  const ids = new Set<string>();
-  const out: { id: string }[] = [];
-  for (const model of [...piModels.getModels(providerId), ...declared]) {
-    if (ids.has(model.id)) continue;
-    ids.add(model.id);
-    out.push({ id: model.id });
-  }
-  return out;
-}
 
 /** A user-friendly view of a provider that merges manifest + DB row. */
 type ProviderView = ProviderManifest & {
   enabled: boolean;
   config: Record<string, unknown> | null;
   hasCredentials: boolean;
-  /** A subscription's catalog is the engine's, so it is filled in here. */
+  /** The catalog the engine resolves for this provider — the only source. */
   models?: readonly { id: string }[];
+  /** Defined by the user, so it can be edited and deleted. */
+  custom?: boolean;
+  /** The endpoint the engine resolved for this provider — the only source, and
+   *  what the settings panel shows as the default. */
+  defaultBaseUrl?: string;
 };
 
 const configSchema = z.record(z.string(), z.unknown());
+
+/** Upsert a provider's whole config blob; the row may not exist yet. */
+function writeConfig(db: Db, id: string, config: Record<string, unknown>): void {
+  db.insert(providers)
+    .values({ id, config })
+    .onConflictDoUpdate({ target: providers.id, set: { config, updatedAt: new Date() } })
+    .run();
+}
+
+/** The models this provider has stored, as untyped rows — callers filter. */
+function storedModels(db: Db, id: string): { config: Record<string, unknown>; models: unknown[] } {
+  const row = db
+    .select({ config: providers.config })
+    .from(providers)
+    .where(eq(providers.id, id))
+    .get();
+  const config = (row?.config as Record<string, unknown> | null) ?? {};
+  return { config, models: Array.isArray(config.customModels) ? config.customModels : [] };
+}
 
 export const providersRouter = router({
   /**
@@ -62,22 +66,121 @@ export const providersRouter = router({
    * raw encrypted credentials blob — callers ask for plaintext explicitly
    * via `getCredentials` when (and only when) they need to display it.
    */
+  /**
+   * The providers the user has added, in manifest order. Adding one is what
+   * makes it exist here — there is no separate step that turns it on, because
+   * a provider sitting in the list doing nothing is the state everyone forgets
+   * to leave.
+   */
   list: publicProcedure.query(({ ctx }): ProviderView[] => {
     const rows = ctx.db.select().from(providers).all();
     const byId = new Map(rows.map((r) => [r.id, r]));
-    return PROVIDER_MANIFEST.map((m) => {
+    // A provider the user defined has no manifest entry, so one is made for it
+    // from what they gave: the panel treats both the same from here on.
+    const defined: ProviderView[] = rows.flatMap((row) => {
+      const parsed = customProviderSchema.safeParse(
+        (row.config as { customProvider?: unknown } | null)?.customProvider,
+      );
+      if (!parsed.success || getProviderManifest(row.id)) return [];
+      return [
+        {
+          id: row.id,
+          kind: 'cloud-api' as const,
+          name: parsed.data.name,
+          protocol: 'openai-compatible' as const,
+          defaultBaseUrl: parsed.data.baseUrl,
+          consoleUrl: '',
+          enabled: row.enabled,
+          config: (row.config as Record<string, unknown> | null) ?? null,
+          hasCredentials: !!row.credentialsEncrypted,
+          models: piModels.getModels(row.id).map((model) => ({ id: model.id })),
+          custom: true,
+        },
+      ];
+    });
+    const shipped: ProviderView[] = PROVIDER_MANIFEST.filter((m) => byId.has(m.id)).map((m) => {
       const row = byId.get(m.id);
+      // The endpoint comes from the registry, which is the only place it is
+      // written down: the manifest describes a provider, it doesn't say how to
+      // reach one.
+      const registered = piModels.getProvider(m.id);
       return {
         ...m,
+        defaultBaseUrl: registered?.baseUrl,
         ...(m.kind === 'cloud-api' || m.kind === 'subscription'
-          ? { models: withEngineCatalog(m.id, 'models' in m ? m.models : []) }
+          ? { models: piModels.getModels(m.id).map((model) => ({ id: model.id })) }
           : {}),
         enabled: row?.enabled ?? false,
         config: (row?.config as Record<string, unknown> | null) ?? null,
         hasCredentials: !!row?.credentialsEncrypted,
       };
     });
+    return [...shipped, ...defined];
   }),
+
+  /** The shipped providers not added yet — the choices in the add picker. */
+  available: publicProcedure.query(({ ctx }) => {
+    const taken = new Set(
+      ctx.db
+        .select({ id: providers.id })
+        .from(providers)
+        .all()
+        .map((r) => r.id),
+    );
+    return PROVIDER_MANIFEST.filter((m) => !taken.has(m.id)).map((m) => ({
+      id: m.id,
+      name: m.name,
+      kind: m.kind,
+    }));
+  }),
+
+  /** Add a shipped provider. Adding is the whole step: it is on from here. */
+  add: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    if (!getProviderManifest(input.id)) throw badRequest(`"${input.id}" is not a known provider.`);
+    ctx.db
+      .insert(providers)
+      .values({ id: input.id, enabled: true })
+      .onConflictDoUpdate({ target: providers.id, set: { enabled: true, updatedAt: new Date() } })
+      .run();
+  }),
+
+  /** Remove a provider from the list, and with it the key it was holding. */
+  remove: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    ctx.db.delete(providers).where(eq(providers.id, input.id)).run();
+    refreshProviders(ctx.db);
+  }),
+
+  /** Define a provider Atrium doesn't ship: an endpoint, a request format, and
+   *  whatever models the user adds to it. */
+  createCustomProvider: publicProcedure
+    .input(z.object({ id: customProviderIdSchema, provider: customProviderSchema }))
+    .mutation(({ ctx, input }) => {
+      if (getProviderManifest(input.id)) {
+        throw badRequest(`"${input.id}" is already the id of a built-in provider.`);
+      }
+      const taken = ctx.db
+        .select({ id: providers.id })
+        .from(providers)
+        .where(eq(providers.id, input.id))
+        .get();
+      if (taken) throw badRequest(`"${input.id}" is already in use.`);
+      // Defining one is adding it, so it is on — the same rule as picking a
+      // shipped provider.
+      ctx.db
+        .insert(providers)
+        .values({ id: input.id, enabled: true, config: { customProvider: input.provider } })
+        .run();
+      refreshProviders(ctx.db);
+    }),
+
+  updateCustomProvider: publicProcedure
+    .input(z.object({ id: z.string(), provider: customProviderSchema }))
+    .mutation(({ ctx, input }) => {
+      const { config } = storedModels(ctx.db, input.id);
+      if (!config.customProvider) throw badRequest('Not a provider you defined.');
+      writeConfig(ctx.db, input.id, { ...config, customProvider: input.provider });
+      refreshProviders(ctx.db);
+    }),
 
   /**
    * Subscription login. `start` kicks the flow off and opens the browser; the
@@ -134,18 +237,10 @@ export const providersRouter = router({
         .from(providers)
         .where(eq(providers.id, input.id))
         .get();
-      const merged = {
+      writeConfig(ctx.db, input.id, {
         ...((existing?.config as Record<string, unknown> | null) ?? {}),
         ...input.partial,
-      };
-      ctx.db
-        .insert(providers)
-        .values({ id: input.id, config: merged })
-        .onConflictDoUpdate({
-          target: providers.id,
-          set: { config: merged, updatedAt: new Date() },
-        })
-        .run();
+      });
     }),
 
   /**
@@ -203,133 +298,43 @@ export const providersRouter = router({
     }),
 
   /**
-   * Liveness probe for a local model service (Ollama). Read-only and cheap, so
-   * the settings UI can poll it; "not running" is a normal answer, not an error.
-   */
-  detectLocalService: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }): Promise<LocalServiceStatus> => {
-      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind !== 'local-service') {
-        throw badRequest('Unknown local service id.');
-      }
-      const row = ctx.db
-        .select({ config: providers.config })
-        .from(providers)
-        .where(eq(providers.id, input.id))
-        .get();
-      const baseUrl =
-        (row?.config as { baseUrl?: string } | null)?.baseUrl?.trim() || manifest.defaultBaseUrl;
-      return pingOllama(baseUrl);
-    }),
-
-  /** Kick off a model download on the local service; progress is polled via
-   *  pullStates (the pull runs for minutes — far beyond any request). */
-  pullModel: publicProcedure
-    .input(z.object({ id: z.string(), model: z.string().min(1) }))
-    .mutation(({ ctx, input }): { started: boolean } => {
-      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind !== 'local-service') {
-        throw badRequest('Unknown local service id.');
-      }
-      const row = ctx.db
-        .select({ config: providers.config })
-        .from(providers)
-        .where(eq(providers.id, input.id))
-        .get();
-      const baseUrl =
-        (row?.config as { baseUrl?: string } | null)?.baseUrl?.trim() || manifest.defaultBaseUrl;
-      return { started: pullManager.start(baseUrl, input.model.trim()) };
-    }),
-
-  /** Snapshot of in-flight (and just-finished) downloads for the polling UI. */
-  pullStates: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(({ input }): PullState[] => {
-      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind !== 'local-service') {
-        throw badRequest('Unknown local service id.');
-      }
-      return pullManager.list();
-    }),
-
-  /**
-   * Validate model names against the public registry and read their download
-   * sizes. Backs the curated rows (live sizes instead of hardcoded ones) and
-   * the validating autocomplete. A registry failure yields exists=null —
-   * "couldn't verify", which never blocks a download attempt.
-   */
-  probeModels: publicProcedure
-    .input(z.object({ id: z.string(), models: z.array(z.string().min(1)).max(20) }))
-    .query(async ({ input }): Promise<Record<string, ModelProbe>> => {
-      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind !== 'local-service') {
-        throw badRequest('Unknown local service id.');
-      }
-      const entries = await Promise.all(
-        input.models.map(async (m): Promise<[string, ModelProbe]> => {
-          try {
-            return [m, await probeOllamaRegistryCached(m.trim())];
-          } catch {
-            return [m, { exists: null }];
-          }
-        }),
-      );
-      return Object.fromEntries(entries);
-    }),
-
-  /**
    * List the provider's available models and persist them to
    * `config.fetchedModels`. Cloud providers call their `/models` endpoint with
    * the saved credentials (doubling as a connection test); a local service
    * lists its installed models keylessly. Failures surface as TRPCErrors the
    * renderer renders verbatim.
    */
-  fetchModels: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }): Promise<string[]> => {
-      const manifest = PROVIDER_MANIFEST.find((p) => p.id === input.id);
-      if (!manifest || manifest.kind === 'subscription') {
-        // A subscription's catalog is the engine's, fixed by the vendor.
-        throw badRequest('Provider has no model listing.');
-      }
+  /**
+   * Add or replace a model on a provider. Stored on the provider's config and
+   * folded into its catalog, replacing a catalog entry of the same id — which
+   * is how a wrong window gets corrected, not just how a missing model is
+   * added. `previousId` lets the editor rename one without leaving the old
+   * entry behind.
+   */
+  upsertCustomModel: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        model: customModelSchema,
+        previousId: z.string().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      const { config, models } = storedModels(ctx.db, input.id);
+      const dropped = new Set([input.model.id, input.previousId].filter(Boolean));
+      const kept = models.filter((m) => !dropped.has(String((m as { id?: unknown }).id)));
+      writeConfig(ctx.db, input.id, { ...config, customModels: [...kept, input.model] });
+      refreshProviders(ctx.db);
+    }),
 
-      const row = ctx.db
-        .select({ blob: providers.credentialsEncrypted, config: providers.config })
-        .from(providers)
-        .where(eq(providers.id, input.id))
-        .get();
-      const config = (row?.config as { baseUrl?: string } | null) ?? {};
-      const baseUrl = config.baseUrl?.trim() || manifest.defaultBaseUrl;
-
-      let modelIds: string[];
-      try {
-        if (manifest.kind === 'local-service') {
-          modelIds = await fetchOllamaModels(baseUrl);
-        } else {
-          if (!row?.blob) {
-            throw preconditionFailed('Add an API key first.');
-          }
-          const apiKey = decryptJson<{ key: string }>(row.blob).key;
-          modelIds = await fetchModelIds({ protocol: manifest.protocol, baseUrl, apiKey });
-        }
-      } catch (err) {
-        if (err instanceof TRPCError) throw err;
-        throw internalError(err instanceof Error ? err.message : 'Fetch failed.');
-      }
-
-      // Tie the listing to the endpoint it came from: point a provider at a
-      // relay and back, and the relay's catalog must not linger as its own.
-      const mergedConfig = { ...config, fetchedModels: modelIds, fetchedFrom: baseUrl };
-      ctx.db
-        .insert(providers)
-        .values({ id: input.id, config: mergedConfig })
-        .onConflictDoUpdate({
-          target: providers.id,
-          set: { config: mergedConfig, updatedAt: new Date() },
-        })
-        .run();
-
-      return modelIds;
+  removeCustomModel: publicProcedure
+    .input(z.object({ id: z.string(), modelId: z.string() }))
+    .mutation(({ ctx, input }) => {
+      const { config, models } = storedModels(ctx.db, input.id);
+      writeConfig(ctx.db, input.id, {
+        ...config,
+        customModels: models.filter((m) => String((m as { id?: unknown }).id) !== input.modelId),
+      });
+      refreshProviders(ctx.db);
     }),
 });

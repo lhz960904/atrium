@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { ModelPricing } from '@main/agent/providers/models/types';
-import { costUsd, type TokenCounts } from '../../shared/cost';
+import { costUsd, type TokenCounts, type TokenRates } from '../../shared/cost';
 import type { Db } from '.';
 import { usage } from './schema';
 
 export type UsageKind = 'chat' | 'subagent' | 'title' | 'summary' | 'review';
 
 /** Micro-USD (1e-6 dollar) cost of one call — integer for ledger storage. */
-export function costMicros(t: TokenCounts, pricing: ModelPricing): number {
+export function costMicros(t: TokenCounts, pricing: TokenRates): number {
   return Math.round(costUsd(t, pricing) * 1_000_000);
 }
 
@@ -25,11 +24,11 @@ export type RecordUsageInput = {
 };
 
 /**
- * Append one LLM call to the usage ledger. Pricing is passed in (resolved by the
- * caller from the catalog) so this module stays free of the Electron-bound
- * catalog and is unit-testable. No-token calls are skipped.
+ * Append one LLM call to the usage ledger. Rates are passed in (the caller
+ * resolves the model) so this module doesn't reach into the provider layer and
+ * stays unit-testable. No-token calls are skipped.
  */
-export function recordUsage(db: Db, input: RecordUsageInput, pricing: ModelPricing): void {
+export function recordUsage(db: Db, input: RecordUsageInput, pricing: TokenRates): void {
   const tokens: TokenCounts = {
     inputTokens: input.inputTokens ?? 0,
     outputTokens: input.outputTokens ?? 0,

@@ -1,7 +1,7 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import { Gauge } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { aggregateUsage, contextOccupancy, formatUsd, sessionModelIds } from '../../../lib/cost';
+import { aggregateUsage, contextOccupancy, formatUsd, sessionModels } from '../../../lib/cost';
 import { formatTokens } from '../../../lib/format';
 import { trpc } from '../../../lib/trpc';
 import { Tooltip } from '../../Tooltip';
@@ -47,10 +47,10 @@ export function TokenCounter({
   messages: AtriumUIMessage[];
 }): React.JSX.Element | null {
   const { t } = useTranslation();
-  const modelIds = sessionModelIds(messages);
+  const models = sessionModels(messages);
   const info = trpc.models.info.useQuery(
-    { modelIds },
-    { enabled: modelIds.length > 0, staleTime: 5 * 60_000 },
+    { models },
+    { enabled: models.length > 0, staleTime: 5 * 60_000 },
   );
   const agg = aggregateUsage(messages, info.data);
   const occ = contextOccupancy(messages, info.data);

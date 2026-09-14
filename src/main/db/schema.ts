@@ -63,11 +63,12 @@ export const artifacts = sqliteTable('artifacts', {
 });
 
 /**
- * One row per provider the user has interacted with. Static per-provider
- * metadata (display name, icon, kind, default endpoints) lives in
- * `src/main/providers/manifest.ts`; this table only stores the user's actual
- * configuration: whether it's enabled, non-secret config (base URL, visible
- * models, CLI path…), and encrypted credentials.
+ * One row per provider the user has added — having a row is what "added"
+ * means, so removing one is how a provider leaves the list. Holds only what
+ * the user chose: the enabled flag, non-secret config (endpoint override,
+ * picked models, models and providers they defined) and encrypted credentials.
+ * Display copy lives in `agent/providers/manifest.ts`, and what a provider
+ * serves comes from a catalog rather than from here.
  */
 export const providers = sqliteTable('providers', {
   id: text().primaryKey(),

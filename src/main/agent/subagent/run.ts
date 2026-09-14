@@ -2,10 +2,10 @@ import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import { recordUsage } from '@main/db/usage';
 import { createLogger } from '@main/utils/log';
+import type { TokenRates } from '@shared/cost';
 import type { AssistantMessage, Message, TextContent, Usage } from '@shared/protocol';
 import type { ToolName } from '@shared/tools';
 import { workspaceGuidance } from '../prompts';
-import type { ModelPricing } from '../providers/models/types';
 import { withinTurnFold } from '../runtime/compaction';
 import { createAgentLoop } from '../runtime/loop';
 import type { RunContext } from '../runtime/run-context';
@@ -38,7 +38,7 @@ export type RunSubagentOptions = {
   /** Correlates the child's bubbled-up activity with its UI block. */
   subagentId: string;
   /** Pricing lookup for the usage ledger; omitted in tests (skips recording). */
-  pricingOf?: (modelId: string) => ModelPricing;
+  pricingOf?: (providerId: string, modelId: string) => TokenRates;
   abortSignal?: AbortSignal;
 };
 
@@ -182,7 +182,7 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
         cacheCreationTokens: usage.cacheWrite,
         totalTokens: usage.totalTokens,
       },
-      opts.pricingOf(modelId),
+      opts.pricingOf(providerId, modelId),
     );
   }
 
