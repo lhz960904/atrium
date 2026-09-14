@@ -1,44 +1,34 @@
 /**
- * Static metadata for every well-known provider Atrium can talk to.
+ * Who Atrium ships an entry for, and what to call them.
  *
- * No model lists live here. A provider the engine ships answers for its own
- * catalog; one it doesn't gets a catalog Atrium writes, next to the provider
- * it belongs to. There is no third case and nothing to merge.
+ * Nothing here says what a provider serves or how to reach it: models come
+ * from a catalog — the engine's, or one written beside the provider it belongs
+ * to — and the endpoint is carried by the registered provider itself. What is
+ * left is what the settings panel needs to offer one, plus the one distinction
+ * that changes behaviour, which is how it is paid for.
  *
- * The `providers` table only stores the user's runtime configuration
- * (enabled flag, base URL, visible models, encrypted credentials). Display
- * name, kind, default endpoints, console URLs, etc. live here so the table
- * stays minimal and we can ship updated copy without a schema migration.
- *
- * `descriptionKey` is an i18n key (not display text): the renderer translates
- * it, keeping this main-side catalog free of localized strings.
+ * Keeping the copy here rather than in the `providers` table means it can be
+ * updated in a release without a migration, and the table holds only what the
+ * user chose. `descriptionKey` is an i18n key, so this stays free of localized
+ * strings.
  */
-
-export type ProviderKind = 'cloud-api' | 'subscription';
-export type CloudApiManifest = {
-  id: string;
-  kind: 'cloud-api';
-  name: string;
-  descriptionKey: string;
-  /** Where the user goes to generate their API key. */
-  consoleUrl: string;
-};
 
 /**
- * A vendor subscription the user signs into instead of pasting a key. The
- * engine owns the whole flow (authorization URL, token exchange, refresh); the
- * manifest only says which provider offers one and where to read about it.
+ * How a provider is paid for, which is the only thing that changes how Atrium
+ * treats one. A subscription is signed into instead of keyed: the engine owns
+ * the whole auth flow, and the vendor's catalog is fixed — there is nothing to
+ * add to it and nothing to pick from it.
  */
-export type SubscriptionManifest = {
+export type ProviderKind = 'cloud-api' | 'subscription';
+
+export type ProviderManifest = {
   id: string;
-  kind: 'subscription';
+  kind: ProviderKind;
   name: string;
   descriptionKey: string;
-  /** Where the user manages the subscription itself. */
+  /** Where the user goes for a key, or to manage the subscription. */
   consoleUrl: string;
 };
-
-export type ProviderManifest = CloudApiManifest | SubscriptionManifest;
 
 export const PROVIDER_MANIFEST: readonly ProviderManifest[] = [
   // ── Cloud API ────────────────────────────────────────────────────────────

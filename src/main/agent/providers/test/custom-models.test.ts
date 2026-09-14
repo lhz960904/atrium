@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Db } from '@main/db';
 import type { CustomModel } from '@shared/custom-model';
-import { readAddedModels } from './custom-models';
+import { readAddedModels } from '../custom-models';
 
 const valid: CustomModel = {
   id: 'deepseek-chat',

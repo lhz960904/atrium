@@ -64,11 +64,7 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
   );
 }
 
-function CloudApiForm({
-  provider,
-}: {
-  provider: Extract<ProviderView, { kind: 'cloud-api' }>;
-}): React.JSX.Element {
+function CloudApiForm({ provider }: { provider: ProviderView }): React.JSX.Element {
   const { t } = useTranslation();
   const config = (provider.config ?? {}) as {
     baseUrl?: string;

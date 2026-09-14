@@ -5,7 +5,7 @@ import { trpc } from '../../../lib/trpc';
 import { ModelsBlock } from './ModelsBlock';
 import type { ProviderView } from './types';
 
-type Provider = Extract<ProviderView, { kind: 'subscription' }>;
+type Provider = ProviderView;
 
 /** A login is a handful of state changes over a minute or two; poll for them. */
 const POLL_MS = 700;

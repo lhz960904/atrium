@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { AuthInteraction } from '@earendil-works/pi-ai';
-import { toCredential } from './credential-store';
-import { answerLogin, cancelLogin, readLogin, startLogin } from './oauth-login';
+import { toCredential } from '../credential-store';
+import { answerLogin, cancelLogin, readLogin, startLogin } from '../oauth-login';
 
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 5));
 
