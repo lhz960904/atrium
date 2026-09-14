@@ -24,13 +24,21 @@ export function deriveGroups(
   for (const p of providers) {
     if (!p.enabled) continue;
     const picked = (p.config as { enabledModels?: string[] } | null)?.enabledModels ?? [];
+    const catalog = (p.models ?? []).map((m) => m.id);
+    // A pick outlives its model when a catalog changes or a custom model is
+    // deleted, and choosing one would fail, so only listed picks are offered.
+    const listed = new Set(catalog);
     // Picking models is how a key-based provider is narrowed — an aggregator
     // serves hundreds and only a few are wanted. An OAuth provider has nothing to
     // narrow: its catalog is the vendor's, signing in is what grants it, and
     // the vendor adding a model shouldn't need the user to go tick it. So an
     // untouched OAuth provider offers everything it has.
     const models =
-      picked.length > 0 ? picked : p.authMode === 'oauth' ? (p.models ?? []).map((m) => m.id) : [];
+      picked.length > 0
+        ? picked.filter((id) => listed.has(id))
+        : p.authMode === 'oauth'
+          ? catalog
+          : [];
     if (models.length > 0) groups.push({ providerId: p.id, providerName: p.name, models });
   }
   return groups;

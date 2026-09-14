@@ -85,3 +85,35 @@ test('a subscription narrowed by hand keeps that choice', () => {
     ]),
   ).toEqual([{ providerId: 'openai-codex', providerName: 'OpenAI Codex', models: ['gpt-5.4'] }]);
 });
+
+test('a pick the catalog no longer lists is not offered', () => {
+  expect(
+    deriveGroups([
+      {
+        ...base,
+        id: 'openrouter',
+        name: 'OpenRouter',
+        authMode: 'api-key',
+        enabled: true,
+        config: { enabledModels: ['retired-model', 'a'] },
+        models: [{ id: 'a' }],
+      },
+    ]),
+  ).toEqual([{ providerId: 'openrouter', providerName: 'OpenRouter', models: ['a'] }]);
+});
+
+test('a provider left with only stale picks offers nothing', () => {
+  expect(
+    deriveGroups([
+      {
+        ...base,
+        id: 'openai-codex',
+        name: 'OpenAI Codex',
+        authMode: 'oauth',
+        enabled: true,
+        config: { enabledModels: ['retired-model'] },
+        models: [{ id: 'gpt-5.4' }],
+      },
+    ]),
+  ).toEqual([]);
+});
