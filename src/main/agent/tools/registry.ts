@@ -1,4 +1,4 @@
-import { ratesFor } from '../providers/resolve';
+import { ratesFor } from '../providers/models';
 import { listSubagentDefs } from '../subagent/defs';
 import { askClarificationTool } from './builtins/ask-clarification';
 import { bashTool } from './builtins/bash';

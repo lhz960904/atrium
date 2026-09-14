@@ -10,7 +10,7 @@ test('a disabled provider offers nothing', () => {
         ...base,
         id: 'openai',
         name: 'OpenAI',
-        kind: 'cloud-api',
+        authMode: 'api-key',
         enabled: false,
         config: { enabledModels: ['gpt-5'] },
       },
@@ -25,7 +25,7 @@ test('a key-based provider offers only what was picked', () => {
         ...base,
         id: 'openrouter',
         name: 'OpenRouter',
-        kind: 'cloud-api',
+        authMode: 'api-key',
         enabled: true,
         config: { enabledModels: ['a'] },
         models: [{ id: 'a' }, { id: 'b' }],
@@ -41,7 +41,7 @@ test('a key-based provider with nothing picked offers nothing', () => {
         ...base,
         id: 'openrouter',
         name: 'OpenRouter',
-        kind: 'cloud-api',
+        authMode: 'api-key',
         enabled: true,
         models: [{ id: 'a' }],
       },
@@ -56,7 +56,7 @@ test('signing into a subscription is enough to offer its catalog', () => {
         ...base,
         id: 'openai-codex',
         name: 'OpenAI Codex',
-        kind: 'subscription',
+        authMode: 'oauth',
         enabled: true,
         models: [{ id: 'gpt-5.4' }, { id: 'gpt-5.4-mini' }],
       },
@@ -77,11 +77,43 @@ test('a subscription narrowed by hand keeps that choice', () => {
         ...base,
         id: 'openai-codex',
         name: 'OpenAI Codex',
-        kind: 'subscription',
+        authMode: 'oauth',
         enabled: true,
         config: { enabledModels: ['gpt-5.4'] },
         models: [{ id: 'gpt-5.4' }, { id: 'gpt-5.4-mini' }],
       },
     ]),
   ).toEqual([{ providerId: 'openai-codex', providerName: 'OpenAI Codex', models: ['gpt-5.4'] }]);
+});
+
+test('a pick the catalog no longer lists is not offered', () => {
+  expect(
+    deriveGroups([
+      {
+        ...base,
+        id: 'openrouter',
+        name: 'OpenRouter',
+        authMode: 'api-key',
+        enabled: true,
+        config: { enabledModels: ['retired-model', 'a'] },
+        models: [{ id: 'a' }],
+      },
+    ]),
+  ).toEqual([{ providerId: 'openrouter', providerName: 'OpenRouter', models: ['a'] }]);
+});
+
+test('a provider left with only stale picks offers nothing', () => {
+  expect(
+    deriveGroups([
+      {
+        ...base,
+        id: 'openai-codex',
+        name: 'OpenAI Codex',
+        authMode: 'oauth',
+        enabled: true,
+        config: { enabledModels: ['retired-model'] },
+        models: [{ id: 'gpt-5.4' }],
+      },
+    ]),
+  ).toEqual([]);
 });

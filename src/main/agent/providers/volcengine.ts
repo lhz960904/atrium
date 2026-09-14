@@ -15,7 +15,7 @@ import type { Model } from '@earendil-works/pi-ai';
  */
 
 /** A plan is a subscription: per-token pricing would misreport every turn. */
-const FREE = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } as const;
+const UNMETERED = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } as const;
 
 type ArkModel = Model<'anthropic-messages'>;
 
@@ -114,7 +114,7 @@ function toModels(specs: readonly Spec[], provider: string, baseUrl: string): Ar
     baseUrl,
     reasoning: true,
     input: s.vision ? ['text', 'image'] : ['text'],
-    cost: FREE,
+    cost: UNMETERED,
     contextWindow: s.contextWindow,
     maxTokens: s.maxTokens,
   }));
@@ -122,13 +122,13 @@ function toModels(specs: readonly Spec[], provider: string, baseUrl: string): Ar
 
 const AGENT_PLAN = {
   id: 'volcengine-agent',
-  name: 'Volcengine Agent Plan',
+  name: 'VolcEngine Ark - Agent Plan',
   baseUrl: 'https://ark.cn-beijing.volces.com/api/plan',
 } as const;
 
 const CODING_PLAN = {
   id: 'volcengine-coding',
-  name: 'Volcengine Coding Plan',
+  name: 'VolcEngine Ark - Coding Plan',
   baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
 } as const;
 

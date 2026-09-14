@@ -5,7 +5,7 @@ import type { TokenRates } from '@shared/cost';
 import type { SelectedModel } from '@shared/settings';
 import { eq } from 'drizzle-orm';
 import { getProviderManifest } from './manifest';
-import { piModels } from './pi-model';
+import { piModels } from './registry';
 
 function configuredBaseUrl(db: Db, providerId: string): string | undefined {
   const row = db
@@ -84,10 +84,13 @@ export function firstEnabledModel(db: Db): SelectedModel | null {
     .all();
   for (const row of rows) {
     const picked = (row.config as { enabledModels?: string[] } | null)?.enabledModels ?? [];
-    if (picked[0]) return { providerId: row.id, modelId: picked[0] };
-    // A subscription is granted by signing in, not by picking models, so an
+    // A pick outlives its model when a catalog changes or a custom model is
+    // deleted, so only one the registry still lists counts.
+    const usable = picked.find((modelId) => piModels.getModel(row.id, modelId));
+    if (usable) return { providerId: row.id, modelId: usable };
+    // An OAuth provider is granted by signing in, not by picking models, so an
     // untouched one still offers its catalog.
-    if (getProviderManifest(row.id)?.kind === 'subscription') {
+    if (picked.length === 0 && getProviderManifest(row.id)?.authMode === 'oauth') {
       const first = piModels.getModels(row.id)[0];
       if (first) return { providerId: row.id, modelId: first.id };
     }

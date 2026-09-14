@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { Db } from '@main/db';
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
-import { piModels, refreshProviders } from '../pi-model';
+import { piModels, refreshProviders } from '../registry';
 
 const definition: CustomProvider = {
   name: 'Relay',
