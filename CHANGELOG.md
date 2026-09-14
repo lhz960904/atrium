@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.17.0](https://github.com/lhz960904/atrium/compare/v0.16.0...v0.17.0) (2026-09-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **providers:** route credentials through one store and tidy provider naming ([#113](https://github.com/lhz960904/atrium/issues/113))
+* **providers:** simplify the provider runtime ([#111](https://github.com/lhz960904/atrium/issues/111))
+
+### Code Refactoring
+
+* **providers:** route credentials through one store and tidy provider naming ([#113](https://github.com/lhz960904/atrium/issues/113)) ([a76ff5d](https://github.com/lhz960904/atrium/commit/a76ff5d59f44bcfd31b45b30f4001426a3900943))
+* **providers:** simplify the provider runtime ([#111](https://github.com/lhz960904/atrium/issues/111)) ([d6afd6d](https://github.com/lhz960904/atrium/commit/d6afd6d12949b0f41c90102f4b324d8535a05f25))
+
 ## [0.16.0](https://github.com/lhz960904/atrium/compare/v0.15.1...v0.16.0) (2026-09-14)
 
 
