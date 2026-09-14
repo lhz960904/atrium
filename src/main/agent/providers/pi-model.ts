@@ -25,7 +25,6 @@ import type { CustomModel, CustomProvider } from '@shared/custom-model';
 import { eq } from 'drizzle-orm';
 import { readAddedModels, readCustomProviders } from './custom-models';
 import { getProviderManifest } from './manifest';
-import { adoptRetiredProviders } from './retired';
 import { arkAgentPlanModels, arkCodingPlanModels } from './volcengine.models';
 
 /**
@@ -265,7 +264,6 @@ registerAll(new Map());
  * until it is set again.
  */
 export function refreshProviders(db: Db): void {
-  adoptRetiredProviders(db);
   registerAll(readAddedModels(db), readCustomProviders(db));
 }
 
