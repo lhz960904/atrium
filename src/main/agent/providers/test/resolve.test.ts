@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Db } from '@main/db';
 import { piModels } from '../pi-model';
-import { resolvePiModel } from '../resolve';
+import { firstEnabledModel, resolvePiModel } from '../resolve';
 
 /** A database whose provider row, whichever is asked for, holds `config`. */
 const dbWith = (config: Record<string, unknown> | null = null): Db =>
@@ -29,4 +29,32 @@ test('a configured endpoint replaces the catalog one', () => {
     deepseek.id,
   );
   expect(resolved.baseUrl).toBe('https://proxy.example.test');
+});
+
+/** A database whose enabled providers are `rows`, in order. */
+const enabledProviders = (rows: Array<{ id: string; config: unknown }>): Db =>
+  ({ select: () => ({ from: () => ({ where: () => ({ all: () => rows }) }) }) }) as unknown as Db;
+
+test('a fallback skips picks the registry no longer lists', () => {
+  const db = enabledProviders([
+    { id: 'deepseek', config: { enabledModels: ['retired-model', deepseek.id] } },
+  ]);
+  expect(firstEnabledModel(db)).toEqual({ providerId: 'deepseek', modelId: deepseek.id });
+});
+
+test('a provider left with only stale picks yields to the next one', () => {
+  const [codex] = piModels.getModels('openai-codex');
+  const db = enabledProviders([
+    { id: 'deepseek', config: { enabledModels: ['retired-model'] } },
+    { id: 'openai-codex', config: null },
+  ]);
+  expect(firstEnabledModel(db)).toEqual({ providerId: 'openai-codex', modelId: codex.id });
+});
+
+test('nothing usable leaves no fallback', () => {
+  const db = enabledProviders([
+    { id: 'deepseek', config: { enabledModels: ['retired-model'] } },
+    { id: 'openai-codex', config: { enabledModels: ['retired-model'] } },
+  ]);
+  expect(firstEnabledModel(db)).toBeNull();
 });
