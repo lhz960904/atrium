@@ -1,6 +1,8 @@
 import type { ToolName } from '@shared/tools';
+import type { Capability } from '../runtime/capabilities';
+import type { RunContext } from '../runtime/run-context';
 import type { AtriumTool } from '../tools';
-import type { ActiveSkill } from './types';
+import { type ActiveSkill, SKILL_SCRATCH_KEY } from './types';
 
 /**
  * Narrow the offered tools to an active skill's allow-list. Always applied to
@@ -63,4 +65,17 @@ export function scopeToolsForSkill(
     if (resolved) mapped.add(resolved);
   }
   return mapped.size > 0 ? [...mapped] : null;
+}
+
+/** Recompute from the full catalog so leaving a skill restores tools. Register before hard restrictions. */
+export function skillToolScope(tools: AtriumTool[], scratch: RunContext['scratch']): Capability {
+  return {
+    name: 'skill-tool-scope',
+    prepareNextTurn: ({ context }) => ({
+      context: {
+        ...context,
+        tools: scopeToolsToSkill(tools, scratch.get(SKILL_SCRATCH_KEY) as ActiveSkill | undefined),
+      },
+    }),
+  };
 }

@@ -1,4 +1,6 @@
 import type { AgentMessage, AgentMessage as Message } from '@earendil-works/pi-agent-core';
+import { currentDateNote } from '../prompts';
+import type { Capability } from '../runtime/capabilities';
 
 /**
  * Prepend a `<system-reminder>` to a user message — on the message rather than
@@ -28,4 +30,13 @@ export function injectSystemReminder(
       ? [reminder, { type: 'text' as const, text: target.content }]
       : [reminder, ...target.content];
   return [...messages.slice(0, at), { ...target, content }, ...messages.slice(at + 1)];
+}
+
+/** Tells the model today's date on the latest user turn. */
+export function dateReminder(): Capability {
+  return {
+    name: 'date-reminder',
+    transformContext: async (messages) =>
+      injectSystemReminder(messages, currentDateNote(new Date()), { anchor: 'last' }),
+  };
 }

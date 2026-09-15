@@ -2,6 +2,7 @@ import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { ImageContent, TextContent, ToolResultMessage } from '@earendil-works/pi-ai';
 
 import { persistToolImage } from '../mcp/spill';
+import type { Capability } from '../runtime/capabilities';
 import type { ContextTransform } from './compose';
 
 const KEEP_RECENT_IMAGES = 2;
@@ -76,4 +77,10 @@ export function screenshotTrim(
       return content ? ({ ...message, content } as AgentMessage) : message;
     });
   };
+}
+
+/** Trims older screenshots out of what the model is shown each turn. */
+export function screenshotContext(workspaceRoot: string): Capability {
+  const transform = screenshotTrim(workspaceRoot);
+  return { name: 'screenshot-context', transformContext: async (messages) => transform(messages) };
 }

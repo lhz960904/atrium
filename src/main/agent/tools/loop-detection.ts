@@ -3,6 +3,7 @@ import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
 import { createLogger } from '@main/utils/log';
 
 import type { ContextTransform } from '../context/compose';
+import type { Capability } from '../runtime/capabilities';
 
 const log = createLogger('loop-detection');
 
@@ -102,6 +103,19 @@ export function createLoopDetector(options: LoopDetectionOptions = {}): LoopDete
       const warning = note(pending.join('\n\n'));
       pending = [];
       return [...messages, warning];
+    },
+  };
+}
+
+/** Watches this run's turns and cuts tool use off once a call keeps repeating. */
+export function loopDetection(): Capability {
+  const detector = createLoopDetector();
+  return {
+    name: 'loop-detection',
+    transformContext: async (messages) => detector.transform(messages),
+    prepareNextTurn: ({ context, message }) => {
+      detector.observe(message);
+      return { context: { ...context, tools: detector.stopped ? [] : context.tools } };
     },
   };
 }

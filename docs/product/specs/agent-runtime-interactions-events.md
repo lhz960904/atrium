@@ -69,7 +69,7 @@ flowchart LR
 |---|---|---|
 | 同一 loop 等待 | pi 0.84.2 的 `beforeToolCall` 返回 Promise，内部直接 await；`dist/types.d.ts:232`、`dist/agent-loop.js:405` | 审批在 beforeToolCall 内 await；批准返回 undefined；拒绝返回 block + reason，不默认 terminate。保留进程内运行资源，换取正常路径不重建上下文和工具。 |
 | 询问也使用真正的工具执行 | `src/main/agent/tools/builtins/ask-clarification.ts` 目前 execute 只会抛错，依赖 clientSide 标记 | 在询问工具 execute 内 await，答案成为真实工具结果。不能把答案塞进只能决定是否放行的 beforeToolCall 返回值。 |
-| 集中登记能力 | `capabilities/tool-interactions.ts` 已是交互注册点 | 该能力负责审批判断、请求/决定持久化、业务事件，并暴露一个给询问工具使用的 ask 方法。新增的 `pending-interactions.ts` 只管理等待与决策竞争，不访问 DB，也不是通用中间件框架。 |
+| 集中登记能力 | `tools/interactions.ts` 是交互注册点 | 该能力负责审批判断、请求/决定持久化、业务事件，并暴露一个给询问工具使用的 ask 方法。新增的 `pending-interactions.ts` 只管理等待与决策竞争，不访问 DB，也不是通用中间件框架。 |
 | Runner 的边界 | 当前 Runner 已只管理 active、取消和缓冲区 | Runner 为每个 run 创建一个待决请求表，负责按 threadId/runId 投递决定；executeRun 负责 session、工具和能力装配。HTTP 不读 DB、不执行工具、不重建 Agent。 |
 | 消息身份 | `pi-chat/store.ts` 用消息 ID 合并历史；目前它等于 runId | 删除 pi 消息上的 messageId；每条运行流的首个 Atrium `run_started` 业务事件携带 runId。一个 run 仍对应前端一条 assistant 回复，多个 pi turn 是其中的步骤。 |
 | 运行结束 | `execute-run.ts` 在用量、录制和资源收尾后手工发 agent_end | pi 的 agent_end 只表示 loop 结束，按协议投影后转发，不再伪造；`run_finished` 才表示应用收尾已完成。准备阶段失败时允许没有 agent_start/end，但必须有失败的 run_finished。 |
@@ -226,7 +226,7 @@ export function createPendingInteractions(opts: {
 
 `open` 返回 `{ request, response, cancel }`。cancel 用于“请求保存失败”的局部撤销；全 run 取消通过 cancel(reason)。respond 接纳 cancelled 时，先 settle 该询问，再同步取消整个 run，防止另一个工具继续进入执行。停止原因以 run 的原始 AbortSignal.reason 为准，不依赖 pi 转发后可能丢失的 reason。Error 表示内部执行故障而非用户取消；待决表暴露只读 failure，记住首个内部故障，避免已经发生用户取消时 AbortSignal.reason 无法再次更新而吞掉持久化失败。
 
-#### `src/main/agent/runtime/capabilities/tool-interactions.ts`
+#### `src/main/agent/tools/interactions.ts`
 
 一个能力拥有完整交互流程。审批在 beforeToolCall 中等待；ask 交给询问工具的 execute。请求/决定先记录后发布，数据库故障不能被当作批准。gate 不变，包括已有 trust rules 与自动审核。
 

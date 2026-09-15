@@ -4,6 +4,7 @@ import { discoverInstructions, type InstructionFile } from '../instructions';
 import { MEMORY_INDEX_BUDGET, MEMORY_SCOPES, type MemoryScope, memoryDir } from '../memory/paths';
 import { readIndexClipped } from '../memory/store';
 import { readUser as readUserProfile } from '../profile/paths';
+import type { Capability } from '../runtime/capabilities';
 import type { Skill } from '../skills/types';
 import type { ContextTransform } from './compose';
 import { injectSystemReminder } from './system-reminder';
@@ -117,4 +118,10 @@ async function readIndex(
 export function injectContextBlocks(blocks: string[]): ContextTransform {
   return (messages: AgentMessage[]) =>
     blocks.reduce((acc, block) => injectSystemReminder(acc, block), messages);
+}
+
+/** Puts the run's context blocks in front of the model each turn. */
+export function contextInjection(blocks: string[]): Capability {
+  const transform = injectContextBlocks(blocks);
+  return { name: 'context-injection', transformContext: async (messages) => transform(messages) };
 }

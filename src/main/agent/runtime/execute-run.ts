@@ -19,9 +19,11 @@ import { createLogger } from '@main/utils/log';
 import type { AtriumUIMessage } from '@shared/chat';
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
 import type { AgentSessionEvent, RunCompletion } from '@shared/protocol';
-import { compactForTurn } from '../context/compaction';
-import { loadContextBlocks } from '../context/injectors';
+import { compactForTurn, contextCompaction } from '../context/compaction';
+import { contextInjection, loadContextBlocks } from '../context/injectors';
+import { screenshotContext } from '../context/screenshot-trim';
 import { createSummarizer } from '../context/summarize';
+import { dateReminder } from '../context/system-reminder';
 import { estimateTokens } from '../context/tokens';
 import { mcpManager } from '../mcp/manager';
 import { buildMcpTools } from '../mcp/tool-adapter';
@@ -33,20 +35,14 @@ import { modelRates, resolvePiModel, supportsImageToolResults } from '../provide
 import { piStreamFn } from '../providers/registry';
 import { type BackgroundShells, LocalSandbox } from '../sandbox';
 import { getSkills } from '../skills/registry';
+import { skillToolScope } from '../skills/scope';
 import { getTools } from '../tools';
 import { preserveActiveSkill } from '../tools/builtins/skill';
 import { preserveTodos } from '../tools/builtins/todo';
+import { toolInteractions } from '../tools/interactions';
+import { loopDetection } from '../tools/loop-detection';
 import { createAgentLoop } from './agent-loop';
-import { composeCapabilities } from './capabilities/compose';
-import {
-  contextCompaction,
-  contextInjection,
-  dateReminder,
-  screenshotContext,
-} from './capabilities/context';
-import { loopDetection } from './capabilities/loop-detection';
-import { skillToolScope } from './capabilities/skill-tool-scope';
-import { toolInteractions } from './capabilities/tool-interactions';
+import { composeCapabilities } from './capabilities';
 import { type PendingInteractions, stopReasonOf } from './pending-interactions';
 import type { RunContext } from './run-context';
 import { projectAgentEvent } from './stream/projector';

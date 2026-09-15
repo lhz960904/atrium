@@ -1,11 +1,11 @@
 import { expect, test } from 'bun:test';
 import type { AfterToolCallContext, AgentContext } from '@earendil-works/pi-agent-core';
 import { fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai';
+import { skillToolScope } from '../../skills/scope';
 import { SKILL_SCRATCH_KEY } from '../../skills/types';
 import type { AtriumTool } from '../../tools';
-import { composeCapabilities } from '../capabilities/compose';
-import { loopDetection } from '../capabilities/loop-detection';
-import { skillToolScope } from '../capabilities/skill-tool-scope';
+import { loopDetection } from '../../tools/loop-detection';
+import { composeCapabilities } from '../capabilities';
 
 const message = fauxAssistantMessage('done');
 const turn = () => ({

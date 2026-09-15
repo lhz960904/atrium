@@ -27,9 +27,12 @@ flowchart TD
 | `execute-run.ts` | 单次运行的完整业务流程：装配 context 和工具、打开 session、读取历史、注册 capabilities、订阅、执行、记录与清理 |
 | `agent-loop.ts` | 每个实例持有一个 pi Agent；调用方配置 messages、tools、maxTurns；仅负责运行循环 |
 | `complete.ts` | 通过 pi-ai completeSimple 执行单次无工具请求，检查错误并提取文本 |
-| `capabilities/` | 一个能力实现多个 pi 钩子；compose 将显式注册列表组合为单函数 |
+| `capabilities.ts` | 钩子组合器：把显式注册的能力列表合成单函数；能力本身住在各自的模块里 |
 | `pending-interactions.ts` | 一次运行中等待用户的请求：决定与停止的竞争、重复提交识别；不访问存储 |
-| `../skills/scope.ts` | 根据激活 Skill 的 allowed-tools 筛选工具 |
+| `../skills/scope.ts` | 根据激活 Skill 的 allowed-tools 筛选工具，并提供对应能力 |
+| `../tools/interactions.ts` | 审批与询问的等待、记录与事件 |
+| `../tools/loop-detection.ts` | 重复工具调用的检测与能力 |
+| `../context/` | 上下文变换及其能力（截图裁剪、轮内压缩、注入、日期提醒） |
 | `../context/` | 统一拥有上下文变换、注入、摘要、压缩和 token 估算 |
 | `stream/` | pi 事件投影、SSE 编码与内存重放 |
 | `test/` | Runtime 测试；`stream/` 测试保留对应层级，上下文测试位于 `agent/context/test/` |
@@ -71,7 +74,7 @@ Runner 不构建工具、不创建 recorder，也不通过 buildTools / generate
 扩展点直接放在 `createAgentLoop` 入参上。Loop 只接收组合后的单函数，负责轮次上限、取消与执行控制；策略组合由 execute-run 等调用层决定：
 
 - `transformContext`：接收 pi 兼容的单函数。能力组合器内部通过 `composeContext` 组合，不接受 false / undefined 占位；按顺序变换模型输入，复用 context 的错误跳过策略，不改写持久化历史。
-- `beforeToolCall`：接收 pi 兼容的单函数。能力组合器内部通过 `tool-checks.ts` 的 `composeBeforeToolCall` 组合检查，按顺序等待执行；遇到 `block` 立即返回原决策（包括 reason / terminate），不再执行后续检查。检查抛错交给 pi 处理，不跳过后继续放行；取消时不启动后续检查。`toolInteractions` 在审批钩子里等待用户决定，并为询问工具提供 ask；请求与决定先记录再继续。
+- `beforeToolCall`：接收 pi 兼容的单函数。能力组合器内部通过 `composeBeforeToolCall` 组合检查，按顺序等待执行；遇到 `block` 立即返回原决策（包括 reason / terminate），不再执行后续检查。检查抛错交给 pi 处理，不跳过后继续放行；取消时不启动后续检查。`toolInteractions` 在审批钩子里等待用户决定，并为询问工具提供 ask；请求与决定先记录再继续。
 - `afterToolCall`：按注册顺序传递修改后的 result 和 isError；仅覆盖明确返回的字段。
 - `prepareNextTurn` / `shouldStopAfterTurn`：更新下一轮上下文、模型或决定停止；不能绕过 `maxTurns` 硬上限。达到上限时不再调用停止 Hook。
 - `onPayload` / `onResponse`：直接传给 pi 的模型请求扩展点。

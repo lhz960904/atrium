@@ -2,11 +2,10 @@ import { expect, expectTypeOf, test } from 'bun:test';
 import type { AgentOptions } from '@earendil-works/pi-agent-core';
 import { createModels, fauxAssistantMessage, fauxProvider, Type } from '@earendil-works/pi-ai';
 import { composeContext } from '../../context/compose';
+import { dateReminder } from '../../context/system-reminder';
+import { loopDetection } from '../../tools/loop-detection';
 import { type AgentLoopOptions, createAgentLoop } from '../agent-loop';
-import { composeCapabilities } from '../capabilities/compose';
-import { dateReminder } from '../capabilities/context';
-import { loopDetection } from '../capabilities/loop-detection';
-import { composeBeforeToolCall } from '../tool-checks';
+import { composeBeforeToolCall, composeCapabilities } from '../capabilities';
 
 test('loop accepts pi-compatible single callbacks', () => {
   expectTypeOf<AgentLoopOptions['transformContext']>().toEqualTypeOf<

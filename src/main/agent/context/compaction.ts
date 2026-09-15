@@ -14,6 +14,7 @@ type Content =
   | import('@earendil-works/pi-ai').ImageContent
   | import('@earendil-works/pi-ai').ToolCall;
 
+import type { Capability } from '../runtime/capabilities';
 import type { ContextTransform } from './compose';
 import type { Summarize } from './summarize';
 import { countTokens, estimateContextTokens } from './tokens';
@@ -323,4 +324,10 @@ export function withinTurnFold(opts: {
       return base;
     }
   };
+}
+
+/** Folds the transcript mid-turn when it would otherwise overflow the window. */
+export function contextCompaction(options: Parameters<typeof withinTurnFold>[0]): Capability {
+  const transform = withinTurnFold(options);
+  return { name: 'context-compaction', transformContext: async (messages) => transform(messages) };
 }
