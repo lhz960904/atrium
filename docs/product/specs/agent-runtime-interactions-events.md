@@ -2,23 +2,24 @@
 Status: Awaiting Human review
 Last updated: 2026-09-15
 Scope: Refactor
-Source revision: 1d645c860dbdf20d5837e9d5ca8df0f6bd0d4391
+Source revision: f5dd546012f7a9b726a25e19a038bcad4a6fba97
 Source branch: refactor/provider-runtime
 ---
 
-# Agent Runtime：连续交互与原生事件
+# Agent Runtime：连续交互与事件投影
 
 ## 概述
 
 审批和询问是一次运行中的等待，不是一次运行的结束。进程仍在运行时，用户提交决定只解除原调用的等待，由原来的 pi loop 继续执行；退出、取消和崩溃才进入中断收尾或历史修复。
 
-事件描述真实发生的事情，不为某个 UI 的当前展示方式删字段、复制错误文本或改变生命周期含义。pi 事件直接复用包类型；Atrium 的运行身份、交互请求和应用收尾作为独立业务事件。前端负责按角色组织消息、关联工具卡片和提取错误文字。
+事件流是主进程到 renderer 的传输投影，不是 pi 事件的逐字镜像。投影只做有明确理由的负载删减（累计的 partial / message，以及 turn_end、agent_end 里重复送达的内容），事件类型从 pi 包类型派生而不是手抄。投影不伪造生命周期、不复制字段：运行身份由 Atrium 的 run_started 携带，应用收尾由 run_finished 表示，交互请求是独立业务事件，工具错误文字由消费者从 content 提取。
 
-本方案依据当前工作区，而不只是 HEAD：已包含暂存的 capabilities 调整和未提交的 `execute-run.ts` / Runner 重构。实施时保留这些已有改动；不能重新从旧的 `execute-turn.ts` 开始。Provider 优化不在本次范围，已有 `provider-runtime-simplification.md` 不改写、不替代。
+本方案基于 `f5dd546`：capabilities 集中注册与 `execute-run.ts` / Runner 重构已经提交，实施在其上继续。Provider 相关改动不在本次范围。
 
 已确认的交互策略：
 
-- 桌面聊天默认不限时，直到用户决定、停止或进程退出；底层支持可选超时参数，本轮不新增超时设置界面。
+- 等待用户决定不设超时，直到用户决定、停止或进程退出。本轮不实现超时参数，等有设置入口时再加。
+- 等待交互期间线程保持占用：用户必须先批准、拒绝、回答或停止，才能发送新消息。现有 `ChatThread.tsx` 已在有待审批 / 待回答时占用 composer，本方案沿用；不做“发送新消息即拒绝当前交互”。
 - 定时任务也保留等待，允许用户稍后打开绑定会话处理；不自动批准，不因为暂时没有前端订阅者而失败。
 - 不做旧版协议、旧 `/resume` 写接口或跨版本待审批任务的兼容执行。保留现有已完成会话数据，不重置用户数据库。
 - 保留当前审批、询问和工具卡片的视觉布局；本次改变其数据与运行生命周期，不另做 UI 设计。
@@ -40,7 +41,7 @@ flowchart LR
   Buffer --> UI
 ```
 
-当前模型 `message_update` 被裁掉累计消息；`message_start/end` 增加了实际等于 runId 的 messageId；`agent_end` 被吞掉，再由应用收尾伪造。前端也假定所有消息事件都是 assistant，并从 `details.errorText` 读取工具错误。
+当前投影删掉累计的 partial / message，让每帧只和增量大小有关（`shared/protocol/events.ts` 头注释），这一点保留。需要修的是三处：`message_start/end` 附加的 messageId 实际等于 runId；pi 的 `agent_end` 被吞掉，再由应用收尾伪造一个；工具错误由 `stream/tool-result.ts` 复制到 `details.errorText`，实时卡片和历史视图都读这份副本。
 
 ## 目标流程
 
@@ -53,9 +54,10 @@ flowchart LR
   API -->|"提交决定，不启动运行"| Pending
   Pending -->|"解除原调用等待"| Interact
   Interact --> Session["修改 · session：请求、决定、真实结果"]
-  Pi -->|"原生 AgentEvent"| Buffer["修改 · buffer：固定 JSON 帧 / SSE"]
+  Pi -->|"AgentEvent"| Project["修改 · projector：按协议投影"]
+  Project --> Buffer["现有 · buffer / SSE"]
   Run -->|"Atrium 业务事件"| Buffer
-  Buffer --> UI["修改 · 前端按角色和业务状态消费"]
+  Buffer --> UI["修改 · 前端按业务事件确定身份与结束"]
   Run --> Recover["修改 · conversation：仅在中断后修复"]
 ```
 
@@ -70,8 +72,9 @@ flowchart LR
 | 集中登记能力 | `capabilities/tool-interactions.ts` 已是交互注册点 | 该能力负责审批判断、请求/决定持久化、业务事件，并暴露一个给询问工具使用的 ask 方法。新增的 `pending-interactions.ts` 只管理等待与决策竞争，不访问 DB，也不是通用中间件框架。 |
 | Runner 的边界 | 当前 Runner 已只管理 active、取消和缓冲区 | Runner 为每个 run 创建一个待决请求表，负责按 threadId/runId 投递决定；executeRun 负责 session、工具和能力装配。HTTP 不读 DB、不执行工具、不重建 Agent。 |
 | 消息身份 | `pi-chat/store.ts` 用消息 ID 合并历史；目前它等于 runId | 删除 pi 消息上的 messageId；每条运行流的首个 Atrium `run_started` 业务事件携带 runId。一个 run 仍对应前端一条 assistant 回复，多个 pi turn 是其中的步骤。 |
-| 运行结束 | `execute-run.ts` 在用量、录制和资源收尾后手工发 agent_end | 原生 agent_end 只表示 pi loop 结束，原样转发；`run_finished` 才表示应用收尾已完成。准备阶段失败时允许没有 agent_start/end，但必须有失败的 run_finished。 |
-| 原生事件类型 | `shared/protocol/events.ts`、`messages.ts` 手抄了 pi 类型，并主动删字段 | 使用 type-only import / re-export。保留 partial、message、toolResults、agent_end.messages、user/toolResult 消息事件；不把 pi 运行时代码打包进 renderer。 |
+| 运行结束 | `execute-run.ts` 在用量、录制和资源收尾后手工发 agent_end | pi 的 agent_end 只表示 loop 结束，按协议投影后转发，不再伪造；`run_finished` 才表示应用收尾已完成。准备阶段失败时允许没有 agent_start/end，但必须有失败的 run_finished。 |
+| 线上负载 | pi 每个 message_update 同时带 `message` 与 `assistantMessageEvent.partial` 两份累计内容（`dist/agent-loop.js:222`）。按 50 KiB 回复估算，1,000 个增量原样转发约 49 MiB、现投影约 0.18 MiB；token 粒度 12,800 个增量约 634 MiB、现投影约 1.7 MiB | 保留投影：累计 partial / message、turn_end 的 message/toolResults、agent_end.messages、done/error 的最终消息不上线；user / toolResult 的消息事件不上线（用户消息来自请求体，工具结果由 tool_execution_end 送达）。缓冲区保存方式不变。 |
+| 事件类型 | `shared/protocol/events.ts` 手抄了 pi 事件形状，pi 升级时会漂移 | 事件类型用 type-only import 从 pi 的 `AgentEvent` / `AssistantMessageEvent` 派生，只在派生处声明删减。消息与内容词汇仍用 `messages.ts`：其 Content 放宽是为保留未知内容块的有意偏差，本次不改。不把 pi 运行时代码打包进 renderer。 |
 
 ### 交互身份、接口与安全
 
@@ -94,9 +97,9 @@ type DecisionBody = {
 - approved / denied 只适用于审批；answered / cancelled 只适用于询问。答案按原问题顺序提交，服务端恢复问题文字，不能信任前端自带的问题或工具结果。
 - 继续使用本机 token 校验。Zod 严格校验结构、字符串长度和答案个数；请求体上限 64 KiB，原因最长 2,000 字符，每个答案最长 8,000 字符。问题最多四个，具体答案数量须匹配该请求的原始 questions。
 - 返回 `202 { status: 'accepted' | 'already_accepted' }`：表示进程内已经接纳决定，不表示工具已执行或结果已落盘。落盘成功后发送 interaction_resolved；之后才放行工具。写入失败就停止运行，绝不执行已批准但未成功记录决定的工具。
-- 同一运行中相同决定重试返回 already_accepted；不同决定竞争返回 409，首次有效决定获胜。过期、已关闭运行、runId 不匹配或不存在的 interactionId 返回 409；非法类型/答案返回 400；未认证返回 401。迟到请求不能创建运行。
+- 同一运行中相同决定重试返回 already_accepted；不同决定竞争返回 409，首次有效决定获胜。已结束的请求、已关闭运行、runId 不匹配或不存在的 interactionId 返回 409；非法类型/答案返回 400；未认证返回 401。迟到请求不能创建运行。
 - `/resume` 写接口删除。GET pi-events 的“恢复”只指事件重连，与恢复工具执行无关。
-- 批准、停止、超时竞争需要同步抢占状态；Promise 只能 settle 一次。批准已接纳后若 run 被取消，仍不能执行工具。
+- 批准与停止竞争需要同步抢占状态；Promise 只能 settle 一次。批准已接纳后若 run 被取消，仍不能执行工具。
 
 ### 状态、持久化与失败
 
@@ -108,7 +111,7 @@ type DecisionBody = {
 | 批准 | 原调用放行，由 pi 执行 | 保存决定，然后保存 pi 真正产生的结果 |
 | 拒绝 | 原调用被阻止，pi 生成带拒绝原因的错误结果；允许模型继续解释 | 保存拒绝决定，不复制错误到 details |
 | 取消询问 | 原询问得到 cancelled 结果，同时取消本轮，不再请求模型 | 记录 clarification_cancelled；已完成的工具结果保留 |
-| 点击停止 / 可选超时 | 取消所有待决请求、传播 abort、清理定时器和监听 | 分别记录 user_cancelled / interaction_timeout；只补实际缺失的结果 |
+| 点击停止 | 取消所有待决请求、传播 abort、清理监听 | 记录 user_cancelled；只补实际缺失的结果 |
 | 前端离开、断流 | 不取消 run，不解除 Promise | 重连只重放，不重新执行 |
 | 正常退出 | 拒绝新运行，停止调度，中止运行，有界等待收尾再关库 | 尽量记录 app_shutdown；退出等待上限建议 3 秒 |
 | 强杀 / 崩溃 | Promise 随进程消失，不恢复执行栈 | 下次启动运行前修复旧缺口；未知原因只能记 interrupted |
@@ -121,7 +124,7 @@ pi 在 beforeToolCall 返回后若发现 signal 已取消，会生成通用 `Ope
 
 ### 并发、调度与资源
 
-pi 的默认 parallel 模式先顺序执行所有工具的 preflight，再并行执行已放行的工具（`dist/agent-loop.js:332`）。因此本轮接受审批逐个出现；不承诺一个批次的所有审批同时弹出，也不改 pi 的调度算法。
+pi 的默认 parallel 模式（`dist/agent.js:134`）先逐个完成整批工具的 preflight，全部结束后才用 Promise.all 开始执行已放行的工具（`dist/agent-loop.js` 的 executeToolCallsParallel）。因此同一批次里审批逐个出现，并且已批准的工具要等同批其余审批都有结论才开始执行：用户批准后可能暂时看不到执行。本轮接受这一行为，不改 pi 的调度，列入评审重点。
 
 取消的安全补充：这个实现可能在中止 preflight 后仍调用此前已准备好的工具。所有当前内置与 MCP 工具都通过 `tools/define.ts` 的 defineTool 创建；在那里统一增加“execute 入口检查 signal”的保护，防止未开始的工具在取消后产生副作用。已经执行中的副作用不能靠 Promise 回滚，不能承诺跨崩溃 exactly-once。
 
@@ -129,11 +132,11 @@ pi 的默认 parallel 模式先顺序执行所有工具的 preflight，再并行
 
 定时任务通过 RunHandle 的事件订阅读取相同业务事件，不另做“只给 UI 用”的审批通道。新增订阅只用于观察；持久化仍是 executeRun 的 awaited recorder，不转移到异步观察者里。现有 subagent 的询问工具禁用规则保留，不新增子 Agent 交互转发能力。
 
-### 传输与存储分开
+### 传输投影
 
-`run-event-buffer.ts` 目前保存对象引用，发流/重放时才 JSON.stringify；pi provider 会持续修改 partial 的 content。改为事件进入缓冲区时序列化一次，缓存完整 UTF-8 SSE 帧，重放同一份字节。保证的是“进入本应用缓冲区时”的快照，不声称修复 pi 上游排队前已经发生的对象修改。
+线上事件保留现有投影，理由见上表的负载估算。缓冲区策略不变：每线程一个日志、完成日志最多 64 个、发送时序列化。投影规则写在 `shared/protocol/events.ts` 的派生类型旁边，改规则必须同时改类型。
 
-原生事件里的两份累计内容确实会增加编码、解析和缓存成本，这是接受原生结构的取舍，不称其为零成本。保留当前每线程一个日志、完成日志最多 64 个的策略；不在本轮引入丢帧、裁剪、磁盘事件仓库或另一套紧凑协议。长输出基准是实施验证门槛，内存无法接受时返回评审，不悄悄删除字段。未完成日志当前没有字节上限，这一限制在回归证据里必须披露。
+S-002 只修投影里与事实不符的部分：messageId、伪造的 agent_end、details.errorText。进程内观察者（定时任务）与 SSE 收到同一批事件对象，类型为只读，不另做快照。
 
 ## 实施步骤
 
@@ -141,7 +144,7 @@ pi 的默认 parallel 模式先顺序执行所有工具的 preflight，再并行
 
 ### S-001 — 审批和询问在同一个 loop 中完成
 
-先用真实 pi + SQLite 的运行测试锁住“决定前运行不结束，决定后原工具只执行一次”；再实现单个待决表，连接现有能力、工具、录制器和 HTTP，最后一起切换前端和定时任务。此步仍使用现有事件编码，原生事件切换在 S-002；但待审批不再产生占位错误。
+先用真实 pi + SQLite 的运行测试锁住“决定前运行不结束，决定后原工具只执行一次”；再实现单个待决表，连接现有能力、工具、录制器和 HTTP，最后一起切换前端和定时任务。此步仍使用现有事件编码，投影修正在 S-002；但待审批不再产生占位错误。
 
 #### `src/shared/interactions.ts`（新增）
 
@@ -165,8 +168,7 @@ export const decideInteractionSchema = z.object({
 export type InteractionDecision = z.infer<typeof interactionDecisionSchema>;
 export type DecideInteraction = z.infer<typeof decideInteractionSchema>;
 export type RunStopReason =
-  | 'user_cancelled' | 'clarification_cancelled' | 'interaction_timeout'
-  | 'app_shutdown' | 'interrupted';
+  | 'user_cancelled' | 'clarification_cancelled' | 'app_shutdown' | 'interrupted';
 export type InteractionOutcome = InteractionDecision | { kind: 'interrupted'; reason: RunStopReason };
 export type InteractionRequest = {
   id: string;
@@ -174,14 +176,13 @@ export type InteractionRequest = {
   kind: 'approval' | 'clarification';
   toolCall: ToolCall;
   createdAt: number;
-  expiresAt?: number;
 };
 export type InteractionEvent =
   | { type: 'interaction_requested'; request: InteractionRequest }
   | { type: 'interaction_resolved'; request: InteractionRequest; outcome: InteractionOutcome };
 ```
 
-`shared/protocol/events.ts` 此步仅把旧 approval_requested / approval_resolved 扩展替换为 InteractionEvent，并移除旧 ToolDecision；其余 pi 形状留待 S-002 一次替换。`shared/protocol/index.ts` 仅增加类型导出。
+`shared/protocol/events.ts` 此步仅把旧 approval_requested / approval_resolved 扩展替换为 InteractionEvent，并移除旧 ToolDecision；其余投影修正留待 S-002。`shared/protocol/index.ts` 仅增加类型导出。
 
 #### `src/main/agent/runtime/pending-interactions.ts`（新增）
 
@@ -191,7 +192,6 @@ Runner 每个 run 创建一个实例，传入该 run 的 AbortController。不�
 export function createPendingInteractions(opts: {
   runId: string;
   abort: AbortController;
-  timeoutMs?: number;
 }): PendingInteractions {
   // PendingInteractions 的公开方法见返回值；entries 内保存 request、settle、timer、detach。
   const entries = new Map<string, PendingEntry>();
@@ -202,13 +202,12 @@ export function createPendingInteractions(opts: {
     get failure() { return failure; },
     open(kind, toolCall) {
       // 创建 request 和带取消处理的 response；登记后才允许调用方发布 requested。
-      // 已取消时不得留 pending；取消与超时返回 interrupted，并清理全部资源。
-      // timeoutMs 未提供时不创建定时器；超时还要 abort 整个 run。
+      // 已取消时不得留 pending；取消返回 interrupted，并清理全部资源。
       return createEntry(entries, opts, kind, toolCall);
     },
     respond({ runId, interactionId, decision }) {
       // 先校验 runId、存活状态、请求类型、原始问题和答案数量。
-      // 已接纳同一决定返回 already_accepted，不同决定/过期请求抛 409。
+      // 已接纳同一决定返回 already_accepted，不同决定或已结束的请求抛 409。
       // 在任何 await 之前从 pending 转入 accepted，然后 settle；不能执行工具。
       return acceptDecision(entries, accepted, opts, runId, interactionId, decision);
     },
@@ -217,7 +216,7 @@ export function createPendingInteractions(opts: {
       opts.abort.abort(reason);
     },
     dispose() {
-      // 撤销未完成等待并清理计时器/监听；清空 accepted，不持久化 resolver。
+      // 撤销未完成等待并清理监听；清空 accepted，不持久化 resolver。
       closeEntries(entries);
       accepted.clear();
     },
@@ -321,7 +320,7 @@ const interactions = toolInteractions({ gate, pending: opts.pending, recorder, e
 const tools = getTools({ ...toolContext, ask: interactions.ask });
 const capabilities = [/* 保留已存在的上下文、scope、loop detection */ interactions];
 const loop = createAgentLoop({ /* 保留 model / system / messages / tools */ ...composeCapabilities(capabilities) });
-loop.subscribe(createRunEventProjector({ runId, emit })); // 此步还保留旧编码，S-002 删除。
+loop.subscribe(createRunEventProjector({ runId, emit })); // 投影修正见 S-002。
 loop.subscribe(recorder.observe);
 await loop.run(signal);
 // 先检查 pending.failure，存在则 result=failed；之后才按 signal 判断 aborted。
@@ -329,7 +328,7 @@ await loop.run(signal);
 // 原有独立收尾仍执行；pending.dispose 放 finally，waiting 不再跳过 recorder.end。
 ```
 
-`stream/event-projector.ts` 此步删除 parked 检查，仅保留旧字段编码与错误提取；其函数暂时仍需 runId 提供旧 messageId，装配调用保留 `{ runId, emit }`。S-002 整个文件删除，不能把旧过滤路径继续带进原生协议。
+`stream/event-projector.ts` 此步删除 parked 检查，仅保留角色过滤与错误提取；暂时仍需 runId 提供旧 messageId，装配调用保留 `{ runId, emit }`。S-002 把剩下的角色过滤并入 `projector.ts` 后删除此文件。
 
 #### `src/main/agent/runtime/runner.ts`
 
@@ -359,11 +358,11 @@ function abort(threadId: string): boolean {
 }
 ```
 
-start 仍同步校验模型并返回 RunHandle，不等待审批。删除 resume / settle。RunHandle 增加 `subscribe(listener): () => void`：与传输接收相同的原生/业务事件，不取代 recorder，不允许观察者修改事件；观察者抛错只记录日志，不使已保存的决定回滚。事件订阅在 start 返回后的异步执行开始前可建立；请求必须先经过异步 session 装配。完成后清理观察者。
+start 仍同步校验模型并返回 RunHandle，不等待审批。删除 resume / settle。RunHandle 增加 `subscribe(listener): () => void`：与传输相同的投影事件和业务事件，类型只读，只接收订阅之后的事件；不取代 recorder；观察者抛错只记录日志，不使已保存的决定回滚。事件订阅在 start 返回后的异步执行开始前可建立；请求必须先经过异步 session 装配。完成后清理观察者。
 
 #### `src/main/conversation/session-recorder.ts`
 
-移除 resuming / park / parked set；所有 pi message_end 的真实 toolResult 都正常记录。用已有 Session.appendEntry 写交互请求及终态，Entry ID 按 interactionId + 阶段稳定生成，单 run 内重复响应不重复写。
+移除 resuming / park / parked set；所有 pi message_end 的真实 toolResult 都正常记录。用已有 Session.appendEntry 写交互请求及终态。每个请求只写一次 requested、一次 resolved，由待决表只 settle 一次保证；Entry ID 按 interactionId + 阶段生成便于读取，但 pi 对重复 id 抛 `SessionError`（code `already_exists`），不能把稳定 ID 当作去重。
 
 ```ts
 async function interactionRequested(request: InteractionRequest): Promise<void> {
@@ -383,7 +382,7 @@ async function interactionResolved(request: InteractionRequest, outcome: Interac
 
 #### `src/main/conversation/project.ts`
 
-按 custom entry 顺序折叠 requested/resolved，而不是见过审批标记就永远显示待批。只有未解决请求可以恢复为交互卡片，拒绝、取消、超时必须恢复为终态。工具成功/失败仍以真实 toolResult 为准。
+按 custom entry 顺序折叠 requested/resolved，而不是见过审批标记就永远显示待批。只有未解决请求可以恢复为交互卡片，拒绝、取消、中断必须恢复为终态。工具成功/失败仍以真实 toolResult 为准。
 
 ```ts
 function toolStatesOf(entries: Entry[]): Record<string, unknown> {
@@ -501,6 +500,16 @@ const onStop = () => { void chat.stop(); }; // stop 内记录并展示请求失�
 const onCancelClarify = (toolCallId: string) => {
   void chat.addToolOutput({ toolCallId, output: { answers: [], cancelled: true } });
 };
+```
+
+#### `src/renderer/src/components/chat/ChatThread.tsx`
+
+composer 的占用判断不变：`busy` 已包含 `approvalPending` 与 `clarifyPending`，这就是“等待期间必须先决定或停止”的现有实现。需要改的是 Esc：等待回答时 run 仍在运行，现有逻辑先判断 `live`，会把取消询问变成停止运行，顺序要对调。
+
+```ts
+if (e.key !== 'Escape') return;
+if (pendingClarify) onCancelClarify(pendingClarify);
+else if (live) onStop();
 ```
 
 #### `src/renderer/src/lib/assistant-view.ts`
@@ -668,86 +677,103 @@ emit({ type: 'interaction_resolved', request, outcome: { kind: 'approved' } });
 expect(blockSuspension).toHaveBeenCalledTimes(2);
 ```
 
-**验证：** `bun test src/main/agent/runtime/test src/main/conversation/test src/main/api/test src/main/agent/tools/test src/main/agent/automation/test src/renderer/src/lib/pi-chat/test`；另跑 `bun test src/main/agent/automation/manager.test.ts src/main/agent/tools/schema.test.ts src/main/agent/subagent/run.test.ts` 与两端 typecheck。关键补充用例：混合工具批次中取消审批，先通过检查但尚未开始的工具执行次数为零；拒绝会让模型读到拒绝原因；回答只产生一个 toolResult；重连不创建第二个 Agent。保留测试输出作为证据。
+**验证：** `bun test src/main/agent/runtime/test src/main/conversation/test src/main/api/test src/main/agent/tools/test src/main/agent/automation/test src/renderer/src/lib/pi-chat/test`；另跑 `bun test src/main/agent/automation/manager.test.ts src/main/agent/tools/schema.test.ts src/main/agent/subagent/run.test.ts` 与两端 typecheck。关键补充用例：混合工具批次中取消审批，先通过检查但尚未开始的工具执行次数为零；已批准的工具在同批其余审批决定前不执行；拒绝会让模型读到拒绝原因；回答只产生一个 toolResult；重连不创建第二个 Agent。保留测试输出作为证据。
 
 **建议提交：** `refactor(agent): await user interactions within active runs`
 
-### S-002 — 完整转发原生事件，展示逻辑回到消费者
+### S-002 — 修正事件投影：运行身份、结束语义与工具错误
 
-先替换协议类型并固定事件快照，再同时修改发送方和消费者。S-001 已删除正常等待产生的占位错误，因此不需要在前端搬一套“隐藏等待错误”的兼容逻辑。此步删除两个 projector 和错误补字段工具。
-
-#### `src/shared/protocol/messages.ts`
-
-只重导出 pi-ai 已有类型，不手抄字段。Content 只是已有内容类型的联合，供 UI 的通用文本/图片 helper 使用；不能为了“未来兼容”继续把已知字段降为 unknown。
-
-```ts
-import type { ImageContent, TextContent, ThinkingContent, ToolCall } from '@earendil-works/pi-ai';
-export type {
-  AssistantMessage, ImageContent, Message, StopReason, TextContent,
-  ThinkingContent, ToolCall, ToolResultMessage, Usage, UserMessage,
-} from '@earendil-works/pi-ai';
-export type Content = TextContent | ThinkingContent | ToolCall | ImageContent;
-export type KnownContent = Content;
-```
-
-pi 的 AgentEvent 自身仍引用 AgentMessage，因而自定义角色没有被缩窄成 pi-ai.Message；这与上面的模型消息辅助类型是两个不同用途。
+保留现有投影的负载删减，只修三处与事实不符的地方，同时把手抄的事件类型改为从 pi 类型派生。发送方和两个消费者（实时 reduce、历史 ui-messages）在同一步切换。S-001 已删除等待产生的占位错误，前端不需要“隐藏等待错误”的兼容逻辑。
 
 #### `src/shared/protocol/events.ts`
 
-AgentSessionEvent 是原生 pi 事件与独立 Atrium 事件的联合；只有应用事件由我们定义。沿用现有 v/seq 信封，不新增旧版本解码器。主进程和 renderer 同次发布。
+事件形状用 type-only import 从 pi 派生，删减只在这里声明；消息与内容仍引用 `messages.ts`。删除 messageId 与 agent_end 的 willRetry，新增 run_started / run_finished；S-001 已换成交互事件的部分不再出现。头注释改为只说明保留的删减及其理由。
 
 ```ts
 import type { AgentEvent, AgentToolResult } from '@earendil-works/pi-agent-core';
+import type { AssistantMessageEvent as PiStreamEvent } from '@earendil-works/pi-ai';
 import type { InteractionEvent, RunStopReason } from '../interactions';
-export type { AssistantMessageEvent } from '@earendil-works/pi-ai';
+import type { Message, ToolCall, Usage } from './messages';
+
+type Pi<T extends AgentEvent['type']> = Extract<AgentEvent, { type: T }>;
+type PiStream<T extends PiStreamEvent['type']> = Extract<PiStreamEvent, { type: T }>;
+
+// 每帧只带增量：累计的 partial 与最终消息不上线，message_end 才是权威内容。
+export type AssistantMessageEvent =
+  | Pick<PiStream<'start'>, 'type'>
+  | Pick<PiStream<'text_start' | 'thinking_start'>, 'type' | 'contentIndex'>
+  | Pick<PiStream<'text_delta' | 'thinking_delta' | 'toolcall_delta'>, 'type' | 'contentIndex' | 'delta'>
+  | Pick<PiStream<'text_end' | 'thinking_end'>, 'type' | 'contentIndex' | 'content'>
+  // pi 只在 partial 里给出调用身份，投影时内联，工具卡片才能在参数流式到达时打开。
+  | (Pick<PiStream<'toolcall_start'>, 'type' | 'contentIndex'> & { toolCallId: string; toolName: string })
+  | (Pick<PiStream<'toolcall_end'>, 'type' | 'contentIndex'> & { toolCall: ToolCall })
+  | (Pick<PiStream<'done'>, 'type' | 'reason'> & { usage?: Usage })
+  | Pick<PiStream<'error'>, 'type' | 'reason'>;
+
 export type ToolExecutionResult = AgentToolResult<unknown>;
+
 export type RunCompletion =
   | { status: 'completed' }
   | { status: 'aborted'; reason: RunStopReason }
   | { status: 'failed'; error: string };
+
 export type AgentSessionEvent =
-  | AgentEvent
+  | Pi<'agent_start' | 'turn_start'>
+  // turn_end / agent_end 的内容已由 message_end 与 tool_execution_end 送达。
+  | Pick<Pi<'turn_end' | 'agent_end'>, 'type'>
+  // 只投影 assistant 消息：用户消息来自请求体，工具结果由 tool_execution_end 送达。
+  | (Pick<Pi<'message_start' | 'message_end'>, 'type'> & { message: Message })
+  | (Pick<Pi<'message_update'>, 'type'> & { assistantMessageEvent: AssistantMessageEvent })
+  | (Omit<Pi<'tool_execution_start'>, 'args'> & { args: unknown })
+  | (Omit<Pi<'tool_execution_update'>, 'args' | 'partialResult'> & { args: unknown; partialResult: unknown })
+  | (Omit<Pi<'tool_execution_end'>, 'result'> & { result: ToolExecutionResult })
   | InteractionEvent
   | { type: 'run_started'; runId: string }
   | ({ type: 'run_finished' } & RunCompletion)
   | { type: 'notice'; name: string; payload: unknown };
+
 export type EventEnvelope = { v: 1; seq: number; event: AgentSessionEvent };
 export const PROTOCOL_VERSION = 1 as const;
 ```
 
-run_started 是每个日志 seq=0 的一次性元信息。新建前端 assembler 必须从 seq=-1 重放；已有 assembler 才能按 seq 续读。当前前端沿用完整重放，不能只拿后半段却丢失 runId；若以后支持增量重连，必须把 runId 与 cursor 一起校验，不能拿旧 run 的 seq 跳过新 run 数据。
+#### `src/main/agent/runtime/stream/projector.ts`
 
-#### `src/main/agent/runtime/stream/run-event-buffer.ts`
-
-append 时完成 JSON 序列化及 UTF-8 编码，之后缓存/重放同一帧。不存活的可变事件引用，不给每个消费者重复编码。buffer 不解释消息角色、不抽取错误、不删字段。
+保留现有投影函数，并入 event-projector 剩下的角色过滤；去掉 messageId 参数，agent_end 不再吞掉，工具结果原样投影。
 
 ```ts
-type Frame = { seq: number; bytes: Uint8Array };
-
-const append = (event: AgentSessionEvent) => {
-  if (threadLog.ended) return;
-  const seq = threadLog.frames.length;
-  const envelope: EventEnvelope = { v: 1, seq, event };
-  const bytes = encoder.encode(`data: ${JSON.stringify(envelope)}\n\n`);
-  const frame: Frame = { seq, bytes };
-  threadLog.frames.push(frame);
-  for (const listener of threadLog.listeners) listener(frame);
-};
-
-// subscribe 的 replay 和 live listener 都只 enqueue(frame.bytes)。
-// 不能序列化的自定义 result 使运行明确失败，不能静默删除 content 或整条事件。
+export function projectAgentEvent(event: AgentEvent): AgentSessionEvent | null {
+  switch (event.type) {
+    case 'agent_end':
+      // loop 已结束，但持久化、用量与资源收尾尚未完成；应用结束以 run_finished 为准。
+      return { type: 'agent_end' };
+    case 'message_start':
+    case 'message_end':
+      if (event.message.role !== 'assistant') return null;
+      return { type: event.type, message: event.message as Message };
+    case 'tool_execution_end':
+      return {
+        type: 'tool_execution_end',
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        result: event.result as ToolExecutionResult,
+        isError: event.isError,
+      };
+    // 其余分支沿用现有投影，projectAssistantEvent 不变。
+  }
+}
 ```
-
-RunHandle.subscribe 的进程内观察与 SSE 来自同一次 append，但不复用可被观察者写坏的原始 pi 引用：只读观察快照按需从同帧 JSON 解析一次。没有进程内观察者时不额外解析。不能把 Uint8Array 交给可修改它的业务观察者。
 
 #### `src/main/agent/runtime/execute-run.ts`
 
-最早发 run_started，订阅时原样传递 pi 事件。真实 pi agent_end 后仍可以有元数据事件，最后才是 run_finished；准备失败不能伪造一次根本没有启动的 Agent。
+最早发 run_started；订阅时经投影转发；删除收尾后手工发的 agent_end 和 `stream-error` notice，失败原因改由 run_finished 携带。
 
 ```ts
 emit({ type: 'run_started', runId });
 // 保留现有 try/catch、独立收尾以及 recorder 的 awaited 行为。
-loop.subscribe(emit);
+loop.subscribe((event) => {
+  const projected = projectAgentEvent(event);
+  if (projected) emit(projected);
+});
 loop.subscribe(recorder.observe);
 await loop.run(signal);
 // reportUsage / recorder.end / 资源清理完成后，result 已包含收尾失败。
@@ -755,51 +781,28 @@ emit({ type: 'run_finished', ...toRunCompletion(result, signal.reason) });
 return result;
 ```
 
-run_started 在 executeRun 的受保护执行范围内发送。buffer 本身异常或准备失败也必须让 settled 结束；一次执行最多一个 run_finished。晚到的标题任务仍可写标题，但不能在流关闭后继续发事件。Runner 的 RunOutcome 继续使用现有 ok/error 映射，不因此更换定时任务持久化结构。
+run_started 在 executeRun 的受保护执行范围内、第一次 await 之前发送，所以 start() 返回时它已进入缓冲区：SSE 从 -1 重放能拿到；RunHandle.subscribe 只接收之后的事件，定时任务不需要 run_started。准备失败也必须让 settled 结束；一次执行最多一个 run_finished。晚到的标题任务仍可写标题，但不能在流关闭后继续发事件。Runner 的 RunOutcome 继续使用现有 ok/error 映射。
 
 #### `src/renderer/src/lib/pi-chat/reduce.ts`
 
-run_started 决定运行身份；仅 assistant 消息组织回复步骤。工具执行结果只选 tool_execution_end 作为此 UI 的消费入口，收到同一结果的 message_end(toolResult) 不重复生成卡片；这些事件仍完整存在于流中，其他消费者可以使用。
+运行身份来自 run_started，结束来自 run_finished；工具错误从 content 提取。拒绝 / 取消判断保持在前（S-001 已改为读交互状态），不被随后 pi 的阻止错误覆盖。删除 `stream-error` notice 分支。
 
 ```ts
 case 'run_started':
   this.id = event.runId;
   break;
-case 'message_start':
-  if (event.message.role !== 'assistant') break;
-  this.parts.push({ type: 'step-start' });
-  this.started = true;
-  this.turnParts = new Map();
-  break;
-case 'message_end':
-  if (event.message.role === 'assistant') this.syncTurn(event.message);
-  break;
 case 'agent_end':
-  // pi 结束不代表应用的持久化、用量与错误收尾已经结束。
+  // loop 结束不代表应用收尾结束。
   break;
 case 'run_finished':
   this.ended = true;
   if (event.status === 'failed') this.failure = event.error;
   break;
+// message_start：删除从 messageId 取身份的分支，其余不变。
 ```
 
-text/thinking 继续消费 delta，message_end 同步最终内容；不能同时把 outer message 和 partial 再追加一次。turn_end 的完整 message/toolResults 对这个 UI 不增加步骤，忽略即可。
-
 ```ts
-case 'toolcall_start':
-case 'toolcall_delta': {
-  const call = update.partial.content[update.contentIndex];
-  if (call?.type !== 'toolCall' || !call.id || !call.name) break;
-  this.openOrUpdateToolInput(update.contentIndex, call);
-  break;
-}
-// toolcall_end 仍用 update.toolCall 完成参数和身份校准，不能制造第二张卡片。
-```
-
-openOrUpdateToolInput 按本 turn 的 contentIndex 与 run 内 toolCallId 关联；某供应商早期尚未给出完整 ID 时推迟创建工具卡片，后续 delta/end 再补，不能向标准事件塞一个自造 toolCallId。
-
-```ts
-// endTool 错误分支：先保留已知的用户拒绝/取消语义，否则直接取 content。
+// endTool 的错误分支。
 this.patchTool(toolCallId, toolName, {
   state: 'output-error',
   errorText: contentText(result.content).trim() || 'Tool failed.',
@@ -808,25 +811,19 @@ this.patchTool(toolCallId, toolName, {
 
 #### `src/renderer/src/lib/pi-chat/store.ts`
 
-从 run_started 建立当前 run 身份，完整重放以该 ID 替换历史中的同一条 assistant 消息；不再依赖 messageId 或 seed 一个已经结束的审批 run。SSE 断开不等于 run_finished，保留已接收内容和重连能力。
+以 run_started 建立的 ID 合并历史中的同一条 assistant 消息。流结束但没有收到 run_finished 时，视为连接中断而不是运行成功：保留已收到的内容，可以重连。
 
 ```ts
-const envelope = JSON.parse(frame.slice('data: '.length)) as EventEnvelope;
-if (envelope.seq <= this.lastSeq) continue;
-this.lastSeq = envelope.seq;
 this.run?.apply(envelope.event);
-if (envelope.event.type === 'run_finished') {
-  // 记录已见明确终态；结束读取后再统一合并 history，不在 agent_end 上提前结算。
-  finished = true;
-}
-// 流 EOF 且未收到 run_finished：标记连接中断，可重连；不得显示为运行成功。
+if (envelope.event.type === 'run_finished') finished = true;
+// 读到 EOF 后：finished 为 false 且不是本地主动 detach，就标记连接中断，不走成功收尾。
 ```
 
-`src/renderer/src/lib/pi-chat/use-pi-chat.ts` 若需给错误重试/取消暴露 Promise，仅做方法接线，不引入另一套状态机。前端新建 assembler 后从 -1 重放，既避免多次追加，也保证 run_started 不丢失。
+新建 assembler 从 seq -1 重放（现有 begin 已重置 lastSeq），run_started 不会丢；以后若支持增量续读，必须把 runId 与 seq 一起校验。
 
 #### `src/main/conversation/ui-messages.ts`
 
-历史视图是标准数据的另一个消费者，也直接从原生 content 提取错误；不要求 session 里多存一份 details.errorText。
+历史视图同样从 content 提取错误，session 里不需要多存 details.errorText；复用 `shared/protocol/helpers.ts` 的 contentText。
 
 ```ts
 Object.assign(base, {
@@ -835,66 +832,46 @@ Object.assign(base, {
 });
 ```
 
-`src/shared/protocol/helpers.ts` 继续复用现有 contentText；仅适配新的 type-only imports，不创建第二套错误转换 helper。正常工具的 details 保持原样，图片和结构化输出不受影响。
-
 #### 删除文件
 
-- `src/main/agent/runtime/stream/projector.ts`
-- `src/main/agent/runtime/stream/event-projector.ts`
+- `src/main/agent/runtime/stream/event-projector.ts`（角色过滤已并入 projector.ts）
 - `src/main/agent/runtime/stream/tool-result.ts`
 - `src/main/agent/runtime/test/stream/tool-result.test.ts`
 
-删除对应导入；README 同步更新。原生事件不再经过业务过滤或字段转换，持久化观察仍是独立订阅。
+删除对应导入；README 的 stream/ 职责同步更新。
 
 #### 测试文件与关键断言
 
-`src/main/agent/runtime/test/stream/run-event-buffer.test.ts` 使用完整 AgentEvent fixture，增加快照、字节一致性与订阅取消不终止生产者测试。下面测试可直接使用 pi-ai 的 fauxAssistantMessage 和当前 buffer 的 produce/subscribe。
+新增 `src/main/agent/runtime/test/stream/projector.test.ts`（目前没有投影测试）。除三处修正外，锁住负载删减，防止以后把累计内容加回线上。
 
 ```ts
-test('replay preserves the content at append time', async () => {
-  const message = fauxAssistantMessage('A');
-  await buffer.produce('t1', async ({ append }) => {
-    append({ type: 'message_update', message,
-      assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: 'A', partial: message } });
-    if (message.content[0]?.type === 'text') message.content[0].text = 'AB';
-  });
-  const frames = await readEnvelopes(buffer.subscribe('t1', -1)!);
-  expect(frames[0].event).toMatchObject({
-    message: { content: [{ type: 'text', text: 'A' }] },
-    assistantMessageEvent: { partial: { content: [{ type: 'text', text: 'A' }] } },
-  });
-});
+const update = projectAgentEvent(piTextDelta);
+expect(update).not.toHaveProperty('message');
+expect(update).not.toHaveProperty('assistantMessageEvent.partial');
+expect(projectAgentEvent({ type: 'agent_end', messages })).toEqual({ type: 'agent_end' });
+expect(projectAgentEvent({ type: 'message_end', message: userMessage })).toBeNull();
+expect(projectAgentEvent(failedToolEnd)).not.toHaveProperty('result.details.errorText');
 ```
 
-`src/main/agent/runtime/test/execute-run.cases.ts` 验证完整事件，不再断言 partial 被删除。直接从 pi 的测试订阅即时序列化得到对照快照，不能拿后续已被修改的对象作期望值。
+`src/main/agent/runtime/test/execute-run.cases.ts`：首个事件为 run_started、最后为 run_finished，恰好一个 agent_end 且没有事件带 messageId；准备失败时没有 AgentEvent，run_finished.status 为 failed；agent_end 之后 recorder / usage 失败时 agent_end 不变，run_finished 报告失败。
 
 ```ts
-expect(events[0]).toMatchObject({ type: 'run_started', runId: 'r1' });
+expect(events[0]).toEqual({ type: 'run_started', runId: 'r1' });
 expect(events.at(-1)?.type).toBe('run_finished');
 expect(events.filter((event) => event.type === 'agent_end')).toHaveLength(1);
-expect(events.find((event) => event.type === 'agent_end')).toHaveProperty('messages');
-const update = events.find((event) => event.type === 'message_update');
-expect(update).toHaveProperty('message');
-expect(update).toHaveProperty('assistantMessageEvent.partial');
+expect(events.some((event) => 'messageId' in event)).toBe(false);
 ```
 
-增加准备失败测试：没有 AgentEvent，run_finished.status 为 failed；增加 agent_end 之后 recorder/usage 失败测试：原生 agent_end 不变，最终业务事件正确报告失败。
-
-`src/renderer/src/lib/pi-chat/test/reduce.test.ts` 直接构造满足 `AgentEvent` 的原生事件，不再使用断言强行塞入缺字段对象。覆盖 user 回声、工具结果双入口、toolcall_start ID 从 partial 读取，以及 agent_end 后仍在收尾。
+`src/renderer/src/lib/pi-chat/test/reduce.test.ts`：agent_end 之后仍在收尾，run_finished 才结束；错误文字取自 content；拒绝不被随后的阻止错误覆盖。
 
 ```ts
-assembler.apply({ type: 'agent_end', messages: [] });
+assembler.apply({ type: 'agent_end' });
 expect(assembler.snapshot().status).toBe('streaming');
 assembler.apply({ type: 'run_finished', status: 'completed' });
 expect(assembler.snapshot().status).toBe('done');
 ```
 
-`src/renderer/src/lib/pi-chat/test/store.test.ts` 的 open/close fixture 改为 run_started 和 run_finished；验证重放仍只得到一个 run 对应的一条回复。
-
-```ts
-expect(chat.getSnapshot().messages.filter((message) => message.id === runId)).toHaveLength(1);
-expect(calls.filter((call) => call.url.endsWith('/api/chat'))).toHaveLength(1);
-```
+`src/renderer/src/lib/pi-chat/test/store.test.ts` 的 open/close fixture 改为 run_started / run_finished；重放只得到一个 run 对应的一条回复；EOF 前没有 run_finished 时不显示为成功。
 
 `src/main/conversation/test/project.test.ts` 工具错误 fixture 只提供 content 和 isError，details 不含 errorText，验证历史展示与实时消费一致。
 
@@ -904,25 +881,9 @@ expect(projectMessages(entries, records).at(-1)?.parts).toContainEqual(
 );
 ```
 
-新增 `src/main/agent/runtime/test/stream/native-events.test.ts`，用真实 createAgentLoop + faux provider 比较原生流与 SSE 解码结果，覆盖 text/thinking、工具、错误和取消；除 JSON 正常的 undefined 省略之外不能改变字段。
+**验证：** `bun test src/main/agent/runtime/test src/main/conversation/test src/renderer/src/lib/pi-chat/test`；`bun run typecheck:node`、`bun run typecheck:web`、`bunx electron-vite build`，并确认 renderer 产物不含 pi 运行时代码（`grep -l executeToolCallsParallel out/renderer/assets/*.js` 无输出），证明派生类型只是 type-only 引用。
 
-```ts
-expect(decodedPiEvents).toEqual(nativeSnapshots);
-expect(nativeResult.details).toEqual(originalDetails);
-```
-
-新增 `src/main/agent/runtime/test/stream/native-events.bench.ts`，通过 `bun run` 显式执行而非混入普通测试：固定 50 KiB 最终正文、1,000 个均匀增量，比较原始事件、编码缓存和解码耗时；追加一个含 1 MiB 图片结果的工具事件。输出总字节数、峰值 RSS、append/完整重放耗时；这些是合成负载，不冒充真实供应商性能。
-
-```ts
-// 固定 seed，正文逐步增长；每帧都包含 message 和 partial。
-// 使用真实 createRunEventBuffer append / subscribe 测量完整保留字段的路径。
-const bytes = await new Response(buffer.subscribe('benchmark', -1)).arrayBuffer();
-console.info({ wireBytes: bytes.byteLength, rss: process.memoryUsage().rss, appendMs, replayMs });
-```
-
-**验证：** `bun test src/main/agent/runtime/test src/main/conversation/test src/renderer/src/lib/pi-chat/test`；`bun run src/main/agent/runtime/test/stream/native-events.bench.ts`；`bun run typecheck:node`、`bun run typecheck:web`、`bunx electron-vite build`。性能结果必须保留，不能只写“通过”；类型检查与 renderer 构建必须证明 type-only 引用没有引入 Node-only pi 运行代码。
-
-**建议提交：** `refactor(agent): preserve native pi events end to end`
+**建议提交：** `refactor(agent): carry run identity and completion as run events`
 
 ### S-003 — 明确中断结果与退出顺序，恢复不重执行
 
@@ -957,7 +918,7 @@ reasonFor 只由 conversation 根据持久化的 interaction / run_stop 状态�
 
 #### `src/main/conversation/recovery.ts`（新增）
 
-按 operation 的 seq 范围读取原 run 的调用、已有结果与交互终态，保存缺失结果，再关闭原 operation。用 Session 的 writer lease 保证唯一写入者；每个补写使用 runId + toolCallId 生成稳定 Entry ID。不能只扫描 open operation：原代码可能已写 operation_finished 却还有缺结果，需要在读取可运行历史时保持最后一道纯修复保护。
+按 operation 的 seq 范围读取原 run 的调用、已有结果与交互终态，保存缺失结果，再关闭原 operation。用 Session 的 writer lease 保证唯一写入者；每个补写使用 runId + toolCallId 生成 Entry ID，写入前按已读到的结果判重。不能只扫描 open operation：原代码可能已写 operation_finished 却还有缺结果，需要在读取可运行历史时保持最后一道纯修复保护。
 
 ```ts
 export async function recoverInterruptedRun(session: Session, runId: string, reason: RunStopReason): Promise<void> {
@@ -976,7 +937,7 @@ export async function recoverInterruptedRun(session: Session, runId: string, rea
 }
 ```
 
-若恢复中途崩溃，下次先读取已存在的结果/终态后继续；没有并发写入者时 check + append 足够，确定性 Entry ID 是额外防线。不得调用底层原始 SQL 来改写已保存 pi 消息。
+若恢复中途崩溃，下次先读取已存在的结果/终态后继续；writer lease 保证没有并发写入者，check + append 足够。pi 对重复 id 抛 `SessionError`（code `already_exists`，`pi-session-backend-sqlite-node/dist/sqlite/repo.js:202`，entry 与 record 共用 id 空间），所以稳定 ID 不能代替这一步检查。不得调用底层原始 SQL 来改写已保存 pi 消息。
 
 #### `src/main/conversation/session-recorder.ts`
 
@@ -1035,52 +996,67 @@ function dispose(): Promise<void> {
 
 `execute-run.ts` 仅把原始 signal.reason 传给 recorder.end 和 run_finished；错误归一化只处理已知枚举，未知原因记 interrupted。其余收尾仍各自执行，第一项失败不能阻止后面的录制或清理。这里是调用参数接线，不新增一套取消协议。
 
-#### `src/main/shutdown.ts`（新增）
+#### `src/main/utils/drain.ts`（新增）
 
-进程退出顺序属于主进程，不放进 platform 或 conversation。此文件执行退出流程，依赖仍由 index 装配；一个普通异步函数，不新增生命周期框架。使用实际服务对象的窄类型，而非大量无名回调。
+退出流程里唯一需要单测的纯逻辑是有界等待，放在不依赖任何模块的 utils。收尾 Promise 的晚到 rejection 在这里接住。
 
 ```ts
-export async function shutdown(deps: {
-  runner?: Pick<Runner, 'dispose'>;
-  scheduled: Pick<typeof scheduledManager, 'dispose'>;
-  mcp: Pick<typeof mcpManager, 'dispose'>;
-  updater: Pick<typeof updaterManager, 'dispose'>;
-}, drainMs = 3000): Promise<void> {
-  const errors: unknown[] = [];
-  const attempt = async (operation: () => void | Promise<void>) => {
-    try { await operation(); } catch (error) { errors.push(error); }
-  };
-  await attempt(() => deps.scheduled.dispose());
-  // drainWithin 超时抛错且 clearTimeout；3 秒是等待 run 收尾的上限，不是杀进程保证。
-  await attempt(() => drainWithin(deps.runner?.dispose() ?? Promise.resolve(), drainMs));
-  await attempt(() => deps.mcp.dispose());
-  await attempt(() => deps.updater.dispose());
-  await attempt(() => disposeComputerUseHelper());
-  await attempt(() => closeSessionStore());
-  await attempt(() => closeDb());
-  if (errors.length) throw new AggregateError(errors, 'Application shutdown was incomplete');
+export async function drainWithin(pending: Promise<unknown>, ms: number): Promise<'drained' | 'timed_out'> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<'timed_out'>((resolve) => {
+    timer = setTimeout(() => resolve('timed_out'), ms);
+  });
+  const drained = pending.then(() => 'drained' as const, () => 'drained' as const);
+  try {
+    return await Promise.race([drained, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 ```
 
-超时只意味着转为 best-effort 退出，不承诺所有不响应取消的第三方工具已终止。dispose 的晚到 rejection 必须被接住；下次恢复不得自动重执行这些不确定操作。数据库关闭函数沿用现有模块，不移动其 ownership。
-
 #### `src/main/index.ts`
 
-第一次 before-quit 阻止立即退出，等待 shutdown；重复触发复用同一次流程。只有收尾结束后才允许第二次 app.quit 真正退出。窗口隐藏不走此路径。
+退出顺序是进程级组合，按项目约定留在 index.ts，不新增根目录模块。第一次 before-quit 阻止立即退出，按顺序收尾后再真正退出；重复触发复用同一次流程。窗口隐藏不走此路径。
+
+更新安装不走有序收尾。`platform/updater.ts` 的 install 注释记录过：quitAndInstall 期间若有监听器 preventDefault，Squirrel 会卡住并报 “The command is disabled and cannot be executed”。`onBeforeInstall` 额外置位 `installingUpdate`，before-quit 见到它时不阻止退出，只做现有的同步尽力收尾；被中止的 run 由下次启动的恢复补齐。
 
 ```ts
 let closing: Promise<void> | undefined;
-let shutdownComplete = false;
+let quitReady = false;
+let installingUpdate = false; // onBeforeInstall 中置为 true
+
 app.on('before-quit', (event) => {
-  if (shutdownComplete) return;
-  event.preventDefault();
-  if (closing) return;
   isQuitting = true;
-  closing = shutdown({ runner, scheduled: scheduledManager, mcp: mcpManager, updater: updaterManager })
-    .catch((error) => logShutdownError(error))
-    .finally(() => { shutdownComplete = true; app.quit(); });
+  if (installingUpdate) return disposeImmediately(); // 即现有 before-quit 的同步收尾
+  if (quitReady) return;
+  event.preventDefault();
+  closing ??= shutdown().finally(() => {
+    quitReady = true;
+    app.quit();
+  });
 });
+
+async function shutdown(): Promise<void> {
+  const attempt = async (step: string, run: () => unknown) => {
+    try {
+      await run();
+    } catch (error) {
+      log.warn(`shutdown step ${step} failed`, error);
+    }
+  };
+  await attempt('scheduled', () => scheduledManager.dispose());
+  // 3 秒是等待 run 收尾的上限，不保证终止不响应取消的第三方工具。
+  await attempt('runner', () => drainWithin(runner?.dispose() ?? Promise.resolve(), 3000));
+  await attempt('mcp', () => mcpManager.dispose());
+  await attempt('updater', () => updaterManager.dispose());
+  await attempt('computer-use', () => disposeComputerUseHelper());
+  await attempt('session-store', () => closeSessionStore());
+  await attempt('db', () => closeDb());
+}
 ```
+
+超时只意味着转为 best-effort 退出。与现有顺序相比，session store 改为在 run 收尾之后关闭，避免收尾写入撞上已关闭的存储。下次恢复不得自动重执行不确定的操作。index.ts 目前没有 logger，用 `utils/log` 的 createLogger 增加一个（根目录 index.ts 使用相对路径导入）。
 
 #### `src/renderer/src/lib/pi-chat/store.ts`
 
@@ -1099,21 +1075,22 @@ if (res.status === 204) {
 
 #### 测试文件与关键断言
 
-`src/main/agent/runtime/test/pending-interactions.test.ts` 增加可选短超时和已经取消的 signal；等待 Promise 完成就是确定性触发条件，不循环 sleep。
+`src/main/agent/runtime/test/pending-interactions.test.ts` 增加已经取消的 run：等待 Promise 完成就是确定性触发条件，不循环 sleep。
 
 ```ts
-test('timeout settles the wait and rejects a late approval', async () => {
+test('a cancelled run settles its waits and rejects a late approval', async () => {
   const abort = new AbortController();
-  const inbox = createPendingInteractions({ runId: 'r1', abort, timeoutMs: 5 });
+  const inbox = createPendingInteractions({ runId: 'r1', abort });
   const waiting = inbox.open('approval', { type: 'toolCall', id: 'c1', name: 'bash', arguments: {} });
-  await expect(waiting.response).resolves.toEqual({ kind: 'interrupted', reason: 'interaction_timeout' });
+  inbox.cancel('user_cancelled');
+  await expect(waiting.response).resolves.toEqual({ kind: 'interrupted', reason: 'user_cancelled' });
   expect(abort.signal.aborted).toBe(true);
   expect(() => inbox.respond({ runId: 'r1', interactionId: waiting.request.id, decision: { kind: 'approved' } })).toThrow();
   inbox.dispose();
 });
 ```
 
-新增 `src/main/conversation/test/recovery.test.ts`：复用真实 SQLite Session fixture，模拟保存 requested 后中断、批准记录后结果缺失、已有真实结果、补写一半再次中断。核对每个 toolCallId 最多一个结果，原真实结果不被替换，恢复从不调用工具。
+新增 `src/main/conversation/test/recovery.test.ts`：复用真实 SQLite Session fixture，模拟保存 requested 后中断、批准记录后结果缺失、已有真实结果、补写一半再次中断。核对每个 toolCallId 最多一个结果，原真实结果不被替换，重复恢复不抛 already_exists，恢复从不调用工具。
 
 ```ts
 await recoverInterruptedRun(session, 'r1', 'interrupted');
@@ -1150,15 +1127,12 @@ expect(repairedResult.seq).toBeLessThan(newOperation.seq);
 expect(newPrompt.seq).toBeGreaterThan(newOperation.seq);
 ```
 
-新增 `src/main/test/shutdown.test.ts`：受控 runner.dispose Promise + mocked 主进程服务，验证 drain 完成前不关库、重复退出只清理一次、drain 超时仍关闭依赖、某清理步骤抛错时其余清理继续。测试宿主必须隔离 Electron mock，不能污染现有 runtime fixture。
+新增 `src/main/utils/drain.test.ts`（与该目录现有测试一样就近放置）：覆盖完成、超时与晚到 rejection，超时后定时器被清理。退出顺序本身依赖 Electron 生命周期，由上面 runner 的 dispose 用例和下文 UI 验证中的正常退出、更新安装两步覆盖。
 
 ```ts
-const ending = shutdown(deps, 50);
-expect(closeDb).not.toHaveBeenCalled();
-drained.resolve();
-await ending;
-expect(order.indexOf('runner-settled')).toBeLessThan(order.indexOf('close-session-store'));
-expect(order.indexOf('close-session-store')).toBeLessThan(order.indexOf('close-db'));
+expect(await drainWithin(Promise.resolve(), 50)).toBe('drained');
+expect(await drainWithin(new Promise(() => {}), 10)).toBe('timed_out');
+expect(await drainWithin(Promise.reject(new Error('late')), 50)).toBe('drained');
 ```
 
 `src/renderer/src/lib/pi-chat/test/store.test.ts` 增加旧交互 + 204 重连断言：无活跃审批按钮，正文与已完成工具不变，不发 decisions / resume，也不启动新模型请求。
@@ -1169,7 +1143,7 @@ expect(calls.some((call) => call.url.endsWith('/decisions'))).toBe(false);
 expect(calls.some((call) => call.url.endsWith('/resume'))).toBe(false);
 ```
 
-**验证：** `bun test src/main/agent/runtime/test src/main/conversation/test src/main/test src/renderer/src/lib/pi-chat/test`；用临时 SQLite 重新打开 session 验证恢复后的模型上下文不存在缺失 toolResult。分别覆盖用户停止、默认不限时、显式超时、正常退出和模拟进程丢失；不能只测正常批准。
+**验证：** `bun test src/main/agent/runtime/test src/main/conversation/test src/main/utils/drain.test.ts src/renderer/src/lib/pi-chat/test`；用临时 SQLite 重新打开 session 验证恢复后的模型上下文不存在缺失 toolResult。分别覆盖用户停止、无限等待、正常退出、更新安装和模拟进程丢失；不能只测正常批准。
 
 **建议提交：** `fix(agent): settle interrupted interactions before shutdown and reuse`
 
@@ -1181,23 +1155,23 @@ expect(calls.some((call) => call.url.endsWith('/resume'))).toBe(false);
 bun test src/main/agent/runtime/test src/main/conversation/test src/renderer/src/lib/pi-chat/tests
 ```
 
-Bun 1.4.2，**126 pass / 0 fail**，15 个测试文件。它只证明当前工作区基线，不代表上述新行为已实现或验证。现有 runtime.test.ts 还会在隔离子进程中执行 runner / execute-run 集成用例，继续复用这个宿主以免 Electron mock 相互污染。
+Bun 1.4.2，**126 pass / 0 fail**，15 个测试文件。它只证明编写方案时的基线，不代表上述新行为已实现或验证。现有 runtime.test.ts 还会在隔离子进程中执行 runner / execute-run 集成用例，继续复用这个宿主以免 Electron mock 相互污染。
 
 | 回归边界 | 风险与验证 |
 |---|---|
 | 权限判断 | 保持 full-access / default / auto-review 和信任规则语义。运行权限现有测试与新增 HTTP 负向用例；批准只影响该请求，拒绝不能执行，停止后不能迟到放行。 |
-| loop 与工具并发 | 真实 pi 执行混合工具批次，等待前没有副作用；取消后未开始工具不执行；允许/拒绝只产生一个原生结果；不靠 mocked Agent 测这些断言。 |
-| 询问 | 回答恢复原调用；取消不再发模型请求；多个问题按原顺序配对；未回答、超时、重启后表单不可错误地继续提交。 |
-| SSE 与 UI | 完整原生事件、partial 快照、user 回声、toolResult 双入口、工具 ID 延迟出现、完成与断流、重连历史去重、错误 content、图片及 MCP 工具卡片。 |
+| loop 与工具并发 | 真实 pi 执行混合工具批次，等待前没有副作用；取消后未开始工具不执行；允许/拒绝只产生一个工具结果；不靠 mocked Agent 测这些断言。 |
+| 询问 | 回答恢复原调用；取消（含 Esc）不再发模型请求；多个问题按原顺序配对；未回答、重启后表单不可错误地继续提交。 |
+| SSE 与 UI | 投影不含累计内容、run_started 身份、agent_end 后仍在收尾、断流不算完成、工具 ID 延迟出现、重连历史去重、错误取自 content、图片及 MCP 工具卡片。 |
 | 持久化与恢复 | 一次 run 一对 operation 记录；决定先记录再执行；写入失败不放行；缺结果幂等修复；批准后崩溃不重执行；旧结果不覆盖。 |
 | 调度 | 待交互任务仍 running，同任务不重叠；稍后打开会话可决定；待交互释放防休眠锁，执行/终止时正确恢复和释放。 |
 | 子 Agent、上下文与模型 | 回归 subagent 询问禁用、scope 动态工具列表、loop detection、压缩、标题、用量及 Provider 完成请求；不改变 piModels 路径。 |
-| 进程退出 | stop 调度 → abort / settle run → 释放其他服务 → 关闭 session store → closeDb；超时/异常每步仍执行，重复退出幂等。 |
+| 进程退出 | stop 调度 → abort / settle run → 释放其他服务 → 关闭 session store → closeDb；超时/异常每步仍执行，重复退出幂等；更新安装不阻止退出。 |
 
 实施结束执行：
 
 ```sh
-bun test src/main/agent/runtime/test src/main/conversation/test src/main/agent/context/test src/main/agent/subagent/run.test.ts src/main/api/test src/main/agent/tools/test src/main/agent/automation/test src/main/test src/renderer/src/lib/pi-chat/test
+bun test src/main/agent/runtime/test src/main/conversation/test src/main/agent/context/test src/main/agent/subagent/run.test.ts src/main/api/test src/main/agent/tools/test src/main/agent/automation/test src/main/utils/drain.test.ts src/renderer/src/lib/pi-chat/test
 bun run lint
 bun run typecheck:node
 bun run typecheck:web
@@ -1209,11 +1183,11 @@ bun test
 
 ### Agent 实际操作 UI
 
-在实现阶段由 Agent 启动并操作应用，不只给人工检查清单。启动专用验证实例，Electron 的 `--user-data-dir` 指向 `mktemp -d` 创建的测试目录；确认 app.getPath('userData') 实际命中该目录后才写测试设置，不能使用用户当前账户配置或数据库。本地 electron-vite 5.0.0 的启动实现读取 ELECTRON_CLI_ARGS（`node_modules/electron-vite/dist/chunks/lib-q6ns0vZr.js` 的 startElectron），可这样启动：
+在实现阶段由 Agent 启动并操作应用，不只给人工检查清单。启动专用验证实例，Electron 的 `--user-data-dir` 指向 `mktemp -d` 创建的测试目录；确认 app.getPath('userData') 实际命中该目录后才写测试设置，不能使用用户当前账户配置或数据库。electron-vite 5.0.0 的 dev 命令总会用 `--` 之后的参数覆盖 ELECTRON_CLI_ARGS（`node_modules/electron-vite/dist/cli.js:58`；cac 在命令行没有 `--` 时也给出空数组），环境变量传不进去，参数必须写在 `--` 之后。通过 `bun run dev` 启动需要两个 `--`（bun 会吞掉第一个），直接调用二进制更清楚：
 
 ```sh
 runtime_check_dir=$(mktemp -d)
-ELECTRON_CLI_ARGS="[\"--user-data-dir=$runtime_check_dir/profile\"]" bun run dev
+./node_modules/.bin/electron-vite dev -- --user-data-dir="$runtime_check_dir/profile"
 ```
 
 新增测试资产 `src/main/api/test/model-server.ts`，由 `bun run src/main/api/test/model-server.ts` 显式启动，只绑定 127.0.0.1、随机端口。提供 `/v1/chat/completions` 的确定性 OpenAI-compatible SSE 响应，以及只在测试进程内选择场景/读取计数的接口。普通 Bun 单元测试仍使用已有 fauxProvider；真实 UI 则通过正常的自定义 Provider 配置访问这个本机假模型，不把测试分支插入正式 Electron 入口。
@@ -1236,12 +1210,13 @@ console.info({ baseUrl: `http://127.0.0.1:${server.port}/v1` });
 
 依次操作并保留应用截图、网络请求记录和临时 session 的断言输出：
 
-1. 发送消息 → 审批卡片出现 → 等待期间切换会话再返回 → 批准 → 同一回复继续；只有一次 chat 启动请求，无 `/resume`。
+1. 发送消息 → 审批卡片出现 → 等待期间 composer 保持占用、无法发送新消息 → 切换会话再返回 → 批准 → 同一回复继续；只有一次 chat 启动请求，无 `/resume`。
 2. 拒绝审批 → 工具未执行 → 模型读到真实拒绝原因；再测试“始终允许”后下一次相同受信任操作不重复询问。
-3. 询问出现 → 回答并继续；另一次点击取消 → 无第二次模型请求，无永久等待表单。
+3. 询问出现 → 回答并继续；另一次按 Esc 取消（而不是停止运行）→ 无第二次模型请求，无永久等待表单。
 4. 审批等待时断开 SSE 再重连 → 卡片恢复且工具执行次数仍为零；批准后只执行一次。
 5. 审批等待时停止、正常退出再启动；另外用隔离 fixture 模拟强杀后的 session → 旧交互不可批准，下次发送前缺口已修复。
 6. 定时任务触发审批 → 保持 running → 打开绑定会话批准 → 任务完成；期间不重叠触发，防休眠调用符合等待策略。
+7. 更新安装：用签名打包版在审批等待时触发已下载更新的安装 → 应用退出并重启到新版本，无 Squirrel 报错；重启后旧审批显示已中断。本机无法构建签名包时报告此项未执行。
 
 model-server.ts 属于 S-001 的 UI 验证资产，S-002/S-003 延伸其场景；必须经真实 Provider 设置和 HTTP 调用完成接线后才能声称 UI 验证通过。若宿主不支持专用实例或 native 自动化，则报告这一项未执行，不能以截图草图或 Bun 测试冒充真机验证。
 
@@ -1252,12 +1227,14 @@ model-server.ts 属于 S-001 的 UI 验证资产，S-002/S-003 延伸其场景�
 - run_started / run_finished 仅是运行流元信息，不替代 session 的 operation 和工具结果记录；事件重放缓存不变成新的持久化真相来源。
 - 本地旧版数据的读取/回滚以“保留已完成对话”为边界，不保证旧二进制能处理新交互记录。回退验证使用测试数据库副本，不删除或重置真实用户数据。
 - 测试放到各模块 test/ 下；仅迁移此次直接修改的 pi-chat/tests，不扩大成全仓库测试搬家。
-- 实施前重新核对 staged/unstaged 边界；本方案不授权提交已有暂存内容，也不授权 push、发布或清理数据库。提交方式由后续 Develop 与用户确认。
+- 三步在同一个 PR 内完成并一起合入（squash 为一个提交），不单独发版：只有 S-001 时，重启后遗留的待审批卡片仍可点击并返回 409，要到 S-003 才处理。
+- 本方案不授权发布或清理数据库；提交与推送节奏由后续 Develop 与用户确认。
 
 ## 本次评审重点
 
-1. 正常审批与询问保持原 loop；取消/崩溃恢复不执行旧工具，默认不限时且定时任务也可等待。
-2. 事件契约是原生 AgentEvent + 独立运行/交互业务事件；messageId、占位过滤、details.errorText 和伪造 agent_end 全部退出标准事件路径。
-3. 建议接受等待期间释放定时任务的防休眠锁，以及正常退出最多等待 run 收尾 3 秒的资源策略；对仍在执行且不响应取消的外部工具不作成功或回滚保证。
+1. 正常审批与询问保持原 loop；取消/崩溃恢复不执行旧工具；等待不设超时，定时任务也可等待；等待期间线程保持占用，须先决定或停止。
+2. 事件流保留负载投影，类型从 pi 派生；只修三处：run_started 携带身份替代 messageId，run_finished 表示收尾替代伪造的 agent_end，错误文字取自 content 替代 details.errorText。
+3. 建议接受等待期间释放定时任务的防休眠锁，以及正常退出最多等待 run 收尾 3 秒的资源策略；更新安装不走有序收尾；对仍在执行且不响应取消的外部工具不作成功或回滚保证。
+4. 同一批次中已批准的工具要等其余审批都有结论才开始执行。
 
-文档完成后停在 Human review。确认这份方案后，下一阶段为 product-develop；本轮没有修改生产代码、测试代码或已有暂存区。
+文档完成后停在 Human review。确认这份方案后，下一阶段为 product-develop；本次修订只改文档。
