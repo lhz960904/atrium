@@ -4,13 +4,13 @@ import { recordUsage } from '@main/db/usage';
 import { createLogger } from '@main/utils/log';
 import type { TokenRates } from '@shared/cost';
 import type { ToolName } from '@shared/tools';
-import { withinTurnFold } from '../context/compaction';
-import { composeContext } from '../context/compose';
 import { createSummarizer } from '../context/summarize';
 import { workspaceGuidance } from '../prompts';
 import { resolvePiModel } from '../providers/models';
 import { createAgentLoop } from '../runtime/agent-loop';
-import { withChatPolicies } from '../runtime/chat-policies';
+import { composeCapabilities } from '../runtime/capabilities/compose';
+import { contextCompaction, dateReminder } from '../runtime/capabilities/context';
+import { loopDetection } from '../runtime/capabilities/loop-detection';
 import type { RunContext } from '../runtime/run-context';
 import type { AtriumTool } from '../tools';
 import { preserveTodos } from '../tools/builtins/todo';
@@ -110,25 +110,25 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   const emit = (data: Record<string, unknown>): void =>
     parent.notice('subagent', { id: opts.subagentId, ...data });
 
-  const child = createAgentLoop(
-    withChatPolicies({
-      systemPrompt,
-      model,
-      streamFn: opts.engine.streamFn,
-      messages,
-      tools: opts.tools,
-      // The child can run many turns and overflow its own window, but it has no
-      // persisted history to check point against — only the within-turn fold.
-
-      transformContext: composeContext([
-        withinTurnFold({
-          summarize: createSummarizer(model),
-          contextWindow: model.contextWindow,
-          preservers: [preserveTodos],
-        }),
-      ]),
+  // A child explicitly opts into these capabilities; no implicit chat-policy bundle.
+  const capabilities = [
+    contextCompaction({
+      summarize: createSummarizer(model),
+      contextWindow: model.contextWindow,
+      preservers: [preserveTodos],
     }),
-  );
+    dateReminder(),
+    loopDetection(),
+  ];
+  const child = createAgentLoop({
+    systemPrompt,
+    model,
+    streamFn: opts.engine.streamFn,
+    messages,
+    tools: opts.tools,
+    maxTurns: 100,
+    ...composeCapabilities(capabilities),
+  });
 
   const usage = zeroUsage();
   let lastText = '';

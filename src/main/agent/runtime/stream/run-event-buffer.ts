@@ -45,18 +45,19 @@ export function createRunEventBuffer() {
    * whatever the producer did. Closure is the point: a reader tailing the log
    * must always see it end, so a producer that throws still seals the stream.
    */
-  async function produce(
+  async function produce<T>(
     threadId: string,
-    producer: (events: RunEventWriter) => Promise<void>,
-  ): Promise<void> {
+    producer: (events: RunEventWriter) => Promise<T>,
+  ): Promise<T> {
     const threadLog = beginLog(threadId);
     const append = (event: AgentSessionEvent) => {
+      if (threadLog.ended) return;
       const envelope: EventEnvelope = { v: 1, seq: threadLog.envelopes.length, event };
       threadLog.envelopes.push(envelope);
       for (const listener of threadLog.listeners) listener(envelope);
     };
     try {
-      await producer({ append });
+      return await producer({ append });
     } finally {
       threadLog.ended = true;
       for (const fn of threadLog.onEnd) fn();

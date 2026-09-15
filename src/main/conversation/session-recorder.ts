@@ -54,6 +54,8 @@ export type SessionRecorder = {
   readonly contextTokens: number | undefined;
   /** Whether the run put anything in the session. */
   readonly wrote: boolean;
+  /** UI id of the assistant message actually stored by this execution. */
+  readonly messageId: string | undefined;
 };
 
 const isAssistant = (m: AgentMessage): m is AgentMessage & AssistantMessage =>
@@ -75,7 +77,9 @@ export function createSessionRecorder(opts: {
   let contextTokens: number | undefined;
   let failure: string | undefined;
   let wrote = false;
+  let messageId: string | undefined;
   let attempt = 0;
+  let operationOpen = opts.resuming ?? false;
   const parked = new Set<string>();
 
   return {
@@ -104,6 +108,7 @@ export function createSessionRecorder(opts: {
           sourceLeafId: await session.getLeafId(),
           intent: { kind: 'run', originalPrompt: [], initialMessages: [] },
         });
+        operationOpen = true;
       }
       if (prompt) {
         // Stored under the id the client minted, not one the store assigns:
@@ -142,6 +147,7 @@ export function createSessionRecorder(opts: {
 
         const entryId = await session.appendMessage(durable(message));
         wrote = true;
+        messageId = runId;
         await session.appendRecord({
           id: randomUUID(),
           lane: 'main',
@@ -175,6 +181,9 @@ export function createSessionRecorder(opts: {
     },
 
     async end(outcome) {
+      // begin may fail before opening the bracket, or after opening it while
+      // writing the prompt. Only close the operation we actually own.
+      if (!operationOpen) return;
       await session.appendRecord({
         id: randomUUID(),
         lane: 'main',
@@ -182,6 +191,7 @@ export function createSessionRecorder(opts: {
         runId,
         outcome,
       });
+      operationOpen = false;
     },
 
     get totals() {
@@ -195,6 +205,9 @@ export function createSessionRecorder(opts: {
     },
     get wrote() {
       return wrote;
+    },
+    get messageId() {
+      return messageId;
     },
   };
 }

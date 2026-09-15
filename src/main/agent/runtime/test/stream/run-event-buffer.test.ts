@@ -33,6 +33,22 @@ const run = (threadId: string, events: AgentSessionEvent[]) =>
   });
 
 describe('run event buffer', () => {
+  test('returns the producer result after closing its stream', async () => {
+    const result = { runId: 'r1', status: 'completed' };
+    expect(await buffer.produce('t-result', async () => result)).toBe(result);
+    expect(await replay('t-result')).toEqual([]);
+  });
+
+  test('ignores late events from background work after the stream closes', async () => {
+    let append!: (event: AgentSessionEvent) => void;
+    await buffer.produce('t-closed', async (writer) => {
+      append = writer.append;
+      append({ type: 'agent_end', willRetry: false });
+    });
+    append({ type: 'notice', name: 'title', payload: { data: { title: 'Late title' } } });
+    expect((await replay('t-closed')).map((frame) => frame.event.type)).toEqual(['agent_end']);
+  });
+
   test('an ended log replays fully with contiguous seq and closes', async () => {
     await run('t-replay', turn('m1'));
     const envelopes = await replay('t-replay');

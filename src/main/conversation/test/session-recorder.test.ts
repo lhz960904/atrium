@@ -79,7 +79,9 @@ test('a turn is readable the moment its message lands, before the run ends', asy
   const { repo, session: s } = await session();
   const recorder = createSessionRecorder({ session: s, runId: 'r1' });
   await recorder.begin(user('hi'));
+  expect(recorder.messageId).toBeUndefined();
   await recorder.observe(ended(assistant([{ type: 'text', text: 'first half' }])));
+  expect(recorder.messageId).toBe('r1');
 
   // No end() yet — this is what a crash mid-turn would leave behind.
   const { entries, records } = await read(s);

@@ -1,293 +1,124 @@
 import { randomUUID } from 'node:crypto';
-import type { Session } from '@earendil-works/pi-agent-core';
-import type { Api, Model } from '@earendil-works/pi-ai';
-import { createSessionRecorder } from '@main/conversation/session-recorder';
 import {
   compactThread,
   openThreadCalls,
-  openThreadSession,
-  resolveThreadWorkspace,
-  runnableHistory,
-  setThreadTitle,
   settleThreadCalls,
   threadHistory,
-  touchThread,
 } from '@main/conversation/threads';
-import { splitUserMessage } from '@main/conversation/ui-messages';
 import type { Db } from '@main/db';
-import { recordUsage } from '@main/db/usage';
-import { getComputerUseHelper } from '@main/platform/computer-use';
-import { getSettings } from '@main/settings/conf';
 import { createLogger } from '@main/utils/log';
-import type { AtriumUIMessage } from '@shared/chat';
-import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
-import { generateThreadTitle } from '../../conversation/title';
 import { foldHistory } from '../context/compaction';
 import { createSummarizer } from '../context/summarize';
-import { mcpManager } from '../mcp/manager';
-import { buildMcpTools } from '../mcp/tool-adapter';
-import { modelRates, resolvePiModel, supportsImageToolResults } from '../providers/models';
-import { piStreamFn } from '../providers/registry';
-import { BackgroundShells, LocalSandbox } from '../sandbox';
-import { getSkills } from '../skills/registry';
-import { getTools } from '../tools';
+import { resolvePiModel } from '../providers/models';
+import { BackgroundShells } from '../sandbox';
 import { preserveActiveSkill } from '../tools/builtins/skill';
 import { preserveTodos } from '../tools/builtins/todo';
-import { executeTurn } from './execute-turn';
-import { createRunCoordinator } from './run-coordinator';
+import { executeRun, type RunInput } from './execute-run';
+import { createRunEventBuffer } from './stream/run-event-buffer';
 import { type Resolution, resultFor } from './tool-resolutions';
 
 const log = createLogger('runner');
 
-/** One turn to run on a thread. */
-export type RunRequest = {
-  threadId: string;
-  providerId: string;
-  modelId: string;
-  permissionMode?: PermissionMode;
-  /** A new user turn to append before the run starts. */
-  userMessage?: AtriumUIMessage;
-  /** Extend the run with this id — answering the calls it parked — instead of
-   *  opening a new one. */
-  resumeRunId?: string;
-  /** What the user decided about the calls the resumed run parked. */
-  resolutions?: Resolution[];
-};
+/** Start or continue a run using the selected provider/model. */
+export type RunRequest = RunInput & { providerId: string; modelId: string };
 
-/** How a turn ended, for a caller that isn't reading the event stream. */
+/** Public outcome for HTTP/scheduler callers; cancellation and waiting aren't errors. */
 export type RunOutcome = {
   runId: string;
   status: 'ok' | 'error';
   error?: string;
-  /** The stored assistant message, when the run produced one. */
   messageId?: string;
 };
 
 export type RunHandle = { runId: string; settled: Promise<RunOutcome> };
-
-/** A thread to fold on demand, and the model that writes the summary. */
 export type CompactRequest = { threadId: string; providerId: string; modelId: string };
-
-/** Continue the run that parked these calls, with what the user decided. */
 export type ResumeRequest = Omit<RunRequest, 'userMessage' | 'resumeRunId' | 'resolutions'> & {
   runId: string;
   decisions: Resolution[];
 };
 
-/**
- * The composition root for a turn: everything a run needs — workspace, sandbox,
- * model, tools, permissions, persistence — is assembled here and nowhere else.
- *
- * It exists so that starting a turn is a function call rather than an HTTP
- * request. The chat endpoint and the scheduler are both callers; neither can
- * see how a run is put together, and neither has to reach the other through the
- * loopback interface to start one.
- */
 export type Runner = {
   abort(threadId: string): boolean;
   isRunning(threadId: string): boolean;
   runningThreadIds(): string[];
   subscribe(threadId: string, fromSeq: number): ReadableStream<Uint8Array> | null;
-  /**
-   * Start a turn. Returns once the thread's event log exists — a caller can
-   * subscribe to the stream immediately — with a promise for the outcome.
-   * Throws synchronously when the request can't run at all (an unknown model).
-   */
+  /** Returns once the stream exists. Invalid models and busy threads throw synchronously. */
   start(request: RunRequest): RunHandle;
-  /**
-   * Answer the calls a run parked and let it continue. Null when none of the
-   * decisions name a call that is still open — the session is the authority, so
-   * a client working from a stale view can only ask for less than it thinks.
-   */
+  /** Null when none of the decisions address a still-open call. */
   resume(request: ResumeRequest): Promise<RunHandle | null>;
-  /**
-   * Record decisions without running the model — a cancelled clarification,
-   * where the user has taken the turn back and will send again themselves. The
-   * calls still have to be closed, or the next request's history carries an
-   * unpaired call. Reports how many were settled.
-   */
+  /** Settle denials/answers without running the model; returns the number written. */
   settle(threadId: string, decisions: Resolution[]): Promise<number>;
-  /**
-   * Fold a thread's history now, at the user's request. Reports whether
-   * anything was folded — a conversation shorter than the floor folds nothing.
-   */
   compact(request: CompactRequest): Promise<boolean>;
   dispose(): void;
 };
 
 /**
- * Resolve the auto-review reviewer model. Prefers the dedicated setting; when
- * unset, falls back to this turn's chat model so auto-review works out of the
- * box. Returns undefined (→ auto-review prompts) when nothing resolves — a
- * removed model.
+ * Application-lifetime run management: admission, cancellation, replay and shared
+ * shells. All per-run assembly and recording belongs to executeRun.
  */
-function resolveReviewer(
-  db: Db,
-  fallback: { providerId: string; modelId: string },
-): Model<Api> | undefined {
-  const configured = getSettings('permissions.reviewerModel');
-  const picked = configured ?? fallback;
-  try {
-    const model = resolvePiModel(db, picked.providerId, picked.modelId);
-    log.info(
-      `reviewer = ${picked.providerId}/${picked.modelId}${configured ? '' : ' (inherited chat model)'}`,
-    );
-    return model;
-  } catch (err) {
-    log.info(`reviewer unresolved (${picked.providerId}/${picked.modelId}) → prompts: ${err}`);
-    return undefined;
-  }
-}
-
-/**
- * When a run first opened. A continuation reports the moment the run began, not
- * the moment it resumed, so the card it extends doesn't appear to restart.
- */
-async function runStartedAt(session: Session, runId: string): Promise<number> {
-  const [started] = await session.findRecords({ type: 'operation_started', runId, limit: 1 });
-  return started?.timestamp ?? Date.now();
-}
-
 export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner {
   const { db } = deps;
-  // Long-running shells (dev servers, watchers) outlive a turn, so the registry
-  // is one instance held for the runner's lifetime, not per-run.
   const bgShells = new BackgroundShells();
-  const coordinator = createRunCoordinator();
+  const active = new Map<string, AbortController>();
+  const events = createRunEventBuffer();
+  let disposed = false;
 
-  function start(request: RunRequest): RunHandle {
-    const { threadId, providerId, modelId } = request;
-    coordinator.assertAvailable(threadId);
-    // The thread's workspace: its project's directory, or the projectless
-    // fallback. Drives the sandbox and the tools below.
-    const workspaceRoot = resolveThreadWorkspace(db, threadId, deps.projectlessRoot);
+  function start({ providerId, modelId, ...input }: RunRequest): RunHandle {
+    const { threadId } = input;
+    if (disposed) throw new Error('Runner is disposed');
+    if (active.has(threadId)) throw new Error(`Thread ${threadId} is already running`);
+    // Admission stays synchronous, before replacing this thread's replay buffer.
+    const model = resolvePiModel(db, providerId, modelId);
+    const runId = input.resumeRunId ?? randomUUID();
     const abort = new AbortController();
-    const sandbox = new LocalSandbox(workspaceRoot);
-    const skills = getSkills();
-    const mode = request.permissionMode ?? DEFAULT_PERMISSION_MODE;
-    const computerUse =
-      process.platform === 'darwin' && getSettings('computerUse.enabled')
-        ? getComputerUseHelper()
-        : undefined;
-    const piModel = resolvePiModel(db, providerId, modelId);
-    const supportsImages = supportsImageToolResults(piModel);
-    // A continuation extends the run it answers, so the model's next turns
-    // land in that same stored run instead of opening a second one.
-    const runId = request.resumeRunId ?? randomUUID();
-    // Resolve the reviewer only when auto-review can actually use it; a
-    // misconfigured/removed model resolves to undefined, so auto-review simply
-    // falls back to prompting rather than failing the turn.
-    const reviewerModel =
-      mode === 'auto-review' ? resolveReviewer(db, { providerId, modelId }) : undefined;
+    active.set(threadId, abort);
 
-    let result: Awaited<ReturnType<typeof executeTurn>> | undefined;
-    const finished = coordinator.start(
-      threadId,
-      async (events) => {
-        // The conversation lives in the thread's session, created with its
-        // first turn. Opening the run and appending the turn that started it
-        // happen before the history is read, so the loop sees them.
-        const session = await openThreadSession(db, threadId, workspaceRoot);
-        const recorder = createSessionRecorder({
-          session,
+    const settled = events
+      .produce(threadId, ({ append }) =>
+        executeRun({
+          input,
           runId,
-          resuming: request.resumeRunId !== undefined,
-        });
-        const prompt = request.userMessage
-          ? {
-              id: request.userMessage.id,
-              message: splitUserMessage(request.userMessage).message,
-            }
-          : undefined;
-        await recorder.begin(prompt);
-        // Sending counts as reading: a thread must never flash unread from
-        // the user's own message.
-        touchThread(db, threadId, { markRead: prompt !== undefined });
-        const openedAt = await runStartedAt(session, runId);
-
-        result = await executeTurn({
-          runId,
-          providerId,
-          modelId,
-          piModel,
-          streamFn: piStreamFn,
-          messages: runnableHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' })),
-          workspaceRoot,
-          threadId,
+          model,
           db,
-          sandbox,
-          skills,
-          permissionMode: mode,
-          permission: { mode, rules: getSettings('permissions.trustRules'), reviewerModel },
-          resolutions: request.resolutions,
-          recorder,
-          openedAt,
-          persistCheckpoint: (fold) => compactThread(db, threadId, fold),
-          abortSignal: abort.signal,
-          emit: events.append,
-          recordUsage: (u) =>
-            recordUsage(db, { threadId, kind: 'chat', ...u }, modelRates(piModel)),
-          generateTitle: getSettings('general.autoGenerateTitle')
-            ? ({ messages, model }) =>
-                generateThreadTitle({
-                  messages,
-                  model,
-                  onTitle: (title) => {
-                    setThreadTitle(db, threadId, title);
-                    events.append({ type: 'notice', name: 'title', payload: { data: { title } } });
-                  },
-                })
-            : undefined,
-          onSettled: () => computerUse?.hideOverlay(),
-          buildTools: (run) =>
-            getTools({
-              sandbox,
-              workspaceRoot,
-              run,
-              skills,
-              // A nested loop (the task tool) runs on the same handles as this turn.
-              engine: { model: piModel, streamFn: piStreamFn },
-              bgShells,
-              supportsImageToolResults: supportsImages,
-              computerUse,
-              mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
-                supportsImageToolResults: supportsImages,
-                workspaceRoot,
-              }),
-            }),
-        });
-      },
-      abort,
-    );
-
-    return {
-      runId,
-      settled: finished.then(
-        () => ({
-          runId,
-          status: result?.status ?? 'error',
-          error: result?.error ?? (result ? undefined : 'the run ended without reporting'),
-          messageId: result?.stored ? runId : undefined,
+          projectlessRoot: deps.projectlessRoot,
+          bgShells,
+          signal: abort.signal,
+          emit: append,
         }),
-        (err): RunOutcome => {
-          const error = err instanceof Error ? err.message : String(err);
-          log.warn(`run ${runId} failed: ${error}`);
-          return { runId, status: 'error', error };
+      )
+      .then(
+        (result): RunOutcome => ({
+          runId: result.runId,
+          status: result.status === 'failed' ? 'error' : 'ok',
+          error: result.error,
+          messageId: result.messageId,
+        }),
+        (error): RunOutcome => {
+          const errorText = error instanceof Error ? error.message : String(error);
+          log.warn(`run ${runId} failed: ${errorText}`);
+          return { runId, status: 'error', error: errorText };
         },
-      ),
-    };
+      )
+      .finally(() => active.delete(threadId));
+
+    return { runId, settled };
   }
 
   return {
     start,
-    abort: coordinator.abort,
-    isRunning: coordinator.isRunning,
-    runningThreadIds: coordinator.runningThreadIds,
-    subscribe: coordinator.subscribe,
+    abort(threadId) {
+      const controller = active.get(threadId);
+      if (!controller) return false;
+      controller.abort();
+      return true;
+    },
+    isRunning: (threadId) => active.has(threadId),
+    runningThreadIds: () => [...active.keys()],
+    subscribe: events.subscribe,
 
     async resume({ threadId, runId, decisions, ...rest }) {
       const open = await openThreadCalls(db, threadId);
-      const resolutions = decisions.filter((d) => open.has(d.toolCallId));
+      const resolutions = decisions.filter((decision) => open.has(decision.toolCallId));
       if (resolutions.length === 0) return null;
       return start({ ...rest, threadId, resumeRunId: runId, resolutions });
     },
@@ -305,27 +136,23 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
 
     async compact({ threadId, providerId, modelId }) {
       const history = await threadHistory(db, threadId);
-      const piModel = resolvePiModel(db, providerId, modelId);
-      // Forced compaction is aggressive on purpose: the automatic path keeps a
-      // quarter of the window, so a short chat folds nothing — but the user
-      // asked to compact now, so only the recent floor is kept.
+      const model = resolvePiModel(db, providerId, modelId);
       const folded = await foldHistory({
         messages: history,
-        summarize: createSummarizer(piModel),
-        contextWindow: piModel.contextWindow,
+        summarize: createSummarizer(model),
+        contextWindow: model.contextWindow,
         preservers: [preserveTodos, preserveActiveSkill],
+        // User-requested compaction keeps only the recent floor.
         keepRecentTokens: 0,
       });
       if (!folded) return false;
       await compactThread(db, threadId, folded);
-      log.info(
-        `forced compaction folded ${history.length - folded.retainedTail.length} of ${history.length} messages`,
-      );
       return true;
     },
 
     dispose() {
-      coordinator.dispose();
+      disposed = true;
+      for (const controller of active.values()) controller.abort();
       bgShells.killAll();
     },
   };

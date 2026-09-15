@@ -3,7 +3,9 @@ import type { AgentOptions } from '@earendil-works/pi-agent-core';
 import { createModels, fauxAssistantMessage, fauxProvider, Type } from '@earendil-works/pi-ai';
 import { composeContext } from '../../context/compose';
 import { type AgentLoopOptions, createAgentLoop } from '../agent-loop';
-import { withChatPolicies } from '../chat-policies';
+import { composeCapabilities } from '../capabilities/compose';
+import { dateReminder } from '../capabilities/context';
+import { loopDetection } from '../capabilities/loop-detection';
 import { composeBeforeToolCall } from '../tool-checks';
 
 test('loop accepts pi-compatible single callbacks', () => {
@@ -177,7 +179,7 @@ test.each([
   expect(faux.state.callCount).toBe(1);
 });
 
-test('chat policy retains caller prepareNextTurn context updates', async () => {
+test('capability composition retains caller prepareNextTurn context updates', async () => {
   let prepared = 0;
   const { faux, options } = fixture({
     prepareNextTurn: async ({ context }) => {
@@ -185,7 +187,15 @@ test('chat policy retains caller prepareNextTurn context updates', async () => {
       return { context: { ...context, systemPrompt: 'updated system', tools: [] } };
     },
   });
-  const loop = createAgentLoop(withChatPolicies(options));
+  const loop = createAgentLoop({
+    ...options,
+    maxTurns: 100,
+    ...composeCapabilities([
+      { name: 'caller', prepareNextTurn: options.prepareNextTurn },
+      dateReminder(),
+      loopDetection(),
+    ]),
+  });
   faux.setResponses([
     fauxAssistantMessage(
       [{ type: 'toolCall', id: 'missing', name: 'unavailable', arguments: {} }],
