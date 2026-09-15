@@ -30,14 +30,16 @@ function sseBody(events: AgentSessionEvent[]): string {
   return events.map((event, seq) => `data: ${JSON.stringify({ v: 1, seq, event })}\n\n`).join('');
 }
 
-const open = (messageId: string): AgentSessionEvent[] => [
+const open = (runId: string): AgentSessionEvent[] => [
+  { type: 'run_started', runId },
   { type: 'agent_start' },
-  { type: 'message_start', messageId, message: assistant([]) },
+  { type: 'message_start', message: assistant([]) },
 ];
 
-const close = (messageId: string, content: Content[]): AgentSessionEvent[] => [
-  { type: 'message_end', messageId, message: assistant(content) },
-  { type: 'agent_end', willRetry: false },
+const close = (content: Content[]): AgentSessionEvent[] => [
+  { type: 'message_end', message: assistant(content) },
+  { type: 'agent_end' },
+  { type: 'run_finished', status: 'completed' },
 ];
 
 const sayText = (messageId: string, value: string): AgentSessionEvent[] => [
@@ -54,7 +56,7 @@ const sayText = (messageId: string, value: string): AgentSessionEvent[] => [
     type: 'message_update',
     assistantMessageEvent: { type: 'text_end', contentIndex: 0, content: value },
   } as AgentSessionEvent,
-  ...close(messageId, [{ type: 'text', text: value }]),
+  ...close([{ type: 'text', text: value }]),
 ];
 
 type Call = { url: string; init?: RequestInit };
@@ -190,7 +192,7 @@ describe('sending', () => {
           sseBody([
             ...open('a1'),
             { type: 'notice', name: 'title', payload: { data: { title: '新标题' } } },
-            ...close('a1', []),
+            ...close([]),
           ]),
         ),
     );
@@ -232,7 +234,7 @@ describe('interactions', () => {
         result: { content: [], details: { stdout: 'ok' } },
         isError: false,
       },
-      ...close('a1', []),
+      ...close([]),
     );
     stream.close();
     await untilIdle(chat);
@@ -348,7 +350,10 @@ describe('lifecycle', () => {
     const stopping = chat.stop();
     await until(() => calls.some((call) => call.url === 'http://test/api/chat/t1/abort'));
     expect(chat.isBusy).toBe(true);
-    stream.push({ type: 'agent_end', willRetry: false });
+    stream.push(
+      { type: 'agent_end' },
+      { type: 'run_finished', status: 'aborted', reason: 'user_cancelled' },
+    );
     stream.close();
     await stopping;
     const snap = chat.getSnapshot();
@@ -366,6 +371,30 @@ describe('lifecycle', () => {
     expect(chat.isBusy).toBe(true);
     stream.close();
     await untilIdle(chat);
+  });
+
+  test('a stream that ends before the run finishes is not reported as success', async () => {
+    const stream = liveStream();
+    const { chat } = liveChat(stream);
+    chat.sendMessage({ text: 'x' });
+    stream.push(
+      ...open('a1'),
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_start', contentIndex: 0 },
+      } as AgentSessionEvent,
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '半句' },
+      } as AgentSessionEvent,
+    );
+    await until(() => chat.getSnapshot().messages.length === 2);
+    // The connection dropped: the run may still be going, so this is not a finish.
+    stream.close();
+    await untilIdle(chat);
+    const snap = chat.getSnapshot();
+    expect(snap.status).toBe('error');
+    expect(snap.messages[1].parts.at(-1)).toMatchObject({ type: 'text', text: '半句' });
   });
 
   test('setMessages materializes and replaces the list', async () => {

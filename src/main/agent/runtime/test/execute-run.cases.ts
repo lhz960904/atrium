@@ -90,8 +90,10 @@ test('owns begin, message persistence and end; the wire carries deltas and a fin
   });
   const messages = await threadMessages(f.db, 't1');
   expect(messages.map((message) => message.id)).toEqual(['u1', 'r1']);
-  expect(events.find((event) => event.type === 'message_start')).toMatchObject({ messageId: 'r1' });
-  expect(events.at(-1)?.type).toBe('agent_end');
+  expect(events[0]).toEqual({ type: 'run_started', runId: 'r1' });
+  expect(events.some((event) => 'messageId' in event)).toBe(false);
+  expect(events.filter((event) => event.type === 'agent_end')).toHaveLength(1);
+  expect(events.at(-1)).toEqual({ type: 'run_finished', status: 'completed' });
   const updates = events.filter((event) => event.type === 'message_update');
   expect(updates.length).toBeGreaterThan(0);
   for (const event of updates) expect(event.assistantMessageEvent).not.toHaveProperty('partial');
@@ -138,7 +140,13 @@ test('a preparation failure closes the started recording as failed', async () =>
   expect(result.messageId).toBeUndefined();
   expect(f.faux.state.callCount).toBe(0);
   expect(records.find((r) => r.type === 'operation_finished')).toMatchObject({ outcome: 'failed' });
-  expect(events.at(-1)?.type).toBe('agent_end');
+  // A run that never reached the loop has no engine events, but still ends.
+  expect(events.some((event) => event.type === 'agent_start')).toBe(false);
+  expect(events.at(-1)).toEqual({
+    type: 'run_finished',
+    status: 'failed',
+    error: 'tool setup failed',
+  });
 });
 
 test('context loading failure also closes the recording', async () => {
@@ -171,7 +179,7 @@ test('a provider error is a failed result, without inventing a stored assistant 
   expect(result).toMatchObject({ status: 'failed', error: 'Connection error.' });
   expect(result.messageId).toBeUndefined();
   expect(records.find((r) => r.type === 'operation_finished')).toMatchObject({ outcome: 'failed' });
-  expect(events.at(-1)?.type).toBe('agent_end');
+  expect(events.at(-1)).toMatchObject({ type: 'run_finished', status: 'failed' });
 });
 
 test('an answered clarification is the single real result of one operation', async () => {
@@ -225,6 +233,11 @@ test('default permissions ask before a boundary crossing and never run it unansw
     outcome: 'aborted',
   });
   expect(await session?.findOpenOperations('main')).toEqual([]);
+  expect(events.at(-1)).toEqual({
+    type: 'run_finished',
+    status: 'aborted',
+    reason: 'user_cancelled',
+  });
 });
 
 test('a decision that cannot be recorded stops the run instead of approving it', async () => {
@@ -281,7 +294,8 @@ test('abort during preparation closes the run and never starts pi', async () => 
   expect(result.error).toBeUndefined();
   expect(f.faux.state.callCount).toBe(0);
   expect(await session?.findOpenOperations('main')).toEqual([]);
-  expect(events.at(-1)?.type).toBe('agent_end');
+  // Cancelled before a reason was set, so the run only knows it was interrupted.
+  expect(events.at(-1)).toEqual({ type: 'run_finished', status: 'aborted', reason: 'interrupted' });
 });
 
 test('abort during a tool reaches the sandbox and closes the operation after its result lands', async () => {
@@ -313,7 +327,7 @@ test('abort during a tool reaches the sandbox and closes the operation after its
   expect(
     entries?.some((entry) => entry.type === 'message' && entry.message.role === 'toolResult'),
   ).toBe(true);
-  expect(events.at(-1)?.type).toBe('agent_end');
+  expect(events.at(-1)).toMatchObject({ type: 'run_finished', status: 'aborted' });
 });
 
 test('a recording close failure is reported but does not prevent the final event', async () => {
@@ -327,7 +341,9 @@ test('a recording close failure is reported but does not prevent the final event
   });
   const { result, events } = await run(f);
   expect(result).toMatchObject({ status: 'failed', error: 'close write failed' });
-  expect(events.at(-1)?.type).toBe('agent_end');
+  // The loop finished; only the app's own settlement failed.
+  expect(events.filter((event) => event.type === 'agent_end')).toHaveLength(1);
+  expect(events.at(-1)).toMatchObject({ type: 'run_finished', status: 'failed' });
   // The database could not record completion; leave evidence for recovery.
   expect(await session.findOpenOperations('main')).toHaveLength(1);
 });
@@ -353,7 +369,7 @@ test('bookkeeping failure still ends the recording and stream', async () => {
   expect(result.status).toBe('failed');
   expect(result.error).toContain('usage write failed');
   expect(records.find((r) => r.type === 'operation_finished')).toMatchObject({ outcome: 'failed' });
-  expect(events.at(-1)?.type).toBe('agent_end');
+  expect(events.at(-1)).toMatchObject({ type: 'run_finished', status: 'failed' });
 });
 
 test.skipIf(process.platform !== 'darwin')(
@@ -375,7 +391,7 @@ test.skipIf(process.platform !== 'darwin')(
   },
 );
 
-test('a late title is saved without emitting after agent_end', async () => {
+test('a late title is saved without emitting after the run finished', async () => {
   const f = await runtimeFixture();
   f.config['general.autoGenerateTitle'] = true;
   const ready = deferred<Parameters<typeof title.generateThreadTitle>[0]>();
@@ -385,5 +401,5 @@ test('a late title is saved without emitting after agent_end', async () => {
   (await ready.promise).onTitle('Late title');
   expect(f.raw.query('SELECT title FROM threads').get()).toEqual({ title: 'Late title' });
   expect(events).toHaveLength(count);
-  expect(events.at(-1)?.type).toBe('agent_end');
+  expect(events.at(-1)?.type).toBe('run_finished');
 });

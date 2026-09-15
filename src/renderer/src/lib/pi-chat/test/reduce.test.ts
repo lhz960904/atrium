@@ -34,14 +34,16 @@ const assistant = (content: Content[]): AssistantMessage => ({
 const update = (assistantMessageEvent: unknown): AgentSessionEvent =>
   ({ type: 'message_update', assistantMessageEvent }) as AgentSessionEvent;
 
-const open = (messageId = 'm1'): AgentSessionEvent[] => [
+const open = (runId = 'm1'): AgentSessionEvent[] => [
+  { type: 'run_started', runId },
   { type: 'agent_start' },
-  { type: 'message_start', messageId, message: assistant([]) },
+  { type: 'message_start', message: assistant([]) },
 ];
 
-const close = (content: Content[], messageId = 'm1'): AgentSessionEvent[] => [
-  { type: 'message_end', messageId, message: assistant(content) },
-  { type: 'agent_end', willRetry: false },
+const close = (content: Content[]): AgentSessionEvent[] => [
+  { type: 'message_end', message: assistant(content) },
+  { type: 'agent_end' },
+  { type: 'run_finished', status: 'completed' },
 ];
 
 const text = (contentIndex: number, value: string) => [
@@ -130,12 +132,11 @@ describe('tool turns', () => {
       toolEnd('t1', 'bash', { stdout: 'a.txt' }),
       {
         type: 'message_end',
-        messageId: 'm1',
         message: assistant([
           { type: 'toolCall', id: 't1', name: 'bash', arguments: { command: 'ls' } },
         ] as Content[]),
       },
-      { type: 'message_start', messageId: 'm1', message: assistant([]) },
+      { type: 'message_start', message: assistant([]) },
       ...text(0, 'done'),
       ...close([{ type: 'text', text: 'done' }]),
     ]);
@@ -204,7 +205,7 @@ describe('tool turns', () => {
     });
   });
 
-  test('errored executions surface errorText', () => {
+  test('a failed execution shows the text the tool returned', () => {
     const { message } = assemble([
       ...open(),
       ...toolCall(0, 't1', 'bash', {}),
@@ -212,12 +213,29 @@ describe('tool turns', () => {
         type: 'tool_execution_end',
         toolCallId: 't1',
         toolName: 'bash',
-        result: { content: [{ type: 'text', text: 'exit 1' }], details: { errorText: 'exit 1' } },
+        // pi puts the reason in content; details stay whatever the tool set.
+        result: { content: [{ type: 'text', text: 'exit 1' }], details: {} },
         isError: true,
       },
       ...close([{ type: 'toolCall', id: 't1', name: 'bash', arguments: {} }] as Content[]),
     ]);
     expect(message?.parts[1]).toMatchObject({ state: 'output-error', errorText: 'exit 1' });
+  });
+
+  test('a failure with nothing to quote still says something', () => {
+    const { message } = assemble([
+      ...open(),
+      ...toolCall(0, 't1', 'bash', {}),
+      {
+        type: 'tool_execution_end',
+        toolCallId: 't1',
+        toolName: 'bash',
+        result: { content: [], details: {} },
+        isError: true,
+      },
+      ...close([{ type: 'toolCall', id: 't1', name: 'bash', arguments: {} }] as Content[]),
+    ]);
+    expect(message?.parts[1]).toMatchObject({ state: 'output-error', errorText: 'Tool failed.' });
   });
 });
 
@@ -328,14 +346,25 @@ describe('run envelope', () => {
     expect(message?.metadata).toMatchObject({ createdAt: 111, durationMs: 5000, totalTokens: 9 });
   });
 
-  test('stream errors surface on the snapshot and the run still ends', () => {
+  test('the loop ending is not the run ending', () => {
+    const assembler = new RunAssembler();
+    for (const event of [...open(), { type: 'agent_end' } as AgentSessionEvent]) {
+      assembler.apply(event);
+    }
+    // Persistence, usage and cleanup still have to land.
+    expect(assembler.snapshot().status).toBe('streaming');
+    assembler.apply({ type: 'run_finished', status: 'completed' });
+    expect(assembler.snapshot().status).toBe('done');
+  });
+
+  test('a failed run reports the reason its own event carries', () => {
     const { status, error } = assemble([
       ...open(),
-      { type: 'notice', name: 'stream-error', payload: { errorText: 'rate limited' } },
-      { type: 'agent_end', willRetry: false },
+      { type: 'agent_end' },
+      { type: 'run_finished', status: 'failed', error: 'usage write failed' },
     ]);
     expect(status).toBe('done');
-    expect(error).toBe('rate limited');
+    expect(error).toBe('usage write failed');
   });
 
   test('an aborted run keeps whatever streamed', () => {
@@ -343,7 +372,8 @@ describe('run envelope', () => {
       ...open(),
       update({ type: 'text_start', contentIndex: 0 }),
       update({ type: 'text_delta', contentIndex: 0, delta: '写到一半' }),
-      { type: 'agent_end', willRetry: false },
+      { type: 'agent_end' },
+      { type: 'run_finished', status: 'aborted', reason: 'user_cancelled' },
     ]);
     expect(status).toBe('done');
     expect(message?.parts.at(-1)).toMatchObject({ type: 'text', text: '写到一半' });
@@ -354,14 +384,14 @@ describe('run envelope', () => {
       ...open(),
       {
         type: 'message_end',
-        messageId: 'm1',
         message: {
           ...assistant([]),
           stopReason: 'aborted',
           errorMessage: 'This operation was aborted',
         },
       },
-      { type: 'agent_end', willRetry: false },
+      { type: 'agent_end' },
+      { type: 'run_finished', status: 'aborted', reason: 'user_cancelled' },
     ]);
     expect(status).toBe('done');
     expect(error).toBeUndefined();
@@ -372,10 +402,10 @@ describe('run envelope', () => {
       ...open(),
       {
         type: 'message_end',
-        messageId: 'm1',
         message: { ...assistant([]), stopReason: 'error', errorMessage: 'rate limited' },
       },
-      { type: 'agent_end', willRetry: false },
+      { type: 'agent_end' },
+      { type: 'run_finished', status: 'failed', error: 'rate limited' },
     ]);
     expect(error).toBe('rate limited');
   });

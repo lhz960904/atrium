@@ -10,18 +10,9 @@ import type {
 
 /**
  * pi's in-process `AgentEvent` → the wire's `AgentSessionEvent`. Near-identity:
- * the only work is the deviations the frozen protocol documents, all of them
- * serialization-boundary decisions rather than engine artifacts.
- *
- * - assistant stream events drop pi's cumulative `partial` (and `message_update`
- *   its partial `message`): a frame per delta that carries the whole message so
- *   far is O(message²) on the wire, and message_end is authoritative anyway;
- * - `toolcall_start` inlines the call id and name that pi only exposes through
- *   `partial`, so a renderer can open the tool card while arguments stream;
- * - `turn_end` drops message/toolResults and `agent_end` its messages array —
- *   all already delivered by message_end / tool_execution_end;
- * - message_start/message_end carry the run id as `messageId`: pi messages have
- *   no identity, and both the renderer and the stored rows reconcile by it.
+ * the only work is the payload deviations `shared/protocol/events.ts` declares,
+ * all of them transport decisions rather than engine artifacts. A run's own
+ * identity and settlement are separate events the run emits around this.
  */
 
 /** The tool call being opened, read off the partial pi only exposes there. */
@@ -74,12 +65,8 @@ function projectAssistantEvent(event: PiAssistantMessageEvent): AssistantMessage
   }
 }
 
-/**
- * Project one pi event. Returns nothing for events the wire doesn't carry.
- * `messageId` is the run's id — every message in a run shares it, which is what
- * makes a run one assistant message to the renderer and one row group in the DB.
- */
-export function projectAgentEvent(event: AgentEvent, messageId: string): AgentSessionEvent | null {
+/** Project one pi event. Returns nothing for events the wire doesn't carry. */
+export function projectAgentEvent(event: AgentEvent): AgentSessionEvent | null {
   switch (event.type) {
     case 'agent_start':
       return { type: 'agent_start' };
@@ -88,12 +75,15 @@ export function projectAgentEvent(event: AgentEvent, messageId: string): AgentSe
     case 'turn_end':
       return { type: 'turn_end' };
     case 'agent_end':
-      // pi retries inside the loop, so a run that reaches agent_end is final.
-      return { type: 'agent_end', willRetry: false };
+      // The loop is done; the run's own bookkeeping still has to finish, which
+      // is what run_finished reports.
+      return { type: 'agent_end' };
     case 'message_start':
-      return { type: 'message_start', message: event.message as Message, messageId };
     case 'message_end':
-      return { type: 'message_end', message: event.message as Message, messageId };
+      // pi announces every appended message; the user's arrived in the request
+      // body and a tool result comes through tool_execution_end.
+      if (event.message.role !== 'assistant') return null;
+      return { type: event.type, message: event.message as Message };
     case 'message_update':
       return {
         type: 'message_update',

@@ -31,7 +31,7 @@ flowchart TD
 | `pending-interactions.ts` | 一次运行中等待用户的请求：决定与停止的竞争、重复提交识别；不访问存储 |
 | `../skills/scope.ts` | 根据激活 Skill 的 allowed-tools 筛选工具 |
 | `../context/` | 统一拥有上下文变换、注入、摘要、压缩和 token 估算 |
-| `stream/` | pi 事件投影、工具错误展示、SSE 编码与内存重放 |
+| `stream/` | pi 事件投影、SSE 编码与内存重放 |
 | `test/` | Runtime 测试；`stream/` 测试保留对应层级，上下文测试位于 `agent/context/test/` |
 
 ## 生命周期约束
@@ -43,7 +43,7 @@ flowchart TD
 - `executeRun()` 统一拥有 recorder 的 begin/observe/end，准备失败、模型失败和取消都进入收尾。审批和询问在运行内等待，用户决定只解除原调用的等待。
 - usage、浮层清理、operation 关闭分别尝试，后一项失败不覆盖原错误；底层存储不可写时保留未结束记录供恢复，并向调用方报告失败。
 - `RunResult` 内部分为 completed / aborted / failed；Runner 仅在公共接口映射成现有 ok/error。messageId 来自实际存储的 assistant 消息。
-- `agent_end` 在收尾后发出。后台标题仍可更新会话，但不会在结束后追加流事件；缓冲区也拒绝关闭后的追加。
+- pi 的 `agent_end` 原样投影转发；`run_finished` 才表示应用收尾完成，`run_started` 是流上的第一个事件。后台标题仍可更新会话，但不会在结束后追加流事件；缓冲区也拒绝关闭后的追加。
 - `dispose()` 中止当前 Runner 的运行，并阻止它启动新运行。
 
 ## 装配边界

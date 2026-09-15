@@ -7,13 +7,15 @@ beforeEach(() => {
   buffer = createRunEventBuffer();
 });
 
-const turn = (messageId: string): AgentSessionEvent[] => [
+const turn = (runId: string): AgentSessionEvent[] => [
+  { type: 'run_started', runId },
   { type: 'agent_start' },
   { type: 'turn_start' },
-  { type: 'message_start', messageId, message: { role: 'user', content: '', timestamp: 0 } },
-  { type: 'message_end', messageId, message: { role: 'user', content: 'hi', timestamp: 0 } },
+  { type: 'message_start', message: { role: 'user', content: '', timestamp: 0 } },
+  { type: 'message_end', message: { role: 'user', content: 'hi', timestamp: 0 } },
   { type: 'turn_end' },
-  { type: 'agent_end', willRetry: false },
+  { type: 'agent_end' },
+  { type: 'run_finished', status: 'completed' },
 ];
 
 async function readEnvelopes(sse: ReadableStream<Uint8Array>): Promise<EventEnvelope[]> {
@@ -43,7 +45,7 @@ describe('run event buffer', () => {
     let append!: (event: AgentSessionEvent) => void;
     await buffer.produce('t-closed', async (writer) => {
       append = writer.append;
-      append({ type: 'agent_end', willRetry: false });
+      append({ type: 'agent_end' });
     });
     append({ type: 'notice', name: 'title', payload: { data: { title: 'Late title' } } });
     expect((await replay('t-closed')).map((frame) => frame.event.type)).toEqual(['agent_end']);
@@ -53,8 +55,8 @@ describe('run event buffer', () => {
     await run('t-replay', turn('m1'));
     const envelopes = await replay('t-replay');
     expect(envelopes.map((e) => e.seq)).toEqual(envelopes.map((_, i) => i));
-    expect(envelopes[0]?.event.type).toBe('agent_start');
-    expect(envelopes.at(-1)?.event.type).toBe('agent_end');
+    expect(envelopes[0]?.event.type).toBe('run_started');
+    expect(envelopes.at(-1)?.event.type).toBe('run_finished');
   });
 
   test('replay from a seq skips everything at or before it', async () => {
@@ -69,7 +71,7 @@ describe('run event buffer', () => {
       release = resolve;
     });
     const running = buffer.produce('t-live', async (log) => {
-      log.append({ type: 'agent_start' });
+      log.append({ type: 'run_started', runId: 'm1' });
       await gate;
       for (const event of turn('m1').slice(1)) log.append(event);
     });
@@ -82,7 +84,7 @@ describe('run event buffer', () => {
 
     const envelopes = await readEnvelopes(sse as ReadableStream<Uint8Array>);
     expect(envelopes.map((e) => e.seq)).toEqual(envelopes.map((_, i) => i));
-    expect(envelopes.at(-1)?.event.type).toBe('agent_end');
+    expect(envelopes.at(-1)?.event.type).toBe('run_finished');
   });
 
   test('a run that threw still seals the log', async () => {
@@ -103,9 +105,9 @@ describe('run event buffer', () => {
     await run('t-super', turn('m2'));
     const envelopes = await replay('t-super');
     expect(envelopes[0]?.seq).toBe(0);
-    const starts = envelopes.filter((e) => e.event.type === 'message_start');
+    const starts = envelopes.filter((e) => e.event.type === 'run_started');
     expect(starts).toHaveLength(1);
-    expect(starts[0]?.event).toMatchObject({ messageId: 'm2' });
+    expect(starts[0]?.event).toMatchObject({ runId: 'm2' });
   });
 
   test('unknown threads subscribe to null', () => {

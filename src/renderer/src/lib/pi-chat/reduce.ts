@@ -8,6 +8,7 @@ import type {
   ToolCall,
   ToolExecutionResult,
 } from '@shared/protocol';
+import { contentText } from '@shared/protocol';
 
 /**
  * Rebuilds the run's assistant message, in the exact part shape the existing
@@ -61,8 +62,10 @@ export class RunAssembler {
 
   apply(event: AgentSessionEvent): void {
     switch (event.type) {
+      case 'run_started':
+        this.id = event.runId;
+        break;
       case 'message_start': {
-        if (this.id === '' && event.messageId) this.id = event.messageId;
         // Mirror the old per-step markers (every step opened with one).
         this.parts.push({ type: 'step-start' });
         this.started = true;
@@ -104,7 +107,11 @@ export class RunAssembler {
         this.applyNotice(event.name, event.payload);
         break;
       case 'agent_end':
+        // The loop is done, but the run's persistence and cleanup are not.
+        break;
+      case 'run_finished':
         this.ended = true;
+        if (event.status === 'failed') this.failure = event.error;
         break;
       default:
         // turn brackets carry no render state; unknown events are future protocol.
@@ -278,7 +285,6 @@ export class RunAssembler {
     result: ToolExecutionResult,
     isError: boolean,
   ): void {
-    const details = result?.details as LoosePart | undefined;
     if (!isError) {
       this.patchTool(toolCallId, toolName, {
         state: 'output-available',
@@ -290,16 +296,13 @@ export class RunAssembler {
     if (this.denied.has(toolCallId)) return;
     this.patchTool(toolCallId, toolName, {
       state: 'output-error',
-      errorText: typeof details?.errorText === 'string' ? details.errorText : 'Tool failed.',
+      errorText: contentText(result.content).trim() || 'Tool failed.',
     });
   }
 
   private applyNotice(name: string, payload: unknown): void {
     if (name === 'message-metadata' && payload && typeof payload === 'object') {
       this.metadata = { ...this.metadata, ...(payload as Record<string, unknown>) };
-    } else if (name === 'stream-error') {
-      const text = (payload as LoosePart | undefined)?.errorText;
-      this.failure = typeof text === 'string' ? text : 'stream error';
     } else if (name === 'file' && payload && typeof payload === 'object') {
       const file = payload as { url?: string; mediaType?: string };
       this.parts.push({

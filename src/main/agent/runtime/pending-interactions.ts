@@ -38,7 +38,8 @@ const STOP_REASONS = new Set<unknown>([
   'interrupted',
 ]);
 
-const stopReasonOf = (reason: unknown): RunStopReason =>
+/** A stop reason the run set, or plain interruption when it is anything else. */
+export const stopReasonOf = (reason: unknown): RunStopReason =>
   STOP_REASONS.has(reason) ? (reason as RunStopReason) : 'interrupted';
 
 const DECISIONS: Record<InteractionKind, InteractionDecision['kind'][]> = {

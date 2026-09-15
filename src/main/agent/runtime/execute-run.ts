@@ -18,7 +18,7 @@ import { getSettings } from '@main/settings/conf';
 import { createLogger } from '@main/utils/log';
 import type { AtriumUIMessage } from '@shared/chat';
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
-import type { AgentSessionEvent } from '@shared/protocol';
+import type { AgentSessionEvent, RunCompletion } from '@shared/protocol';
 import { compactForTurn } from '../context/compaction';
 import { loadContextBlocks } from '../context/injectors';
 import { createSummarizer } from '../context/summarize';
@@ -47,9 +47,9 @@ import {
 import { loopDetection } from './capabilities/loop-detection';
 import { skillToolScope } from './capabilities/skill-tool-scope';
 import { toolInteractions } from './capabilities/tool-interactions';
-import type { PendingInteractions } from './pending-interactions';
+import { type PendingInteractions, stopReasonOf } from './pending-interactions';
 import type { RunContext } from './run-context';
-import { createRunEventProjector } from './stream/event-projector';
+import { projectAgentEvent } from './stream/projector';
 
 const log = createLogger('agent');
 const preservers = [preserveTodos, preserveActiveSkill];
@@ -109,6 +109,9 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
   };
 
   try {
+    // First on the stream, before anything can await: a reader that replays from
+    // the start always learns which run it is reading.
+    emit({ type: 'run_started', runId });
     signal.throwIfAborted();
     workspaceRoot = resolveThreadWorkspace(db, input.threadId, opts.projectlessRoot);
     computerUse =
@@ -167,7 +170,10 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
       maxTurns: 100,
       ...composeCapabilities(capabilities),
     });
-    loop.subscribe(createRunEventProjector({ runId, emit }));
+    loop.subscribe((event) => {
+      const projected = projectAgentEvent(event);
+      if (projected) emit(projected);
+    });
     // Notify readers first, then await persistence before the loop continues.
     loop.subscribe(recorder.observe);
     await loop.run(signal);
@@ -204,12 +210,16 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
   }
   opts.pending.dispose();
   if (workspaceRoot && recorder?.messageId) await recordTurn(workspaceRoot, input.threadId);
-  if (result.status === 'failed') {
-    emit({ type: 'notice', name: 'stream-error', payload: { errorText: result.error } });
-  }
   finished = true;
-  emit({ type: 'agent_end', willRetry: false });
+  emit({ type: 'run_finished', ...toRunCompletion(result, signal.reason) });
   return { ...result, messageId: recorder?.messageId };
+}
+
+/** The outcome as the wire states it; only a stop reason the run knows is kept. */
+function toRunCompletion(result: RunResult, reason: unknown): RunCompletion {
+  if (result.status === 'failed') return { status: 'failed', error: result.error };
+  if (result.status === 'aborted') return { status: 'aborted', reason: stopReasonOf(reason) };
+  return { status: 'completed' };
 }
 
 /** Context and tools are built together, not via a callback into Runner. */

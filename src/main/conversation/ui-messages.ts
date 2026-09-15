@@ -8,6 +8,7 @@ import type {
   ToolResultMessage,
   UserMessage,
 } from '@shared/protocol';
+import { contentText } from '@shared/protocol';
 import type { ToolApproval } from '@shared/ui-message';
 
 /**
@@ -150,13 +151,14 @@ function mergeToolPart(
     return { ...base, state: 'output-denied', approval: extra.approval } as Part;
   }
   if (result) {
-    const details = result.details as LoosePart | undefined;
     if (!result.isError) {
       Object.assign(base, { state: 'output-available', output: result.details });
     } else {
+      // pi puts a failure's reason in the model-facing content, which is the
+      // same text the live card reads.
       Object.assign(base, {
         state: 'output-error',
-        errorText: String(details?.errorText ?? 'Tool failed.'),
+        errorText: contentText(result.content).trim() || 'Tool failed.',
       });
     }
     return base as Part;

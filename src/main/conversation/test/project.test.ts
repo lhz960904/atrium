@@ -282,6 +282,36 @@ test('an approval asked in a later turn still reaches its card', async () => {
   await repo.close();
 });
 
+test('a failed tool shows the text the tool returned', async () => {
+  const { repo, session: s } = await session();
+  await run(s, 'r1', async (s) => {
+    await s.appendMessage(user('read a missing file'));
+    await s.appendMessage(
+      assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: { command: 'cat x' } }]),
+    );
+    // pi puts the reason in content; the store keeps whatever details the tool set.
+    await s.appendMessage({
+      role: 'toolResult',
+      toolCallId: 'c1',
+      toolName: 'bash',
+      content: [{ type: 'text', text: 'Permission denied' }],
+      details: {},
+      isError: true,
+      timestamp: 3,
+    } as AgentMessage);
+  });
+
+  const { entries, records } = await read(s);
+  expect(projectMessages(entries, records).at(-1)?.parts).toContainEqual(
+    expect.objectContaining({
+      toolCallId: 'c1',
+      state: 'output-error',
+      errorText: 'Permission denied',
+    }),
+  );
+  await repo.close();
+});
+
 test('two runs stay separate messages', async () => {
   const { repo, session: s } = await session();
   await run(s, 'r1', async (s) => {

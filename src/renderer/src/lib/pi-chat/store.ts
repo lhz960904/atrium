@@ -115,8 +115,7 @@ export class PiChat {
           this.settle();
           return;
         }
-        await this.consume(res.body);
-        this.finalizeRun();
+        this.finalizeRun(await this.consume(res.body));
       } catch (err) {
         if (!abort.signal.aborted) this.failWith(err);
       }
@@ -202,8 +201,7 @@ export class PiChat {
       if (!res.ok || !res.body) {
         throw new Error(`chat request failed (${res.status}) ${await res.text().catch(() => '')}`);
       }
-      await this.consume(res.body);
-      this.finalizeRun();
+      this.finalizeRun(await this.consume(res.body));
     } catch (err) {
       if (!abort.signal.aborted) this.failWith(err);
     }
@@ -220,8 +218,10 @@ export class PiChat {
     return abort;
   }
 
-  private async consume(body: ReadableStream<Uint8Array>): Promise<void> {
+  /** Reads the run's stream; false when it ended before the run said it had. */
+  private async consume(body: ReadableStream<Uint8Array>): Promise<boolean> {
     this.run = new RunAssembler();
+    let finished = false;
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -240,21 +240,28 @@ export class PiChat {
         this.lastSeq = envelope.seq;
         if (this.status !== 'streaming') this.status = 'streaming';
         this.run?.apply(envelope.event);
+        if (envelope.event.type === 'run_finished') finished = true;
         if (envelope.event.type === 'notice') {
           this.init.onNotice(envelope.event.name, envelope.event.payload);
         }
         this.notify();
       }
     }
+    return finished;
   }
 
-  /** Fold the finished (or detached) run into history, keyed by message id. */
-  private finalizeRun(): void {
+  /**
+   * Fold the finished (or detached) run into history, keyed by message id. A
+   * stream that stopped before the run finished is a lost connection, not a
+   * finished run: what arrived is kept, and the reconnect is the user's to make.
+   */
+  private finalizeRun(finished = true): void {
     const live = this.run?.snapshot();
     this.run = null;
     this.inflight = null;
     if (live?.message) this.history = upsertById(this.history, live.message);
     if (live?.error) this.failure = new Error(live.error);
+    else if (!finished) this.failure = new Error('The connection to the run was interrupted.');
     this.settle();
   }
 

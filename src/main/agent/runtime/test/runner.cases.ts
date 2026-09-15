@@ -82,7 +82,7 @@ test('returns a subscribable handle immediately and rejects duplicate runs witho
   expect((await first.settled).status).toBe('ok');
   expect(runner.isRunning('t1')).toBe(false);
   expect(runner.abort('t1')).toBe(false);
-  expect(await new Response(stream).text()).toContain('agent_end');
+  expect(await new Response(stream).text()).toContain('run_finished');
   expect(f.faux.state.callCount).toBe(0);
   runner.dispose();
 });
@@ -98,7 +98,7 @@ test('a failed execution releases the thread, seals its stream and allows the ne
     error: 'context unavailable',
   });
   expect(runner.runningThreadIds()).toEqual([]);
-  expect(await new Response(runner.subscribe('t1', -1)).text()).toContain('agent_end');
+  expect(await new Response(runner.subscribe('t1', -1)).text()).toContain('run_finished');
   const next = runner.start({ ...f.request, userMessage: { ...f.request.userMessage, id: 'u2' } });
   expect(await next.settled).toMatchObject({
     runId: next.runId,
