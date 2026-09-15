@@ -40,11 +40,12 @@ test('built-in providers register under the engine’s own ids', () => {
 
 test('both Ark plans register their own catalog and endpoint', () => {
   expect(piModels.getModels('volcengine-coding')).toHaveLength(11);
-  expect(piModels.getModels('volcengine-agent')).toHaveLength(12);
+  expect(piModels.getModels('volcengine-agent')).toHaveLength(11);
   expect(piModels.getModel('volcengine-agent', 'doubao-seed-2.0-mini')?.baseUrl).toBe(
     'https://ark.cn-beijing.volces.com/api/plan',
   );
   expect(piModels.getModel('volcengine-coding', 'doubao-seed-2.0-mini')).toBeUndefined();
+  expect(piModels.getModel('volcengine-agent', 'auto')).toBeUndefined();
 });
 
 test('a defined provider registers its models with its own format and endpoint', () => {
