@@ -5,7 +5,7 @@ import {
   createAssistantMessageEventStream,
   type Model,
 } from '@earendil-works/pi-ai';
-import type { RunJournal } from '@main/conversation/journal';
+import type { SessionRecorder } from '@main/conversation/session-recorder';
 import type { Db } from '@main/db';
 import type { AgentSessionEvent, Message } from '@shared/protocol';
 import type { Sandbox } from '../sandbox/types';
@@ -67,14 +67,14 @@ const userMessage = (text: string): Message => ({
 
 /**
  * Stands in for the session so these tests stay about what the run hands over.
- * That the store keeps it faithfully is the journal's own round-trip test.
+ * That the store keeps it faithfully is the recorder's own round-trip test.
  */
-function recordingJournal() {
+function recordingSessionRecorder() {
   const written: Message[] = [];
   const parked: string[] = [];
   let outcome: string | undefined;
   let failure: string | undefined;
-  const journal: RunJournal = {
+  const recorder: SessionRecorder = {
     begin: async (prompt) => {
       if (prompt) written.push(prompt.message);
     },
@@ -82,7 +82,7 @@ function recordingJournal() {
       if (event.type !== 'message_end') return;
       const message = event.message as Message;
       written.push(message);
-      // The one part of the journal's reading the run depends on: a provider
+      // The one part of the recorder's reading the run depends on: a provider
       // failure arrives as an errored turn, not an exception.
       if (message.role === 'assistant' && message.stopReason === 'error') {
         failure = message.errorMessage ?? 'the model call failed';
@@ -102,7 +102,7 @@ function recordingJournal() {
     wrote: true,
   };
   return {
-    journal,
+    recorder,
     written,
     parked,
     get outcome() {
@@ -113,7 +113,7 @@ function recordingJournal() {
 
 async function runOnce(text: string) {
   const events: AgentSessionEvent[] = [];
-  const recording = recordingJournal();
+  const recording = recordingSessionRecorder();
   await runAgent({
     runId: 'run-1',
     providerId: 'p1',
@@ -130,7 +130,7 @@ async function runOnce(text: string) {
     permission: { mode: 'default' },
     buildTools: () => [],
     emit: (event) => events.push(event),
-    journal: recording.journal,
+    recorder: recording.recorder,
   });
   return { events, recording };
 }
@@ -160,7 +160,7 @@ test('stream frames carry deltas only, never the cumulative message', async () =
   }
 });
 
-test('hands the finished turn to the journal and closes the run', async () => {
+test('hands the finished turn to the recorder and closes the run', async () => {
   const { events, recording } = await runOnce('done');
   expect(recording.written.map((m) => m.role)).toEqual(['assistant']);
   expect((recording.written[0] as { content: unknown[] }).content).toEqual([
@@ -194,7 +194,7 @@ test('reports the turn to the usage ledger once', async () => {
     permission: { mode: 'default' },
     buildTools: () => [],
     emit: () => {},
-    journal: recordingJournal().journal,
+    recorder: recordingSessionRecorder().recorder,
     recordUsage: (u) => seen.push(u),
   });
   expect(seen).toEqual([
@@ -250,7 +250,7 @@ const parkTool = (name: string, clientSide?: true) =>
 
 async function runParking(tool: unknown, args: Record<string, unknown>, name: string) {
   const events: AgentSessionEvent[] = [];
-  const recording = recordingJournal();
+  const recording = recordingSessionRecorder();
   await runAgent({
     runId: 'run-3',
     providerId: 'p1',
@@ -267,7 +267,7 @@ async function runParking(tool: unknown, args: Record<string, unknown>, name: st
     permission: { mode: 'default' },
     buildTools: () => [tool as never],
     emit: (event) => events.push(event),
-    journal: recording.journal,
+    recorder: recording.recorder,
   });
   return { events, recording };
 }
@@ -304,7 +304,7 @@ test('a boundary crossing asks for approval and parks the call under it', async 
 
 test('full access runs the same call without asking', async () => {
   const events: AgentSessionEvent[] = [];
-  const recording = recordingJournal();
+  const recording = recordingSessionRecorder();
   await runAgent({
     runId: 'run-4',
     providerId: 'p1',
@@ -321,7 +321,7 @@ test('full access runs the same call without asking', async () => {
     permission: { mode: 'full-access' },
     buildTools: () => [parkTool('bash')],
     emit: (event) => events.push(event),
-    journal: recording.journal,
+    recorder: recording.recorder,
   });
   expect(events.some((e) => e.type === 'approval_requested')).toBe(false);
   expect(recording.parked).toEqual([]);
@@ -352,7 +352,7 @@ const erroringStream: StreamFn = () => {
 
 test('a turn that failed at the provider is reported as a failed run', async () => {
   const events: AgentSessionEvent[] = [];
-  const recording = recordingJournal();
+  const recording = recordingSessionRecorder();
   const result = await runAgent({
     runId: 'run-5',
     providerId: 'p1',
@@ -369,7 +369,7 @@ test('a turn that failed at the provider is reported as a failed run', async () 
     permission: { mode: 'default' },
     buildTools: () => [],
     emit: (event) => events.push(event),
-    journal: recording.journal,
+    recorder: recording.recorder,
   });
   expect(result).toMatchObject({ status: 'error', error: 'Connection error.' });
   expect(recording.outcome).toBe('failed');

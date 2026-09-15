@@ -31,7 +31,7 @@ export type RunTotals = {
 
 export type RunOutcome = 'completed' | 'aborted' | 'failed';
 
-export type RunJournal = {
+export type SessionRecorder = {
   /** Open the run, and record the turn that started it under the id its author
    *  already gave it. */
   begin(prompt?: { id: string; message: Message }): Promise<void>;
@@ -57,13 +57,13 @@ const isAssistant = (m: AgentMessage): m is AgentMessage & AssistantMessage =>
 const contextSizeOf = (usage: AssistantMessage['usage']): number =>
   usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
 
-export function createRunJournal(opts: {
+export function createSessionRecorder(opts: {
   session: Session;
   /** The run's id, which is also its operation record's id. */
   runId: string;
   /** True when continuing a run whose bracket is already open. */
   resuming?: boolean;
-}): RunJournal {
+}): SessionRecorder {
   const { session, runId } = opts;
   const totals: RunTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
   let contextTokens: number | undefined;

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
-import type { RunJournal } from '@main/conversation/journal';
+import type { SessionRecorder } from '@main/conversation/session-recorder';
 import type { Db } from '@main/db';
 import { createLogger } from '@main/utils/log';
 import type { PermissionMode } from '@shared/permissions';
@@ -89,7 +89,7 @@ export type RunAgentOptions = {
   emit: (event: AgentSessionEvent) => void;
   /** Where the run's messages go, as they land. Injected so the agent layer
    *  stays independent of how a conversation is stored. */
-  journal: RunJournal;
+  recorder: SessionRecorder;
   /** When the run first started, for a continuation that reports itself again. */
   openedAt?: number;
   /**
@@ -195,7 +195,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
   // The results the user's decisions produced belong to the run too — they are
   // what the loop is about to continue from.
   for (const message of settled) {
-    await opts.journal.observe({ type: 'message_end', message } as never);
+    await opts.recorder.observe({ type: 'message_end', message } as never);
   }
 
   const loop = createAgentLoop({
@@ -226,7 +226,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
     beforeToolCall: async ({ toolCall, args }) => {
       const park = async (approvalId?: string) => {
         parked.set(toolCall.id, { toolCallId: toolCall.id, toolName: toolCall.name, approvalId });
-        await opts.journal.park({ toolCallId: toolCall.id, approvalId });
+        await opts.recorder.park({ toolCallId: toolCall.id, approvalId });
         return { block: true, terminate: true, reason: AWAITING_USER };
       };
       // A client-side tool is answered by the user, never executed.
@@ -241,7 +241,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
   loop.subscribe(wireEmitter({ runId: opts.runId, parked, emit: opts.emit }));
   // Second, so a reader sees the turn as soon as it lands while the loop still
   // waits for it to be stored before going on.
-  loop.subscribe(opts.journal.observe);
+  loop.subscribe(opts.recorder.observe);
 
   opts.emit({ type: 'notice', name: 'message-metadata', payload: { createdAt: openedAt } });
 
@@ -257,9 +257,9 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
   }
 
   const aborted = opts.abortSignal?.aborted ?? false;
-  const totals = opts.journal.totals;
+  const totals = opts.recorder.totals;
   // The live figures the card shows while the turn is open. What gets stored is
-  // the usage records the journal already wrote; this is the wire's copy.
+  // the usage records the recorder already wrote; this is the wire's copy.
   opts.emit({
     type: 'notice',
     name: 'message-metadata',
@@ -273,19 +273,19 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
       cacheReadTokens: totals.cacheRead,
       cacheCreationTokens: totals.cacheWrite,
       totalTokens: totals.total,
-      contextTokens: opts.journal.contextTokens,
+      contextTokens: opts.recorder.contextTokens,
     },
   });
 
   // A stop is the user's doing, not a failure — only a real error is reported.
-  const failure = loopError ?? opts.journal.failure;
+  const failure = loopError ?? opts.recorder.failure;
   // A run holding a parked call is not over: its bracket stays open so the
   // decision, whenever it arrives, extends this same run.
   if (parked.size === 0) {
-    await opts.journal.end(aborted ? 'aborted' : failure ? 'failed' : 'completed');
+    await opts.recorder.end(aborted ? 'aborted' : failure ? 'failed' : 'completed');
   }
 
-  if (opts.journal.wrote) {
+  if (opts.recorder.wrote) {
     opts.recordUsage?.({
       messageId: opts.runId,
       providerId: opts.providerId,
@@ -305,6 +305,6 @@ export async function runAgent(opts: RunAgentOptions): Promise<RunResult> {
   return {
     status: failure && !aborted ? 'error' : 'ok',
     error: aborted ? undefined : failure,
-    stored: opts.journal.wrote,
+    stored: opts.recorder.wrote,
   };
 }

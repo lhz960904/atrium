@@ -7,12 +7,12 @@ import type { AgentEvent, AgentMessage, Session } from '@earendil-works/pi-agent
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { Message } from '@shared/protocol';
-import { createRunJournal } from './journal';
+import { createSessionRecorder } from './session-recorder';
 import { projectHistory, projectMessages } from './project';
 import { sessionSqlite } from './store/sqlite-driver';
 
 /**
- * Round-trip: what the journal writes has to be exactly what the projection
+ * Round-trip: what the recorder writes has to be exactly what the projection
  * reads back, so the two are exercised against each other rather than against
  * fixtures either one could be wrong about.
  */
@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 async function session() {
-  const dir = mkdtempSync(join(tmpdir(), 'atrium-journal-'));
+  const dir = mkdtempSync(join(tmpdir(), 'atrium-session-recorder-'));
   dirs.push(dir);
   const databasePath = join(dir, 'data.db');
   const repo = new SqliteSessionRepository({
@@ -72,9 +72,9 @@ const read = async (s: Session) => ({
 
 test('a turn is readable the moment its message lands, before the run ends', async () => {
   const { repo, session: s } = await session();
-  const journal = createRunJournal({ session: s, runId: 'r1' });
-  await journal.begin(user('hi'));
-  await journal.observe(ended(assistant([{ type: 'text', text: 'first half' }])));
+  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  await recorder.begin(user('hi'));
+  await recorder.observe(ended(assistant([{ type: 'text', text: 'first half' }])));
 
   // No end() yet — this is what a crash mid-turn would leave behind.
   const { entries, records } = await read(s);
@@ -86,30 +86,30 @@ test('a turn is readable the moment its message lands, before the run ends', asy
 
 test('an unfinished run leaves its operation open for a later boot to find', async () => {
   const { repo, session: s } = await session();
-  const journal = createRunJournal({ session: s, runId: 'r1' });
-  await journal.begin(user('hi'));
-  await journal.observe(ended(assistant([{ type: 'text', text: 'partial' }])));
+  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  await recorder.begin(user('hi'));
+  await recorder.observe(ended(assistant([{ type: 'text', text: 'partial' }])));
 
   expect((await s.findOpenOperations('main')).map((r) => r.id)).toEqual(['r1']);
-  await journal.end('aborted');
+  await recorder.end('aborted');
   expect(await s.findOpenOperations('main')).toEqual([]);
   await repo.close();
 });
 
 test('usage is recorded per turn and adds up on the run', async () => {
   const { repo, session: s } = await session();
-  const journal = createRunJournal({ session: s, runId: 'r1' });
-  await journal.begin(user('hi'));
-  await journal.observe(
+  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  await recorder.begin(user('hi'));
+  await recorder.observe(
     ended(assistant([{ type: 'text', text: 'one' }], { usage: usage(100, 10) })),
   );
-  await journal.observe(
+  await recorder.observe(
     ended(assistant([{ type: 'text', text: 'two' }], { usage: usage(200, 20) })),
   );
-  await journal.end('completed');
+  await recorder.end('completed');
 
-  expect(journal.totals).toMatchObject({ input: 300, output: 30, total: 330 });
-  expect(journal.contextTokens).toBe(220);
+  expect(recorder.totals).toMatchObject({ input: 300, output: 30, total: 330 });
+  expect(recorder.contextTokens).toBe(220);
 
   const { entries, records } = await read(s);
   expect(projectMessages(entries, records)[1].metadata).toMatchObject({
@@ -122,14 +122,14 @@ test('usage is recorded per turn and adds up on the run', async () => {
 
 test('a turn that produced nothing is not kept', async () => {
   const { repo, session: s } = await session();
-  const journal = createRunJournal({ session: s, runId: 'r1' });
-  await journal.begin(user('hi'));
-  await journal.observe(
+  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  await recorder.begin(user('hi'));
+  await recorder.observe(
     ended(assistant([], { stopReason: 'error', errorMessage: 'upstream exploded' })),
   );
-  await journal.end('failed');
+  await recorder.end('failed');
 
-  expect(journal.failure).toBe('upstream exploded');
+  expect(recorder.failure).toBe('upstream exploded');
   const { entries } = await read(s);
   // Only the user turn: an empty assistant message would be rejected as history.
   expect(projectHistory(entries).map((m) => m.role)).toEqual(['user']);
@@ -138,12 +138,12 @@ test('a turn that produced nothing is not kept', async () => {
 
 test('a parked call comes back as its approval card', async () => {
   const { repo, session: s } = await session();
-  const journal = createRunJournal({ session: s, runId: 'r1' });
-  await journal.begin(user('curl x'));
-  await journal.observe(
+  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  await recorder.begin(user('curl x'));
+  await recorder.observe(
     ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
   );
-  await journal.park({ toolCallId: 'c1', approvalId: 'ap1' });
+  await recorder.park({ toolCallId: 'c1', approvalId: 'ap1' });
 
   const { entries, records } = await read(s);
   const [, reply] = projectMessages(entries, records);
@@ -158,14 +158,14 @@ test('a parked call comes back as its approval card', async () => {
 
 test('the refusal result a parked call produces is not kept', async () => {
   const { repo, session: s } = await session();
-  const journal = createRunJournal({ session: s, runId: 'r1' });
-  await journal.begin(user('curl x'));
-  await journal.observe(
+  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  await recorder.begin(user('curl x'));
+  await recorder.observe(
     ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
   );
-  await journal.park({ toolCallId: 'c1', approvalId: 'ap1' });
+  await recorder.park({ toolCallId: 'c1', approvalId: 'ap1' });
   // Blocking the call makes the engine stand in an error result for it.
-  await journal.observe(
+  await recorder.observe(
     ended({
       role: 'toolResult',
       toolCallId: 'c1',
@@ -191,14 +191,14 @@ test('the refusal result a parked call produces is not kept', async () => {
 
 test('a message carrying undefined is still storable', async () => {
   const { repo, session: s } = await session();
-  const journal = createRunJournal({ session: s, runId: 'r1' });
-  await journal.begin(user('run something'));
-  await journal.observe(
+  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  await recorder.begin(user('run something'));
+  await recorder.observe(
     ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
   );
   // What a tool actually returns: optional fields left unset rather than absent.
   // The store rejects undefined outright, and one rejected append fails the turn.
-  await journal.observe(
+  await recorder.observe(
     ended({
       role: 'toolResult',
       toolCallId: 'c1',
@@ -209,7 +209,7 @@ test('a message carrying undefined is still storable', async () => {
       timestamp: 3,
     } as AgentMessage),
   );
-  await journal.end('completed');
+  await recorder.end('completed');
 
   const { entries, records } = await read(s);
   const [, reply] = projectMessages(entries, records);
@@ -224,13 +224,13 @@ test('a message carrying undefined is still storable', async () => {
 
 test('a clarification with no approval id is still storable', async () => {
   const { repo, session: s } = await session();
-  const journal = createRunJournal({ session: s, runId: 'r1' });
-  await journal.begin(user('ask me'));
-  await journal.observe(
+  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  await recorder.begin(user('ask me'));
+  await recorder.observe(
     ended(assistant([{ type: 'toolCall', id: 'c1', name: 'ask_clarification', arguments: {} }])),
   );
   // A tool the user answers has no approval, so the field is simply undefined.
-  await journal.park({ toolCallId: 'c1' });
+  await recorder.park({ toolCallId: 'c1' });
 
   const { entries, records } = await read(s);
   const [, reply] = projectMessages(entries, records);
@@ -244,10 +244,10 @@ test('a clarification with no approval id is still storable', async () => {
 
 test("the user's turn keeps the id it was sent under", async () => {
   const { repo, session: s } = await session();
-  const journal = createRunJournal({ session: s, runId: 'r1' });
+  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
   const prompt = user('find me later');
-  await journal.begin(prompt);
-  await journal.end('completed');
+  await recorder.begin(prompt);
+  await recorder.end('completed');
 
   // The live view addresses this message by that id, and editing it later has
   // to find the entry it became — a store-assigned id would never match.
@@ -259,7 +259,7 @@ test("the user's turn keeps the id it was sent under", async () => {
 
 test('a new run supersedes one the user walked away from', async () => {
   const { repo, session: s } = await session();
-  const first = createRunJournal({ session: s, runId: 'r1' });
+  const first = createSessionRecorder({ session: s, runId: 'r1' });
   await first.begin(user('curl x'));
   await first.observe(
     ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
@@ -268,7 +268,7 @@ test('a new run supersedes one the user walked away from', async () => {
 
   // The user ignores the ask and sends something else. The lane holds one
   // operation at a time, so this only works if the parked one is closed first.
-  const second = createRunJournal({ session: s, runId: 'r2' });
+  const second = createSessionRecorder({ session: s, runId: 'r2' });
   await second.begin(user('never mind, do this'));
   await second.observe(ended(assistant([{ type: 'text', text: 'done' }])));
   await second.end('completed');
@@ -285,7 +285,7 @@ test('a new run supersedes one the user walked away from', async () => {
 
 test('a continuation extends the run it resumes instead of opening a second one', async () => {
   const { repo, session: s } = await session();
-  const first = createRunJournal({ session: s, runId: 'r1' });
+  const first = createSessionRecorder({ session: s, runId: 'r1' });
   await first.begin(user('curl x'));
   await first.observe(
     ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
@@ -293,7 +293,7 @@ test('a continuation extends the run it resumes instead of opening a second one'
   await first.park({ toolCallId: 'c1', approvalId: 'ap1' });
 
   // The user approves; the run resumes under the same id.
-  const resumed = createRunJournal({ session: s, runId: 'r1', resuming: true });
+  const resumed = createSessionRecorder({ session: s, runId: 'r1', resuming: true });
   await resumed.begin();
   await resumed.observe(
     ended({

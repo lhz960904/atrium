@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Session } from '@earendil-works/pi-agent-core';
-import { createRunJournal } from '@main/conversation/journal';
+import { createSessionRecorder } from '@main/conversation/session-recorder';
 import {
   compactThread,
   openThreadCalls,
@@ -183,7 +183,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
         // first turn. Opening the run and appending the turn that started it
         // happen before the history is read, so the loop sees them.
         const session = await openThreadSession(db, threadId, workspaceRoot);
-        const journal = createRunJournal({
+        const recorder = createSessionRecorder({
           session,
           runId,
           resuming: request.resumeRunId !== undefined,
@@ -194,7 +194,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
               message: splitUserMessage(request.userMessage).message as Message,
             }
           : undefined;
-        await journal.begin(prompt);
+        await recorder.begin(prompt);
         // Sending counts as reading: a thread must never flash unread from
         // the user's own message.
         touchThread(db, threadId, { markRead: prompt !== undefined });
@@ -215,7 +215,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
           permissionMode: mode,
           permission: { mode, rules: getSettings('permissions.trustRules'), review },
           resolutions: request.resolutions,
-          journal,
+          recorder,
           openedAt,
           persistCheckpoint: (fold) => compactThread(db, threadId, fold),
           abortSignal: abort.signal,

@@ -243,7 +243,7 @@ test('a run left parked does not swallow the run that follows it', async () => {
   const { repo, session: s } = await session();
   // Parked: the user was asked something and sent a new message instead. The
   // store allows one open operation per lane, so the parked one is closed as
-  // the next run opens — which is what the journal does.
+  // the next run opens — which is what the recorder does.
   await run(
     s,
     'r1',
