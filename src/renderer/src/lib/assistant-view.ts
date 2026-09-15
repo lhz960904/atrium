@@ -163,15 +163,19 @@ export function buildAssistantView(parts: AtriumUIMessage['parts'], t: TFunction
  * tool output carries the result for the read-only view. Skipped while the
  * input is still streaming, since the questions aren't complete yet.
  */
-function toClarifySegment(part: AtriumToolPart): ClarifySegment | null {
+function toClarifySegment(part: AtriumToolPart): ViewSegment | null {
   if (part.state === 'input-streaming') return null;
+  // A question that failed or was cut off shows what happened, not a form to fill in.
+  if (part.state === 'output-error') {
+    return { kind: 'narrative', id: `clarify-${part.toolCallId}`, content: part.errorText };
+  }
   const input = (part.input ?? {}) as { questions?: Omit<ClarifyQuestion, 'id'>[] };
   const questions = (input.questions ?? []).map((q, i) => ({ ...q, id: String(i) }));
   if (questions.length === 0) return null;
   return {
     kind: 'clarify',
     clarify: { id: part.toolCallId, questions },
-    pending: part.state !== 'output-available',
+    pending: part.state === 'input-available',
     result: part.state === 'output-available' ? (part.output as ClarifyResult) : undefined,
   };
 }

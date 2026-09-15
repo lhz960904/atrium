@@ -53,7 +53,12 @@ function lastCompletedRunAt(db: Db, taskId: string): Date | undefined {
  * consecutive-failure auto-pause; the messages are persisted by the run itself.
  */
 export async function runScheduledTask(
-  deps: { db: Db; runner: Runner; defaultModel: () => SelectedModel | null },
+  deps: {
+    db: Db;
+    runner: Runner;
+    defaultModel: () => SelectedModel | null;
+    blockSuspension?: () => () => void;
+  },
   task: ScheduledTask,
 ): Promise<ScheduledRunResult> {
   if (!task.threadId) return { status: 'error', error: 'Scheduled task has no bound thread.' };
@@ -82,15 +87,32 @@ export async function runScheduledTask(
     parts: [{ type: 'text', text: `${header}\n\n${task.prompt}` }],
   };
 
-  const release = blockSuspension();
+  const block = deps.blockSuspension ?? blockSuspension;
+  let release: (() => void) | undefined = block();
+  let unsubscribe: (() => void) | undefined;
   try {
-    const outcome = await deps.runner.start({
+    const handle = deps.runner.start({
       threadId: task.threadId,
       providerId: model.providerId,
       modelId: model.modelId,
       permissionMode: task.permissionMode,
       userMessage: message,
-    }).settled;
+    });
+    // A run waiting on the user does no work, so the machine may sleep until
+    // every request it is waiting on has been answered.
+    const waiting = new Set<string>();
+    unsubscribe = handle.subscribe((event) => {
+      if (event.type === 'interaction_requested') waiting.add(event.request.id);
+      else if (event.type === 'interaction_resolved') waiting.delete(event.request.id);
+      else return;
+      if (waiting.size > 0) {
+        release?.();
+        release = undefined;
+      } else if (!release) {
+        release = block();
+      }
+    });
+    const outcome = await handle.settled;
     if (outcome.status === 'error') {
       log.error(`task ${task.id} run failed: ${outcome.error}`);
     }
@@ -101,6 +123,7 @@ export async function runScheduledTask(
     log.error(`task ${task.id} could not start`, err);
     return { status: 'error', error: err instanceof Error ? err.message : String(err) };
   } finally {
-    release();
+    unsubscribe?.();
+    release?.();
   }
 }

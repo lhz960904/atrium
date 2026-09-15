@@ -1,6 +1,5 @@
 import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
-import { withSettledResults } from '@main/conversation/history';
 import { createSessionRecorder, type SessionRecorder } from '@main/conversation/session-recorder';
 import {
   compactThread,
@@ -48,9 +47,9 @@ import {
 import { loopDetection } from './capabilities/loop-detection';
 import { skillToolScope } from './capabilities/skill-tool-scope';
 import { toolInteractions } from './capabilities/tool-interactions';
+import type { PendingInteractions } from './pending-interactions';
 import type { RunContext } from './run-context';
 import { createRunEventProjector } from './stream/event-projector';
-import { applyResolutions, type ParkedCall, type Resolution } from './tool-resolutions';
 
 const log = createLogger('agent');
 const preservers = [preserveTodos, preserveActiveSkill];
@@ -60,19 +59,13 @@ export type RunInput = {
   threadId: string;
   permissionMode?: PermissionMode;
   userMessage?: AtriumUIMessage;
-  /** Continue this stored run instead of opening another one. */
-  resumeRunId?: string;
-  resolutions?: Resolution[];
 };
 
 export type RunResult = {
   runId: string;
   /** The UI message id, not an individual pi entry id. */
   messageId?: string;
-} & (
-  | { status: 'completed' | 'waiting' | 'aborted'; error?: never }
-  | { status: 'failed'; error: string }
-);
+} & ({ status: 'completed' | 'aborted'; error?: never } | { status: 'failed'; error: string });
 
 export type ExecuteRunOptions = {
   input: RunInput;
@@ -83,16 +76,18 @@ export type ExecuteRunOptions = {
   projectlessRoot: string;
   bgShells: BackgroundShells;
   signal: AbortSignal;
+  /** Decisions reach the calls waiting in this run through it; created with the run's controller. */
+  pending: PendingInteractions;
   emit: (event: AgentSessionEvent) => void;
 };
 
 /**
- * Execute until completion or a user interaction pauses the run. Owns the whole
- * per-execution lifecycle; Runner only owns admission, cancellation and streams.
+ * Execute a run to its end; waiting on the user happens inside it. Owns the
+ * whole per-execution lifecycle; Runner only owns admission, cancellation and
+ * streams.
  */
 export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
   const { input, runId, model, db, signal, emit } = opts;
-  const parked = new Map<string, ParkedCall>();
   let recorder: SessionRecorder | undefined;
   let openedAt = Date.now();
   let workspaceRoot: string | undefined;
@@ -105,9 +100,12 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
     const errorText = error instanceof Error ? error.message : String(error);
     log.warn(`run ${runId} failed: ${errorText}`);
     if (result.status === 'failed') return;
-    result = signal.aborted
-      ? { runId, status: 'aborted' }
-      : { runId, status: 'failed', error: errorText };
+    const failure = opts.pending.failure;
+    result = failure
+      ? { runId, status: 'failed', error: failure.message }
+      : signal.aborted
+        ? { runId, status: 'aborted' }
+        : { runId, status: 'failed', error: errorText };
   };
 
   try {
@@ -119,7 +117,7 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
         : undefined;
 
     const session = await openThreadSession(db, input.threadId, workspaceRoot);
-    recorder = createSessionRecorder({ session, runId, resuming: !!input.resumeRunId });
+    recorder = createSessionRecorder({ session, runId });
     const prompt = input.userMessage
       ? { id: input.userMessage.id, message: splitUserMessage(input.userMessage).message }
       : undefined;
@@ -129,7 +127,7 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
     openedAt = started?.timestamp ?? openedAt;
     emit({ type: 'notice', name: 'message-metadata', payload: { createdAt: openedAt } });
 
-    const prepared = await prepareRun(opts, workspaceRoot, computerUse);
+    const prepared = await prepareRun(opts, workspaceRoot, computerUse, recorder);
     const history = runnableHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' }));
     if (getSettings('general.autoGenerateTitle')) {
       generateThreadTitle({
@@ -142,8 +140,8 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
         },
       });
     }
-    const messages = await prepareMessages(opts, prepared, history, recorder);
-    const { ctx, tools, blocks, summarize, gate } = prepared;
+    const messages = await prepareMessages(opts, prepared, history);
+    const { ctx, tools, blocks, summarize, interactions } = prepared;
 
     // One explicit registration area. Order matters within each pi hook.
     const capabilities = [
@@ -158,13 +156,7 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
       dateReminder(),
       skillToolScope(tools, ctx.scratch),
       loopDetection(),
-      toolInteractions({
-        clientSide: new Set(tools.filter((tool) => tool.clientSide).map((tool) => tool.name)),
-        gate,
-        recorder,
-        parked,
-        emit,
-      }),
+      interactions,
     ];
     const loop = createAgentLoop({
       systemPrompt: ctx.system,
@@ -175,16 +167,20 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
       maxTurns: 100,
       ...composeCapabilities(capabilities),
     });
-    loop.subscribe(createRunEventProjector({ runId, parked, emit }));
+    loop.subscribe(createRunEventProjector({ runId, emit }));
     // Notify readers first, then await persistence before the loop continues.
     loop.subscribe(recorder.observe);
     await loop.run(signal);
 
-    result = signal.aborted
-      ? { runId, status: 'aborted' }
-      : recorder.failure
-        ? { runId, status: 'failed', error: recorder.failure }
-        : { runId, status: parked.size ? 'waiting' : 'completed' };
+    // A recording failure during a wait stops the run through its signal, so it
+    // is checked before the signal is read as a cancellation.
+    result = opts.pending.failure
+      ? { runId, status: 'failed', error: opts.pending.failure.message }
+      : signal.aborted
+        ? { runId, status: 'aborted' }
+        : recorder.failure
+          ? { runId, status: 'failed', error: recorder.failure }
+          : { runId, status: 'completed' };
   } catch (error) {
     fail(error);
   }
@@ -202,12 +198,11 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
     fail(error);
   }
   try {
-    if (result.status !== 'waiting') {
-      await recorder?.end(result.status);
-    }
+    await recorder?.end(result.status);
   } catch (error) {
     fail(error);
   }
+  opts.pending.dispose();
   if (workspaceRoot && recorder?.messageId) await recordTurn(workspaceRoot, input.threadId);
   if (result.status === 'failed') {
     emit({ type: 'notice', name: 'stream-error', payload: { errorText: result.error } });
@@ -222,6 +217,7 @@ async function prepareRun(
   opts: ExecuteRunOptions,
   workspaceRoot: string,
   computerUse: ComputerUseHelper | undefined,
+  recorder: SessionRecorder,
 ) {
   opts.signal.throwIfAborted();
   const { input, db, model, signal } = opts;
@@ -243,11 +239,27 @@ async function prepareRun(
     notice: (name, data) => opts.emit({ type: 'notice', name, payload: { data } }),
     scratch: new Map(),
   };
+  const gate = approvalGate({
+    mode,
+    rules: getSettings('permissions.trustRules'),
+    reviewerModel: mode === 'auto-review' ? resolveReviewer(db, model) : undefined,
+    workspaceRoot,
+    abortSignal: signal,
+    onReviewed: ({ toolCallId, subject }) => ctx.notice('autoReview', { toolCallId, subject }),
+  });
+  const interactions = toolInteractions({
+    gate,
+    pending: opts.pending,
+    recorder,
+    emit: opts.emit,
+    signal,
+  });
   const supportsImages = supportsImageToolResults(model);
   const tools = getTools({
     sandbox,
     workspaceRoot,
     run: ctx,
+    ask: interactions.ask,
     skills,
     engine: { model, streamFn: piStreamFn },
     bgShells: opts.bgShells,
@@ -259,22 +271,13 @@ async function prepareRun(
     }),
   });
   const blocks = await loadContextBlocks({ skills, workspaceRoot });
-  const gate = approvalGate({
-    mode,
-    rules: getSettings('permissions.trustRules'),
-    reviewerModel: mode === 'auto-review' ? resolveReviewer(db, model) : undefined,
-    workspaceRoot,
-    abortSignal: signal,
-    onReviewed: ({ toolCallId, subject }) => ctx.notice('autoReview', { toolCallId, subject }),
-  });
-  return { ctx, tools, blocks, gate, summarize: createSummarizer(model) };
+  return { ctx, tools, blocks, interactions, summarize: createSummarizer(model) };
 }
 
 async function prepareMessages(
   opts: ExecuteRunOptions,
   prepared: Awaited<ReturnType<typeof prepareRun>>,
   history: Message[],
-  recorder: SessionRecorder,
 ): Promise<Message[]> {
   opts.signal.throwIfAborted();
   const compacted = await compactForTurn({
@@ -285,16 +288,7 @@ async function prepareMessages(
     emit: (phase) => prepared.ctx.notice('compaction', { phase }),
     persist: (fold) => compactThread(opts.db, opts.input.threadId, fold),
   });
-  opts.signal.throwIfAborted();
-  const settled = await applyResolutions({
-    resolutions: opts.input.resolutions ?? [],
-    messages: compacted,
-    tools: prepared.tools,
-    emit: opts.emit,
-    abortSignal: opts.signal,
-  });
-  for (const message of settled) await recorder.observe({ type: 'message_end', message });
-  return withSettledResults(compacted, settled);
+  return compacted;
 }
 
 /** Resolve auto-review only when enabled; an invalid setting falls back to asking. */

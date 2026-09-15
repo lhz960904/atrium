@@ -7,9 +7,10 @@ import type {
 } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage } from '@earendil-works/pi-ai';
 import { createLogger } from '@main/utils/log';
+import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
 
 import { durable } from './durable';
-import { APPROVAL_ENTRY, type ApprovalEntryData } from './project';
+import { INTERACTION_ENTRY, type InteractionEntryData } from './project';
 
 const log = createLogger('session');
 
@@ -43,8 +44,10 @@ export type SessionRecorder = {
   begin(prompt?: { id: string; message: Message }): Promise<void>;
   /** Fold one engine event into the session. */
   observe(event: AgentEvent): Promise<void>;
-  /** Record a call handed back to the user; it gets no result this run. */
-  park(call: ApprovalEntryData): Promise<void>;
+  /** Record that the run is waiting on the user for this request. */
+  interactionRequested(request: InteractionRequest): Promise<void>;
+  /** Record how the request was settled, before the call it gates continues. */
+  interactionResolved(request: InteractionRequest, outcome: InteractionOutcome): Promise<void>;
   /** Close the run. */
   end(outcome: RunOutcome): Promise<void>;
   readonly totals: RunTotals;
@@ -69,8 +72,6 @@ export function createSessionRecorder(opts: {
   session: Session;
   /** The run's id, which is also its operation record's id. */
   runId: string;
-  /** True when continuing a run whose bracket is already open. */
-  resuming?: boolean;
 }): SessionRecorder {
   const { session, runId } = opts;
   const totals: RunTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
@@ -79,37 +80,39 @@ export function createSessionRecorder(opts: {
   let wrote = false;
   let messageId: string | undefined;
   let attempt = 0;
-  let operationOpen = opts.resuming ?? false;
-  const parked = new Set<string>();
+  let operationOpen = false;
+
+  const appendInteraction = async (id: string, data: InteractionEntryData) => {
+    await session.appendEntry(
+      { id, type: 'custom', customType: INTERACTION_ENTRY, data: durable(data) },
+      'main',
+    );
+    wrote = true;
+  };
 
   return {
     async begin(prompt) {
-      // A continuation extends the operation the earlier turn left open, so its
-      // bracket must not be opened a second time.
-      if (!opts.resuming) {
-        // A lane holds one operation at a time, so anything still open has to be
-        // closed first. It is open because the run that owned it never got to
-        // end — the user was asked something and moved on instead, or the app
-        // died mid-turn — and either way it is not going to finish now.
-        for (const open of await session.findOpenOperations('main')) {
-          log.info(`abandoning run ${open.id}, superseded by ${runId}`);
-          await session.appendRecord({
-            id: randomUUID(),
-            lane: 'main',
-            type: 'operation_finished',
-            runId: open.id,
-            outcome: 'aborted',
-          });
-        }
+      // A lane holds one operation at a time, so anything still open has to be
+      // closed first. It is open because the run that owned it never got to end
+      // — the app died mid-turn — and it is not going to finish now.
+      for (const open of await session.findOpenOperations('main')) {
+        log.info(`abandoning run ${open.id}, superseded by ${runId}`);
         await session.appendRecord({
-          id: runId,
+          id: randomUUID(),
           lane: 'main',
-          type: 'operation_started',
-          sourceLeafId: await session.getLeafId(),
-          intent: { kind: 'run', originalPrompt: [], initialMessages: [] },
+          type: 'operation_finished',
+          runId: open.id,
+          outcome: 'aborted',
         });
-        operationOpen = true;
       }
+      await session.appendRecord({
+        id: runId,
+        lane: 'main',
+        type: 'operation_started',
+        sourceLeafId: await session.getLeafId(),
+        intent: { kind: 'run', originalPrompt: [], initialMessages: [] },
+      });
+      operationOpen = true;
       if (prompt) {
         // Stored under the id the client minted, not one the store assigns:
         // the live view already addresses the message by it, and editing that
@@ -163,22 +166,18 @@ export function createSessionRecorder(opts: {
       }
 
       if (message.role === 'toolResult') {
-        // Blocking a call makes the engine stand in an error result for it. A
-        // parked call has not failed — it is waiting — so that result is
-        // dropped, leaving the call open for the decision to land on later.
-        if (parked.has(message.toolCallId)) return;
         await session.appendMessage(durable(message));
         wrote = true;
       }
     },
 
-    async park(call) {
-      parked.add(call.toolCallId);
-      // pi has no state for "waiting on the user", so it rides in an entry of
-      // our own — the extension point pi does offer.
-      await session.appendCustomEntry(APPROVAL_ENTRY, durable(call));
-      wrote = true;
-    },
+    // pi has no state for "waiting on the user", so it rides in entries of our
+    // own. A request settles once, so each phase is written exactly once.
+    interactionRequested: (request) =>
+      appendInteraction(`${request.id}:requested`, { phase: 'requested', request }),
+
+    interactionResolved: (request, outcome) =>
+      appendInteraction(`${request.id}:resolved`, { phase: 'resolved', request, outcome }),
 
     async end(outcome) {
       // begin may fail before opening the bracket, or after opening it while

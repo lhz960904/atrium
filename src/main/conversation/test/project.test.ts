@@ -6,7 +6,8 @@ import { dirname, join } from 'node:path';
 import type { AgentMessage, Session } from '@earendil-works/pi-agent-core';
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
-import { APPROVAL_ENTRY, openToolCalls, projectHistory, projectMessages } from '../project';
+import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
+import { INTERACTION_ENTRY, openToolCalls, projectHistory, projectMessages } from '../project';
 import { sessionSqlite } from '../store/sqlite-driver';
 import { runnableHistory } from '../threads';
 
@@ -99,6 +100,20 @@ async function run(
   }
 }
 
+const approvalFor = (toolCallId: string): InteractionRequest => ({
+  id: `ap-${toolCallId}`,
+  runId: 'r1',
+  kind: 'approval',
+  toolCall: { type: 'toolCall', id: toolCallId, name: 'bash', arguments: {} },
+  createdAt: 1,
+});
+
+const asked = (s: Session, request: InteractionRequest) =>
+  s.appendCustomEntry(INTERACTION_ENTRY, { phase: 'requested', request });
+
+const decided = (s: Session, request: InteractionRequest, outcome: InteractionOutcome) =>
+  s.appendCustomEntry(INTERACTION_ENTRY, { phase: 'resolved', request, outcome });
+
 const read = async (s: Session) => ({
   entries: await s.findEntriesOnBranch({ order: 'oldestFirst' }),
   records: await s.findRecords({ order: 'oldestFirst' }),
@@ -177,8 +192,9 @@ test("run metadata is rebuilt from the run's own records", async () => {
   await repo.close();
 });
 
-test('a parked call keeps its approval card instead of spinning', async () => {
+test('an open approval request keeps its card instead of spinning', async () => {
   const { repo, session: s } = await session();
+  const request = approvalFor('c1');
   await run(
     s,
     'r1',
@@ -187,7 +203,7 @@ test('a parked call keeps its approval card instead of spinning', async () => {
       await s.appendMessage(
         assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: { command: 'curl x' } }]),
       );
-      await s.appendCustomEntry(APPROVAL_ENTRY, { toolCallId: 'c1', approvalId: 'ap1' });
+      await asked(s, request);
     },
     { finish: false },
   );
@@ -197,8 +213,71 @@ test('a parked call keeps its approval card instead of spinning', async () => {
   expect(reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1')).toMatchObject(
     {
       state: 'approval-requested',
-      approval: { id: 'ap1' },
+      approval: { id: request.id },
     },
+  );
+  await repo.close();
+});
+
+test('a request that was denied reads back as denied, not as waiting', async () => {
+  const { repo, session: s } = await session();
+  const request = approvalFor('call-1');
+  await run(s, 'r1', async (s) => {
+    await s.appendMessage(user('curl something'));
+    await s.appendMessage(
+      assistant([
+        { type: 'toolCall', id: 'call-1', name: 'bash', arguments: { command: 'curl x' } },
+      ]),
+    );
+    await asked(s, request);
+    await decided(s, request, { kind: 'denied', reason: 'No' });
+    await s.appendMessage({
+      role: 'toolResult',
+      toolCallId: 'call-1',
+      toolName: 'bash',
+      content: [{ type: 'text', text: 'No' }],
+      details: {},
+      isError: true,
+      timestamp: 3,
+    } as AgentMessage);
+  });
+
+  const { entries, records } = await read(s);
+  const messages = projectMessages(entries, records);
+  expect(messages.at(-1)?.parts).toContainEqual(
+    expect.objectContaining({
+      toolCallId: 'call-1',
+      state: 'output-denied',
+      approval: { id: request.id, approved: false, reason: 'No' },
+    }),
+  );
+  await repo.close();
+});
+
+test('an approval asked in a later turn still reaches its card', async () => {
+  const { repo, session: s } = await session();
+  const request = approvalFor('c2');
+  await run(
+    s,
+    'r1',
+    async (s) => {
+      await s.appendMessage(user('two steps'));
+      await s.appendMessage(
+        assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: { command: 'ls' } }]),
+      );
+      await s.appendMessage(toolResult('c1', { stdout: 'a.txt' }));
+      await s.appendMessage(
+        assistant([{ type: 'toolCall', id: 'c2', name: 'bash', arguments: { command: 'curl x' } }]),
+      );
+      await asked(s, request);
+    },
+    { finish: false },
+  );
+
+  const { entries, records } = await read(s);
+  const [, reply] = projectMessages(entries, records);
+  expect(reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c2')).toMatchObject(
+    { state: 'approval-requested', approval: { id: request.id } },
   );
   await repo.close();
 });
@@ -239,11 +318,11 @@ test('the engine transcript is every message in order, records ignored', async (
   await repo.close();
 });
 
-test('a run left parked does not swallow the run that follows it', async () => {
+test('a run left open does not swallow the run that follows it', async () => {
   const { repo, session: s } = await session();
-  // Parked: the user was asked something and sent a new message instead. The
-  // store allows one open operation per lane, so the parked one is closed as
-  // the next run opens — which is what the recorder does.
+  // The run was still waiting when the process ended. The store allows one
+  // open operation per lane, so it is closed as the next run opens — which is
+  // what the recorder does.
   await run(
     s,
     'r1',
@@ -252,7 +331,7 @@ test('a run left parked does not swallow the run that follows it', async () => {
       await s.appendMessage(
         assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }]),
       );
-      await s.appendCustomEntry(APPROVAL_ENTRY, { toolCallId: 'c1', approvalId: 'ap1' });
+      await asked(s, approvalFor('c1'));
     },
     { finish: 'aborted' },
   );
@@ -264,7 +343,7 @@ test('a run left parked does not swallow the run that follows it', async () => {
   const { entries, records } = await read(s);
   const messages = projectMessages(entries, records);
   expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
-  // The second run's answer belongs to the second run, not the parked one.
+  // The second run's answer belongs to the second run, not the one left open.
   expect(messages[1].id).toBe('r1');
   expect(messages[3].id).toBe('r2');
   expect(messages[3].parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'done' }]);

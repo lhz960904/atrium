@@ -11,6 +11,7 @@ import type {
 } from '@earendil-works/pi-agent-core';
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
+import type { InteractionRequest } from '@shared/interactions';
 
 import { projectHistory, projectMessages } from '../project';
 import { createSessionRecorder } from '../session-recorder';
@@ -69,6 +70,14 @@ const assistant = (content: unknown[], extra: Record<string, unknown> = {}): Age
 
 const ended = (message: AgentMessage): AgentEvent =>
   ({ type: 'message_end', message }) as AgentEvent;
+
+const request = (id: string): InteractionRequest => ({
+  id,
+  runId: 'r1',
+  kind: 'approval',
+  toolCall: { type: 'toolCall', id: 'c1', name: 'bash', arguments: {} },
+  createdAt: 1,
+});
 
 const read = async (s: Session) => ({
   entries: await s.findEntriesOnBranch({ order: 'oldestFirst' }),
@@ -143,59 +152,6 @@ test('a turn that produced nothing is not kept', async () => {
   await repo.close();
 });
 
-test('a parked call comes back as its approval card', async () => {
-  const { repo, session: s } = await session();
-  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
-  await recorder.begin(user('curl x'));
-  await recorder.observe(
-    ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
-  );
-  await recorder.park({ toolCallId: 'c1', approvalId: 'ap1' });
-
-  const { entries, records } = await read(s);
-  const [, reply] = projectMessages(entries, records);
-  expect(reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1')).toMatchObject(
-    {
-      state: 'approval-requested',
-      approval: { id: 'ap1' },
-    },
-  );
-  await repo.close();
-});
-
-test('the refusal result a parked call produces is not kept', async () => {
-  const { repo, session: s } = await session();
-  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
-  await recorder.begin(user('curl x'));
-  await recorder.observe(
-    ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
-  );
-  await recorder.park({ toolCallId: 'c1', approvalId: 'ap1' });
-  // Blocking the call makes the engine stand in an error result for it.
-  await recorder.observe(
-    ended({
-      role: 'toolResult',
-      toolCallId: 'c1',
-      toolName: 'bash',
-      content: [{ type: 'text', text: 'Paused: waiting for the user.' }],
-      details: { errorText: 'Paused: waiting for the user.' },
-      isError: true,
-      timestamp: 3,
-    } as AgentMessage),
-  );
-
-  const { entries, records } = await read(s);
-  // The call is still open, so the card still shows the ask.
-  expect(projectHistory(entries).some((m) => m.role === 'toolResult')).toBe(false);
-  const [, reply] = projectMessages(entries, records);
-  expect(reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1')).toMatchObject(
-    {
-      state: 'approval-requested',
-    },
-  );
-  await repo.close();
-});
-
 test('a message carrying undefined is still storable', async () => {
   const { repo, session: s } = await session();
   const recorder = createSessionRecorder({ session: s, runId: 'r1' });
@@ -229,26 +185,6 @@ test('a message carrying undefined is still storable', async () => {
   await repo.close();
 });
 
-test('a clarification with no approval id is still storable', async () => {
-  const { repo, session: s } = await session();
-  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
-  await recorder.begin(user('ask me'));
-  await recorder.observe(
-    ended(assistant([{ type: 'toolCall', id: 'c1', name: 'ask_clarification', arguments: {} }])),
-  );
-  // A tool the user answers has no approval, so the field is simply undefined.
-  await recorder.park({ toolCallId: 'c1' });
-
-  const { entries, records } = await read(s);
-  const [, reply] = projectMessages(entries, records);
-  expect(reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1')).toMatchObject(
-    {
-      state: 'input-available',
-    },
-  );
-  await repo.close();
-});
-
 test("the user's turn keeps the id it was sent under", async () => {
   const { repo, session: s } = await session();
   const recorder = createSessionRecorder({ session: s, runId: 'r1' });
@@ -264,19 +200,16 @@ test("the user's turn keeps the id it was sent under", async () => {
   await repo.close();
 });
 
-test('a new run supersedes one the user walked away from', async () => {
+test('a new run closes one that never got to end', async () => {
   const { repo, session: s } = await session();
   const first = createSessionRecorder({ session: s, runId: 'r1' });
   await first.begin(user('curl x'));
-  await first.observe(
-    ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
-  );
-  await first.park({ toolCallId: 'c1', approvalId: 'ap1' });
+  await first.observe(ended(assistant([{ type: 'text', text: 'cut off' }])));
 
-  // The user ignores the ask and sends something else. The lane holds one
-  // operation at a time, so this only works if the parked one is closed first.
+  // The process died before the first run could end. The lane holds one
+  // operation at a time, so the next run only opens once that one is closed.
   const second = createSessionRecorder({ session: s, runId: 'r2' });
-  await second.begin(user('never mind, do this'));
+  await second.begin(user('try again'));
   await second.observe(ended(assistant([{ type: 'text', text: 'done' }])));
   await second.end('completed');
 
@@ -284,46 +217,62 @@ test('a new run supersedes one the user walked away from', async () => {
   const { entries, records } = await read(s);
   const abandoned = records.find((r) => r.type === 'operation_finished' && r.runId === 'r1');
   expect(abandoned).toMatchObject({ outcome: 'aborted' });
-  // Both runs are still readable, each with its own turn.
   const messages = projectMessages(entries, records);
   expect(messages.map((m) => m.id)).toEqual([messages[0].id, 'r1', messages[2].id, 'r2']);
   await repo.close();
 });
 
-test('a continuation extends the run it resumes instead of opening a second one', async () => {
+test('an approval is recorded once when asked and once when decided', async () => {
   const { repo, session: s } = await session();
-  const first = createSessionRecorder({ session: s, runId: 'r1' });
-  await first.begin(user('curl x'));
-  await first.observe(
+  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  await recorder.begin(user('curl x'));
+  await recorder.observe(
     ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
   );
-  await first.park({ toolCallId: 'c1', approvalId: 'ap1' });
+  const asked = request('00000000-0000-4000-8000-000000000001');
+  await recorder.interactionRequested(asked);
 
-  // The user approves; the run resumes under the same id.
-  const resumed = createSessionRecorder({ session: s, runId: 'r1', resuming: true });
-  await resumed.begin();
-  await resumed.observe(
+  let { entries, records } = await read(s);
+  const card = (parts: readonly unknown[]) =>
+    parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1');
+  expect(card(projectMessages(entries, records)[1].parts)).toMatchObject({
+    state: 'approval-requested',
+    approval: { id: asked.id },
+  });
+
+  await recorder.interactionResolved(asked, { kind: 'denied', reason: 'not now' });
+  ({ entries, records } = await read(s));
+  expect(
+    entries.filter((entry) => entry.type === 'custom' && entry.customType === 'atrium.interaction'),
+  ).toHaveLength(2);
+  expect(card(projectMessages(entries, records)[1].parts)).toMatchObject({
+    state: 'output-denied',
+    approval: { id: asked.id, approved: false },
+  });
+  await repo.close();
+});
+
+test('the error result a blocked call produces is kept as its real result', async () => {
+  const { repo, session: s } = await session();
+  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  await recorder.begin(user('curl x'));
+  await recorder.observe(
+    ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
+  );
+  await recorder.observe(
     ended({
       role: 'toolResult',
       toolCallId: 'c1',
       toolName: 'bash',
-      content: [{ type: 'text', text: 'ok' }],
-      details: 'ok',
-      isError: false,
+      content: [{ type: 'text', text: 'The user denied this operation.' }],
+      details: {},
+      isError: true,
       timestamp: 3,
     } as AgentMessage),
   );
-  await resumed.observe(ended(assistant([{ type: 'text', text: 'done' }])));
-  await resumed.end('completed');
+  await recorder.end('completed');
 
-  const { entries, records } = await read(s);
-  expect(records.filter((r) => r.type === 'operation_started')).toHaveLength(1);
-  const messages = projectMessages(entries, records);
-  // Still one user turn and one assistant message, not two of each.
-  expect(messages.map((m) => m.role)).toEqual(['user', 'assistant']);
-  expect(messages[1].id).toBe('r1');
-  expect(
-    messages[1].parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1'),
-  ).toMatchObject({ state: 'output-available', output: 'ok' });
+  const { entries } = await read(s);
+  expect(projectHistory(entries).filter((m) => m.role === 'toolResult')).toHaveLength(1);
   await repo.close();
 });

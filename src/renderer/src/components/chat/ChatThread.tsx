@@ -42,13 +42,13 @@ type ChatThreadProps = {
   onSend: (text: string, attachments: Attachment[]) => void;
   /** Rewrite a user message and re-run from it, discarding everything after. */
   onEditMessage: (id: string, text: string) => void;
-  /** Approve / trust-always / deny a pending tool call (resumes or aborts it). */
-  onApprove: (approvalId: string) => void;
-  onAlways: (approvalId: string) => void;
-  onDeny: (approvalId: string) => void;
-  /** Submit a clarification's answers (addToolOutput); resumes the turn. */
+  /** Approve / trust-always / deny a pending tool call; the waiting run carries on. */
+  onApprove: (approvalId: string) => Promise<void>;
+  onAlways: (approvalId: string) => Promise<void>;
+  onDeny: (approvalId: string) => Promise<void>;
+  /** Submit a clarification's answers to the run waiting on them. */
   onClarify: (toolCallId: string, result: ClarifyResult) => void;
-  /** Dismiss a clarification without answering; resolves it but doesn't resume. */
+  /** Dismiss a clarification without answering; the run ends its turn there. */
   onCancelClarify: (toolCallId: string) => void;
   /** Stop the in-flight generation. */
   onStop: () => void;
@@ -62,8 +62,7 @@ function messageText(parts: AtriumUIMessage['parts']): string {
 }
 
 /** The toolCallId of an ask_clarification awaiting its answer, or null. The
- *  composer is held while one is pending so the dangling tool call can't strand
- *  the next turn; Esc cancels it. */
+ *  composer is held while one is pending; Esc cancels it. */
 function pendingClarifyId(messages: AtriumUIMessage[]): string | null {
   for (const m of messages) {
     if (m.role !== 'assistant') continue;
@@ -133,15 +132,16 @@ export function ChatThread({
   // producing content.
   const preloader = live && !compacting && !lastAssistantHasContent(messages);
 
-  // Esc takes back the turn (Claude Code style): aborts an in-flight generation,
-  // or cancels a clarification that's waiting on the user. Bound only while one
-  // of those is active, so it doesn't swallow Esc from popovers/menus otherwise.
+  // Esc takes back the turn (Claude Code style): cancels a clarification that's
+  // waiting on the user, or else aborts an in-flight generation. A waiting
+  // question keeps its run streaming, so it is checked first. Bound only while
+  // one of those is active, so it doesn't swallow Esc from popovers/menus.
   useEffect(() => {
     if (!live && !clarifyPending) return;
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
-      if (live) onStop();
-      else if (pendingClarify) onCancelClarify(pendingClarify);
+      if (pendingClarify) onCancelClarify(pendingClarify);
+      else if (live) onStop();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

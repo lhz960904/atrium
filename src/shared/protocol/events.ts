@@ -1,3 +1,4 @@
+import type { InteractionEvent } from '../interactions';
 import type { ImageContent, Message, StopReason, TextContent, ToolCall, Usage } from './messages';
 
 /** Frozen shape of pi's AgentToolResult: model-facing content plus tool-specific structured details for UI rendering. */
@@ -31,7 +32,7 @@ export type ToolExecutionResult = {
  *   rows by it), and are carried only for assistant turns — pi announces every
  *   appended message, while the user's message arrived in the POST body and a
  *   tool result already comes through tool_execution_end;
- * - Atrium-owned events (approval_*, notice) extend the union in the same
+ * - Atrium-owned events (interaction_*, notice) extend the union in the same
  *   snake_case style.
  * Reducers must ignore unknown event types — new ones may appear.
  */
@@ -78,22 +79,8 @@ export type AgentSessionEvent =
   | { type: 'turn_end' }
   | { type: 'agent_end'; willRetry: boolean }
   // Atrium extensions
-  | { type: 'approval_requested'; approvalId: string; toolCallId: string }
-  | { type: 'approval_resolved'; approvalId: string; approved: boolean }
+  | InteractionEvent
   | { type: 'notice'; name: string; payload: unknown };
-
-/**
- * What the user came back with for a call the agent parked — the client's half
- * of the approval protocol, addressed to one call by id.
- *
- * A decision is a claim, not an instruction: the server checks it against the
- * run's stored rows, so a client working from a stale view can only ask for
- * less than it thinks, never for more.
- */
-export type ToolDecision =
-  | { toolCallId: string; kind: 'approved' }
-  | { toolCallId: string; kind: 'denied'; reason?: string }
-  | { toolCallId: string; kind: 'answered'; output: unknown };
 
 /**
  * seq is monotonic per stream; reconnecting clients pass their last seen seq

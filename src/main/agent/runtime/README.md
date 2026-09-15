@@ -1,6 +1,6 @@
 # Agent Runtime
 
-Runtime 的公共入口是 `Runner`。HTTP、tRPC 和定时任务通过它启动、恢复、停止运行或查询状态。
+Runtime 的公共入口是 `Runner`。HTTP、tRPC 和定时任务通过它启动、停止运行、提交用户决定或查询状态。
 
 ```mermaid
 flowchart TD
@@ -23,12 +23,12 @@ flowchart TD
 
 | 文件 / 目录 | 负责的事情 |
 | --- | --- |
-| `runner.ts` | 公共入口与应用生命周期资源：运行注册表、事件缓冲区、取消、后台 shell；同步校验模型；提供 start/resume/settle/compact 等接口 |
-| `execute-run.ts` | 单次运行的完整业务流程：装配 context 和工具、打开 session、读取历史、恢复决策、注册 capabilities、订阅、执行、记录与清理 |
+| `runner.ts` | 公共入口与应用生命周期资源：运行注册表、事件缓冲区、取消、后台 shell；同步校验模型；提供 start/respond/compact 等接口 |
+| `execute-run.ts` | 单次运行的完整业务流程：装配 context 和工具、打开 session、读取历史、注册 capabilities、订阅、执行、记录与清理 |
 | `agent-loop.ts` | 每个实例持有一个 pi Agent；调用方配置 messages、tools、maxTurns；仅负责运行循环 |
 | `complete.ts` | 通过 pi-ai completeSimple 执行单次无工具请求，检查错误并提取文本 |
 | `capabilities/` | 一个能力实现多个 pi 钩子；compose 将显式注册列表组合为单函数 |
-| `tool-resolutions.ts` | 将批准、拒绝、回答落实为暂停工具调用的执行结果 |
+| `pending-interactions.ts` | 一次运行中等待用户的请求：决定与停止的竞争、重复提交识别；不访问存储 |
 | `../skills/scope.ts` | 根据激活 Skill 的 allowed-tools 筛选工具 |
 | `../context/` | 统一拥有上下文变换、注入、摘要、压缩和 token 估算 |
 | `stream/` | pi 事件投影、工具错误展示、SSE 编码与内存重放 |
@@ -40,9 +40,9 @@ flowchart TD
 - 同一线程已有运行时，新运行被拒绝；不会覆盖原有事件缓冲区或中止句柄。
 - `abort()` 发出取消请求。运行完成清理前仍占有线程。
 - producer 直接返回执行结果；成功或失败都会关闭事件流并释放运行注册表。
-- `executeRun()` 统一拥有 recorder 的 begin/observe/end，准备失败、模型失败和取消都进入收尾；等待用户时不关闭 operation。
+- `executeRun()` 统一拥有 recorder 的 begin/observe/end，准备失败、模型失败和取消都进入收尾。审批和询问在运行内等待，用户决定只解除原调用的等待。
 - usage、浮层清理、operation 关闭分别尝试，后一项失败不覆盖原错误；底层存储不可写时保留未结束记录供恢复，并向调用方报告失败。
-- `RunResult` 内部分为 completed / waiting / aborted / failed；Runner 仅在公共接口映射成现有 ok/error。messageId 来自实际存储的 assistant 消息。
+- `RunResult` 内部分为 completed / aborted / failed；Runner 仅在公共接口映射成现有 ok/error。messageId 来自实际存储的 assistant 消息。
 - `agent_end` 在收尾后发出。后台标题仍可更新会话，但不会在结束后追加流事件；缓冲区也拒绝关闭后的追加。
 - `dispose()` 中止当前 Runner 的运行，并阻止它启动新运行。
 
@@ -52,7 +52,7 @@ Runner 不构建工具、不创建 recorder，也不通过 buildTools / generate
 
 单次环境在 execute-run 的 `prepareRun` 中顺序组装：创建 sandbox 和 RunContext，再直接 getTools。`prepareMessages` 处理压缩与恢复决策，`reportUsage` 将一次计数映射到前端与账本。它们是同文件的具体步骤，不是额外调度层。capabilities 仍只有一个显式注册区，agent-loop 不承担业务装配。
 
-这里的 Run 指运行到结束或等待用户的一段执行，可以包含多个 pi turn；恢复时沿用原业务 runId，但重新创建 loop。RunContext 是工具环境，不是另一套消息上下文，messages 仍统一使用 pi 类型。
+这里的 Run 指从发起到结束的一次执行，等待用户决定也在其中，可以包含多个 pi turn。RunContext 是工具环境，不是另一套消息上下文，messages 仍统一使用 pi 类型。
 
 ## 事件与持久化
 
@@ -71,7 +71,7 @@ Runner 不构建工具、不创建 recorder，也不通过 buildTools / generate
 扩展点直接放在 `createAgentLoop` 入参上。Loop 只接收组合后的单函数，负责轮次上限、取消与执行控制；策略组合由 execute-run 等调用层决定：
 
 - `transformContext`：接收 pi 兼容的单函数。能力组合器内部通过 `composeContext` 组合，不接受 false / undefined 占位；按顺序变换模型输入，复用 context 的错误跳过策略，不改写持久化历史。
-- `beforeToolCall`：接收 pi 兼容的单函数。能力组合器内部通过 `tool-checks.ts` 的 `composeBeforeToolCall` 组合检查，按顺序等待执行；遇到 `block` 立即返回原决策（包括 reason / terminate），不再执行后续检查。检查抛错交给 pi 处理，不跳过后继续放行；取消时不启动后续检查。`toolInteractions` 能力内依次检查客户端工具暂停、权限审批，并负责暂停后的停止判断。
+- `beforeToolCall`：接收 pi 兼容的单函数。能力组合器内部通过 `tool-checks.ts` 的 `composeBeforeToolCall` 组合检查，按顺序等待执行；遇到 `block` 立即返回原决策（包括 reason / terminate），不再执行后续检查。检查抛错交给 pi 处理，不跳过后继续放行；取消时不启动后续检查。`toolInteractions` 在审批钩子里等待用户决定，并为询问工具提供 ask；请求与决定先记录再继续。
 - `afterToolCall`：按注册顺序传递修改后的 result 和 isError；仅覆盖明确返回的字段。
 - `prepareNextTurn` / `shouldStopAfterTurn`：更新下一轮上下文、模型或决定停止；不能绕过 `maxTurns` 硬上限。达到上限时不再调用停止 Hook。
 - `onPayload` / `onResponse`：直接传给 pi 的模型请求扩展点。
@@ -85,7 +85,7 @@ Runner 不构建工具、不创建 recorder，也不通过 buildTools / generate
 
 Skill 范围每轮从完整工具列表重建，保证退出 Skill 后恢复；重复检测注册在后，达到阈值后持续清空工具，不能被 Skill 恢复覆盖。这一顺序是约束，有回归测试。
 
-Capabilities 只收拢 pi 决策能力。事件投影、会话订阅和收尾是 executeRun 的显式业务步骤；后台 memory/dream 的独立执行入口和审批恢复直接执行工具的路径不经过 capabilities。
+Capabilities 只收拢 pi 决策能力。事件投影、会话订阅和收尾是 executeRun 的显式业务步骤；后台 memory/dream 的独立执行入口不经过 capabilities。
 
 暂不提供 TurnHooks：目前没有业务观察者使用整次执行的开始、失败、结束通知。持久化、usage 和清理仍由 `executeRun` 明确执行，不增加空置的生命周期扩展层。
 

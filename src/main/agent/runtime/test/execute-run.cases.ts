@@ -1,6 +1,8 @@
 // Invoked by runtime.test.ts in an isolated Electron host stub.
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
+import type { AgentSessionEvent } from '@shared/protocol';
+import { createPendingInteractions, type PendingInteractions } from '../pending-interactions';
 import { cleanupRuntime, deferred, runtimeFixture } from './runtime-fixture';
 
 afterEach(cleanupRuntime);
@@ -15,8 +17,19 @@ const tools = await import('../../tools/registry');
 const title = await import('@main/conversation/title');
 
 type Fixture = Awaited<ReturnType<typeof runtimeFixture>>;
-async function run(f: Fixture, overrides: Partial<Parameters<typeof executeRun>[0]> = {}) {
-  const events: import('@shared/protocol').AgentSessionEvent[] = [];
+type RunOverrides = Partial<
+  Omit<Parameters<typeof executeRun>[0], 'signal' | 'pending' | 'emit'>
+> & {
+  abort?: AbortController;
+  onEvent?: (event: AgentSessionEvent, pending: PendingInteractions) => void;
+};
+
+async function run(
+  f: Fixture,
+  { abort = new AbortController(), onEvent, ...overrides }: RunOverrides = {},
+) {
+  const events: AgentSessionEvent[] = [];
+  const pending = createPendingInteractions({ runId: 'r1', abort });
   const result = await executeRun({
     input: f.request,
     runId: 'r1',
@@ -24,8 +37,12 @@ async function run(f: Fixture, overrides: Partial<Parameters<typeof executeRun>[
     db: f.db,
     projectlessRoot: f.dir,
     bgShells: f.bgShells,
-    signal: new AbortController().signal,
-    emit: (event) => events.push(event),
+    signal: abort.signal,
+    pending,
+    emit: (event) => {
+      events.push(event);
+      onEvent?.(event, pending);
+    },
     ...overrides,
   });
   const session = await findThreadSession(f.db, 't1');
@@ -55,6 +72,13 @@ const bash = () =>
       stopReason: 'toolUse',
     },
   );
+
+const decide =
+  (decision: Parameters<PendingInteractions['respond']>[0]['decision']) =>
+  (event: AgentSessionEvent, pending: PendingInteractions) => {
+    if (event.type !== 'interaction_requested') return;
+    pending.respond({ runId: 'r1', interactionId: event.request.id, decision });
+  };
 
 test('owns begin, message persistence and end; the wire carries deltas and a final event', async () => {
   const f = await runtimeFixture();
@@ -150,61 +174,78 @@ test('a provider error is a failed result, without inventing a stored assistant 
   expect(events.at(-1)?.type).toBe('agent_end');
 });
 
-test('waiting keeps the operation open and suppresses the artificial blocked tool result', async () => {
+test('an answered clarification is the single real result of one operation', async () => {
   const f = await runtimeFixture();
-  f.faux.setResponses([question()]);
-  const { result, events, session } = await run(f);
-  expect(result.status).toBe('waiting');
-  expect(await session?.findOpenOperations('main')).toHaveLength(1);
-  expect(events.some((event) => event.type === 'tool_execution_end')).toBe(false);
-  const entries = await session?.findEntriesOnBranch();
-  expect(
-    entries?.some((entry) => entry.type === 'message' && entry.message.role === 'toolResult'),
-  ).toBe(false);
-  expect(events.at(-1)?.type).toBe('agent_end');
-});
-
-test('resume stores the answer before invoking pi and extends the original run', async () => {
-  const f = await runtimeFixture();
-  f.faux.setResponses([question()]);
-  const first = await run(f);
-  const started = first.records.find((r) => r.type === 'operation_started');
-  f.faux.setResponses([
-    (context) => {
-      const results = context.messages.filter((message) => message.role === 'toolResult');
-      expect(results).toHaveLength(1);
-      expect(results[0]).toMatchObject({ toolCallId: 'call-1', isError: false });
-      return fauxAssistantMessage('Understood');
-    },
-  ]);
-  const resumed = await run(f, {
-    input: {
-      threadId: 't1',
-      resumeRunId: 'r1',
-      resolutions: [{ toolCallId: 'call-1', kind: 'answered', output: 'A' }],
+  f.faux.setResponses([question(), fauxAssistantMessage('Understood')]);
+  const { result, records, session, events } = await run(f, {
+    onEvent: decide({ kind: 'answered', answers: ['A'] }),
+  });
+  expect(result).toMatchObject({ status: 'completed', messageId: 'r1' });
+  expect(records.filter((record) => record.type === 'operation_started')).toHaveLength(1);
+  expect(records.filter((record) => record.type === 'operation_finished')).toHaveLength(1);
+  const entries = (await session?.findEntriesOnBranch({ order: 'oldestFirst' })) ?? [];
+  const results = entries.filter(
+    (entry) => entry.type === 'message' && entry.message.role === 'toolResult',
+  );
+  expect(results).toHaveLength(1);
+  expect(results[0]).toMatchObject({
+    message: {
+      toolCallId: 'call-1',
+      isError: false,
+      details: { answers: [{ question: 'Which one?', answer: 'A' }] },
     },
   });
-  expect(resumed.result.status).toBe('completed');
-  expect(resumed.records.filter((r) => r.type === 'operation_started')).toHaveLength(1);
-  expect(await resumed.session?.findOpenOperations('main')).toEqual([]);
   expect(
-    resumed.events.find((event) => event.type === 'notice' && event.name === 'message-metadata'),
-  ).toMatchObject({ payload: { createdAt: started?.timestamp } });
+    entries.filter((entry) => entry.type === 'custom' && entry.customType === 'atrium.interaction'),
+  ).toHaveLength(2);
+  expect(events.filter((event) => event.type === 'interaction_resolved')).toHaveLength(1);
 });
 
-test('default permissions park a boundary crossing without executing it', async () => {
+test('default permissions ask before a boundary crossing and never run it unanswered', async () => {
   const f = await runtimeFixture();
   const exec = spyOn(LocalSandbox.prototype, 'exec').mockResolvedValue({
     output: 'ran',
     exitCode: 0,
   });
   f.faux.setResponses([bash()]);
-  const { result, events } = await run(f);
-  expect(result.status).toBe('waiting');
-  expect(events.find((event) => event.type === 'approval_requested')).toMatchObject({
-    toolCallId: 'call-1',
+  const { result, events, records, session } = await run(f, {
+    onEvent: (event, pending) => {
+      if (event.type === 'interaction_requested') pending.cancel('user_cancelled');
+    },
+  });
+  expect(result.status).toBe('aborted');
+  expect(events.find((event) => event.type === 'interaction_requested')).toMatchObject({
+    request: { kind: 'approval', toolCall: { id: 'call-1' } },
+  });
+  expect(events.find((event) => event.type === 'interaction_resolved')).toMatchObject({
+    outcome: { kind: 'interrupted', reason: 'user_cancelled' },
   });
   expect(exec).not.toHaveBeenCalled();
+  expect(records.find((record) => record.type === 'operation_finished')).toMatchObject({
+    outcome: 'aborted',
+  });
+  expect(await session?.findOpenOperations('main')).toEqual([]);
+});
+
+test('a decision that cannot be recorded stops the run instead of approving it', async () => {
+  const f = await runtimeFixture();
+  const exec = spyOn(LocalSandbox.prototype, 'exec').mockResolvedValue({
+    output: 'ran',
+    exitCode: 0,
+  });
+  const session = await openThreadSession(f.db, 't1', f.dir);
+  spyOn(f.repo, 'open').mockResolvedValue(session);
+  const append = session.appendEntry.bind(session);
+  spyOn(session, 'appendEntry').mockImplementation((entry, lane) =>
+    (entry as { data?: { phase?: string } }).data?.phase === 'resolved'
+      ? Promise.reject(new Error('interaction write failed'))
+      : append(entry, lane),
+  );
+  f.faux.setResponses([bash(), fauxAssistantMessage('should never be asked')]);
+  const { result } = await run(f, { onEvent: decide({ kind: 'approved' }) });
+  expect(result).toMatchObject({ status: 'failed', error: 'interaction write failed' });
+  expect(exec).not.toHaveBeenCalled();
+  expect(f.faux.state.callCount).toBe(1);
 });
 
 test('full access uses the same permission mode in the prompt and gate', async () => {
@@ -225,7 +266,7 @@ test('full access uses the same permission mode in the prompt and gate', async (
   });
   expect(result.status).toBe('completed');
   expect(exec).toHaveBeenCalledTimes(1);
-  expect(events.some((event) => event.type === 'approval_requested')).toBe(false);
+  expect(events.some((event) => event.type === 'interaction_requested')).toBe(false);
 });
 
 test('abort during preparation closes the run and never starts pi', async () => {
@@ -235,7 +276,7 @@ test('abort during preparation closes the run and never starts pi', async () => 
     abort.abort();
     return [];
   });
-  const { result, session, events } = await run(f, { signal: abort.signal });
+  const { result, session, events } = await run(f, { abort });
   expect(result.status).toBe('aborted');
   expect(result.error).toBeUndefined();
   expect(f.faux.state.callCount).toBe(0);
@@ -256,7 +297,7 @@ test('abort during a tool reaches the sandbox and closes the operation after its
   });
   f.faux.setResponses([bash()]);
   const running = run(f, {
-    signal: abort.signal,
+    abort,
     input: { ...f.request, permissionMode: 'full-access' },
   });
   await entered.promise;
@@ -293,7 +334,9 @@ test('a recording close failure is reported but does not prevent the final event
 
 test('an already-aborted execution opens no session', async () => {
   const f = await runtimeFixture();
-  const { result, session } = await run(f, { signal: AbortSignal.abort() });
+  const abort = new AbortController();
+  abort.abort();
+  const { result, session } = await run(f, { abort });
   expect(result.status).toBe('aborted');
   expect(session).toBeUndefined();
 });

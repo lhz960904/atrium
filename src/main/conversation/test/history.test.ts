@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, ToolResultMessage } from '@earendil-works/pi-ai';
 
-import { sealDanglingToolCalls, withSettledResults } from '../history';
+import { sealDanglingToolCalls } from '../history';
 
 const zeroUsage = () => ({
   input: 0,
@@ -43,28 +43,12 @@ test('an unanswered call is sealed so the transcript stays valid', () => {
   expect(resultsFor(sealed, 'c1')[0].isError).toBe(true);
 });
 
-test('a settled decision replaces the seal rather than joining it', () => {
-  // What a resumed run actually starts from: the reader has already sealed the
-  // call the previous turn parked, and now the user's answer arrives for it.
-  const history = sealDanglingToolCalls([calling('c1')]);
-  const messages = withSettledResults(history, [answer('c1', 'blue')]);
-
-  const results = resultsFor(messages, 'c1');
-  expect(results).toHaveLength(1);
-  expect(results[0].details).toBe('blue');
-  // The answer has to sit after the turn that asked for it.
-  expect(messages.at(-1)).toBe(results[0]);
+test('a transcript whose calls all have results is left as it is', () => {
+  const history: Message[] = [calling('c1', 'c2'), answer('c1', 'one'), answer('c2', 'two')];
+  expect(sealDanglingToolCalls(history)).toEqual(history);
 });
 
-test('results for other calls are left where they are', () => {
-  const history: Message[] = [calling('c1', 'c2'), answer('c1', 'kept')];
-  const messages = withSettledResults(history, [answer('c2', 'new')]);
-  expect(resultsFor(messages, 'c1')).toHaveLength(1);
-  expect(resultsFor(messages, 'c2')).toHaveLength(1);
-  expect(messages).toHaveLength(3);
-});
-
-test('nothing settled leaves the transcript untouched', () => {
-  const history: Message[] = [calling('c1')];
-  expect(withSettledResults(history, [])).toBe(history);
+test('sealing twice adds nothing the first pass did not', () => {
+  const once = sealDanglingToolCalls([calling('c1')]);
+  expect(sealDanglingToolCalls(once)).toEqual(once);
 });

@@ -8,15 +8,8 @@ import { type TSchema, Type } from 'typebox';
  * `details` is the structured payload the UI renders — the renderer reads a
  * tool result's details verbatim, so each tool's details must stay the exact
  * shape its card already knows.
- *
- * `clientSide` marks a tool the engine must never execute: the model's call
- * ends the turn and the user's answer becomes the result. pi has no such
- * concept — every call needs a result — so it is carried as our own flag until
- * the HITL step gives those tools a real pi-side execute.
  */
-export type AtriumTool<P extends TSchema = TSchema, D = unknown> = AgentTool<P, D> & {
-  clientSide?: true;
-};
+export type AtriumTool<P extends TSchema = TSchema, D = unknown> = AgentTool<P, D>;
 
 /**
  * Binds `execute`'s params to `parameters` while authoring, then widens to the
@@ -24,9 +17,20 @@ export type AtriumTool<P extends TSchema = TSchema, D = unknown> = AgentTool<P, 
  * property rather than a method: a tool whose params are a concrete object is
  * not assignable to one whose params are `unknown`, so a mixed toolset can only
  * be typed at the open end.
+ *
+ * Execution checks the run's signal first: once a run is cancelled pi can still
+ * start a call it had already let through, and a tool that never began must not
+ * get to cause its side effect.
  */
 export function defineTool<P extends TSchema, D>(t: AtriumTool<P, D>): AtriumTool {
-  return t as unknown as AtriumTool;
+  const guarded: AtriumTool<P, D> = {
+    ...t,
+    execute: async (...args) => {
+      args[2]?.throwIfAborted();
+      return t.execute(...args);
+    },
+  };
+  return guarded as unknown as AtriumTool;
 }
 
 export { Type };

@@ -6,8 +6,14 @@ import {
   type MessageEntry,
 } from '@earendil-works/pi-agent-core';
 import type { AtriumUIMessage } from '@shared/chat';
+import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
 import type { AssistantMessage, Message, ToolCall } from '@shared/protocol';
-import { mergeAssistantMessage, mergeUserMessage, type PiRow } from './ui-messages';
+import {
+  mergeAssistantMessage,
+  mergeUserMessage,
+  type PiRow,
+  type ToolStateExtras,
+} from './ui-messages';
 
 /**
  * A session as the rest of the app reads it.
@@ -24,14 +30,14 @@ import { mergeAssistantMessage, mergeUserMessage, type PiRow } from './ui-messag
  * bracket.
  */
 
-/** The state a parked tool call is waiting in, recorded as its own entry. */
-export const APPROVAL_ENTRY = 'atrium.approval';
+/** A run's wait on the user, recorded when asked and again when settled. */
+export const INTERACTION_ENTRY = 'atrium.interaction';
 
-export type ApprovalEntryData = {
-  toolCallId: string;
-  /** Present when the pause is an approval; absent for a tool the user answers. */
-  approvalId?: string;
-};
+export type InteractionEntryData =
+  | { phase: 'requested'; request: InteractionRequest }
+  | { phase: 'resolved'; request: InteractionRequest; outcome: InteractionOutcome };
+
+const INTERRUPTED_TEXT = 'The run stopped before this call was decided.';
 
 type Run = {
   id: string;
@@ -62,7 +68,7 @@ function runsOf(records: LaneRecord[]): Run[] {
     });
   }
   runs.sort((a, b) => a.startSeq - b.startSeq);
-  // A run with no end is still streaming, or was left parked, or was cut off.
+  // A run with no end is still streaming or waiting, or was cut off.
   // Its entries reach to wherever the next run begins — a lane runs one
   // operation at a time, so nothing after that point can be its own.
   for (const [index, run] of runs.entries()) {
@@ -111,15 +117,43 @@ function modelOf(messages: Message[]): { providerId?: string; modelId?: string }
   return {};
 }
 
-/** Tool states pi has no slot for, keyed by call id, from the approval entries. */
-function toolStatesOf(entries: Entry[]): Record<string, unknown> {
-  const states: Record<string, unknown> = {};
+/**
+ * Tool states pi has no slot for, keyed by call id, folded from the interaction
+ * entries in order. A settlement replaces the request it answers, so only a
+ * request nobody settled still reads as waiting.
+ */
+function toolStatesOf(entries: Entry[]): ToolStateExtras {
+  const states: ToolStateExtras = {};
   for (const entry of entries) {
-    if (entry.type !== 'custom' || entry.customType !== APPROVAL_ENTRY) continue;
-    const { toolCallId, approvalId } = entry.data as ApprovalEntryData;
-    states[toolCallId] = approvalId
-      ? { state: 'approval-requested', approval: { id: approvalId } }
-      : { state: 'input-available' };
+    if (entry.type !== 'custom' || entry.customType !== INTERACTION_ENTRY) continue;
+    const data = entry.data as InteractionEntryData;
+    const { id: callId } = data.request.toolCall;
+    const approval = { id: data.request.id };
+    if (data.phase === 'requested') {
+      states[callId] =
+        data.request.kind === 'approval'
+          ? { state: 'approval-requested', approval }
+          : { state: 'input-available' };
+      continue;
+    }
+    const { outcome } = data;
+    if (outcome.kind === 'denied') {
+      states[callId] = {
+        state: 'output-denied',
+        approval: {
+          ...approval,
+          approved: false,
+          ...(outcome.reason && { reason: outcome.reason }),
+        },
+      };
+    } else if (outcome.kind === 'approved') {
+      states[callId] = { state: 'approval-responded', approval: { ...approval, approved: true } };
+    } else if (outcome.kind === 'interrupted') {
+      states[callId] = { state: 'output-error', errorText: INTERRUPTED_TEXT };
+    } else {
+      // An answer or a cancellation is carried by the call's own result.
+      delete states[callId];
+    }
   }
   return states;
 }
@@ -233,7 +267,7 @@ export function projectHistory(entries: Entry[]): AgentMessage[] {
   return buildSessionContext(entries).messages;
 }
 
-/** Tool calls in the branch that never got a result — the ones still parked. */
+/** Tool calls in the branch that never got a result. */
 export function openToolCalls(entries: Entry[]): ToolCall[] {
   const answered = new Set(
     entries.flatMap((entry) =>

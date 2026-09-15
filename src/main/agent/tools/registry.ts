@@ -83,7 +83,7 @@ export function getTools(ctx: ToolCtx): AtriumTool[] {
       siblings: () => assembled,
     }),
     skillTool({ skills: ctx.skills ?? [], run: ctx.run }),
-    askClarificationTool(),
+    askClarificationTool(ctx.ask),
     viewImageTool(ctx),
     memoryTool(ctx),
     profileTool(),

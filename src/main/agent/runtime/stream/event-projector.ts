@@ -1,6 +1,5 @@
 import type { AgentEvent } from '@earendil-works/pi-agent-core';
 import type { AgentSessionEvent } from '@shared/protocol';
-import type { ParkedCall } from '../tool-resolutions';
 import { projectAgentEvent } from './projector';
 import { withErrorText } from './tool-result';
 
@@ -11,8 +10,6 @@ import { withErrorText } from './tool-result';
  */
 export function createRunEventProjector(opts: {
   runId: string;
-  /** Calls handed back to the user; their cards are showing the ask. */
-  parked: Map<string, ParkedCall>;
   emit: (event: AgentSessionEvent) => void;
 }): (event: AgentEvent) => void {
   return (event: AgentEvent) => {
@@ -31,9 +28,6 @@ export function createRunEventProjector(opts: {
       return;
     }
     if (projected.type === 'tool_execution_end') {
-      // A parked call produced no result — the card is showing the ask, and a
-      // refusal frame would replace it with an error the user never caused.
-      if (opts.parked.has(projected.toolCallId)) return;
       projected.result.details = withErrorText(
         projected.result.details,
         projected.result.content,

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { InteractionRequest } from '@shared/interactions';
 import type { AgentSessionEvent, AssistantMessage, Content } from '@shared/protocol';
 import { getPendingApprovals } from '../../approvals';
 import { RunAssembler, type RunSnapshot } from '../reduce';
@@ -69,6 +70,14 @@ const toolEnd = (
   toolName,
   result: { content: [{ type: 'text', text: String(details) }], details },
   isError,
+});
+
+const approvalRequest = (toolCallId: string, id = `ap-${toolCallId}`): InteractionRequest => ({
+  id,
+  runId: 'm1',
+  kind: 'approval',
+  toolCall: { type: 'toolCall', id: toolCallId, name: 'bash', arguments: {} },
+  createdAt: 1,
 });
 
 function assemble(events: AgentSessionEvent[]): RunSnapshot {
@@ -212,40 +221,98 @@ describe('tool turns', () => {
   });
 });
 
-describe('approvals', () => {
+describe('interactions', () => {
   test('an approval request pauses the part where getPendingApprovals finds it', () => {
+    const request = approvalRequest('t1');
     const { message } = assemble([
       ...open(),
       ...toolCall(0, 't1', 'bash', { command: 'rm -rf /tmp/x' }),
-      { type: 'approval_requested', approvalId: 'a1', toolCallId: 't1' },
+      { type: 'interaction_requested', request },
     ]);
     expect(message?.parts[1]).toMatchObject({
       state: 'approval-requested',
-      approval: { id: 'a1' },
+      approval: { id: request.id },
     });
     const pending = getPendingApprovals([message as never]);
     expect(pending).toHaveLength(1);
-    expect(pending[0]).toMatchObject({ approvalId: 'a1', toolName: 'bash', prefix: '$ ' });
+    expect(pending[0]).toMatchObject({ approvalId: request.id, toolName: 'bash', prefix: '$ ' });
   });
 
-  test('a denied execution closes the part as output-denied', () => {
+  test('an approved request waits for the real result instead of claiming success', () => {
+    const request = approvalRequest('t1');
+    const assembler = new RunAssembler();
+    for (const event of [
+      ...open(),
+      ...toolCall(0, 't1', 'bash', {}),
+      { type: 'interaction_requested', request } as AgentSessionEvent,
+    ]) {
+      assembler.apply(event);
+    }
+    assembler.apply({ type: 'interaction_resolved', request, outcome: { kind: 'approved' } });
+    expect(assembler.snapshot().message?.parts[1]).toMatchObject({
+      state: 'approval-responded',
+      approval: { id: request.id, approved: true },
+    });
+    assembler.apply(toolEnd('t1', 'bash', { stdout: 'ok' }));
+    expect(assembler.snapshot().message?.parts[1]).toMatchObject({
+      state: 'output-available',
+      output: { stdout: 'ok' },
+    });
+  });
+
+  test('a denial is not overwritten by the error pi stands in for the blocked call', () => {
+    const request = approvalRequest('t1');
     const { message } = assemble([
       ...open(),
       ...toolCall(0, 't1', 'bash', {}),
-      { type: 'approval_requested', approvalId: 'a1', toolCallId: 't1' },
+      { type: 'interaction_requested', request },
+      { type: 'interaction_resolved', request, outcome: { kind: 'denied', reason: 'No' } },
       {
         type: 'tool_execution_end',
         toolCallId: 't1',
         toolName: 'bash',
-        result: { content: [], details: { denied: true } },
+        result: { content: [{ type: 'text', text: 'No' }], details: { errorText: 'No' } },
         isError: true,
       },
       ...close([{ type: 'toolCall', id: 't1', name: 'bash', arguments: {} }] as Content[]),
     ]);
     expect(message?.parts[1]).toMatchObject({
       state: 'output-denied',
-      approval: { id: 'a1', approved: false },
+      approval: { id: request.id, approved: false, reason: 'No' },
     });
+  });
+
+  test('a waiting request is found by its id and by its call until it is resolved', () => {
+    const approval = approvalRequest('t1');
+    const question: InteractionRequest = {
+      id: 'q-t2',
+      runId: 'm1',
+      kind: 'clarification',
+      toolCall: {
+        type: 'toolCall',
+        id: 't2',
+        name: 'ask_clarification',
+        arguments: { questions: [] },
+      },
+      createdAt: 1,
+    };
+    const assembler = new RunAssembler();
+    for (const event of [
+      ...open(),
+      { type: 'interaction_requested', request: approval },
+      { type: 'interaction_requested', request: question },
+    ] as AgentSessionEvent[]) {
+      assembler.apply(event);
+    }
+    expect(assembler.openInteraction(approval.id)).toEqual(approval);
+    expect(assembler.openInteractionForTool('t2')).toEqual(question);
+    assembler.apply({
+      type: 'interaction_resolved',
+      request: approval,
+      outcome: { kind: 'approved' },
+    });
+    expect(assembler.openInteraction(approval.id)).toBeUndefined();
+    expect(assembler.openInteractionForTool('t2')).toEqual(question);
   });
 });
 
@@ -280,6 +347,37 @@ describe('run envelope', () => {
     ]);
     expect(status).toBe('done');
     expect(message?.parts.at(-1)).toMatchObject({ type: 'text', text: '写到一半' });
+  });
+
+  test('a run the user stopped ends without reporting an error', () => {
+    const { status, error } = assemble([
+      ...open(),
+      {
+        type: 'message_end',
+        messageId: 'm1',
+        message: {
+          ...assistant([]),
+          stopReason: 'aborted',
+          errorMessage: 'This operation was aborted',
+        },
+      },
+      { type: 'agent_end', willRetry: false },
+    ]);
+    expect(status).toBe('done');
+    expect(error).toBeUndefined();
+  });
+
+  test('a provider failure still reports its error', () => {
+    const { error } = assemble([
+      ...open(),
+      {
+        type: 'message_end',
+        messageId: 'm1',
+        message: { ...assistant([]), stopReason: 'error', errorMessage: 'rate limited' },
+      },
+      { type: 'agent_end', willRetry: false },
+    ]);
+    expect(error).toBe('rate limited');
   });
 
   test('file notices append file parts', () => {
