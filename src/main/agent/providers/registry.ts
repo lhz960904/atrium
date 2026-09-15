@@ -20,7 +20,7 @@ import { openaiCodexProvider } from '@earendil-works/pi-ai/providers/openai-code
 import { openrouterProvider } from '@earendil-works/pi-ai/providers/openrouter';
 import { zaiCodingCnProvider } from '@earendil-works/pi-ai/providers/zai-coding-cn';
 import type { Db } from '@main/db';
-import { type CustomProviderCatalog, readCustomProviderCatalogs } from './custom-providers';
+import { readCustomProviders, type StoredCustomProvider } from './custom-providers';
 import { volcengineAgentProviderConfig, volcengineCodingProviderConfig } from './volcengine';
 
 /**
@@ -144,7 +144,7 @@ const BUILTIN_PROVIDERS: readonly Provider[] = (() => {
 
 /** A provider that exists only because the user defined it: the endpoint and
  *  the request format are theirs, and so is every model on it. */
-function customProvider(id: string, { definition, models }: CustomProviderCatalog): Provider {
+function customProvider(id: string, { definition, models }: StoredCustomProvider): Provider {
   return createProvider({
     id,
     name: definition.name,
@@ -160,7 +160,7 @@ function customProvider(id: string, { definition, models }: CustomProviderCatalo
   });
 }
 
-function registerAll(custom: ReadonlyMap<string, CustomProviderCatalog>): void {
+function syncRegistry(custom: ReadonlyMap<string, StoredCustomProvider>): void {
   for (const provider of BUILTIN_PROVIDERS) piModels.setProvider(provider);
   const builtin = new Set(BUILTIN_PROVIDERS.map((provider) => provider.id));
   for (const [id, catalog] of custom) {
@@ -180,7 +180,7 @@ function registerAll(custom: ReadonlyMap<string, CustomProviderCatalog>): void {
 // The registry has to answer before the database is open — a scheduled run can
 // resolve a model during startup — so it starts at what Atrium ships and is
 // rebuilt once the providers the user defined are readable.
-registerAll(new Map());
+syncRegistry(new Map());
 
 /**
  * Rebuild the registry from what the user has stored. Called once the database
@@ -189,7 +189,7 @@ registerAll(new Map());
  * catalog until it is set again.
  */
 export function refreshProviders(db: Db): void {
-  registerAll(readCustomProviderCatalogs(db));
+  syncRegistry(readCustomProviders(db));
 }
 
 export const piStreamFn = piModels.streamSimple.bind(piModels);

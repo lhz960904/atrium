@@ -11,7 +11,7 @@ import {
 const log = createLogger('providers');
 
 /** A provider the user defined, together with the models they added to it. */
-export type CustomProviderCatalog = {
+export type StoredCustomProvider = {
   definition: CustomProvider;
   models: CustomModel[];
 };
@@ -22,8 +22,8 @@ export type CustomProviderCatalog = {
  * hand-edited, and a half-built entry would reach the engine as a confusing
  * request error instead of a missing one.
  */
-export function readCustomProviderCatalogs(db: Db): Map<string, CustomProviderCatalog> {
-  const out = new Map<string, CustomProviderCatalog>();
+export function readCustomProviders(db: Db): Map<string, StoredCustomProvider> {
+  const out = new Map<string, StoredCustomProvider>();
   for (const row of db
     .select({ id: providers.id, config: providers.config })
     .from(providers)

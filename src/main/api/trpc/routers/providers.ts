@@ -10,10 +10,9 @@ import {
   readLogin,
   startLogin,
 } from '@main/agent/providers/oauth-login';
-import { piModels, refreshProviders } from '@main/agent/providers/pi-model';
+import { piModels, refreshProviders } from '@main/agent/providers/registry';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
-import { decryptJson, encryptJson } from '@main/platform/safe-storage';
 import {
   customModelSchema,
   customProviderIdSchema,
@@ -85,8 +84,9 @@ export const providersRouter = router({
    * a provider sitting in the list doing nothing is the state everyone forgets
    * to leave.
    */
-  list: publicProcedure.query(({ ctx }): ProviderView[] => {
+  list: publicProcedure.query(async ({ ctx }): Promise<ProviderView[]> => {
     const rows = ctx.db.select().from(providers).all();
+    const keyed = new Set((await ctx.credentials.list()).map((c) => c.providerId));
     const byId = new Map(rows.map((r) => [r.id, r]));
     // A provider the user defined has no manifest entry, so one is made for it
     // from what they gave: the panel treats both the same from here on.
@@ -98,20 +98,19 @@ export const providersRouter = router({
       return [
         {
           id: row.id,
-          kind: 'cloud-api' as const,
+          authMode: 'api-key' as const,
           name: parsed.data.name,
-          protocol: 'openai-compatible' as const,
           defaultBaseUrl: parsed.data.baseUrl,
           consoleUrl: '',
           enabled: row.enabled,
           config: (row.config as Record<string, unknown> | null) ?? null,
-          hasCredentials: !!row.credentialsEncrypted,
+          hasCredentials: keyed.has(row.id),
           models: piModels.getModels(row.id).map((model) => ({ id: model.id })),
           custom: true,
         },
       ];
     });
-    const shipped: ProviderView[] = PROVIDER_MANIFEST.filter((m) => byId.has(m.id)).map((m) => {
+    const builtin: ProviderView[] = PROVIDER_MANIFEST.filter((m) => byId.has(m.id)).map((m) => {
       const row = byId.get(m.id);
       // The endpoint comes from the registry, which is the only place it is
       // written down: the manifest describes a provider, it doesn't say how to
@@ -120,18 +119,16 @@ export const providersRouter = router({
       return {
         ...m,
         defaultBaseUrl: registered?.baseUrl,
-        ...(m.kind === 'cloud-api' || m.kind === 'subscription'
-          ? { models: piModels.getModels(m.id).map((model) => ({ id: model.id })) }
-          : {}),
+        models: piModels.getModels(m.id).map((model) => ({ id: model.id })),
         enabled: row?.enabled ?? false,
         config: (row?.config as Record<string, unknown> | null) ?? null,
-        hasCredentials: !!row?.credentialsEncrypted,
+        hasCredentials: keyed.has(m.id),
       };
     });
-    return [...shipped, ...defined];
+    return [...builtin, ...defined];
   }),
 
-  /** The shipped providers not added yet — the choices in the add picker. */
+  /** The built-in providers not added yet — the choices in the add picker. */
   available: publicProcedure.query(({ ctx }) => {
     const taken = new Set(
       ctx.db
@@ -143,11 +140,11 @@ export const providersRouter = router({
     return PROVIDER_MANIFEST.filter((m) => !taken.has(m.id)).map((m) => ({
       id: m.id,
       name: m.name,
-      kind: m.kind,
+      authMode: m.authMode,
     }));
   }),
 
-  /** Add a shipped provider. Adding is the whole step: it is on from here. */
+  /** Add a built-in provider. Adding is the whole step: it is on from here. */
   add: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     if (!getProviderManifest(input.id)) throw badRequest(`"${input.id}" is not a known provider.`);
     ctx.db
@@ -178,7 +175,7 @@ export const providersRouter = router({
         .get();
       if (taken) throw badRequest(`"${input.id}" is already in use.`);
       // Defining one is adding it, so it is on — the same rule as picking a
-      // shipped provider.
+      // built-in provider.
       ctx.db
         .insert(providers)
         .values({ id: input.id, enabled: true, config: { customProvider: input.provider } })
@@ -256,58 +253,32 @@ export const providersRouter = router({
       });
     }),
 
-  /**
-   * Persist credentials encrypted via Electron safeStorage. The plaintext
-   * is the raw key (or a JSON object for richer payloads in the future);
-   * we wrap it in JSON so the same code path supports both shapes.
-   */
+  /** Save an API key in the store requests resolve it from. */
   setCredentials: publicProcedure
     .input(z.object({ id: z.string(), plaintext: z.string() }))
-    .mutation(({ ctx, input }) => {
-      const blob = encryptJson({ key: input.plaintext });
-      ctx.db
-        .insert(providers)
-        .values({ id: input.id, credentialsEncrypted: blob })
-        .onConflictDoUpdate({
-          target: providers.id,
-          set: { credentialsEncrypted: blob, updatedAt: new Date() },
-        })
-        .run();
+    .mutation(async ({ ctx, input }) => {
+      await ctx.credentials.modify(input.id, async () => ({
+        type: 'api_key',
+        key: input.plaintext,
+      }));
     }),
 
   /**
-   * Returns the plaintext credential (currently always the API key string)
-   * so the renderer can reveal it via the eye-toggle in the password field.
-   * Returns null if no credentials are stored.
+   * The saved API key in plaintext, so the password field's eye toggle can
+   * reveal it. Null when there is none, including when the provider holds an
+   * OAuth token instead.
    */
   getCredentials: publicProcedure
     .input(z.object({ id: z.string() }))
-    .query(({ ctx, input }): string | null => {
-      const row = ctx.db
-        .select({ blob: providers.credentialsEncrypted })
-        .from(providers)
-        .where(eq(providers.id, input.id))
-        .get();
-      if (!row?.blob) return null;
-      try {
-        return decryptJson<{ key: string }>(row.blob).key;
-      } catch {
-        // The blob can't be decrypted — the safeStorage key was removed or
-        // rotated in the OS keychain, so the ciphertext is unrecoverable.
-        // Report it as "no readable credential" so the field falls back to an
-        // empty, editable input and the user can re-enter the key.
-        return null;
-      }
+    .query(async ({ ctx, input }): Promise<string | null> => {
+      const credential = await ctx.credentials.read(input.id);
+      return credential?.type === 'api_key' ? (credential.key ?? null) : null;
     }),
 
   clearCredentials: publicProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) => {
-      ctx.db
-        .update(providers)
-        .set({ credentialsEncrypted: null, updatedAt: new Date() })
-        .where(eq(providers.id, input.id))
-        .run();
+    .mutation(async ({ ctx, input }) => {
+      await ctx.credentials.delete(input.id);
     }),
 
   /**

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Db } from '@main/db';
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
-import { readCustomProviderCatalogs } from '../custom-providers';
+import { readCustomProviders } from '../custom-providers';
 
 const definition: CustomProvider = {
   name: 'Relay',
@@ -23,32 +23,32 @@ const dbWith = (rows: Array<{ id: string; config: unknown }>): Db =>
   ({ select: () => ({ from: () => ({ all: () => rows }) }) }) as unknown as Db;
 
 test('reads a defined provider together with its models', () => {
-  const catalogs = readCustomProviderCatalogs(
+  const defined = readCustomProviders(
     dbWith([{ id: 'relay', config: { customProvider: definition, customModels: [model] } }]),
   );
-  expect(catalogs.get('relay')).toEqual({ definition, models: [model] });
+  expect(defined.get('relay')).toEqual({ definition, models: [model] });
 });
 
 test('a defined provider with no models is still read', () => {
-  const catalogs = readCustomProviderCatalogs(
+  const defined = readCustomProviders(
     dbWith([{ id: 'relay', config: { customProvider: definition } }]),
   );
-  expect(catalogs.get('relay')).toEqual({ definition, models: [] });
+  expect(defined.get('relay')).toEqual({ definition, models: [] });
 });
 
 test('built-in rows are absent, even with models stored on them', () => {
-  const catalogs = readCustomProviderCatalogs(
+  const defined = readCustomProviders(
     dbWith([
       { id: 'openai', config: null },
       { id: 'google', config: { baseUrl: 'https://example.test' } },
       { id: 'deepseek', config: { customModels: [model] } },
     ]),
   );
-  expect(catalogs.size).toBe(0);
+  expect(defined.size).toBe(0);
 });
 
 test('a malformed model is dropped, the rest of the provider survives', () => {
-  const catalogs = readCustomProviderCatalogs(
+  const defined = readCustomProviders(
     dbWith([
       {
         id: 'relay',
@@ -59,11 +59,11 @@ test('a malformed model is dropped, the rest of the provider survives', () => {
       },
     ]),
   );
-  expect(catalogs.get('relay')?.models).toEqual([model]);
+  expect(defined.get('relay')?.models).toEqual([model]);
 });
 
 test('a model stored with its own request format reads without it', () => {
-  const catalogs = readCustomProviderCatalogs(
+  const defined = readCustomProviders(
     dbWith([
       {
         id: 'relay',
@@ -71,11 +71,11 @@ test('a model stored with its own request format reads without it', () => {
       },
     ]),
   );
-  expect(catalogs.get('relay')?.models).toEqual([model]);
+  expect(defined.get('relay')?.models).toEqual([model]);
 });
 
 test('a provider whose definition is unreadable is skipped', () => {
-  const catalogs = readCustomProviderCatalogs(
+  const defined = readCustomProviders(
     dbWith([
       {
         id: 'relay',
@@ -83,5 +83,5 @@ test('a provider whose definition is unreadable is skipped', () => {
       },
     ]),
   );
-  expect(catalogs.size).toBe(0);
+  expect(defined.size).toBe(0);
 });

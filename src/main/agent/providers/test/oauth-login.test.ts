@@ -1,24 +1,8 @@
 import { expect, test } from 'bun:test';
 import type { AuthInteraction } from '@earendil-works/pi-ai';
-import { toCredential } from '../credential-store';
 import { answerLogin, cancelLogin, readLogin, startLogin } from '../oauth-login';
 
 const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 5));
-
-test('an untagged blob reads back as an api key', () => {
-  expect(toCredential({ key: 'sk-1' })).toEqual({ type: 'api_key', key: 'sk-1' });
-});
-
-test('a tagged credential passes through', () => {
-  const oauth = { type: 'oauth', refresh: 'r', access: 'a', expires: 1 };
-  expect(toCredential(oauth)).toBe(oauth as never);
-});
-
-test('an unreadable or empty blob is no credential', () => {
-  expect(toCredential(null)).toBeUndefined();
-  expect(toCredential({})).toBeUndefined();
-  expect(toCredential({ key: '' })).toBeUndefined();
-});
 
 test('an authorization url opens the browser and parks the flow', async () => {
   const opened: string[] = [];

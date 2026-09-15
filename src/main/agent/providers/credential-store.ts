@@ -8,28 +8,15 @@ import { eq } from 'drizzle-orm';
 const log = createLogger('providers');
 
 /**
- * Read a stored blob as a credential. An API key written by the settings panel
- * carries no type tag; the two shapes are otherwise identical, so tagging is
- * the whole conversion.
- */
-export function toCredential(stored: unknown): Credential | undefined {
-  if (!stored || typeof stored !== 'object') return undefined;
-  if ('type' in stored) return stored as Credential;
-  const key = (stored as { key?: unknown }).key;
-  return typeof key === 'string' && key ? { type: 'api_key', key } : undefined;
-}
-
-/**
- * The engine's credential storage, on the same encrypted blob the settings UI
- * already writes API keys to — one credential per provider, safeStorage-sealed.
+ * Every provider credential, API key or OAuth token, sealed with safeStorage on
+ * the provider's row. The engine resolves requests through it and the settings
+ * panel writes through it, so both see one record in one shape.
  *
- * The engine reads through this rather than being handed a key per call,
- * because an OAuth credential is not a constant: it is refreshed in place, and
- * `modify` is the serialized read-modify-write that keeps two concurrent
- * requests from racing a rotated token into a lost refresh.
+ * `modify` is a serialized read-modify-write per provider, because an OAuth token
+ * is refreshed in place and two concurrent requests must not race a rotated token
+ * into a lost refresh. The queue lives on the instance, so the app shares one.
  */
 export function createCredentialStore(db: Db): CredentialStore {
-  /** Per-provider write chains — the store's whole point is that writes queue. */
   const chains = new Map<string, Promise<unknown>>();
 
   const readRow = (providerId: string): Credential | undefined => {
@@ -40,15 +27,17 @@ export function createCredentialStore(db: Db): CredentialStore {
       .get();
     if (!row?.blob) return undefined;
     try {
-      return toCredential(decryptJson<unknown>(row.blob as Buffer));
+      const stored = decryptJson<Partial<Credential> | null>(row.blob as Buffer);
+      // Only a typed credential is one the engine can resolve.
+      return stored?.type ? (stored as Credential) : undefined;
     } catch (err) {
       log.warn(`credential for ${providerId} is unreadable: ${err}`);
       return undefined;
     }
   };
 
-  const writeRow = (providerId: string, credential: Credential | undefined): void => {
-    const blob = credential === undefined ? null : encryptJson(credential);
+  const writeRow = (providerId: string, credential: Credential): void => {
+    const blob = encryptJson(credential);
     db.insert(providers)
       .values({ id: providerId, enabled: true, credentialsEncrypted: blob })
       .onConflictDoUpdate({
@@ -97,7 +86,11 @@ export function createCredentialStore(db: Db): CredentialStore {
 
     delete(providerId) {
       return enqueue(providerId, async () => {
-        writeRow(providerId, undefined);
+        // Clearing a credential never adds a provider that isn't in the list.
+        db.update(providers)
+          .set({ credentialsEncrypted: null, updatedAt: new Date() })
+          .where(eq(providers.id, providerId))
+          .run();
       });
     },
   };

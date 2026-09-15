@@ -52,7 +52,7 @@ export function ProviderDetail({ provider }: { provider: ProviderView }): React.
         </div>
       </div>
 
-      {provider.kind === 'cloud-api' ? (
+      {provider.authMode === 'api-key' ? (
         <CloudApiForm key={provider.id} provider={provider} />
       ) : (
         <SubscriptionForm key={provider.id} provider={provider} />
@@ -96,7 +96,7 @@ function CloudApiForm({ provider }: { provider: ProviderView }): React.JSX.Eleme
 
 /**
  * Remove, for any added provider, and edit for one the user defined. Removing a
- * shipped provider is how it leaves the list — the same gesture as deleting a
+ * built-in provider is how it leaves the list — the same gesture as deleting a
  * defined one, since being in the list is all that "added" means.
  */
 function ProviderActions({ provider }: { provider: ProviderView }): React.JSX.Element {

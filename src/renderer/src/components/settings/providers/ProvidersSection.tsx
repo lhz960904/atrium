@@ -11,7 +11,7 @@ export function ProvidersSection(): React.JSX.Element {
   const { t } = useTranslation();
   const { data: providers, isLoading } = trpc.providers.list.useQuery();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  /** 'pick' chooses from the shipped list; 'define' writes a new one. */
+  /** 'pick' chooses from the built-in list; 'define' writes a new one. */
   const [adding, setAdding] = useState<'pick' | 'define' | null>(null);
 
   if (isLoading || !providers) {

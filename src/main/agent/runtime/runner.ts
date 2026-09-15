@@ -23,8 +23,8 @@ import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permission
 import type { Message } from '@shared/protocol';
 import { mcpManager } from '../mcp/manager';
 import { buildMcpTools } from '../mcp/tool-adapter';
-import { piStreamFn } from '../providers/pi-model';
-import { modelRates, resolvePiModel, supportsImageToolResults } from '../providers/resolve';
+import { modelRates, resolvePiModel, supportsImageToolResults } from '../providers/models';
+import { piStreamFn } from '../providers/registry';
 import { BackgroundShells, LocalSandbox } from '../sandbox';
 import { getSkills } from '../skills/registry';
 import { getTools } from '../tools';
