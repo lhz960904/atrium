@@ -1,8 +1,6 @@
 import { serve } from '@hono/node-server';
-import type { Resolution } from '@main/agent/runtime/approvals';
 import type { Runner } from '@main/agent/runtime/runner';
-import { abortThreadRun, isThreadRunning } from '@main/agent/runtime/runs';
-import { subscribePiEvents } from '@main/agent/runtime/stream/event-log';
+import type { Resolution } from '@main/agent/runtime/tool-resolutions';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { PermissionMode } from '@shared/permissions';
 import { Hono } from 'hono';
@@ -17,8 +15,8 @@ const PI_SSE_HEADERS = {
 } as const;
 
 /** The POST response is the just-started run's event stream from seq 0. */
-function runResponse(threadId: string): Response {
-  const sse = subscribePiEvents(threadId, -1);
+function runResponse(runner: Runner, threadId: string): Response {
+  const sse = runner.subscribe(threadId, -1);
   return sse
     ? new Response(sse, { headers: PI_SSE_HEADERS })
     : new Response('event log missing', { status: 500 });
@@ -76,7 +74,7 @@ export function startHttpServer(deps: { token: string; runner: Runner }): Promis
     if (message?.role !== 'user') return c.text('chat takes a user message', 400);
 
     deps.runner.start({ threadId, providerId, modelId, permissionMode, userMessage: message });
-    return runResponse(threadId);
+    return runResponse(deps.runner, threadId);
   });
 
   /**
@@ -98,7 +96,7 @@ export function startHttpServer(deps: { token: string; runner: Runner }): Promis
       runId,
       decisions: decisions ?? [],
     });
-    return handle ? runResponse(threadId) : c.text('no open call to resume', 409);
+    return handle ? runResponse(deps.runner, threadId) : c.text('no open call to resume', 409);
   });
 
   // Record decisions without running the model — a cancelled clarification,
@@ -113,7 +111,7 @@ export function startHttpServer(deps: { token: string; runner: Runner }): Promis
   // (closing the client stream alone can't, since the run is decoupled for
   // resume); whatever was generated so far is persisted as the turn ends.
   app.post('/api/chat/:threadId/abort', (c) => {
-    const aborted = abortThreadRun(c.req.param('threadId'));
+    const aborted = deps.runner.abort(c.req.param('threadId'));
     return c.json({ aborted });
   });
 
@@ -135,9 +133,9 @@ export function startHttpServer(deps: { token: string; runner: Runner }): Promis
   // message is already in the DB the client seeds from, so replaying its log
   // would duplicate the content.
   app.get('/api/chat/:threadId/pi-events', (c) => {
-    if (!isThreadRunning(c.req.param('threadId'))) return c.body(null, 204);
+    if (!deps.runner.isRunning(c.req.param('threadId'))) return c.body(null, 204);
     const raw = Number(c.req.query('from') ?? '-1');
-    const sse = subscribePiEvents(c.req.param('threadId'), Number.isFinite(raw) ? raw : -1);
+    const sse = deps.runner.subscribe(c.req.param('threadId'), Number.isFinite(raw) ? raw : -1);
     return sse ? new Response(sse, { headers: PI_SSE_HEADERS }) : c.body(null, 204);
   });
 

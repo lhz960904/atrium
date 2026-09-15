@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Message } from '@shared/protocol';
+import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
+
 import type { RunContext } from '../../runtime/run-context';
 import { type ActiveSkill, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
 import { runTool } from '../testing';

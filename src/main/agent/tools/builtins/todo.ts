@@ -1,6 +1,7 @@
+import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
+import type { AssistantMessage } from '@earendil-works/pi-ai';
 import type { Todo, TodoStatus } from '@shared/chat-types';
-import type { AssistantMessage, Message } from '@shared/protocol';
-import type { ContextPreserver } from '../../runtime/compaction';
+import type { ContextPreserver } from '../../context/compaction';
 
 /**
  * The todo domain: how a plan renders as text, how to find the active plan in a

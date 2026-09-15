@@ -1,17 +1,17 @@
-import type { StreamFn } from '@earendil-works/pi-agent-core';
-import type { Api, Model } from '@earendil-works/pi-ai';
+import type { AgentMessage as Message, StreamFn } from '@earendil-works/pi-agent-core';
+import type { Api, AssistantMessage, Model, TextContent, Usage } from '@earendil-works/pi-ai';
 import { recordUsage } from '@main/db/usage';
 import { createLogger } from '@main/utils/log';
 import type { TokenRates } from '@shared/cost';
-import type { AssistantMessage, Message, TextContent, Usage } from '@shared/protocol';
 import type { ToolName } from '@shared/tools';
+import { withinTurnFold } from '../context/compaction';
+import { composeContext } from '../context/compose';
+import { createSummarizer } from '../context/summarize';
 import { workspaceGuidance } from '../prompts';
 import { resolvePiModel } from '../providers/models';
-import { withinTurnFold } from '../runtime/compaction';
-import { createAgentLoop } from '../runtime/loop';
+import { createAgentLoop } from '../runtime/agent-loop';
+import { withChatPolicies } from '../runtime/chat-policies';
 import type { RunContext } from '../runtime/run-context';
-import { createSummarizer } from '../runtime/summarize';
-import { storedMessage } from '../runtime/vocabulary';
 import type { AtriumTool } from '../tools';
 import { preserveTodos } from '../tools/builtins/todo';
 import type { SubagentDef } from './defs';
@@ -110,22 +110,25 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   const emit = (data: Record<string, unknown>): void =>
     parent.notice('subagent', { id: opts.subagentId, ...data });
 
-  const child = createAgentLoop({
-    systemPrompt,
-    model,
-    streamFn: opts.engine.streamFn,
-    messages,
-    tools: opts.tools,
-    // The child can run many turns and overflow its own window, but it has no
-    // persisted history to check point against — only the within-turn fold.
-    transforms: [
-      withinTurnFold({
-        summarize: createSummarizer({ ...opts.engine, model }),
-        contextWindow: model.contextWindow,
-        preservers: [preserveTodos],
-      }),
-    ],
-  });
+  const child = createAgentLoop(
+    withChatPolicies({
+      systemPrompt,
+      model,
+      streamFn: opts.engine.streamFn,
+      messages,
+      tools: opts.tools,
+      // The child can run many turns and overflow its own window, but it has no
+      // persisted history to check point against — only the within-turn fold.
+
+      transformContext: composeContext([
+        withinTurnFold({
+          summarize: createSummarizer(model),
+          contextWindow: model.contextWindow,
+          preservers: [preserveTodos],
+        }),
+      ]),
+    }),
+  );
 
   const usage = zeroUsage();
   let lastText = '';
@@ -135,7 +138,7 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
       return;
     }
     if (event.type !== 'message_end') return;
-    const message = storedMessage(event.message);
+    const message = event.message;
     if (message.role !== 'assistant') return;
     addUsage(usage, message.usage);
     const text = textOf(message);

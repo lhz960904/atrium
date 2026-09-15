@@ -42,7 +42,7 @@ type ToolStateExtras = Record<string, { state: string; approval?: unknown }>;
 // user messages
 // ---------------------------------------------------------------------------
 
-export function splitUserMessage(msg: AtriumUIMessage): PiRow {
+export function splitUserMessage(msg: AtriumUIMessage): PiRow & { message: UserMessage } {
   const createdAt = (msg.metadata?.createdAt as number | undefined) ?? 0;
   const content = (msg.parts as LoosePart[]).map((part): TextContent | Content => {
     if (part.type === 'text') return { type: 'text', text: String(part.text ?? '') };

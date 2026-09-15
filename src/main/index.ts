@@ -14,7 +14,6 @@ import { createCredentialStore } from './agent/providers/credential-store';
 import { firstEnabledModel, resolvePiModel } from './agent/providers/models';
 import { piStreamFn, refreshProviders, useCredentialStore } from './agent/providers/registry';
 import { createRunner, type Runner } from './agent/runtime/runner';
-import { getRunningThreadIds } from './agent/runtime/runs';
 import { refreshSkills } from './agent/skills/registry';
 import { startHttpServer } from './api/http';
 import { appRouter } from './api/trpc/router';
@@ -181,7 +180,7 @@ app.whenReady().then(async () => {
   createIPCHandler({
     router: appRouter,
     windows: [win],
-    createContext: async () => ({ db, chatEndpoint, credentials }),
+    createContext: async () => ({ db, chatEndpoint, credentials, runner: runs }),
   });
   registerComputerUseDrag();
   registerDragOverlay(() => mainWindow ?? undefined);
@@ -251,7 +250,7 @@ app.whenReady().then(async () => {
     createIPCHandler({
       router: appRouter,
       windows: [next],
-      createContext: async () => ({ db, chatEndpoint, credentials }),
+      createContext: async () => ({ db, chatEndpoint, credentials, runner: runs }),
     });
   };
 
@@ -263,7 +262,7 @@ app.whenReady().then(async () => {
     startScheduledTasks({
       db,
       runner: runs,
-      runningThreadIds: getRunningThreadIds,
+      runningThreadIds: runs.runningThreadIds,
       defaultModel: () => {
         // The renderer only persists general.defaultModel on an explicit pick, so
         // it can be null even when the user has a working model — fall back to the

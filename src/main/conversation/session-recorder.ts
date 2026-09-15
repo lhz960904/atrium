@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentEvent, AgentMessage, Session } from '@earendil-works/pi-agent-core';
+import type {
+  AgentEvent,
+  AgentMessage,
+  AgentMessage as Message,
+  Session,
+} from '@earendil-works/pi-agent-core';
+import type { AssistantMessage } from '@earendil-works/pi-ai';
 import { createLogger } from '@main/utils/log';
-import type { AssistantMessage, Message } from '@shared/protocol';
+
 import { durable } from './durable';
 import { APPROVAL_ENTRY, type ApprovalEntryData } from './project';
 
@@ -104,7 +110,7 @@ export function createSessionRecorder(opts: {
         // the live view already addresses the message by it, and editing that
         // message later has to find the entry it became.
         await session.appendEntry(
-          { id: prompt.id, type: 'message', message: durable(prompt.message) as AgentMessage },
+          { id: prompt.id, type: 'message', message: durable(prompt.message) },
           'main',
         );
         wrote = true;

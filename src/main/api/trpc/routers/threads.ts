@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { getRunningThreadIds } from '@main/agent/runtime/runs';
 import { deleteThreadSession, threadMessages } from '@main/conversation/threads';
 import { projects, threads } from '@main/db/schema';
 import { desc, eq, isNull } from 'drizzle-orm';
@@ -22,7 +21,7 @@ export const threadsRouter = router({
 
   /** Thread ids whose agent is currently generating — the source of truth lives
    *  in the main process, so the sidebar spinner stays correct across reloads. */
-  running: publicProcedure.query(() => getRunningThreadIds()),
+  running: publicProcedure.query(({ ctx }) => ctx.runner.runningThreadIds()),
 
   /** One thread + its messages ordered chronologically. Returns null if not found.
    *  Messages go through the persistence merge layer, so pi-native rows and

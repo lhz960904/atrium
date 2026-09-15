@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentMessage, Entry, Session } from '@earendil-works/pi-agent-core';
+import type { Entry, AgentMessage as Message, Session } from '@earendil-works/pi-agent-core';
+import type { ToolCall, ToolResultMessage } from '@earendil-works/pi-ai';
 import type { SqliteSessionMetadata } from '@earendil-works/pi-session-backend-sqlite-node';
-import type { Fold } from '@main/agent/runtime/compaction';
-import { sealDanglingToolCalls } from '@main/agent/runtime/history';
-import { asStored } from '@main/agent/runtime/vocabulary';
+import type { Fold } from '@main/agent/context/compaction';
+import { sealDanglingToolCalls } from '@main/conversation/history';
 import type { Db } from '@main/db';
 import { projects, threads } from '@main/db/schema';
 import type { AtriumUIMessage } from '@shared/chat';
-import type { Message, ToolCall, ToolResultMessage } from '@shared/protocol';
+
 import { eq } from 'drizzle-orm';
 import { durable } from './durable';
 import { openToolCalls, projectHistory, projectMessages } from './project';
@@ -124,7 +124,7 @@ export async function settleThreadCalls(
   if (results.length === 0) return;
   const session = await findThreadSession(db, threadId);
   if (!session) return;
-  for (const result of results) await session.appendMessage(durable(result) as never);
+  for (const result of results) await session.appendMessage(durable(result));
   touchThread(db, threadId);
 }
 
@@ -141,7 +141,7 @@ export async function compactThread(db: Db, threadId: string, fold: Fold): Promi
       id: randomUUID(),
       type: 'compaction',
       summary: fold.summary,
-      retainedTail: durable(fold.retainedTail) as unknown as AgentMessage[],
+      retainedTail: durable(fold.retainedTail),
       tokensBefore: fold.tokensBefore,
     },
     'main',
@@ -166,7 +166,7 @@ export async function threadHistory(db: Db, threadId: string): Promise<Message[]
  * the placeholder rather than joining it.
  */
 export function runnableHistory(entries: Entry[]): Message[] {
-  return sealDanglingToolCalls(asStored(projectHistory(entries)));
+  return sealDanglingToolCalls(projectHistory(entries));
 }
 
 /**

@@ -1,7 +1,8 @@
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
+import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
 import { createLogger } from '@main/utils/log';
-import type { AssistantMessage, ToolCall } from '@shared/protocol';
-import type { ContextTransform } from './context/compose';
+
+import type { ContextTransform } from '../context/compose';
 
 const log = createLogger('loop-detection');
 

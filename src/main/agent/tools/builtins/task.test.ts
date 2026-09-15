@@ -48,7 +48,10 @@ const deps = (run: RunContext, text: string) => ({
   siblings: () => [],
   subagents: [],
   run,
-  engine: { model: MODEL, streamFn: answering(text) },
+  engine: {
+    model: MODEL,
+    streamFn: answering(text),
+  },
 });
 
 function ctx(db: Db): RunContext {

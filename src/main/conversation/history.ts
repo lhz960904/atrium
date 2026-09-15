@@ -1,0 +1,58 @@
+import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
+import type { AssistantMessage, ToolCall, ToolResultMessage } from '@earendil-works/pi-ai';
+
+/** Repair and reconcile tool results in the stored conversation transcript. */
+
+const SEAL_ERROR = 'Stopped before the tool returned.';
+
+const isToolCall = (content: { type: string }): content is ToolCall => content.type === 'toolCall';
+
+/**
+ * Pair every tool call with a result. A turn cut short — a user stop, a crash,
+ * a killed scheduled run — leaves a tool call whose result never arrived, and a
+ * provider rejects any later request whose history holds one. Sealing them as
+ * error results keeps one interrupted turn from wedging the thread forever.
+ */
+export function sealDanglingToolCalls(messages: Message[]): Message[] {
+  const answered = new Set(
+    messages
+      .filter((m): m is ToolResultMessage => m.role === 'toolResult')
+      .map((m) => m.toolCallId),
+  );
+  const out: Message[] = [];
+  for (const message of messages) {
+    out.push(message);
+    if (message.role !== 'assistant') continue;
+    for (const content of (message as AssistantMessage).content) {
+      if (!isToolCall(content) || answered.has(content.id)) continue;
+      answered.add(content.id);
+      out.push({
+        role: 'toolResult',
+        toolCallId: content.id,
+        toolName: content.name,
+        content: [{ type: 'text', text: SEAL_ERROR }],
+        details: { errorText: SEAL_ERROR },
+        isError: true,
+        timestamp: message.timestamp,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * Fold freshly settled results into a transcript, dropping any placeholder it
+ * already carried for the same calls.
+ *
+ * A parked call has no result row, so reading the thread back seals it as
+ * "stopped before the tool returned" — right for a turn nobody is coming back
+ * to, wrong the moment the user's answer does arrive. Appending the real result
+ * next to the placeholder gives one call two results, which every provider
+ * rejects outright, so the placeholder has to go.
+ */
+export function withSettledResults(messages: Message[], settled: ToolResultMessage[]): Message[] {
+  if (settled.length === 0) return messages;
+  const ids = new Set(settled.map((m) => m.toolCallId));
+  const kept = messages.filter((m) => m.role !== 'toolResult' || !ids.has(m.toolCallId));
+  return [...kept, ...settled];
+}

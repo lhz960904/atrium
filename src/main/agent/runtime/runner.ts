@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Session } from '@earendil-works/pi-agent-core';
+import type { Api, Model } from '@earendil-works/pi-ai';
 import { createSessionRecorder } from '@main/conversation/session-recorder';
 import {
   compactThread,
@@ -20,7 +21,9 @@ import { getSettings } from '@main/settings/conf';
 import { createLogger } from '@main/utils/log';
 import type { AtriumUIMessage } from '@shared/chat';
 import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
-import type { Message } from '@shared/protocol';
+import { generateThreadTitle } from '../../conversation/title';
+import { foldHistory } from '../context/compaction';
+import { createSummarizer } from '../context/summarize';
 import { mcpManager } from '../mcp/manager';
 import { buildMcpTools } from '../mcp/tool-adapter';
 import { modelRates, resolvePiModel, supportsImageToolResults } from '../providers/models';
@@ -30,13 +33,9 @@ import { getSkills } from '../skills/registry';
 import { getTools } from '../tools';
 import { preserveActiveSkill } from '../tools/builtins/skill';
 import { preserveTodos } from '../tools/builtins/todo';
-import { type Resolution, resultFor } from './approvals';
-import { foldHistory } from './compaction';
-import { type Complete, createCompleter } from './complete';
-import { runAgent } from './run';
-import { startThreadRun } from './runs';
-import { createSummarizer } from './summarize';
-import { generateThreadTitle } from './title';
+import { executeTurn } from './execute-turn';
+import { createRunCoordinator } from './run-coordinator';
+import { type Resolution, resultFor } from './tool-resolutions';
 
 const log = createLogger('runner');
 
@@ -85,6 +84,10 @@ export type ResumeRequest = Omit<RunRequest, 'userMessage' | 'resumeRunId' | 're
  * loopback interface to start one.
  */
 export type Runner = {
+  abort(threadId: string): boolean;
+  isRunning(threadId: string): boolean;
+  runningThreadIds(): string[];
+  subscribe(threadId: string, fromSeq: number): ReadableStream<Uint8Array> | null;
   /**
    * Start a turn. Returns once the thread's event log exists — a caller can
    * subscribe to the stream immediately — with a promise for the outcome.
@@ -121,7 +124,7 @@ export type Runner = {
 function resolveReviewer(
   db: Db,
   fallback: { providerId: string; modelId: string },
-): Complete | undefined {
+): Model<Api> | undefined {
   const configured = getSettings('permissions.reviewerModel');
   const picked = configured ?? fallback;
   try {
@@ -129,7 +132,7 @@ function resolveReviewer(
     log.info(
       `reviewer = ${picked.providerId}/${picked.modelId}${configured ? '' : ' (inherited chat model)'}`,
     );
-    return createCompleter({ model, streamFn: piStreamFn });
+    return model;
   } catch (err) {
     log.info(`reviewer unresolved (${picked.providerId}/${picked.modelId}) → prompts: ${err}`);
     return undefined;
@@ -150,9 +153,11 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
   // Long-running shells (dev servers, watchers) outlive a turn, so the registry
   // is one instance held for the runner's lifetime, not per-run.
   const bgShells = new BackgroundShells();
+  const coordinator = createRunCoordinator();
 
   function start(request: RunRequest): RunHandle {
     const { threadId, providerId, modelId } = request;
+    coordinator.assertAvailable(threadId);
     // The thread's workspace: its project's directory, or the projectless
     // fallback. Drives the sandbox and the tools below.
     const workspaceRoot = resolveThreadWorkspace(db, threadId, deps.projectlessRoot);
@@ -172,13 +177,13 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
     // Resolve the reviewer only when auto-review can actually use it; a
     // misconfigured/removed model resolves to undefined, so auto-review simply
     // falls back to prompting rather than failing the turn.
-    const review =
+    const reviewerModel =
       mode === 'auto-review' ? resolveReviewer(db, { providerId, modelId }) : undefined;
 
-    let result: Awaited<ReturnType<typeof runAgent>> | undefined;
-    const finished = startThreadRun(
+    let result: Awaited<ReturnType<typeof executeTurn>> | undefined;
+    const finished = coordinator.start(
       threadId,
-      async (piLog) => {
+      async (events) => {
         // The conversation lives in the thread's session, created with its
         // first turn. Opening the run and appending the turn that started it
         // happen before the history is read, so the loop sees them.
@@ -191,7 +196,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
         const prompt = request.userMessage
           ? {
               id: request.userMessage.id,
-              message: splitUserMessage(request.userMessage).message as Message,
+              message: splitUserMessage(request.userMessage).message,
             }
           : undefined;
         await recorder.begin(prompt);
@@ -200,7 +205,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
         touchThread(db, threadId, { markRead: prompt !== undefined });
         const openedAt = await runStartedAt(session, runId);
 
-        result = await runAgent({
+        result = await executeTurn({
           runId,
           providerId,
           modelId,
@@ -213,23 +218,23 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
           sandbox,
           skills,
           permissionMode: mode,
-          permission: { mode, rules: getSettings('permissions.trustRules'), review },
+          permission: { mode, rules: getSettings('permissions.trustRules'), reviewerModel },
           resolutions: request.resolutions,
           recorder,
           openedAt,
           persistCheckpoint: (fold) => compactThread(db, threadId, fold),
           abortSignal: abort.signal,
-          emit: piLog.append,
+          emit: events.append,
           recordUsage: (u) =>
             recordUsage(db, { threadId, kind: 'chat', ...u }, modelRates(piModel)),
           generateTitle: getSettings('general.autoGenerateTitle')
-            ? ({ messages, complete }) =>
+            ? ({ messages, model }) =>
                 generateThreadTitle({
                   messages,
-                  complete,
+                  model,
                   onTitle: (title) => {
                     setThreadTitle(db, threadId, title);
-                    piLog.append({ type: 'notice', name: 'title', payload: { data: { title } } });
+                    events.append({ type: 'notice', name: 'title', payload: { data: { title } } });
                   },
                 })
             : undefined,
@@ -257,17 +262,28 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
 
     return {
       runId,
-      settled: finished.then(() => ({
-        runId,
-        status: result?.status ?? 'error',
-        error: result?.error ?? (result ? undefined : 'the run ended without reporting'),
-        messageId: result?.stored ? runId : undefined,
-      })),
+      settled: finished.then(
+        () => ({
+          runId,
+          status: result?.status ?? 'error',
+          error: result?.error ?? (result ? undefined : 'the run ended without reporting'),
+          messageId: result?.stored ? runId : undefined,
+        }),
+        (err): RunOutcome => {
+          const error = err instanceof Error ? err.message : String(err);
+          log.warn(`run ${runId} failed: ${error}`);
+          return { runId, status: 'error', error };
+        },
+      ),
     };
   }
 
   return {
     start,
+    abort: coordinator.abort,
+    isRunning: coordinator.isRunning,
+    runningThreadIds: coordinator.runningThreadIds,
+    subscribe: coordinator.subscribe,
 
     async resume({ threadId, runId, decisions, ...rest }) {
       const open = await openThreadCalls(db, threadId);
@@ -295,10 +311,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
       // asked to compact now, so only the recent floor is kept.
       const folded = await foldHistory({
         messages: history,
-        summarize: createSummarizer({
-          model: piModel,
-          streamFn: piStreamFn,
-        }),
+        summarize: createSummarizer(piModel),
         contextWindow: piModel.contextWindow,
         preservers: [preserveTodos, preserveActiveSkill],
         keepRecentTokens: 0,
@@ -312,6 +325,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
     },
 
     dispose() {
+      coordinator.dispose();
       bgShells.killAll();
     },
   };

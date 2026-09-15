@@ -1,8 +1,8 @@
+import type { Api, Model } from '@earendil-works/pi-ai';
 import { createLogger } from '@main/utils/log';
 import type { PermissionMode } from '@shared/permissions';
 import type { CrossingCode } from '@shared/permissions/analyze';
 import { isAllowed, type TrustRule } from '@shared/permissions/rules';
-import type { Complete } from '../runtime/complete';
 import { type Classification, classifyToolCall } from './classify';
 import { reviewBoundaryCrossing } from './reviewer';
 
@@ -76,8 +76,8 @@ export type ApprovalContext = {
   mode: PermissionMode;
   rules?: TrustRule[];
   workspaceRoot: string;
-  /** Reviewer call for auto-review mode; absent → auto-review falls back to prompting. */
-  review?: Complete;
+  /** Reviewer model for auto-review mode; absent → auto-review falls back to prompting. */
+  reviewerModel?: Model<Api>;
   /** The turn's abort signal, so a stopped turn also cancels an in-flight review. */
   abortSignal?: AbortSignal;
   /** Marks a crossing the reviewer waved through, so the trace shows it was
@@ -103,12 +103,12 @@ export function approvalGate(ctx: ApprovalContext) {
     // MCP calls have no command/path in their input — fall back to the crossing's
     // subject (the server name) so the reviewer/badge still has something to show.
     const subject = crossingSubject(input) || verdict.crossing.subject || '';
-    if (!ctx.review) {
+    if (!ctx.reviewerModel) {
       log.info(`${toolName} crossing → prompt (auto-review, no reviewer model)`);
       return true;
     }
     return reviewBoundaryCrossing({
-      complete: ctx.review,
+      model: ctx.reviewerModel,
       subject,
       risk: RISK[verdict.crossing.code],
       abortSignal: ctx.abortSignal,

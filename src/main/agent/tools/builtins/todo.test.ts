@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
+import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { Todo } from '@shared/chat-types';
-import type { Message } from '@shared/protocol';
+
 import { latestTodos, preserveTodos, renderTodos } from './todo';
 
 const todos: Todo[] = [

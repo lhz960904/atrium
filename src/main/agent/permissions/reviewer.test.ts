@@ -1,23 +1,52 @@
-import { expect, test } from 'bun:test';
-import type { Complete } from '../runtime/complete';
+import { afterEach, expect, mock, spyOn, test } from 'bun:test';
+import { fauxAssistantMessage, fauxProvider } from '@earendil-works/pi-ai';
+import { piModels } from '../providers/registry';
+
+afterEach(() => mock.restore());
+
+import { approvalGate } from './index';
 import { reviewBoundaryCrossing } from './reviewer';
 
 function verdictModel(
   reply: string | (() => Promise<never>),
   capture?: (input: { system: string; prompt: string }) => void,
-): Complete {
-  return async (input) => {
-    capture?.(input);
+) {
+  const model = fauxProvider().getModel();
+  spyOn(piModels, 'completeSimple').mockImplementation(async (selected, context) => {
+    expect(selected).toBe(model);
+    capture?.({ system: context.systemPrompt ?? '', prompt: String(context.messages[0].content) });
     if (typeof reply !== 'string') return reply();
-    return reply;
-  };
+    return fauxAssistantMessage(reply);
+  });
+  return model;
 }
 
 const NET_RISK = 'reaches the network';
 
+test.each([
+  'ALLOW',
+  'DENY',
+])('approval gate passes the selected reviewer model: %s', async (reply) => {
+  const gate = approvalGate({
+    mode: 'auto-review',
+    workspaceRoot: '/workspace',
+    reviewerModel: verdictModel(reply),
+  });
+  expect(await gate('bash', { command: 'curl https://example.com' }, 'call-1')).toBe(
+    reply === 'DENY',
+  );
+});
+
+test('a cancelled review falls back to asking without a model request', async () => {
+  const model = verdictModel('ALLOW');
+  const signal = AbortSignal.abort();
+  expect(await reviewBoundaryCrossing({ model, subject: 'x', abortSignal: signal })).toBe('deny');
+  expect(piModels.completeSimple).not.toHaveBeenCalled();
+});
+
 test('an explicit ALLOW auto-approves', async () => {
   const verdict = await reviewBoundaryCrossing({
-    complete: verdictModel('ALLOW'),
+    model: verdictModel('ALLOW'),
     subject: 'curl https://example.com',
     risk: NET_RISK,
   });
@@ -27,7 +56,7 @@ test('an explicit ALLOW auto-approves', async () => {
 test('a DENY falls back to a prompt', async () => {
   expect(
     await reviewBoundaryCrossing({
-      complete: verdictModel('DENY'),
+      model: verdictModel('DENY'),
       subject: 'rm -rf /',
       risk: 'is a potentially destructive command',
     }),
@@ -46,14 +75,14 @@ test('verdict parsing is forgiving but safe: extra prose, casing, and DENY-wins'
   ];
   for (const [reply, expected] of cases) {
     expect(
-      await reviewBoundaryCrossing({ complete: verdictModel(reply), subject: 'x', risk: NET_RISK }),
+      await reviewBoundaryCrossing({ model: verdictModel(reply), subject: 'x', risk: NET_RISK }),
     ).toBe(expected);
   }
 });
 
 test('a model error resolves to deny, never a silent allow', async () => {
   const verdict = await reviewBoundaryCrossing({
-    complete: verdictModel(() => Promise.reject(new Error('model unreachable'))),
+    model: verdictModel(() => Promise.reject(new Error('model unreachable'))),
     subject: 'curl https://example.com',
     risk: NET_RISK,
   });
@@ -63,7 +92,7 @@ test('a model error resolves to deny, never a silent allow', async () => {
 test('the crossing reason is fed to the model as a hint', async () => {
   let captured: { prompt: string } | undefined;
   await reviewBoundaryCrossing({
-    complete: verdictModel('ALLOW', (input) => {
+    model: verdictModel('ALLOW', (input) => {
       captured = input;
     }),
     subject: 'rm -rf node_modules',
