@@ -68,7 +68,7 @@ function setup(runner?: (task: ScheduledTask) => Promise<ScheduledRunResult>) {
       start: () => unreachable(),
       respond: () => unreachable(),
       compact: () => unreachable(),
-      dispose: () => {},
+      dispose: () => Promise.resolve(),
     },
     defaultModel: () => ({ providerId: 'p', modelId: 'm' }),
     now: () => nowRef.v,

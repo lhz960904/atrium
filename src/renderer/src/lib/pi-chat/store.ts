@@ -47,6 +47,31 @@ type Part = AtriumUIMessage['parts'][number];
 
 const NOTIFY_THROTTLE_MS = 50;
 
+const EXPIRED_TEXT = 'The run ended before this was decided.';
+
+/** States a card is in only while a run is there to answer it. */
+const WAITING_STATES = new Set(['approval-requested', 'input-available', 'input-streaming']);
+
+/**
+ * Nothing is waiting on a run that is no longer there. The cards it left behind
+ * become terminal so they can't be submitted to a run that ended; what it did
+ * finish is untouched, and the stored conversation is repaired by the next run.
+ */
+function expireInactiveInteractions(messages: AtriumUIMessage[]): AtriumUIMessage[] {
+  return messages.map((message) => {
+    if (!message.parts.some((part) => WAITING_STATES.has((part as { state?: string }).state ?? '')))
+      return message;
+    return {
+      ...message,
+      parts: message.parts.map((part) =>
+        WAITING_STATES.has((part as { state?: string }).state ?? '')
+          ? ({ ...part, state: 'output-error', errorText: EXPIRED_TEXT } as Part)
+          : part,
+      ),
+    };
+  });
+}
+
 export class PiChat {
   readonly threadId: string;
   private history: AtriumUIMessage[];
@@ -112,6 +137,7 @@ export class PiChat {
           { headers: { 'x-atrium-token': this.init.token }, signal: abort.signal },
         );
         if (res.status === 204 || !res.body) {
+          this.history = expireInactiveInteractions(this.history);
           this.settle();
           return;
         }

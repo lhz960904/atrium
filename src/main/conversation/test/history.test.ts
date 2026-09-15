@@ -43,6 +43,20 @@ test('an unanswered call is sealed so the transcript stays valid', () => {
   expect(resultsFor(sealed, 'c1')[0].isError).toBe(true);
 });
 
+test('a sealed call carries the reason it was given, and only in its content', () => {
+  const sealed = sealDanglingToolCalls(
+    [calling('c1')],
+    () => 'Approval expired; this tool was not executed.',
+  );
+  const [result] = resultsFor(sealed, 'c1');
+  expect(result.content).toEqual([
+    { type: 'text', text: 'Approval expired; this tool was not executed.' },
+  ]);
+  // Consumers read a failure's reason from content; nothing keeps a copy.
+  expect(result).not.toHaveProperty('details.errorText');
+  expect(sealDanglingToolCalls(sealed)).toEqual(sealed);
+});
+
 test('a transcript whose calls all have results is left as it is', () => {
   const history: Message[] = [calling('c1', 'c2'), answer('c1', 'one'), answer('c2', 'two')];
   expect(sealDanglingToolCalls(history)).toEqual(history);

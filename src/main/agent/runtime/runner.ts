@@ -51,10 +51,16 @@ export type Runner = {
   /** Hand a decision to the run waiting on it; throws when that run is not waiting. */
   respond(threadId: string, input: DecideInteraction): 'accepted' | 'already_accepted';
   compact(request: CompactRequest): Promise<boolean>;
-  dispose(): void;
+  /** Stop accepting runs, cancel the live ones and wait for them to settle. */
+  dispose(): Promise<void>;
 };
 
-type ActiveRun = { runId: string; abort: AbortController; pending: PendingInteractions };
+type ActiveRun = {
+  runId: string;
+  abort: AbortController;
+  pending: PendingInteractions;
+  settled: Promise<RunOutcome>;
+};
 
 /**
  * Application-lifetime run management: admission, cancellation, decisions,
@@ -67,6 +73,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
   const active = new Map<string, ActiveRun>();
   const events = createRunEventBuffer();
   let disposed = false;
+  let closing: Promise<void> | undefined;
 
   function assertIdle(threadId: string): void {
     if (active.has(threadId)) throw new Error(`Thread ${threadId} is already running`);
@@ -82,7 +89,6 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
     const abort = new AbortController();
     const pending = createPendingInteractions({ runId, abort });
     const observers = new Set<RunObserver>();
-    active.set(threadId, { runId, abort, pending });
 
     const settled = events
       .produce(threadId, ({ append }) =>
@@ -124,6 +130,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
         observers.clear();
         active.delete(threadId);
       });
+    active.set(threadId, { runId, abort, pending, settled });
 
     return {
       runId,
@@ -176,9 +183,15 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
     },
 
     dispose() {
+      if (closing) return closing;
       disposed = true;
+      // Cancelling is a request; a run is only really over once its own
+      // recording and cleanup have finished, which is what callers wait for.
+      const running = [...active.values()].map((run) => run.settled);
       for (const run of active.values()) run.pending.cancel('app_shutdown');
       bgShells.killAll();
+      closing = Promise.allSettled(running).then(() => undefined);
+      return closing;
     },
   };
 }

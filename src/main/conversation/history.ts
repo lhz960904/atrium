@@ -3,7 +3,7 @@ import type { AssistantMessage, ToolCall, ToolResultMessage } from '@earendil-wo
 
 /** Repair and reconcile tool results in the stored conversation transcript. */
 
-const SEAL_ERROR = 'Stopped before the tool returned.';
+const UNKNOWN_OUTCOME = 'The previous execution was interrupted; the tool outcome is unknown.';
 
 const isToolCall = (content: { type: string }): content is ToolCall => content.type === 'toolCall';
 
@@ -12,8 +12,15 @@ const isToolCall = (content: { type: string }): content is ToolCall => content.t
  * a killed scheduled run — leaves a tool call whose result never arrived, and a
  * provider rejects any later request whose history holds one. Sealing them as
  * error results keeps one interrupted turn from wedging the thread forever.
+ *
+ * `reasonFor` says what actually happened to a call, which the caller knows
+ * from what the run recorded. The reason goes in the model-facing content, the
+ * one place a failure's text is read from.
  */
-export function sealDanglingToolCalls(messages: Message[]): Message[] {
+export function sealDanglingToolCalls(
+  messages: Message[],
+  reasonFor: (call: ToolCall) => string = () => UNKNOWN_OUTCOME,
+): Message[] {
   const answered = new Set(
     messages
       .filter((m): m is ToolResultMessage => m.role === 'toolResult')
@@ -30,8 +37,7 @@ export function sealDanglingToolCalls(messages: Message[]): Message[] {
         role: 'toolResult',
         toolCallId: content.id,
         toolName: content.name,
-        content: [{ type: 'text', text: SEAL_ERROR }],
-        details: { errorText: SEAL_ERROR },
+        content: [{ type: 'text', text: reasonFor(content) }],
         isError: true,
         timestamp: message.timestamp,
       });

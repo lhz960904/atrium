@@ -10,6 +10,7 @@ import type { AtriumUIMessage } from '@shared/chat';
 import { eq } from 'drizzle-orm';
 import { durable } from './durable';
 import { projectHistory, projectMessages } from './project';
+import { interruptionTextFromEntries } from './recovery';
 import { sessionStore } from './store/repo';
 
 /**
@@ -133,7 +134,9 @@ export async function threadHistory(db: Db, threadId: string): Promise<Message[]
  * one interrupted turn would wedge the thread for good.
  */
 export function runnableHistory(entries: Entry[]): Message[] {
-  return sealDanglingToolCalls(projectHistory(entries));
+  return sealDanglingToolCalls(projectHistory(entries), (call) =>
+    interruptionTextFromEntries(entries, call),
+  );
 }
 
 /**

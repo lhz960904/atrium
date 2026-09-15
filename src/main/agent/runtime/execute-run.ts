@@ -204,7 +204,9 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
     fail(error);
   }
   try {
-    await recorder?.end(result.status);
+    // The recorder repairs what an interrupted run left behind, so it needs the
+    // reason the run actually stopped for.
+    await recorder?.end(result.status, stopReasonOf(signal.reason));
   } catch (error) {
     fail(error);
   }

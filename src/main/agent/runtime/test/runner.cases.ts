@@ -343,6 +343,26 @@ test('an approved call waits for the rest of its batch, and a stop runs neither'
   runner.dispose();
 });
 
+test('shutting down settles the runs it cancels and can be awaited twice', async () => {
+  const f = await runtimeFixture();
+  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const exec = spyOn(LocalSandbox.prototype, 'exec').mockResolvedValue({
+    output: 'ran',
+    exitCode: 0,
+  });
+  f.faux.setResponses([fauxAssistantMessage(bashCall('call-1'), { stopReason: 'toolUse' })]);
+  const handle = runner.start(f.request);
+  await watch(handle).next();
+
+  await runner.dispose();
+  // Returning means the runs are settled, not merely asked to stop.
+  expect(runner.runningThreadIds()).toEqual([]);
+  expect(exec).not.toHaveBeenCalled();
+  expect((await handle.settled).status).toBe('ok');
+  await runner.dispose();
+  expect(runner.runningThreadIds()).toEqual([]);
+});
+
 test('a thread waiting for a decision refuses another run and compaction', async () => {
   const f = await runtimeFixture();
   const runner = createRunner({ db: f.db, projectlessRoot: f.dir });

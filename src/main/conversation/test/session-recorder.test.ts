@@ -222,6 +222,37 @@ test('a new run closes one that never got to end', async () => {
   await repo.close();
 });
 
+test("a lost run's gap is repaired before the next run opens", async () => {
+  const { repo, session: s } = await session();
+  const first = createSessionRecorder({ session: s, runId: 'r1' });
+  await first.begin(user('curl x'));
+  await first.observe(
+    ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
+  );
+  // The process dies here: no tool result, no end.
+
+  const prompt = user('try again');
+  const second = createSessionRecorder({ session: s, runId: 'r2' });
+  await second.begin(prompt);
+  await second.end('completed');
+
+  const { entries, records } = await read(s);
+  const repaired = entries.find(
+    (entry) => entry.type === 'message' && entry.message.role === 'toolResult',
+  );
+  const opened = records.find(
+    (record) => record.type === 'operation_started' && record.id === 'r2',
+  );
+  const asked = entries.find((entry) => entry.id === prompt.id);
+  // The repair belongs to the run that was lost, so it lands before the new one.
+  expect(repaired?.seq).toBeLessThan(opened?.seq ?? 0);
+  expect(asked?.seq).toBeGreaterThan(opened?.seq ?? 0);
+  expect(records.find((r) => r.type === 'operation_finished' && r.runId === 'r1')).toMatchObject({
+    outcome: 'aborted',
+  });
+  await repo.close();
+});
+
 test('an approval is recorded once when asked and once when decided', async () => {
   const { repo, session: s } = await session();
   const recorder = createSessionRecorder({ session: s, runId: 'r1' });

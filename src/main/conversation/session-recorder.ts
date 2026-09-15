@@ -7,10 +7,11 @@ import type {
 } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage } from '@earendil-works/pi-ai';
 import { createLogger } from '@main/utils/log';
-import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
+import type { InteractionOutcome, InteractionRequest, RunStopReason } from '@shared/interactions';
 
 import { durable } from './durable';
 import { INTERACTION_ENTRY, type InteractionEntryData } from './project';
+import { recordRunStop, recoverInterruptedRun } from './recovery';
 
 const log = createLogger('session');
 
@@ -48,8 +49,8 @@ export type SessionRecorder = {
   interactionRequested(request: InteractionRequest): Promise<void>;
   /** Record how the request was settled, before the call it gates continues. */
   interactionResolved(request: InteractionRequest, outcome: InteractionOutcome): Promise<void>;
-  /** Close the run. */
-  end(outcome: RunOutcome): Promise<void>;
+  /** Close the run, repairing what an interrupted one left behind. */
+  end(outcome: RunOutcome, reason?: RunStopReason): Promise<void>;
   readonly totals: RunTotals;
   /** Set when a turn ended in a provider error. */
   readonly failure: string | undefined;
@@ -94,16 +95,11 @@ export function createSessionRecorder(opts: {
     async begin(prompt) {
       // A lane holds one operation at a time, so anything still open has to be
       // closed first. It is open because the run that owned it never got to end
-      // — the app died mid-turn — and it is not going to finish now.
+      // — the app died mid-turn — so its gaps are repaired here, before this
+      // run's own entries land after them.
       for (const open of await session.findOpenOperations('main')) {
-        log.info(`abandoning run ${open.id}, superseded by ${runId}`);
-        await session.appendRecord({
-          id: randomUUID(),
-          lane: 'main',
-          type: 'operation_finished',
-          runId: open.id,
-          outcome: 'aborted',
-        });
+        log.info(`recovering run ${open.id}, superseded by ${runId}`);
+        await recoverInterruptedRun(session, open.id, 'interrupted');
       }
       await session.appendRecord({
         id: runId,
@@ -179,17 +175,25 @@ export function createSessionRecorder(opts: {
     interactionResolved: (request, outcome) =>
       appendInteraction(`${request.id}:resolved`, { phase: 'resolved', request, outcome }),
 
-    async end(outcome) {
+    async end(outcome, reason) {
       // begin may fail before opening the bracket, or after opening it while
       // writing the prompt. Only close the operation we actually own.
       if (!operationOpen) return;
-      await session.appendRecord({
-        id: randomUUID(),
-        lane: 'main',
-        type: 'operation_finished',
-        runId,
-        outcome,
-      });
+      if (outcome === 'completed') {
+        await session.appendRecord({
+          id: randomUUID(),
+          lane: 'main',
+          type: 'operation_finished',
+          runId,
+          outcome,
+        });
+      } else {
+        // A run that stopped or failed can leave calls with no result. Recording
+        // why first means a boot that never gets past here can still say it.
+        await recordRunStop(session, runId, reason ?? 'interrupted');
+        await recoverInterruptedRun(session, runId, reason ?? 'interrupted', outcome);
+      }
+      wrote = true;
       operationOpen = false;
     },
 

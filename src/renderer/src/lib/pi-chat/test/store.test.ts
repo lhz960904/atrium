@@ -331,6 +331,59 @@ describe('lifecycle', () => {
     expect(chat.getSnapshot().error).toBeUndefined();
   });
 
+  test('reconnecting to a run that is gone expires what it was waiting on', async () => {
+    const stale: AtriumUIMessage = {
+      id: 'a1',
+      role: 'assistant',
+      parts: [
+        { type: 'step-start' },
+        { type: 'text', text: 'Before the crash' },
+        {
+          type: 'tool-bash',
+          toolCallId: 'b1',
+          state: 'output-available',
+          input: { command: 'ls' },
+          output: { stdout: 'ok' },
+        } as AtriumUIMessage['parts'][number],
+        {
+          type: 'tool-bash',
+          toolCallId: 'b2',
+          state: 'approval-requested',
+          input: { command: 'curl x' },
+          approval: { id: 'ap1' },
+        } as AtriumUIMessage['parts'][number],
+        {
+          type: 'tool-ask_clarification',
+          toolCallId: 'c1',
+          state: 'input-available',
+          input: { questions: [{ header: 'Q', question: 'Which?', inputType: 'text' }] },
+        } as AtriumUIMessage['parts'][number],
+      ],
+      metadata: { createdAt: 1 },
+    };
+    const { chat, calls } = makeChat(() => new Response(null, { status: 204 }), [stale]);
+    chat.resume();
+    await untilIdle(chat);
+
+    const parts = chat.getSnapshot().messages[0].parts;
+    // Nothing is waiting on a run that no longer exists.
+    expect(getPendingApprovals(chat.getSnapshot().messages)).toEqual([]);
+    expect(parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'b2')).toMatchObject({
+      state: 'output-error',
+    });
+    expect(parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1')).toMatchObject({
+      state: 'output-error',
+    });
+    // What the run did finish is untouched.
+    expect(parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'b1')).toMatchObject({
+      state: 'output-available',
+      output: { stdout: 'ok' },
+    });
+    expect(parts).toContainEqual({ type: 'text', text: 'Before the crash' });
+    expect(calls.map((call) => call.url)).toEqual(['http://test/api/chat/t1/pi-events?from=-1']);
+    expect(chat.getSnapshot().status).toBe('ready');
+  });
+
   test('stop asks the server to abort and settles once the run ends', async () => {
     const stream = liveStream();
     const { chat, calls } = liveChat(stream, () => Response.json({ aborted: true }));
