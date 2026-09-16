@@ -3,7 +3,6 @@ import { compactThread, threadHistory } from '@main/conversation/threads';
 import type { Db } from '@main/db';
 import { createLogger } from '@main/utils/log';
 import type { DecideInteraction } from '@shared/interactions';
-import type { AgentSessionEvent } from '@shared/protocol';
 import { foldHistory } from '../context/compaction';
 import { createSummarizer } from '../context/summarize';
 import { resolvePiModel } from '../providers/models';
@@ -31,13 +30,9 @@ export type RunOutcome = {
   messageId?: string;
 };
 
-export type RunObserver = (event: Readonly<AgentSessionEvent>) => void;
-
 export type RunHandle = {
   runId: string;
   settled: Promise<RunOutcome>;
-  /** Watch the run's events from now on without taking part in it. */
-  subscribe(listener: RunObserver): () => void;
 };
 export type CompactRequest = { threadId: string; providerId: string; modelId: string };
 
@@ -88,7 +83,6 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
     const runId = randomUUID();
     const abort = new AbortController();
     const pending = createPendingInteractions({ runId, abort });
-    const observers = new Set<RunObserver>();
 
     const settled = events
       .produce(threadId, ({ append }) =>
@@ -101,16 +95,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
           bgShells,
           signal: abort.signal,
           pending,
-          emit: (event) => {
-            append(event);
-            for (const observe of observers) {
-              try {
-                observe(event);
-              } catch (error) {
-                log.warn(`run ${runId} observer failed: ${error}`);
-              }
-            }
-          },
+          emit: append,
         }),
       )
       .then(
@@ -127,21 +112,11 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
         },
       )
       .finally(() => {
-        observers.clear();
         active.delete(threadId);
       });
     active.set(threadId, { runId, abort, pending, settled });
 
-    return {
-      runId,
-      settled,
-      subscribe(listener) {
-        observers.add(listener);
-        return () => {
-          observers.delete(listener);
-        };
-      },
-    };
+    return { runId, settled };
   }
 
   return {

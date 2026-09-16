@@ -4,8 +4,6 @@ import type { Runner, RunOutcome } from '@main/agent/runtime/runner';
 import type { Db } from '@main/db';
 import type { ScheduledTask } from '@main/db/schema';
 import * as schema from '@main/db/schema';
-import type { InteractionRequest } from '@shared/interactions';
-import type { AgentSessionEvent } from '@shared/protocol';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { runScheduledTask } from '../run';
 
@@ -27,146 +25,66 @@ const task = {
   permissionMode: 'default',
 } as ScheduledTask;
 
-const request = (id: string): InteractionRequest => ({
-  id,
-  runId: 'r1',
-  kind: 'approval',
-  toolCall: { type: 'toolCall', id: `call-${id}`, name: 'bash', arguments: {} },
-  createdAt: 1,
-});
-
 function fakeRunner() {
-  const listeners = new Set<(event: AgentSessionEvent) => void>();
   let settle!: (outcome: RunOutcome) => void;
   const settled = new Promise<RunOutcome>((resolve) => {
     settle = resolve;
   });
-  const start = mock(() => ({
-    runId: 'r1',
-    settled,
-    subscribe: (listener: (event: AgentSessionEvent) => void) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  }));
-  return {
-    runner: { start } as unknown as Runner,
-    start,
-    listeners,
-    emit: (event: AgentSessionEvent) => {
-      for (const listener of listeners) listener(event);
-    },
-    settle,
-  };
+  const start = mock(() => ({ runId: 'r1', settled }));
+  return { runner: { start } as unknown as Runner, start, settle };
 }
 
-function suspensionBlocker() {
-  const releases: Array<ReturnType<typeof mock>> = [];
-  const block = mock(() => {
-    const release = mock(() => {});
-    releases.push(release);
-    return release;
-  });
-  return { block, releases };
-}
-
-test('a run waiting on the user stays running while the machine may sleep', async () => {
+test('a scheduled run waits for the run it started and reports its outcome', async () => {
   const runner = fakeRunner();
-  const suspension = suspensionBlocker();
   let finished = false;
   const running = runScheduledTask(
-    {
-      db: makeDb(),
-      runner: runner.runner,
-      defaultModel: () => null,
-      blockSuspension: suspension.block,
-    },
+    { db: makeDb(), runner: runner.runner, defaultModel: () => null },
     task,
   ).then((result) => {
     finished = true;
     return result;
   });
-  expect(suspension.block).toHaveBeenCalledTimes(1);
-
-  runner.emit({ type: 'interaction_requested', request: request('a') });
-  expect(suspension.releases[0]).toHaveBeenCalledTimes(1);
   await Promise.resolve();
   expect(finished).toBe(false);
 
-  runner.emit({
-    type: 'interaction_resolved',
-    request: request('a'),
-    outcome: { kind: 'approved' },
-  });
-  expect(suspension.block).toHaveBeenCalledTimes(2);
-
   runner.settle({ runId: 'r1', status: 'ok', messageId: 'r1' });
   expect(await running).toEqual({ status: 'ok', error: undefined, messageId: 'r1' });
-  expect(suspension.releases[1]).toHaveBeenCalledTimes(1);
-  expect(runner.listeners.size).toBe(0);
   expect(runner.start).toHaveBeenCalledTimes(1);
 });
 
-test('the machine stays free until every waiting request is answered', async () => {
+test('a run that fails carries its error back to the task', async () => {
   const runner = fakeRunner();
-  const suspension = suspensionBlocker();
   const running = runScheduledTask(
-    {
-      db: makeDb(),
-      runner: runner.runner,
-      defaultModel: () => null,
-      blockSuspension: suspension.block,
-    },
+    { db: makeDb(), runner: runner.runner, defaultModel: () => null },
     task,
   );
-  runner.emit({ type: 'interaction_requested', request: request('a') });
-  runner.emit({ type: 'interaction_requested', request: request('b') });
-  runner.emit({
-    type: 'interaction_resolved',
-    request: request('a'),
-    outcome: { kind: 'approved' },
+  runner.settle({ runId: 'r1', status: 'error', error: 'the model refused' });
+  expect(await running).toEqual({
+    status: 'error',
+    error: 'the model refused',
+    messageId: undefined,
   });
-  expect(suspension.block).toHaveBeenCalledTimes(1);
-  runner.emit({
-    type: 'interaction_resolved',
-    request: request('b'),
-    outcome: { kind: 'approved' },
-  });
-  expect(suspension.block).toHaveBeenCalledTimes(2);
-  runner.settle({ runId: 'r1', status: 'ok' });
-  await running;
 });
 
-test('a run that ends while waiting does not block suspension again', async () => {
-  const runner = fakeRunner();
-  const suspension = suspensionBlocker();
-  const running = runScheduledTask(
-    {
-      db: makeDb(),
-      runner: runner.runner,
-      defaultModel: () => null,
-      blockSuspension: suspension.block,
-    },
-    task,
-  );
-  runner.emit({ type: 'interaction_requested', request: request('a') });
-  runner.settle({ runId: 'r1', status: 'ok' });
-  await running;
-  expect(suspension.block).toHaveBeenCalledTimes(1);
-  expect(suspension.releases[0]).toHaveBeenCalledTimes(1);
-});
-
-test('a run the runner refuses still lets the machine sleep', async () => {
-  const suspension = suspensionBlocker();
+test('a run the runner refuses is reported as an error', async () => {
   const runner = {
     start: () => {
       throw new Error('Model is not registered');
     },
   } as unknown as Runner;
-  const result = await runScheduledTask(
-    { db: makeDb(), runner, defaultModel: () => null, blockSuspension: suspension.block },
-    task,
-  );
+  const result = await runScheduledTask({ db: makeDb(), runner, defaultModel: () => null }, task);
   expect(result).toEqual({ status: 'error', error: 'Model is not registered' });
-  expect(suspension.releases[0]).toHaveBeenCalledTimes(1);
+});
+
+test('a task with no model never reaches the runner', async () => {
+  const runner = fakeRunner();
+  const result = await runScheduledTask(
+    { db: makeDb(), runner: runner.runner, defaultModel: () => null },
+    { ...task, providerId: null, modelId: null } as ScheduledTask,
+  );
+  expect(result).toEqual({
+    status: 'error',
+    error: 'No model configured for this scheduled task.',
+  });
+  expect(runner.start).not.toHaveBeenCalled();
 });

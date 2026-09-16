@@ -17,23 +17,6 @@ export type ScheduledRunResult = {
   messageId?: string;
 };
 
-/**
- * Keep macOS App Nap / OS suspension from freezing a headless run mid-turn.
- * Electron is required lazily so the manager's import graph stays testable
- * outside an Electron context; a non-Electron context degrades to a no-op.
- */
-function blockSuspension(): () => void {
-  try {
-    const { powerSaveBlocker } = require('electron') as typeof import('electron');
-    const id = powerSaveBlocker.start('prevent-app-suspension');
-    return () => {
-      if (powerSaveBlocker.isStarted(id)) powerSaveBlocker.stop(id);
-    };
-  } catch {
-    return () => {};
-  }
-}
-
 /** Start time of the task's most recent *completed* run (excludes the current
  *  in-flight one, which has no finishedAt yet). Undefined on the first run. */
 function lastCompletedRunAt(db: Db, taskId: string): Date | undefined {
@@ -57,7 +40,6 @@ export async function runScheduledTask(
     db: Db;
     runner: Runner;
     defaultModel: () => SelectedModel | null;
-    blockSuspension?: () => () => void;
   },
   task: ScheduledTask,
 ): Promise<ScheduledRunResult> {
@@ -87,9 +69,6 @@ export async function runScheduledTask(
     parts: [{ type: 'text', text: `${header}\n\n${task.prompt}` }],
   };
 
-  const block = deps.blockSuspension ?? blockSuspension;
-  let release: (() => void) | undefined = block();
-  let unsubscribe: (() => void) | undefined;
   try {
     const handle = deps.runner.start({
       threadId: task.threadId,
@@ -97,20 +76,6 @@ export async function runScheduledTask(
       modelId: model.modelId,
       permissionMode: task.permissionMode,
       userMessage: message,
-    });
-    // A run waiting on the user does no work, so the machine may sleep until
-    // every request it is waiting on has been answered.
-    const waiting = new Set<string>();
-    unsubscribe = handle.subscribe((event) => {
-      if (event.type === 'interaction_requested') waiting.add(event.request.id);
-      else if (event.type === 'interaction_resolved') waiting.delete(event.request.id);
-      else return;
-      if (waiting.size > 0) {
-        release?.();
-        release = undefined;
-      } else if (!release) {
-        release = block();
-      }
     });
     const outcome = await handle.settled;
     if (outcome.status === 'error') {
@@ -122,8 +87,5 @@ export async function runScheduledTask(
     // before the run ever starts.
     log.error(`task ${task.id} could not start`, err);
     return { status: 'error', error: err instanceof Error ? err.message : String(err) };
-  } finally {
-    unsubscribe?.();
-    release?.();
   }
 }

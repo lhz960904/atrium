@@ -2,6 +2,7 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
 import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
+import type { EventEnvelope } from '@shared/protocol';
 import { InteractionConflict, InvalidInteractionDecision } from '../pending-interactions';
 import { cleanupRuntime, deferred, runtimeFixture } from './runtime-fixture';
 
@@ -11,27 +12,55 @@ const { createRunner } = await import('../runner');
 const { LocalSandbox } = await import('../../sandbox');
 const { threadMessages } = await import('@main/conversation/threads');
 
-type Handle = ReturnType<ReturnType<typeof createRunner>['start']>;
+type RunnerInstance = ReturnType<typeof createRunner>;
 
-/** The requests a run asks, in order, awaited on the event rather than on time. */
-function watch(handle: Handle) {
+/**
+ * The requests a run asks, in order, awaited on the event rather than on time.
+ * Reads the run's own event stream, which replays from the start of the log, so
+ * attaching after the run began misses nothing.
+ */
+function watch(runner: RunnerInstance, threadId: string) {
   const queued: InteractionRequest[] = [];
   const waiting: Array<(request: InteractionRequest) => void> = [];
-  const resolved: InteractionOutcome[] = [];
-  handle.subscribe((event) => {
-    if (event.type === 'interaction_resolved') resolved.push(event.outcome);
-    if (event.type !== 'interaction_requested') return;
-    const waiter = waiting.shift();
-    if (waiter) waiter(event.request);
-    else queued.push(event.request);
-  });
-  const next = () =>
-    new Promise<InteractionRequest>((resolve) => {
-      const ready = queued.shift();
-      if (ready) resolve(ready);
-      else waiting.push(resolve);
-    });
-  return { next, resolved };
+  const outcomes: InteractionOutcome[] = [];
+  const stream = runner.subscribe(threadId, -1);
+  const draining = (async () => {
+    if (!stream) return;
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let end = buffer.indexOf('\n\n');
+      while (end !== -1) {
+        const frame = buffer.slice(0, end);
+        buffer = buffer.slice(end + 2);
+        end = buffer.indexOf('\n\n');
+        if (!frame.startsWith('data: ')) continue;
+        const { event } = JSON.parse(frame.slice('data: '.length)) as EventEnvelope;
+        if (event.type === 'interaction_resolved') outcomes.push(event.outcome);
+        if (event.type !== 'interaction_requested') continue;
+        const waiter = waiting.shift();
+        if (waiter) waiter(event.request);
+        else queued.push(event.request);
+      }
+    }
+  })();
+  return {
+    next: () =>
+      new Promise<InteractionRequest>((resolve) => {
+        const ready = queued.shift();
+        if (ready) resolve(ready);
+        else waiting.push(resolve);
+      }),
+    /** What the run settled, once its sealed log has been read to the end. */
+    resolved: async () => {
+      await draining;
+      return outcomes;
+    },
+  };
 }
 
 const bashCall = (id: string) =>
@@ -173,7 +202,7 @@ test('approval continues the original run and executes the tool once', async () 
     },
   ]);
   const handle = runner.start(f.request);
-  const interactions = watch(handle);
+  const interactions = watch(runner, 't1');
   const request = await interactions.next();
   expect(request).toMatchObject({
     runId: handle.runId,
@@ -191,7 +220,7 @@ test('approval continues the original run and executes the tool once', async () 
   expect(runner.respond('t1', decision)).toBe('already_accepted');
   expect(await handle.settled).toMatchObject({ status: 'ok', messageId: handle.runId });
   expect(exec).toHaveBeenCalledTimes(1);
-  expect(interactions.resolved).toEqual([{ kind: 'approved' }]);
+  expect(await interactions.resolved()).toEqual([{ kind: 'approved' }]);
   expect(f.faux.state.callCount).toBe(2);
   expect(runner.isRunning('t1')).toBe(false);
   expect(() => runner.respond('t1', decision)).toThrow(InteractionConflict);
@@ -216,7 +245,7 @@ test('a denial blocks the tool and the model reads the reason', async () => {
     },
   ]);
   const handle = runner.start(f.request);
-  const request = await watch(handle).next();
+  const request = await watch(runner, 't1').next();
   runner.respond('t1', {
     runId: handle.runId,
     interactionId: request.id,
@@ -243,7 +272,7 @@ test('an answered clarification becomes the tool result of the same run', async 
     },
   ]);
   const handle = runner.start(f.request);
-  const request = await watch(handle).next();
+  const request = await watch(runner, 't1').next();
   expect(request.kind).toBe('clarification');
   const answer = (answers: string[]) =>
     runner.respond('t1', {
@@ -274,7 +303,7 @@ test('cancelling a clarification ends the run without asking the model again', a
   const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
   f.faux.setResponses([question(), fauxAssistantMessage('should never be asked')]);
   const handle = runner.start(f.request);
-  const request = await watch(handle).next();
+  const request = await watch(runner, 't1').next();
   runner.respond('t1', {
     runId: handle.runId,
     interactionId: request.id,
@@ -299,11 +328,13 @@ test('stopping while a decision is pending settles the run and runs nothing', as
   });
   f.faux.setResponses([fauxAssistantMessage(bashCall('call-1'), { stopReason: 'toolUse' })]);
   const handle = runner.start(f.request);
-  const interactions = watch(handle);
+  const interactions = watch(runner, 't1');
   const request = await interactions.next();
   expect(runner.abort('t1')).toBe(true);
   expect((await handle.settled).status).toBe('ok');
-  expect(interactions.resolved).toEqual([{ kind: 'interrupted', reason: 'user_cancelled' }]);
+  expect(await interactions.resolved()).toEqual([
+    { kind: 'interrupted', reason: 'user_cancelled' },
+  ]);
   expect(exec).not.toHaveBeenCalled();
   expect(f.faux.state.callCount).toBe(1);
   expect(() =>
@@ -327,7 +358,7 @@ test('an approved call waits for the rest of its batch, and a stop runs neither'
     fauxAssistantMessage([bashCall('call-1'), bashCall('call-2')], { stopReason: 'toolUse' }),
   ]);
   const handle = runner.start(f.request);
-  const interactions = watch(handle);
+  const interactions = watch(runner, 't1');
   const first = await interactions.next();
   runner.respond('t1', {
     runId: handle.runId,
@@ -352,7 +383,7 @@ test('shutting down settles the runs it cancels and can be awaited twice', async
   });
   f.faux.setResponses([fauxAssistantMessage(bashCall('call-1'), { stopReason: 'toolUse' })]);
   const handle = runner.start(f.request);
-  await watch(handle).next();
+  await watch(runner, 't1').next();
 
   await runner.dispose();
   // Returning means the runs are settled, not merely asked to stop.
@@ -368,7 +399,7 @@ test('a thread waiting for a decision refuses another run and compaction', async
   const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
   f.faux.setResponses([fauxAssistantMessage(bashCall('call-1'), { stopReason: 'toolUse' })]);
   const handle = runner.start(f.request);
-  await watch(handle).next();
+  await watch(runner, 't1').next();
   expect(() =>
     runner.start({ ...f.request, userMessage: { ...f.request.userMessage, id: 'u2' } }),
   ).toThrow('already running');
@@ -385,7 +416,7 @@ test('decisions addressed to another run or an idle thread conflict', async () =
   const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
   f.faux.setResponses([fauxAssistantMessage(bashCall('call-1'), { stopReason: 'toolUse' })]);
   const handle = runner.start(f.request);
-  const request = await watch(handle).next();
+  const request = await watch(runner, 't1').next();
   const approved = { kind: 'approved' as const };
   expect(() =>
     runner.respond('t1', { runId: 'another-run', interactionId: request.id, decision: approved }),
@@ -404,7 +435,7 @@ test('reconnecting while waiting replays the request and starts nothing new', as
   const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
   f.faux.setResponses([fauxAssistantMessage(bashCall('call-1'), { stopReason: 'toolUse' })]);
   const handle = runner.start(f.request);
-  await watch(handle).next();
+  await watch(runner, 't1').next();
   const reader = runner.subscribe('t1', -1)?.getReader();
   const decoder = new TextDecoder();
   let replayed = '';
