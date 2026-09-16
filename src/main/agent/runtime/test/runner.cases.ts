@@ -4,22 +4,21 @@ import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
 import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
 import type { EventEnvelope } from '@shared/protocol';
 import { InteractionConflict, InvalidInteractionDecision } from '../pending-interactions';
+import type { Runner } from '../runner';
 import { cleanupRuntime, deferred, runtimeFixture } from './runtime-fixture';
 
 afterEach(cleanupRuntime);
 
-const { createRunner } = await import('../runner');
+const { RunManager } = await import('../runner');
 const { LocalSandbox } = await import('../../sandbox');
 const { threadMessages } = await import('@main/conversation/threads');
-
-type RunnerInstance = ReturnType<typeof createRunner>;
 
 /**
  * The requests a run asks, in order, awaited on the event rather than on time.
  * Reads the run's own event stream, which replays from the start of the log, so
  * attaching after the run began misses nothing.
  */
-function watch(runner: RunnerInstance, threadId: string) {
+function watch(runner: Runner, threadId: string) {
   const queued: InteractionRequest[] = [];
   const waiting: Array<(request: InteractionRequest) => void> = [];
   const outcomes: InteractionOutcome[] = [];
@@ -94,7 +93,7 @@ const partFor = (parts: readonly unknown[] | undefined, toolCallId: string) =>
 
 test('returns a subscribable handle immediately and rejects duplicate runs without replacing it', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   const entered = deferred();
   const release = deferred();
   f.blocks.mockImplementation(async () => {
@@ -121,7 +120,7 @@ test('returns a subscribable handle immediately and rejects duplicate runs witho
 
 test('a failed execution releases the thread, seals its stream and allows the next run', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   f.blocks.mockRejectedValueOnce(new Error('context unavailable'));
   const first = runner.start(f.request);
   expect(await first.settled).toMatchObject({
@@ -146,7 +145,7 @@ test('a failed execution releases the thread, seals its stream and allows the ne
 
 test('invalid models fail admission synchronously and create no run or stream', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   expect(() => runner.start({ ...f.request, modelId: 'missing' })).toThrow('not registered');
   expect(runner.subscribe('t1', -1)).toBeNull();
   expect(runner.runningThreadIds()).toEqual([]);
@@ -156,8 +155,8 @@ test('invalid models fail admission synchronously and create no run or stream', 
 test('runner instances own independent cancellation and stream state', async () => {
   const f = await runtimeFixture();
   f.addThread('t2');
-  const first = createRunner({ db: f.db, projectlessRoot: f.dir });
-  const second = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const first = new RunManager({ db: f.db, projectlessRoot: f.dir });
+  const second = new RunManager({ db: f.db, projectlessRoot: f.dir });
   const entered = deferred();
   const release = deferred();
   let calls = 0;
@@ -179,9 +178,9 @@ test('runner instances own independent cancellation and stream state', async () 
   second.dispose();
 });
 
-test('provider failure reaches the public outcome instead of being lost in a void producer', async () => {
+test('provider failure reaches the public outcome instead of being swallowed', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   f.faux.setResponses([fauxAssistantMessage([], { stopReason: 'error', errorMessage: 'offline' })]);
   const handle = runner.start(f.request);
   expect(await handle.settled).toMatchObject({
@@ -194,7 +193,7 @@ test('provider failure reaches the public outcome instead of being lost in a voi
 
 test('approval continues the original run and executes the tool once', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   const exec = spyOn(LocalSandbox.prototype, 'exec').mockResolvedValue({
     output: 'approved output',
     exitCode: 0,
@@ -236,7 +235,7 @@ test('approval continues the original run and executes the tool once', async () 
 
 test('a denial blocks the tool and the model reads the reason', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   const exec = spyOn(LocalSandbox.prototype, 'exec').mockResolvedValue({
     output: 'ran',
     exitCode: 0,
@@ -268,7 +267,7 @@ test('a denial blocks the tool and the model reads the reason', async () => {
 
 test('an answered clarification becomes the tool result of the same run', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   f.faux.setResponses([
     question(2),
     (context) => {
@@ -307,7 +306,7 @@ test('an answered clarification becomes the tool result of the same run', async 
 
 test('cancelling a clarification ends the run without asking the model again', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   f.faux.setResponses([question(), fauxAssistantMessage('should never be asked')]);
   const handle = runner.start(f.request);
   const request = await watch(runner, 't1').next();
@@ -328,7 +327,7 @@ test('cancelling a clarification ends the run without asking the model again', a
 
 test('stopping while a decision is pending settles the run and runs nothing', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   const exec = spyOn(LocalSandbox.prototype, 'exec').mockResolvedValue({
     output: 'ran',
     exitCode: 0,
@@ -356,7 +355,7 @@ test('stopping while a decision is pending settles the run and runs nothing', as
 
 test('an approved call waits for the rest of its batch, and a stop runs neither', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   const exec = spyOn(LocalSandbox.prototype, 'exec').mockResolvedValue({
     output: 'ran',
     exitCode: 0,
@@ -383,7 +382,7 @@ test('an approved call waits for the rest of its batch, and a stop runs neither'
 
 test('shutting down settles the runs it cancels and can be awaited twice', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   const exec = spyOn(LocalSandbox.prototype, 'exec').mockResolvedValue({
     output: 'ran',
     exitCode: 0,
@@ -403,7 +402,7 @@ test('shutting down settles the runs it cancels and can be awaited twice', async
 
 test('a thread waiting for a decision refuses another run and compaction', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   f.faux.setResponses([fauxAssistantMessage(bashCall('call-1'), { stopReason: 'toolUse' })]);
   const handle = runner.start(f.request);
   await watch(runner, 't1').next();
@@ -420,7 +419,7 @@ test('a thread waiting for a decision refuses another run and compaction', async
 
 test('decisions addressed to another run or an idle thread conflict', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   f.faux.setResponses([fauxAssistantMessage(bashCall('call-1'), { stopReason: 'toolUse' })]);
   const handle = runner.start(f.request);
   const request = await watch(runner, 't1').next();
@@ -439,7 +438,7 @@ test('decisions addressed to another run or an idle thread conflict', async () =
 
 test('reconnecting while waiting replays the request and starts nothing new', async () => {
   const f = await runtimeFixture();
-  const runner = createRunner({ db: f.db, projectlessRoot: f.dir });
+  const runner = new RunManager({ db: f.db, projectlessRoot: f.dir });
   f.faux.setResponses([fauxAssistantMessage(bashCall('call-1'), { stopReason: 'toolUse' })]);
   const handle = runner.start(f.request);
   await watch(runner, 't1').next();

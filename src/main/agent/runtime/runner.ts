@@ -70,49 +70,59 @@ type ActiveRun = {
  * replay and shared shells. All per-run assembly and recording belongs to
  * executeRun.
  */
-export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner {
-  const { db } = deps;
-  const bgShells = new BackgroundShells();
-  const active = new Map<string, ActiveRun>();
-  const buffers = new Map<string, EventBuffer>();
-  let disposed = false;
-  let closing: Promise<void> | undefined;
+export class RunManager implements Runner {
+  private readonly db: Db;
+  private readonly projectlessRoot: string;
+  private readonly bgShells = new BackgroundShells();
+  /** The runs a caller can still address — decide, abort, await. A run leaves
+   *  the moment it settles. */
+  private readonly active = new Map<string, ActiveRun>();
+  /** One event log per thread, kept past its run so a reader can rejoin one
+   *  that just ended. Outlives `active`, which is why they are separate. */
+  private readonly buffers = new Map<string, EventBuffer>();
+  private disposed = false;
+  private closing: Promise<void> | undefined;
 
-  function assertIdle(threadId: string): void {
-    if (active.has(threadId)) throw new Error(`Thread ${threadId} is already running`);
+  constructor(deps: { db: Db; projectlessRoot: string }) {
+    this.db = deps.db;
+    this.projectlessRoot = deps.projectlessRoot;
+  }
+
+  private assertIdle(threadId: string): void {
+    if (this.active.has(threadId)) throw new Error(`Thread ${threadId} is already running`);
   }
 
   /** The thread's log for this run, superseding whatever it had. */
-  function openBuffer(threadId: string): EventBuffer {
+  private openBuffer(threadId: string): EventBuffer {
     const buffer = new EventBuffer();
     // Reinsert so Map order stays usable as an LRU for evicting finished logs.
-    buffers.delete(threadId);
-    buffers.set(threadId, buffer);
-    for (const [id, kept] of buffers) {
-      if (buffers.size <= MAX_FINISHED_LOGS) break;
-      if (kept.closed) buffers.delete(id);
+    this.buffers.delete(threadId);
+    this.buffers.set(threadId, buffer);
+    for (const [id, kept] of this.buffers) {
+      if (this.buffers.size <= MAX_FINISHED_LOGS) break;
+      if (kept.closed) this.buffers.delete(id);
     }
     return buffer;
   }
 
-  function start({ providerId, modelId, ...input }: RunRequest): RunHandle {
+  start({ providerId, modelId, ...input }: RunRequest): RunHandle {
     const { threadId } = input;
-    if (disposed) throw new Error('Runner is disposed');
-    assertIdle(threadId);
+    if (this.disposed) throw new Error('Runner is disposed');
+    this.assertIdle(threadId);
     // Admission stays synchronous, before replacing this thread's replay buffer.
-    const model = resolvePiModel(db, providerId, modelId);
+    const model = resolvePiModel(this.db, providerId, modelId);
     const runId = randomUUID();
     const abort = new AbortController();
     const pending = createPendingInteractions({ runId, abort });
 
-    const eventLog = openBuffer(threadId);
+    const eventLog = this.openBuffer(threadId);
     const settled = executeRun({
       input,
       runId,
       model,
-      db,
-      projectlessRoot: deps.projectlessRoot,
-      bgShells,
+      db: this.db,
+      projectlessRoot: this.projectlessRoot,
+      bgShells: this.bgShells,
       signal: abort.signal,
       pending,
       emit: eventLog.emit,
@@ -133,61 +143,67 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
       .finally(() => {
         // Whatever the run did, its readers have to see the log end.
         eventLog.close();
-        active.delete(threadId);
+        this.active.delete(threadId);
       });
-    active.set(threadId, { runId, abort, pending, settled });
+    this.active.set(threadId, { runId, abort, pending, settled });
 
     return { runId, settled };
   }
 
-  return {
-    start,
-    abort(threadId) {
-      const run = active.get(threadId);
-      if (!run) return false;
-      run.pending.cancel('user_cancelled');
-      return true;
-    },
-    isRunning: (threadId) => active.has(threadId),
-    runningThreadIds: () => [...active.keys()],
-    subscribe: (threadId, fromSeq) => buffers.get(threadId)?.subscribe(fromSeq) ?? null,
+  abort(threadId: string): boolean {
+    const run = this.active.get(threadId);
+    if (!run) return false;
+    run.pending.cancel('user_cancelled');
+    return true;
+  }
 
-    respond(threadId, input) {
-      const run = active.get(threadId);
-      if (!run || run.runId !== input.runId || run.abort.signal.aborted) {
-        throw new InteractionConflict('The interaction is no longer active.');
-      }
-      return run.pending.respond(input);
-    },
+  isRunning(threadId: string): boolean {
+    return this.active.has(threadId);
+  }
 
-    async compact({ threadId, providerId, modelId }) {
-      // A waiting run still owns the thread's history.
-      assertIdle(threadId);
-      const history = await threadHistory(db, threadId);
-      const model = resolvePiModel(db, providerId, modelId);
-      const folded = await foldHistory({
-        messages: history,
-        summarize: createSummarizer(model),
-        contextWindow: model.contextWindow,
-        preservers: [preserveTodos, preserveActiveSkill],
-        // User-requested compaction keeps only the recent floor.
-        keepRecentTokens: 0,
-      });
-      if (!folded) return false;
-      await compactThread(db, threadId, folded);
-      return true;
-    },
+  runningThreadIds(): string[] {
+    return [...this.active.keys()];
+  }
 
-    dispose() {
-      if (closing) return closing;
-      disposed = true;
-      // Cancelling is a request; a run is only really over once its own
-      // recording and cleanup have finished, which is what callers wait for.
-      const running = [...active.values()].map((run) => run.settled);
-      for (const run of active.values()) run.pending.cancel('app_shutdown');
-      bgShells.killAll();
-      closing = Promise.allSettled(running).then(() => undefined);
-      return closing;
-    },
-  };
+  subscribe(threadId: string, fromSeq: number): ReadableStream<EventEnvelope> | null {
+    return this.buffers.get(threadId)?.subscribe(fromSeq) ?? null;
+  }
+
+  respond(threadId: string, input: DecideInteraction): 'accepted' | 'already_accepted' {
+    const run = this.active.get(threadId);
+    if (!run || run.runId !== input.runId || run.abort.signal.aborted) {
+      throw new InteractionConflict('The interaction is no longer active.');
+    }
+    return run.pending.respond(input);
+  }
+
+  async compact({ threadId, providerId, modelId }: CompactRequest): Promise<boolean> {
+    // A waiting run still owns the thread's history.
+    this.assertIdle(threadId);
+    const history = await threadHistory(this.db, threadId);
+    const model = resolvePiModel(this.db, providerId, modelId);
+    const folded = await foldHistory({
+      messages: history,
+      summarize: createSummarizer(model),
+      contextWindow: model.contextWindow,
+      preservers: [preserveTodos, preserveActiveSkill],
+      // User-requested compaction keeps only the recent floor.
+      keepRecentTokens: 0,
+    });
+    if (!folded) return false;
+    await compactThread(this.db, threadId, folded);
+    return true;
+  }
+
+  dispose(): Promise<void> {
+    if (this.closing) return this.closing;
+    this.disposed = true;
+    // Cancelling is a request; a run is only really over once its own
+    // recording and cleanup have finished, which is what callers wait for.
+    const running = [...this.active.values()].map((run) => run.settled);
+    for (const run of this.active.values()) run.pending.cancel('app_shutdown');
+    this.bgShells.killAll();
+    this.closing = Promise.allSettled(running).then(() => undefined);
+    return this.closing;
+  }
 }

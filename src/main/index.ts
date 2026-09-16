@@ -13,7 +13,7 @@ import { runDream, startDreamScheduler } from './agent/memory';
 import { createCredentialStore } from './agent/providers/credential-store';
 import { firstEnabledModel, resolvePiModel } from './agent/providers/models';
 import { piStreamFn, refreshProviders, useCredentialStore } from './agent/providers/registry';
-import { createRunner, type Runner } from './agent/runtime/runner';
+import { RunManager, type Runner } from './agent/runtime/runner';
 import { refreshSkills } from './agent/skills/registry';
 import { startHttpServer } from './api/http';
 import { appRouter } from './api/trpc/router';
@@ -167,7 +167,7 @@ app.whenReady().then(async () => {
 
   // One composition root for every turn — the chat endpoint and the scheduler
   // are both callers of it.
-  const runs = createRunner({ db, projectlessRoot });
+  const runs = new RunManager({ db, projectlessRoot });
   runner = runs;
 
   // Bring the chat server up first — it's a fast port bind — so the IPC handler
