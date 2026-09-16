@@ -11,11 +11,7 @@ import { BackgroundShells } from '../sandbox';
 import { preserveActiveSkill } from '../tools/builtins/skill';
 import { preserveTodos } from '../tools/builtins/todo';
 import { executeRun, type RunInput } from './execute-run';
-import {
-  createPendingInteractions,
-  InteractionConflict,
-  type PendingInteractions,
-} from './pending-interactions';
+import { InteractionConflict, PendingInteractions } from './pending-interactions';
 import { EventBuffer } from './stream/run-event-buffer';
 
 const log = createLogger('runner');
@@ -44,20 +40,6 @@ export type RunHandle = {
 };
 export type CompactRequest = { threadId: string; providerId: string; modelId: string };
 
-export type Runner = {
-  abort(threadId: string): boolean;
-  isRunning(threadId: string): boolean;
-  runningThreadIds(): string[];
-  subscribe(threadId: string, fromSeq: number): ReadableStream<EventEnvelope> | null;
-  /** Returns once the stream exists. Invalid models and busy threads throw synchronously. */
-  start(request: RunRequest): RunHandle;
-  /** Hand a decision to the run waiting on it; throws when that run is not waiting. */
-  respond(threadId: string, input: DecideInteraction): 'accepted' | 'already_accepted';
-  compact(request: CompactRequest): Promise<boolean>;
-  /** Stop accepting runs, cancel the live ones and wait for them to settle. */
-  dispose(): Promise<void>;
-};
-
 type ActiveRun = {
   runId: string;
   abort: AbortController;
@@ -70,9 +52,9 @@ type ActiveRun = {
  * replay and shared shells. All per-run assembly and recording belongs to
  * executeRun.
  */
-export class RunManager implements Runner {
+export class Runner {
   private readonly db: Db;
-  private readonly projectlessRoot: string;
+  private readonly defaultProjectRoot: string;
   private readonly bgShells = new BackgroundShells();
   /** The runs a caller can still address — decide, abort, await. A run leaves
    *  the moment it settles. */
@@ -83,9 +65,9 @@ export class RunManager implements Runner {
   private disposed = false;
   private closing: Promise<void> | undefined;
 
-  constructor(deps: { db: Db; projectlessRoot: string }) {
+  constructor(deps: { db: Db; defaultProjectRoot: string }) {
     this.db = deps.db;
-    this.projectlessRoot = deps.projectlessRoot;
+    this.defaultProjectRoot = deps.defaultProjectRoot;
   }
 
   private assertIdle(threadId: string): void {
@@ -105,6 +87,7 @@ export class RunManager implements Runner {
     return buffer;
   }
 
+  /** Returns once the stream exists. Invalid models and busy threads throw synchronously. */
   start({ providerId, modelId, ...input }: RunRequest): RunHandle {
     const { threadId } = input;
     if (this.disposed) throw new Error('Runner is disposed');
@@ -113,7 +96,7 @@ export class RunManager implements Runner {
     const model = resolvePiModel(this.db, providerId, modelId);
     const runId = randomUUID();
     const abort = new AbortController();
-    const pending = createPendingInteractions({ runId, abort });
+    const pending = new PendingInteractions({ runId, abort });
 
     const eventLog = this.openBuffer(threadId);
     const settled = executeRun({
@@ -121,7 +104,7 @@ export class RunManager implements Runner {
       runId,
       model,
       db: this.db,
-      projectlessRoot: this.projectlessRoot,
+      defaultProjectRoot: this.defaultProjectRoot,
       bgShells: this.bgShells,
       signal: abort.signal,
       pending,
@@ -169,6 +152,7 @@ export class RunManager implements Runner {
     return this.buffers.get(threadId)?.subscribe(fromSeq) ?? null;
   }
 
+  /** Hand a decision to the run waiting on it; throws when that run is not waiting. */
   respond(threadId: string, input: DecideInteraction): 'accepted' | 'already_accepted' {
     const run = this.active.get(threadId);
     if (!run || run.runId !== input.runId || run.abort.signal.aborted) {
@@ -195,6 +179,7 @@ export class RunManager implements Runner {
     return true;
   }
 
+  /** Stop accepting runs, cancel the live ones and wait for them to settle. */
   dispose(): Promise<void> {
     if (this.closing) return this.closing;
     this.disposed = true;

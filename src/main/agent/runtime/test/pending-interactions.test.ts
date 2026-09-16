@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 import type { ToolCall } from '@earendil-works/pi-ai';
 import {
-  createPendingInteractions,
   InteractionConflict,
   InvalidInteractionDecision,
+  PendingInteractions,
 } from '../pending-interactions';
 
 const bash: ToolCall = { type: 'toolCall', id: 'c1', name: 'bash', arguments: { command: 'ls' } };
@@ -23,7 +23,7 @@ const ask = (count: number): ToolCall => ({
 
 function inbox() {
   const abort = new AbortController();
-  return { abort, pending: createPendingInteractions({ runId: 'r1', abort }) };
+  return { abort, pending: new PendingInteractions({ runId: 'r1', abort }) };
 }
 
 test('one decision wins and identical retries do not execute anything', async () => {

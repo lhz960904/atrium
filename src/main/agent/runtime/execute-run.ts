@@ -69,7 +69,7 @@ export type ExecuteRunOptions = {
   /** Resolved at admission so an unknown model still fails start() synchronously. */
   model: Model<Api>;
   db: Db;
-  projectlessRoot: string;
+  defaultProjectRoot: string;
   bgShells: BackgroundShells;
   signal: AbortSignal;
   /** Decisions reach the calls waiting in this run through it; created with the run's controller. */
@@ -109,7 +109,7 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
     // the start always learns which run it is reading.
     emit({ type: 'run_started', runId });
     signal.throwIfAborted();
-    workspaceRoot = resolveThreadWorkspace(db, input.threadId, opts.projectlessRoot);
+    workspaceRoot = resolveThreadWorkspace(db, input.threadId, opts.defaultProjectRoot);
     computerUse =
       process.platform === 'darwin' && getSettings('computerUse.enabled')
         ? getComputerUseHelper()

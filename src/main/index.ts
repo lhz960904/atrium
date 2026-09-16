@@ -13,7 +13,7 @@ import { runDream, startDreamScheduler } from './agent/memory';
 import { createCredentialStore } from './agent/providers/credential-store';
 import { firstEnabledModel, resolvePiModel } from './agent/providers/models';
 import { piStreamFn, refreshProviders, useCredentialStore } from './agent/providers/registry';
-import { RunManager, type Runner } from './agent/runtime/runner';
+import { Runner } from './agent/runtime/runner';
 import { refreshSkills } from './agent/skills/registry';
 import { startHttpServer } from './api/http';
 import { appRouter } from './api/trpc/router';
@@ -160,14 +160,14 @@ app.whenReady().then(async () => {
   refreshProviders(db);
   openSettings();
 
-  // Fallback workspace root for projectless conversations; project-scoped
+  // Fallback workspace root for conversations with no project; project-scoped
   // threads run in their project's directory instead, resolved per request.
-  const projectlessRoot = join(homedir(), 'Documents', 'Atrium');
-  mkdirSync(projectlessRoot, { recursive: true });
+  const defaultProjectRoot = join(homedir(), 'Documents', 'Atrium');
+  mkdirSync(defaultProjectRoot, { recursive: true });
 
   // One composition root for every turn — the chat endpoint and the scheduler
   // are both callers of it.
-  const runs = new RunManager({ db, projectlessRoot });
+  const runs = new Runner({ db, defaultProjectRoot });
   runner = runs;
 
   // Bring the chat server up first — it's a fast port bind — so the IPC handler

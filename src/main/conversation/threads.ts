@@ -39,19 +39,23 @@ export function touchThread(db: Db, threadId: string, opts: { markRead?: boolean
  * projectless fallback when it has no project (or the project was deleted).
  * All file tools, the sandbox, and the system prompt for a turn scope to this.
  */
-export function resolveThreadWorkspace(db: Db, threadId: string, projectlessRoot: string): string {
+export function resolveThreadWorkspace(
+  db: Db,
+  threadId: string,
+  defaultProjectRoot: string,
+): string {
   const row = db
     .select({ projectId: threads.projectId })
     .from(threads)
     .where(eq(threads.id, threadId))
     .get();
-  if (!row?.projectId) return projectlessRoot;
+  if (!row?.projectId) return defaultProjectRoot;
   const project = db
     .select({ path: projects.path })
     .from(projects)
     .where(eq(projects.id, row.projectId))
     .get();
-  return project?.path ?? projectlessRoot;
+  return project?.path ?? defaultProjectRoot;
 }
 
 /** Replace a thread's title with the model-generated summary of its first message. */

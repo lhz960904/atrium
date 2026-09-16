@@ -2,7 +2,7 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
 import type { AgentSessionEvent } from '@shared/protocol';
-import { createPendingInteractions, type PendingInteractions } from '../pending-interactions';
+import { PendingInteractions } from '../pending-interactions';
 import { cleanupRuntime, deferred, runtimeFixture } from './runtime-fixture';
 
 afterEach(cleanupRuntime);
@@ -29,13 +29,13 @@ async function run(
   { abort = new AbortController(), onEvent, ...overrides }: RunOverrides = {},
 ) {
   const events: AgentSessionEvent[] = [];
-  const pending = createPendingInteractions({ runId: 'r1', abort });
+  const pending = new PendingInteractions({ runId: 'r1', abort });
   const result = await executeRun({
     input: f.request,
     runId: 'r1',
     model: f.model,
     db: f.db,
-    projectlessRoot: f.dir,
+    defaultProjectRoot: f.dir,
     bgShells: f.bgShells,
     signal: abort.signal,
     pending,

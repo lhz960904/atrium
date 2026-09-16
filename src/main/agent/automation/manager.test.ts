@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, expect, test } from 'bun:test';
+import type { Runner } from '@main/agent/runtime/runner';
 import type { Db } from '@main/db';
 import type { ScheduledTask } from '@main/db/schema';
 import * as schema from '@main/db/schema';
@@ -69,7 +70,7 @@ function setup(runner?: (task: ScheduledTask) => Promise<ScheduledRunResult>) {
       respond: () => unreachable(),
       compact: () => unreachable(),
       dispose: () => Promise.resolve(),
-    },
+    } as unknown as Runner,
     defaultModel: () => ({ providerId: 'p', modelId: 'm' }),
     now: () => nowRef.v,
     run: runner ?? (async () => ({ status: 'ok', messageId: 'a1' })),
