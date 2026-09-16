@@ -7,6 +7,7 @@ import type { Runner } from '@main/agent/runtime/runner';
 import type { AtriumUIMessage } from '@shared/chat';
 import { decideInteractionSchema } from '@shared/interactions';
 import type { PermissionMode } from '@shared/permissions';
+import type { EventEnvelope } from '@shared/protocol';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
@@ -21,11 +22,23 @@ const PI_SSE_HEADERS = {
 
 const DECISION_BODY_LIMIT = 64 * 1024;
 
+/** Frame the run's envelopes as SSE; the event log itself carries no transport. */
+function sseFrames(envelopes: ReadableStream<EventEnvelope>): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return envelopes.pipeThrough(
+    new TransformStream<EventEnvelope, Uint8Array>({
+      transform(envelope, controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(envelope)}\n\n`));
+      },
+    }),
+  );
+}
+
 /** The POST response is the just-started run's event stream from seq 0. */
 function runResponse(runner: Runner, threadId: string): Response {
-  const sse = runner.subscribe(threadId, -1);
-  return sse
-    ? new Response(sse, { headers: PI_SSE_HEADERS })
+  const envelopes = runner.subscribe(threadId, -1);
+  return envelopes
+    ? new Response(sseFrames(envelopes), { headers: PI_SSE_HEADERS })
     : new Response('event log missing', { status: 500 });
 }
 
@@ -137,8 +150,13 @@ export function createChatApp(deps: { token: string; runner: Runner }): Hono {
   app.get('/api/chat/:threadId/pi-events', (c) => {
     if (!deps.runner.isRunning(c.req.param('threadId'))) return c.body(null, 204);
     const raw = Number(c.req.query('from') ?? '-1');
-    const sse = deps.runner.subscribe(c.req.param('threadId'), Number.isFinite(raw) ? raw : -1);
-    return sse ? new Response(sse, { headers: PI_SSE_HEADERS }) : c.body(null, 204);
+    const envelopes = deps.runner.subscribe(
+      c.req.param('threadId'),
+      Number.isFinite(raw) ? raw : -1,
+    );
+    return envelopes
+      ? new Response(sseFrames(envelopes), { headers: PI_SSE_HEADERS })
+      : c.body(null, 204);
   });
 
   return app;

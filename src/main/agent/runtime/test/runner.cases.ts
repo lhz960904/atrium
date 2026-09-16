@@ -27,25 +27,15 @@ function watch(runner: RunnerInstance, threadId: string) {
   const draining = (async () => {
     if (!stream) return;
     const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let end = buffer.indexOf('\n\n');
-      while (end !== -1) {
-        const frame = buffer.slice(0, end);
-        buffer = buffer.slice(end + 2);
-        end = buffer.indexOf('\n\n');
-        if (!frame.startsWith('data: ')) continue;
-        const { event } = JSON.parse(frame.slice('data: '.length)) as EventEnvelope;
-        if (event.type === 'interaction_resolved') outcomes.push(event.outcome);
-        if (event.type !== 'interaction_requested') continue;
-        const waiter = waiting.shift();
-        if (waiter) waiter(event.request);
-        else queued.push(event.request);
-      }
+      const { event } = value;
+      if (event.type === 'interaction_resolved') outcomes.push(event.outcome);
+      if (event.type !== 'interaction_requested') continue;
+      const waiter = waiting.shift();
+      if (waiter) waiter(event.request);
+      else queued.push(event.request);
     }
   })();
   return {
@@ -61,6 +51,19 @@ function watch(runner: RunnerInstance, threadId: string) {
       return outcomes;
     },
   };
+}
+
+/** Every envelope a thread's log holds, read until the log closes. */
+async function drain(stream: ReadableStream<EventEnvelope> | null): Promise<string[]> {
+  const types: string[] = [];
+  if (!stream) return types;
+  const reader = stream.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    types.push(value.event.type);
+  }
+  return types;
 }
 
 const bashCall = (id: string) =>
@@ -111,7 +114,7 @@ test('returns a subscribable handle immediately and rejects duplicate runs witho
   expect((await first.settled).status).toBe('ok');
   expect(runner.isRunning('t1')).toBe(false);
   expect(runner.abort('t1')).toBe(false);
-  expect(await new Response(stream).text()).toContain('run_finished');
+  expect(await drain(stream)).toContain('run_finished');
   expect(f.faux.state.callCount).toBe(0);
   runner.dispose();
 });
@@ -127,7 +130,7 @@ test('a failed execution releases the thread, seals its stream and allows the ne
     error: 'context unavailable',
   });
   expect(runner.runningThreadIds()).toEqual([]);
-  expect(await new Response(runner.subscribe('t1', -1)).text()).toContain('run_finished');
+  expect(await drain(runner.subscribe('t1', -1))).toContain('run_finished');
   const next = runner.start({ ...f.request, userMessage: { ...f.request.userMessage, id: 'u2' } });
   expect(await next.settled).toMatchObject({
     runId: next.runId,
@@ -437,12 +440,11 @@ test('reconnecting while waiting replays the request and starts nothing new', as
   const handle = runner.start(f.request);
   await watch(runner, 't1').next();
   const reader = runner.subscribe('t1', -1)?.getReader();
-  const decoder = new TextDecoder();
-  let replayed = '';
+  const replayed: string[] = [];
   while (reader && !replayed.includes('interaction_requested')) {
     const { value, done } = await reader.read();
     if (done) break;
-    replayed += decoder.decode(value, { stream: true });
+    replayed.push(value.event.type);
   }
   expect(replayed).toContain('interaction_requested');
   expect(f.faux.state.callCount).toBe(1);

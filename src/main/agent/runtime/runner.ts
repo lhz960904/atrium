@@ -3,6 +3,7 @@ import { compactThread, threadHistory } from '@main/conversation/threads';
 import type { Db } from '@main/db';
 import { createLogger } from '@main/utils/log';
 import type { DecideInteraction } from '@shared/interactions';
+import type { EventEnvelope } from '@shared/protocol';
 import { foldHistory } from '../context/compaction';
 import { createSummarizer } from '../context/summarize';
 import { resolvePiModel } from '../providers/models';
@@ -40,7 +41,7 @@ export type Runner = {
   abort(threadId: string): boolean;
   isRunning(threadId: string): boolean;
   runningThreadIds(): string[];
-  subscribe(threadId: string, fromSeq: number): ReadableStream<Uint8Array> | null;
+  subscribe(threadId: string, fromSeq: number): ReadableStream<EventEnvelope> | null;
   /** Returns once the stream exists. Invalid models and busy threads throw synchronously. */
   start(request: RunRequest): RunHandle;
   /** Hand a decision to the run waiting on it; throws when that run is not waiting. */
@@ -84,20 +85,18 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
     const abort = new AbortController();
     const pending = createPendingInteractions({ runId, abort });
 
-    const settled = events
-      .produce(threadId, ({ append }) =>
-        executeRun({
-          input,
-          runId,
-          model,
-          db,
-          projectlessRoot: deps.projectlessRoot,
-          bgShells,
-          signal: abort.signal,
-          pending,
-          emit: append,
-        }),
-      )
+    const eventLog = events.begin(threadId);
+    const settled = executeRun({
+      input,
+      runId,
+      model,
+      db,
+      projectlessRoot: deps.projectlessRoot,
+      bgShells,
+      signal: abort.signal,
+      pending,
+      emit: eventLog.emit,
+    })
       .then(
         (result): RunOutcome => ({
           runId: result.runId,
@@ -112,6 +111,8 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
         },
       )
       .finally(() => {
+        // Whatever the run did, its readers have to see the log end.
+        eventLog.close();
         active.delete(threadId);
       });
     active.set(threadId, { runId, abort, pending, settled });
