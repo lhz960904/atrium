@@ -108,6 +108,8 @@ function liveStream() {
       }
     },
     close: () => controller.close(),
+    /** A socket that dies, which is what a dropped connection actually does. */
+    fail: () => controller.error(new Error('network error')),
   };
 }
 
@@ -515,6 +517,85 @@ describe('lifecycle', () => {
     await expect(
       chat.addToolApprovalResponse({ id: bashRequest.id, approved: true }),
     ).rejects.toThrow('no longer');
+  });
+
+  test('a stream that dies mid-read is rejoined, not reported as a failure', async () => {
+    const first = liveStream();
+    const second = liveStream();
+    let rejoins = 0;
+    const { chat, calls } = makeChat((url) => {
+      if (url.endsWith('/api/chat')) return new Response(first.body);
+      if (url.includes('/pi-events')) {
+        rejoins += 1;
+        return new Response(second.body);
+      }
+      return Response.json({ status: 'accepted' }, { status: 202 });
+    });
+    chat.sendMessage({ text: 'list files' });
+    first.push(...open('a1'), { type: 'interaction_requested', request: bashRequest });
+    await until(() => getPendingApprovals(chat.getSnapshot().messages).length === 1);
+
+    // A dying socket errors the body rather than ending it.
+    first.fail();
+    await until(() => rejoins === 1);
+    second.push(
+      ...open('a1'),
+      { type: 'interaction_requested', request: bashRequest },
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_start', contentIndex: 0 },
+      } as AgentSessionEvent,
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '重连后' },
+      } as AgentSessionEvent,
+    );
+    await until(() => JSON.stringify(chat.getSnapshot().messages).includes('重连后'));
+    expect(chat.isBusy).toBe(true);
+
+    await chat.addToolApprovalResponse({ id: bashRequest.id, approved: true });
+    expect(calls.filter((call) => call.url.endsWith('/decisions'))).toHaveLength(1);
+    second.push(
+      { type: 'interaction_resolved', request: bashRequest, outcome: { kind: 'approved' } },
+      ...close([]),
+    );
+    second.close();
+    await untilIdle(chat);
+    expect(chat.getSnapshot().status).toBe('ready');
+  });
+
+  test('a run that stays out of reach keeps what arrived and expires its card', async () => {
+    const stream = liveStream();
+    let rejoins = 0;
+    const { chat } = makeChat((url) => {
+      if (url.endsWith('/api/chat')) return new Response(stream.body);
+      rejoins += 1;
+      throw new Error('network error');
+    });
+    chat.sendMessage({ text: 'list files' });
+    stream.push(
+      ...open('a1'),
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_start', contentIndex: 0 },
+      } as AgentSessionEvent,
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '半句' },
+      } as AgentSessionEvent,
+      { type: 'interaction_requested', request: bashRequest },
+    );
+    await until(() => getPendingApprovals(chat.getSnapshot().messages).length === 1);
+
+    stream.fail();
+    await untilIdle(chat);
+    expect(rejoins).toBe(3);
+    const snap = chat.getSnapshot();
+    expect(snap.status).toBe('error');
+    // What arrived survives the drop; only the card it was waiting on is closed.
+    expect(JSON.stringify(snap.messages)).toContain('半句');
+    expect(getPendingApprovals(snap.messages)).toEqual([]);
+    expect(partOf(chat, 'b1')).toMatchObject({ state: 'output-error' });
   });
 
   test('setMessages materializes and replaces the list', async () => {

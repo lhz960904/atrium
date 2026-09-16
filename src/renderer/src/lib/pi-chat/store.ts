@@ -243,24 +243,48 @@ export class PiChat {
   /**
    * Read a run's stream to its end, rejoining when it drops early: the
    * connection can die — a sleep long enough to lose the socket, a network
-   * blip — while the run itself is still going on the other side. The server
+   * blip — while the run itself is still going on the other side. A dying
+   * connection errors far more often than it ends cleanly, so both count as a
+   * drop and only the caller's own abort stops the attempts. The server
    * replays from the start of the log, so each rejoin resets the seq floor and
    * rebuilds the message rather than continuing from a half-read one.
    */
   private async attach(body: ReadableStream<Uint8Array>, abort: AbortController): Promise<void> {
-    let finished = await this.consume(body);
+    let finished = await this.read(body);
     for (let attempt = 0; !finished && attempt < RECONNECT_ATTEMPTS; attempt++) {
       if (abort.signal.aborted) return;
-      const res = await this.fetchFn(this.eventsUrl(), {
-        headers: { 'x-atrium-token': this.init.token },
-        signal: abort.signal,
-      });
-      if (res.status === 204 || !res.body) break;
+      const rejoined = await this.rejoin(abort.signal);
+      if (rejoined === 'gone') break;
+      if (rejoined === 'unreachable') continue;
       this.lastSeq = -1;
-      finished = await this.consume(res.body);
+      finished = await this.read(rejoined);
     }
     if (abort.signal.aborted) return;
     this.finalizeRun(finished);
+  }
+
+  /** A stream that dies mid-read is a drop, not a failure: it reads as unfinished. */
+  private async read(body: ReadableStream<Uint8Array>): Promise<boolean> {
+    try {
+      return await this.consume(body);
+    } catch {
+      return false;
+    }
+  }
+
+  /** The run's stream again, or why there isn't one: ended, or still out of reach. */
+  private async rejoin(
+    signal: AbortSignal,
+  ): Promise<ReadableStream<Uint8Array> | 'gone' | 'unreachable'> {
+    try {
+      const res = await this.fetchFn(this.eventsUrl(), {
+        headers: { 'x-atrium-token': this.init.token },
+        signal,
+      });
+      return res.status === 204 || !res.body ? 'gone' : res.body;
+    } catch {
+      return 'unreachable';
+    }
   }
 
   private begin(status: ChatStatus): AbortController {
