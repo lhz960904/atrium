@@ -49,6 +49,9 @@ const NOTIFY_THROTTLE_MS = 50;
 
 const EXPIRED_TEXT = 'The run ended before this was decided.';
 
+/** Rejoins attempted before a dropped stream is treated as a lost run. */
+const RECONNECT_ATTEMPTS = 3;
+
 /** States a card is in only while a run is there to answer it. */
 const WAITING_STATES = new Set(['approval-requested', 'input-available', 'input-streaming']);
 
@@ -132,16 +135,16 @@ export class PiChat {
     const abort = this.begin('streaming');
     this.streaming = (async () => {
       try {
-        const res = await this.fetchFn(
-          `${this.init.baseUrl}/api/chat/${this.threadId}/pi-events?from=-1`,
-          { headers: { 'x-atrium-token': this.init.token }, signal: abort.signal },
-        );
+        const res = await this.fetchFn(this.eventsUrl(), {
+          headers: { 'x-atrium-token': this.init.token },
+          signal: abort.signal,
+        });
         if (res.status === 204 || !res.body) {
           this.history = expireInactiveInteractions(this.history);
           this.settle();
           return;
         }
-        this.finalizeRun(await this.consume(res.body));
+        await this.attach(res.body, abort);
       } catch (err) {
         if (!abort.signal.aborted) this.failWith(err);
       }
@@ -227,10 +230,37 @@ export class PiChat {
       if (!res.ok || !res.body) {
         throw new Error(`chat request failed (${res.status}) ${await res.text().catch(() => '')}`);
       }
-      this.finalizeRun(await this.consume(res.body));
+      await this.attach(res.body, abort);
     } catch (err) {
       if (!abort.signal.aborted) this.failWith(err);
     }
+  }
+
+  private eventsUrl(): string {
+    return `${this.init.baseUrl}/api/chat/${this.threadId}/pi-events?from=-1`;
+  }
+
+  /**
+   * Read a run's stream to its end, rejoining when it drops early: the
+   * connection can die — a sleep long enough to lose the socket, a network
+   * blip — while the run itself is still going on the other side. The server
+   * replays from the start of the log, so each rejoin resets the seq floor and
+   * rebuilds the message rather than continuing from a half-read one.
+   */
+  private async attach(body: ReadableStream<Uint8Array>, abort: AbortController): Promise<void> {
+    let finished = await this.consume(body);
+    for (let attempt = 0; !finished && attempt < RECONNECT_ATTEMPTS; attempt++) {
+      if (abort.signal.aborted) return;
+      const res = await this.fetchFn(this.eventsUrl(), {
+        headers: { 'x-atrium-token': this.init.token },
+        signal: abort.signal,
+      });
+      if (res.status === 204 || !res.body) break;
+      this.lastSeq = -1;
+      finished = await this.consume(res.body);
+    }
+    if (abort.signal.aborted) return;
+    this.finalizeRun(finished);
   }
 
   private begin(status: ChatStatus): AbortController {
@@ -244,9 +274,13 @@ export class PiChat {
     return abort;
   }
 
-  /** Reads the run's stream; false when it ended before the run said it had. */
+  /**
+   * Reads the run's stream; false when it ended before the run said it had.
+   * The assembler is replaced by the first envelope that actually arrives, so a
+   * rejoin that delivers nothing keeps what the dropped stream had built.
+   */
   private async consume(body: ReadableStream<Uint8Array>): Promise<boolean> {
-    this.run = new RunAssembler();
+    let assembling = false;
     let finished = false;
     const reader = body.getReader();
     const decoder = new TextDecoder();
@@ -264,6 +298,10 @@ export class PiChat {
         const envelope = JSON.parse(frame.slice('data: '.length)) as EventEnvelope;
         if (envelope.seq <= this.lastSeq) continue;
         this.lastSeq = envelope.seq;
+        if (!assembling) {
+          assembling = true;
+          this.run = new RunAssembler();
+        }
         if (this.status !== 'streaming') this.status = 'streaming';
         this.run?.apply(envelope.event);
         if (envelope.event.type === 'run_finished') finished = true;
@@ -278,8 +316,10 @@ export class PiChat {
 
   /**
    * Fold the finished (or detached) run into history, keyed by message id. A
-   * stream that stopped before the run finished is a lost connection, not a
-   * finished run: what arrived is kept, and the reconnect is the user's to make.
+   * stream that could not be rejoined is a lost connection, not a finished run:
+   * what arrived is kept, but nothing is reading that run any more, so the
+   * cards it was waiting on are expired rather than left looking answerable.
+   * A later resume that reaches a live run replays them as live again.
    */
   private finalizeRun(finished = true): void {
     const live = this.run?.snapshot();
@@ -287,7 +327,10 @@ export class PiChat {
     this.inflight = null;
     if (live?.message) this.history = upsertById(this.history, live.message);
     if (live?.error) this.failure = new Error(live.error);
-    else if (!finished) this.failure = new Error('The connection to the run was interrupted.');
+    else if (!finished) {
+      this.history = expireInactiveInteractions(this.history);
+      this.failure = new Error('The connection to the run was interrupted.');
+    }
     this.settle();
   }
 

@@ -448,6 +448,75 @@ describe('lifecycle', () => {
     expect(snap.messages[1].parts.at(-1)).toMatchObject({ type: 'text', text: '半句' });
   });
 
+  test('a dropped stream rejoins the run and its card stays decidable', async () => {
+    const first = liveStream();
+    const second = liveStream();
+    let rejoins = 0;
+    const { chat, calls } = makeChat((url) => {
+      if (url.endsWith('/api/chat')) return new Response(first.body);
+      if (url.includes('/pi-events')) {
+        rejoins += 1;
+        return new Response(second.body);
+      }
+      return Response.json({ status: 'accepted' }, { status: 202 });
+    });
+    chat.sendMessage({ text: 'list files' });
+    first.push(...open('a1'), { type: 'interaction_requested', request: bashRequest });
+    await until(() => getPendingApprovals(chat.getSnapshot().messages).length === 1);
+
+    // The socket dies while the run itself is still going on the other side.
+    first.close();
+    await until(() => rejoins === 1);
+    second.push(
+      ...open('a1'),
+      { type: 'interaction_requested', request: bashRequest },
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_start', contentIndex: 0 },
+      } as AgentSessionEvent,
+      {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '重连后' },
+      } as AgentSessionEvent,
+    );
+    await until(() => JSON.stringify(chat.getSnapshot().messages).includes('重连后'));
+    expect(chat.isBusy).toBe(true);
+
+    // The replay put the request back, so the card answers the run that is waiting.
+    await chat.addToolApprovalResponse({ id: bashRequest.id, approved: true });
+    expect(calls.filter((call) => call.url.endsWith('/decisions'))).toHaveLength(1);
+    second.push(
+      { type: 'interaction_resolved', request: bashRequest, outcome: { kind: 'approved' } },
+      ...close([]),
+    );
+    second.close();
+    await untilIdle(chat);
+    expect(chat.getSnapshot().status).toBe('ready');
+  });
+
+  test('a stream that cannot be rejoined expires what the run was waiting on', async () => {
+    const stream = liveStream();
+    let rejoins = 0;
+    const { chat } = makeChat((url) => {
+      if (url.endsWith('/api/chat')) return new Response(stream.body);
+      rejoins += 1;
+      return new Response(null, { status: 204 });
+    });
+    chat.sendMessage({ text: 'list files' });
+    stream.push(...open('a1'), { type: 'interaction_requested', request: bashRequest });
+    await until(() => getPendingApprovals(chat.getSnapshot().messages).length === 1);
+
+    stream.close();
+    await untilIdle(chat);
+    // The run is gone: the card says so instead of looking answerable.
+    expect(rejoins).toBe(1);
+    expect(getPendingApprovals(chat.getSnapshot().messages)).toEqual([]);
+    expect(partOf(chat, 'b1')).toMatchObject({ state: 'output-error' });
+    await expect(
+      chat.addToolApprovalResponse({ id: bashRequest.id, approved: true }),
+    ).rejects.toThrow('no longer');
+  });
+
   test('setMessages materializes and replaces the list', async () => {
     const { chat } = makeChat(() => new Response(sseBody(textRun)));
     chat.sendMessage({ text: 'x' });
