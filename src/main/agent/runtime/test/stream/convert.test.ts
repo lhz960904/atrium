@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { AgentEvent } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage } from '@earendil-works/pi-ai';
-import { projectAgentEvent } from '../../stream/projector';
+import { convertAgentSessionEvent } from '../../stream/convert';
 
 /**
  * The wire's deviations from pi are all here, so this locks them in: a frame
@@ -30,7 +30,7 @@ const assistant = (content: unknown[] = []): AssistantMessage =>
     timestamp: 0,
   }) as unknown as AssistantMessage;
 
-const project = (event: unknown) => projectAgentEvent(event as AgentEvent);
+const project = (event: unknown) => convertAgentSessionEvent(event as AgentEvent);
 
 test('a delta frame carries the delta, not the message so far', () => {
   const partial = assistant([{ type: 'text', text: 'Hello so far' }]);

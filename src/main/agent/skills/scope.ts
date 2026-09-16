@@ -1,5 +1,5 @@
 import type { ToolName } from '@shared/tools';
-import type { Capability } from '../runtime/capabilities';
+import type { HookSet } from '../runtime/hook-compose';
 import type { RunContext } from '../runtime/run-context';
 import type { AtriumTool } from '../tools';
 import { type ActiveSkill, SKILL_SCRATCH_KEY } from './types';
@@ -68,7 +68,7 @@ export function scopeToolsForSkill(
 }
 
 /** Recompute from the full catalog so leaving a skill restores tools. Register before hard restrictions. */
-export function skillToolScope(tools: AtriumTool[], scratch: RunContext['scratch']): Capability {
+export function skillToolScope(tools: AtriumTool[], scratch: RunContext['scratch']): HookSet {
   return {
     name: 'skill-tool-scope',
     prepareNextTurn: ({ context }) => ({

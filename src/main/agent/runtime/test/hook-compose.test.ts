@@ -5,7 +5,7 @@ import { skillToolScope } from '../../skills/scope';
 import { SKILL_SCRATCH_KEY } from '../../skills/types';
 import type { AtriumTool } from '../../tools';
 import { loopDetection } from '../../tools/loop-detection';
-import { composeCapabilities } from '../capabilities';
+import { composeHooks } from '../hook-compose';
 
 const message = fauxAssistantMessage('done');
 const turn = () => ({
@@ -16,11 +16,11 @@ const turn = () => ({
 });
 
 test('empty registration installs no hooks', () => {
-  expect(composeCapabilities([])).toEqual({});
+  expect(composeHooks([])).toEqual({});
 });
 
 test('context transforms run in order and retain skip-on-error behavior', async () => {
-  const hooks = composeCapabilities([
+  const hooks = composeHooks([
     { name: 'first', transformContext: async (messages) => [...messages, message] },
     {
       name: 'broken',
@@ -43,7 +43,7 @@ test('tool checks short-circuit with the original decision and signal', async ()
   const signal = new AbortController().signal;
   const decision = { block: true, terminate: true, reason: 'waiting' };
   const seen: string[] = [];
-  const hooks = composeCapabilities([
+  const hooks = composeHooks([
     {
       name: 'allow',
       beforeToolCall: async (_context, received) => {
@@ -90,7 +90,7 @@ test('after-tool hooks see prior result changes and keep omitted fields', async 
     isError: false,
     result: { content: [{ type: 'text', text: 'original' }], details: {} },
   };
-  const hooks = composeCapabilities([
+  const hooks = composeHooks([
     {
       name: 'first',
       afterToolCall: async () => ({
@@ -121,7 +121,7 @@ test('after-tool hooks see prior result changes and keep omitted fields', async 
 test('skill tools restore on exit but never override a triggered loop restriction', async () => {
   const tools = ['read_file', 'bash'].map((name) => ({ name }) as AtriumTool);
   const scratch = new Map();
-  const hooks = composeCapabilities([skillToolScope(tools, scratch), loopDetection()]);
+  const hooks = composeHooks([skillToolScope(tools, scratch), loopDetection()]);
   let context: AgentContext = { ...turn().context, tools };
   scratch.set(SKILL_SCRATCH_KEY, { name: 'read-only', allowedTools: ['Read'] });
   context = (await hooks.prepareNextTurn?.({ ...turn(), context }))?.context ?? context;
@@ -141,7 +141,7 @@ test('skill tools restore on exit but never override a triggered loop restrictio
   context = (await hooks.prepareNextTurn?.({ ...turn(), context }))?.context ?? context;
   expect(context.tools).toEqual([]);
   expect(JSON.stringify(await hooks.transformContext?.([]))).toContain('Loop detected');
-  const fresh = composeCapabilities([loopDetection()]);
+  const fresh = composeHooks([loopDetection()]);
   expect(
     (await fresh.prepareNextTurn?.({ ...turn(), context: { ...context, tools } }))?.context?.tools,
   ).toEqual(tools);
@@ -150,7 +150,7 @@ test('skill tools restore on exit but never override a triggered loop restrictio
 test('decision failures propagate and cancellation stops further preparation', async () => {
   const abort = new AbortController();
   const seen: string[] = [];
-  const hooks = composeCapabilities([
+  const hooks = composeHooks([
     {
       name: 'cancel',
       prepareNextTurn: () => {
@@ -168,7 +168,7 @@ test('decision failures propagate and cancellation stops further preparation', a
   ]);
   await expect(hooks.prepareNextTurn?.(turn(), abort.signal)).rejects.toThrow();
   expect(seen).toEqual([]);
-  const failed = composeCapabilities([
+  const failed = composeHooks([
     {
       name: 'failed',
       shouldStopAfterTurn: () => {
@@ -181,7 +181,7 @@ test('decision failures propagate and cancellation stops further preparation', a
 
 test('one registered capability shares state across context and next-turn hooks', async () => {
   let observed = false;
-  const hooks = composeCapabilities([
+  const hooks = composeHooks([
     {
       name: 'shared-state',
       prepareNextTurn: () => {
@@ -197,7 +197,7 @@ test('one registered capability shares state across context and next-turn hooks'
 
 test('next-turn updates preserve earlier model updates and pass context in order', async () => {
   const model = fauxProvider().getModel();
-  const hooks = composeCapabilities([
+  const hooks = composeHooks([
     {
       name: 'first',
       prepareNextTurn: ({ context }) => ({
@@ -223,7 +223,7 @@ test('next-turn updates preserve earlier model updates and pass context in order
 
 test('stopping short-circuits later capabilities', async () => {
   const seen: string[] = [];
-  const hooks = composeCapabilities([
+  const hooks = composeHooks([
     {
       name: 'stop',
       shouldStopAfterTurn: async () => {

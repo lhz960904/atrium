@@ -42,10 +42,10 @@ import { preserveTodos } from '../tools/builtins/todo';
 import { toolInteractions } from '../tools/interactions';
 import { loopDetection } from '../tools/loop-detection';
 import { createAgentLoop } from './agent-loop';
-import { composeCapabilities } from './capabilities';
+import { composeHooks } from './hook-compose';
 import { type PendingInteractions, stopReasonOf } from './pending-interactions';
 import type { RunContext } from './run-context';
-import { projectAgentEvent } from './stream/projector';
+import { convertAgentSessionEvent } from './stream/convert';
 
 const log = createLogger('agent');
 const preservers = [preserveTodos, preserveActiveSkill];
@@ -143,7 +143,7 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
     const { ctx, tools, blocks, summarize, interactions } = prepared;
 
     // One explicit registration area. Order matters within each pi hook.
-    const capabilities = [
+    const hooks = [
       screenshotContext(workspaceRoot),
       contextCompaction({
         summarize,
@@ -164,11 +164,11 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
       messages,
       tools,
       maxTurns: 100,
-      ...composeCapabilities(capabilities),
+      ...composeHooks(hooks),
     });
     loop.subscribe((event) => {
-      const projected = projectAgentEvent(event);
-      if (projected) emit(projected);
+      const converted = convertAgentSessionEvent(event);
+      if (converted) emit(converted);
     });
     // Notify readers first, then await persistence before the loop continues.
     loop.subscribe(recorder.observe);

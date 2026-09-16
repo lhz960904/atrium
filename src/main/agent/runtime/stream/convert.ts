@@ -32,7 +32,7 @@ type PiAssistantMessageEvent = Extract<
   { type: 'message_update' }
 >['assistantMessageEvent'];
 
-function projectAssistantEvent(event: PiAssistantMessageEvent): AssistantMessageEvent {
+function convertAssistantMessageEvent(event: PiAssistantMessageEvent): AssistantMessageEvent {
   switch (event.type) {
     case 'start':
       return { type: 'start' };
@@ -65,8 +65,8 @@ function projectAssistantEvent(event: PiAssistantMessageEvent): AssistantMessage
   }
 }
 
-/** Project one pi event. Returns nothing for events the wire doesn't carry. */
-export function projectAgentEvent(event: AgentEvent): AgentSessionEvent | null {
+/** Convert one pi event. Returns nothing for events the wire doesn't carry. */
+export function convertAgentSessionEvent(event: AgentEvent): AgentSessionEvent | null {
   switch (event.type) {
     case 'agent_start':
       return { type: 'agent_start' };
@@ -87,7 +87,7 @@ export function projectAgentEvent(event: AgentEvent): AgentSessionEvent | null {
     case 'message_update':
       return {
         type: 'message_update',
-        assistantMessageEvent: projectAssistantEvent(event.assistantMessageEvent),
+        assistantMessageEvent: convertAssistantMessageEvent(event.assistantMessageEvent),
       };
     case 'tool_execution_start':
       return {

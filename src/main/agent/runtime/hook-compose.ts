@@ -20,7 +20,7 @@ export function composeBeforeToolCall(checks: BeforeToolCall[]): BeforeToolCall 
   };
 }
 
-export type CapabilityHooks = Pick<
+export type Hooks = Pick<
   AgentLoopOptions,
   | 'transformContext'
   | 'beforeToolCall'
@@ -28,16 +28,17 @@ export type CapabilityHooks = Pick<
   | 'prepareNextTurn'
   | 'shouldStopAfterTurn'
 >;
-export type Capability = { name: string } & CapabilityHooks;
+/** One module's named contribution to the loop's hooks. */
+export type HookSet = { name: string } & Hooks;
 
 /** List order applies within each hook; pi owns the order between hook phases. */
-export function composeCapabilities(capabilities: Capability[]): CapabilityHooks {
-  const hooks: CapabilityHooks = {};
-  const transforms = capabilities.flatMap((c) => (c.transformContext ? [c.transformContext] : []));
-  const before = capabilities.flatMap((c) => (c.beforeToolCall ? [c.beforeToolCall] : []));
-  const after = capabilities.flatMap((c) => (c.afterToolCall ? [c.afterToolCall] : []));
-  const prepare = capabilities.flatMap((c) => (c.prepareNextTurn ? [c.prepareNextTurn] : []));
-  const stop = capabilities.flatMap((c) => (c.shouldStopAfterTurn ? [c.shouldStopAfterTurn] : []));
+export function composeHooks(sets: HookSet[]): Hooks {
+  const hooks: Hooks = {};
+  const transforms = sets.flatMap((c) => (c.transformContext ? [c.transformContext] : []));
+  const before = sets.flatMap((c) => (c.beforeToolCall ? [c.beforeToolCall] : []));
+  const after = sets.flatMap((c) => (c.afterToolCall ? [c.afterToolCall] : []));
+  const prepare = sets.flatMap((c) => (c.prepareNextTurn ? [c.prepareNextTurn] : []));
+  const stop = sets.flatMap((c) => (c.shouldStopAfterTurn ? [c.shouldStopAfterTurn] : []));
   if (transforms.length)
     hooks.transformContext = (messages, signal) =>
       composeContext(transforms.map((transform) => (messages) => transform(messages, signal)))(

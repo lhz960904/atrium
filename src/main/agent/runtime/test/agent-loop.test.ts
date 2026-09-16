@@ -5,7 +5,7 @@ import { composeContext } from '../../context/compose';
 import { dateReminder } from '../../context/system-reminder';
 import { loopDetection } from '../../tools/loop-detection';
 import { type AgentLoopOptions, createAgentLoop } from '../agent-loop';
-import { composeBeforeToolCall, composeCapabilities } from '../capabilities';
+import { composeBeforeToolCall, composeHooks } from '../hook-compose';
 
 test('loop accepts pi-compatible single callbacks', () => {
   expectTypeOf<AgentLoopOptions['transformContext']>().toEqualTypeOf<
@@ -189,7 +189,7 @@ test('capability composition retains caller prepareNextTurn context updates', as
   const loop = createAgentLoop({
     ...options,
     maxTurns: 100,
-    ...composeCapabilities([
+    ...composeHooks([
       { name: 'caller', prepareNextTurn: options.prepareNextTurn },
       dateReminder(),
       loopDetection(),

@@ -14,8 +14,8 @@ flowchart TD
   Loop --> Pi[pi-agent-core Agent]
   Turn --> Recorder[conversation/session-recorder.ts：记录消息与运行状态]
   Recorder --> DB[Session / 数据库]
-  Loop --> Projector[stream/event-projector.ts：事件转换]
-  Projector --> Buffer
+  Loop --> Convert[stream/convert.ts：事件转换]
+  Convert --> Buffer
   Buffer --> SSE[SSE / 前端]
 ```
 
@@ -24,17 +24,17 @@ flowchart TD
 | 文件 / 目录 | 负责的事情 |
 | --- | --- |
 | `runner.ts` | 公共入口与应用生命周期资源：运行注册表、事件缓冲区、取消、后台 shell；同步校验模型；提供 start/respond/compact 等接口 |
-| `execute-run.ts` | 单次运行的完整业务流程：装配 context 和工具、打开 session、读取历史、注册 capabilities、订阅、执行、记录与清理 |
+| `execute-run.ts` | 单次运行的完整业务流程：装配 context 和工具、打开 session、读取历史、注册钩子、订阅、执行、记录与清理 |
 | `agent-loop.ts` | 每个实例持有一个 pi Agent；调用方配置 messages、tools、maxTurns；仅负责运行循环 |
 | `complete.ts` | 通过 pi-ai completeSimple 执行单次无工具请求，检查错误并提取文本 |
-| `capabilities.ts` | 钩子组合器：把显式注册的能力列表合成单函数；能力本身住在各自的模块里 |
+| `hook-compose.ts` | 钩子组合器：把显式注册的钩子列表合成单函数；钩子本身住在各自的模块里 |
 | `pending-interactions.ts` | 一次运行中等待用户的请求：决定与停止的竞争、重复提交识别；不访问存储 |
-| `../skills/scope.ts` | 根据激活 Skill 的 allowed-tools 筛选工具，并提供对应能力 |
+| `../skills/scope.ts` | 根据激活 Skill 的 allowed-tools 筛选工具，并提供对应钩子 |
 | `../tools/interactions.ts` | 审批与询问的等待、记录与事件 |
-| `../tools/loop-detection.ts` | 重复工具调用的检测与能力 |
-| `../context/` | 上下文变换及其能力（截图裁剪、轮内压缩、注入、日期提醒） |
+| `../tools/loop-detection.ts` | 重复工具调用的检测与钩子 |
+| `../context/` | 上下文变换及其钩子（截图裁剪、轮内压缩、注入、日期提醒） |
 | `../context/` | 统一拥有上下文变换、注入、摘要、压缩和 token 估算 |
-| `stream/` | pi 事件投影、SSE 编码与内存重放 |
+| `stream/` | pi 事件转换、SSE 编码与内存重放 |
 | `test/` | Runtime 测试；`stream/` 测试保留对应层级，上下文测试位于 `agent/context/test/` |
 
 ## 生命周期约束
@@ -46,14 +46,14 @@ flowchart TD
 - `executeRun()` 统一拥有 recorder 的 begin/observe/end，准备失败、模型失败和取消都进入收尾。审批和询问在运行内等待，用户决定只解除原调用的等待。
 - usage、浮层清理、operation 关闭分别尝试，后一项失败不覆盖原错误；底层存储不可写时保留未结束记录供恢复，并向调用方报告失败。
 - `RunResult` 内部分为 completed / aborted / failed；Runner 仅在公共接口映射成现有 ok/error。messageId 来自实际存储的 assistant 消息。
-- pi 的 `agent_end` 原样投影转发；`run_finished` 才表示应用收尾完成，`run_started` 是流上的第一个事件。后台标题仍可更新会话，但不会在结束后追加流事件；缓冲区也拒绝关闭后的追加。
+- pi 的 `agent_end` 原样转换转发；`run_finished` 才表示应用收尾完成，`run_started` 是流上的第一个事件。后台标题仍可更新会话，但不会在结束后追加流事件；缓冲区也拒绝关闭后的追加。
 - `dispose()` 中止当前 Runner 的运行，并阻止它启动新运行。
 
 ## 装配边界
 
 Runner 不构建工具、不创建 recorder，也不通过 buildTools / generateTitle / onSettled 等回调参与执行。它向 executeRun 传入业务 input、已解析 model、db、projectlessRoot、共享 bgShells，以及 runId / signal / emit。
 
-单次环境在 execute-run 的 `prepareRun` 中顺序组装：创建 sandbox 和 RunContext，再直接 getTools。`prepareMessages` 处理压缩与恢复决策，`reportUsage` 将一次计数映射到前端与账本。它们是同文件的具体步骤，不是额外调度层。capabilities 仍只有一个显式注册区，agent-loop 不承担业务装配。
+单次环境在 execute-run 的 `prepareRun` 中顺序组装：创建 sandbox 和 RunContext，再直接 getTools。`prepareMessages` 处理压缩与恢复决策，`reportUsage` 将一次计数映射到前端与账本。它们是同文件的具体步骤，不是额外调度层。钩子仍只有一个显式注册区，agent-loop 不承担业务装配。
 
 这里的 Run 指从发起到结束的一次执行，等待用户决定也在其中，可以包含多个 pi turn。RunContext 是工具环境，不是另一套消息上下文，messages 仍统一使用 pi 类型。
 
@@ -73,13 +73,13 @@ Runner 不构建工具、不创建 recorder，也不通过 buildTools / generate
 
 扩展点直接放在 `createAgentLoop` 入参上。Loop 只接收组合后的单函数，负责轮次上限、取消与执行控制；策略组合由 execute-run 等调用层决定：
 
-- `transformContext`：接收 pi 兼容的单函数。能力组合器内部通过 `composeContext` 组合，不接受 false / undefined 占位；按顺序变换模型输入，复用 context 的错误跳过策略，不改写持久化历史。
-- `beforeToolCall`：接收 pi 兼容的单函数。能力组合器内部通过 `composeBeforeToolCall` 组合检查，按顺序等待执行；遇到 `block` 立即返回原决策（包括 reason / terminate），不再执行后续检查。检查抛错交给 pi 处理，不跳过后继续放行；取消时不启动后续检查。`toolInteractions` 在审批钩子里等待用户决定，并为询问工具提供 ask；请求与决定先记录再继续。
+- `transformContext`：接收 pi 兼容的单函数。钩子组合器内部通过 `composeContext` 组合，不接受 false / undefined 占位；按顺序变换模型输入，复用 context 的错误跳过策略，不改写持久化历史。
+- `beforeToolCall`：接收 pi 兼容的单函数。钩子组合器内部通过 `composeBeforeToolCall` 组合检查，按顺序等待执行；遇到 `block` 立即返回原决策（包括 reason / terminate），不再执行后续检查。检查抛错交给 pi 处理，不跳过后继续放行；取消时不启动后续检查。`toolInteractions` 在审批钩子里等待用户决定，并为询问工具提供 ask；请求与决定先记录再继续。
 - `afterToolCall`：按注册顺序传递修改后的 result 和 isError；仅覆盖明确返回的字段。
 - `prepareNextTurn` / `shouldStopAfterTurn`：更新下一轮上下文、模型或决定停止；不能绕过 `maxTurns` 硬上限。达到上限时不再调用停止 Hook。
 - `onPayload` / `onResponse`：直接传给 pi 的模型请求扩展点。
 
-所有 Loop 扩展点都接收单函数。主对话在 execute-run、子代理在 subagent/run 各有一份显式能力列表，通过 composeCapabilities 转换；能力工厂不接收整个 Loop 配置，也不隐藏注册其他能力。
+所有 Loop 扩展点都接收单函数。主对话在 execute-run、子代理在 subagent/run 各有一份显式钩子列表，通过 composeHooks 合成；钩子工厂不接收整个 Loop 配置，也不隐藏注册其他钩子。
 
 主对话注册顺序：截图裁剪 → 轮内压缩 → 上下文注入 → 日期提醒 → Skill 工具范围 → 重复检测 → 工具交互。
 子代理注册顺序：轮内压缩 → 日期提醒 → 重复检测。两个入口显式设置 maxTurns: 100。
@@ -88,7 +88,7 @@ Runner 不构建工具、不创建 recorder，也不通过 buildTools / generate
 
 Skill 范围每轮从完整工具列表重建，保证退出 Skill 后恢复；重复检测注册在后，达到阈值后持续清空工具，不能被 Skill 恢复覆盖。这一顺序是约束，有回归测试。
 
-Capabilities 只收拢 pi 决策能力。事件投影、会话订阅和收尾是 executeRun 的显式业务步骤；后台 memory/dream 的独立执行入口不经过 capabilities。
+钩子只收拢 pi 的决策扩展点。事件转换、会话订阅和收尾是 executeRun 的显式业务步骤；后台 memory/dream 的独立执行入口不经过钩子。
 
 暂不提供 TurnHooks：目前没有业务观察者使用整次执行的开始、失败、结束通知。持久化、usage 和清理仍由 `executeRun` 明确执行，不增加空置的生命周期扩展层。
 
@@ -96,13 +96,13 @@ Capabilities 只收拢 pi 决策能力。事件投影、会话订阅和收尾是
 
 Agent 循环、上下文处理、历史修复和会话记录统一使用 pi-agent-core 的 `AgentMessage`，消息内容与 usage 使用 pi-ai 类型。pi 的压缩摘要消息直接传递。
 
-仅在 token 估算和摘要文本渲染时调用 pi 的 `convertToLlm()`，将扩展消息转换为模型支持的消息。前端事件和展示数据仍在 stream/projector 与 conversation/ui-messages 边界使用应用协议。
+仅在 token 估算和摘要文本渲染时调用 pi 的 `convertToLlm()`，将扩展消息转换为模型支持的消息。前端事件和展示数据仍在 stream/convert 与 conversation/ui-messages 边界使用应用协议。
 
-## 模型调用与会话辅助能力
+## 模型调用与会话辅助
 
 - `providers/registry.ts` 提供 `piStreamFn`，供所有 Agent 共享 provider 与 credential store。
 - `agent-loop.ts` 只暴露 run 和 subscribe，负责 Agent 工具循环；不提供 complete 或最终文本提取。
 - `complete.ts` 的 `complete({ model, system, prompt, signal })` 直接执行单次文本请求，调用共享 `piModels.completeSimple()`，传递 signal、检查 error / aborted 并提取文本。不创建 Agent，不执行工具，也不添加重试或凭证逻辑。
 - 标题、权限审核和 `createSummarizer` 使用该单次请求路径；摘要仍由 context 层组装提示词。调用方只传模型，不传 Models 或完成回调；测试在共享 piModels 的请求边界替换实现并及时恢复。
-- 聊天与 subagent 显式注册各自能力；摘要不会隐式获得聊天策略。
+- 聊天与 subagent 显式注册各自钩子；摘要不会隐式获得聊天策略。
 - `conversation/title.ts` 负责会话标题，`conversation/history.ts` 负责历史工具结果修复；仅用于模型输入的系统提醒位于 `agent/context/system-reminder.ts`。

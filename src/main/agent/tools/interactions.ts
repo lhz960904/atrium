@@ -5,7 +5,7 @@ import type { ClarifyResult } from '@shared/chat-types';
 import type { InteractionKind, InteractionOutcome } from '@shared/interactions';
 import type { AgentSessionEvent } from '@shared/protocol';
 import type { approvalGate } from '../permissions';
-import type { Capability } from '../runtime/capabilities';
+import type { HookSet } from '../runtime/hook-compose';
 import type { PendingInteractions } from '../runtime/pending-interactions';
 import type { ToolCtx } from './context';
 
@@ -49,7 +49,7 @@ export function toolInteractions(opts: {
   recorder: SessionRecorder;
   emit: (event: AgentSessionEvent) => void;
   signal: AbortSignal;
-}): Capability & { ask: NonNullable<ToolCtx['ask']> } {
+}): HookSet & { ask: NonNullable<ToolCtx['ask']> } {
   async function request(kind: InteractionKind, call: ToolCall): Promise<InteractionOutcome> {
     const waiting = opts.pending.open(kind, call);
     try {

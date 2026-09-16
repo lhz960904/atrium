@@ -10,7 +10,7 @@ import { dateReminder } from '../context/system-reminder';
 import { workspaceGuidance } from '../prompts';
 import { resolvePiModel } from '../providers/models';
 import { createAgentLoop } from '../runtime/agent-loop';
-import { composeCapabilities } from '../runtime/capabilities';
+import { composeHooks } from '../runtime/hook-compose';
 import type { RunContext } from '../runtime/run-context';
 import type { AtriumTool } from '../tools';
 import { preserveTodos } from '../tools/builtins/todo';
@@ -111,8 +111,8 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   const emit = (data: Record<string, unknown>): void =>
     parent.notice('subagent', { id: opts.subagentId, ...data });
 
-  // A child explicitly opts into these capabilities; no implicit chat-policy bundle.
-  const capabilities = [
+  // A child explicitly opts into these hooks; no implicit chat-policy bundle.
+  const hooks = [
     contextCompaction({
       summarize: createSummarizer(model),
       contextWindow: model.contextWindow,
@@ -128,7 +128,7 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
     messages,
     tools: opts.tools,
     maxTurns: 100,
-    ...composeCapabilities(capabilities),
+    ...composeHooks(hooks),
   });
 
   const usage = zeroUsage();
