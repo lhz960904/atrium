@@ -47,8 +47,8 @@ test('a scheduled run waits for the run it started and reports its outcome', asy
   await Promise.resolve();
   expect(finished).toBe(false);
 
-  runner.settle({ runId: 'r1', status: 'ok', messageId: 'r1' });
-  expect(await running).toEqual({ status: 'ok', error: undefined, messageId: 'r1' });
+  runner.settle({ status: 'ok', messageId: 'r1' });
+  expect(await running).toEqual({ status: 'ok', messageId: 'r1' });
   expect(runner.start).toHaveBeenCalledTimes(1);
 });
 
@@ -58,12 +58,8 @@ test('a run that fails carries its error back to the task', async () => {
     { db: makeDb(), runner: runner.runner, defaultModel: () => null },
     task,
   );
-  runner.settle({ runId: 'r1', status: 'error', error: 'the model refused' });
-  expect(await running).toEqual({
-    status: 'error',
-    error: 'the model refused',
-    messageId: undefined,
-  });
+  runner.settle({ status: 'error', error: 'the model refused' });
+  expect(await running).toEqual({ status: 'error', error: 'the model refused' });
 });
 
 test('a run the runner refuses is reported as an error', async () => {

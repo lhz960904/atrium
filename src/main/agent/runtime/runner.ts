@@ -26,11 +26,11 @@ const MAX_FINISHED_LOGS = 64;
 /** Start a run using the selected provider/model. */
 export type RunRequest = RunInput & { providerId: string; modelId: string };
 
-/** Public outcome for HTTP/scheduler callers; cancellation isn't an error. */
+/** What a caller awaiting a run learns of it; cancellation isn't an error. */
 export type RunOutcome = {
-  runId: string;
   status: 'ok' | 'error';
   error?: string;
+  /** Set when the run stored an assistant message, which is the run's own id. */
   messageId?: string;
 };
 
@@ -112,7 +112,6 @@ export class Runner {
     })
       .then(
         (result): RunOutcome => ({
-          runId: result.runId,
           status: result.status === 'failed' ? 'error' : 'ok',
           error: result.error,
           messageId: result.messageId,
@@ -120,7 +119,7 @@ export class Runner {
         (error): RunOutcome => {
           const errorText = error instanceof Error ? error.message : String(error);
           log.warn(`run ${runId} failed: ${errorText}`);
-          return { runId, status: 'error', error: errorText };
+          return { status: 'error', error: errorText };
         },
       )
       .finally(() => {

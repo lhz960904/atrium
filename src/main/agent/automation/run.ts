@@ -81,7 +81,7 @@ export async function runScheduledTask(
     if (outcome.status === 'error') {
       log.error(`task ${task.id} run failed: ${outcome.error}`);
     }
-    return { status: outcome.status, error: outcome.error, messageId: outcome.messageId };
+    return outcome;
   } catch (err) {
     // A request the runner refuses outright (an unresolvable model) throws
     // before the run ever starts.

@@ -123,18 +123,13 @@ test('a failed execution releases the thread, seals its stream and allows the ne
   f.blocks.mockRejectedValueOnce(new Error('context unavailable'));
   const first = runner.start(f.request);
   expect(await first.settled).toMatchObject({
-    runId: first.runId,
     status: 'error',
     error: 'context unavailable',
   });
   expect(runner.runningThreadIds()).toEqual([]);
   expect(await drain(runner.subscribe('t1', -1))).toContain('run_finished');
   const next = runner.start({ ...f.request, userMessage: { ...f.request.userMessage, id: 'u2' } });
-  expect(await next.settled).toMatchObject({
-    runId: next.runId,
-    status: 'ok',
-    messageId: next.runId,
-  });
+  expect(await next.settled).toMatchObject({ status: 'ok', messageId: next.runId });
   // The thread's log now holds the new run, not the one it superseded.
   expect((await drain(runner.subscribe('t1', -1))).filter((t) => t === 'run_started')).toHaveLength(
     1,
@@ -182,11 +177,7 @@ test('provider failure reaches the public outcome instead of being swallowed', a
   const runner = new Runner({ db: f.db, defaultProjectRoot: f.dir });
   f.faux.setResponses([fauxAssistantMessage([], { stopReason: 'error', errorMessage: 'offline' })]);
   const handle = runner.start(f.request);
-  expect(await handle.settled).toMatchObject({
-    runId: handle.runId,
-    status: 'error',
-    error: 'offline',
-  });
+  expect(await handle.settled).toMatchObject({ status: 'error', error: 'offline' });
   runner.dispose();
 });
 
