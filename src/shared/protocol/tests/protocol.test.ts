@@ -47,8 +47,8 @@ describe('forward compatibility', () => {
     expect(messageText(revived)).toBe('known');
   });
 
-  test('envelopes serialize with stable version and seq', () => {
-    const envelope: EventEnvelope = { v: 1, seq: 7, event: { type: 'agent_start' } };
+  test('envelopes serialize with their seq intact', () => {
+    const envelope: EventEnvelope = { seq: 7, event: { type: 'agent_start' } };
     const revived = JSON.parse(JSON.stringify(envelope)) as EventEnvelope;
     expect(revived).toEqual(envelope);
   });

@@ -73,9 +73,6 @@ export type AgentSessionEvent =
  * and the server replays the gap, making the replay/live seam idempotent.
  */
 export type EventEnvelope = {
-  v: 1;
   seq: number;
   event: AgentSessionEvent;
 };
-
-export const PROTOCOL_VERSION = 1 as const;

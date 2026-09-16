@@ -27,7 +27,7 @@ const assistant = (content: Content[]): AssistantMessage => ({
 
 /** The wire as the server writes it: one envelope per line of SSE. */
 function sseBody(events: AgentSessionEvent[]): string {
-  return events.map((event, seq) => `data: ${JSON.stringify({ v: 1, seq, event })}\n\n`).join('');
+  return events.map((event, seq) => `data: ${JSON.stringify({ seq, event })}\n\n`).join('');
 }
 
 const open = (runId: string): AgentSessionEvent[] => [
@@ -104,9 +104,7 @@ function liveStream() {
     body,
     push(...events: AgentSessionEvent[]) {
       for (const event of events) {
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ v: 1, seq: seq++, event })}\n\n`),
-        );
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ seq: seq++, event })}\n\n`));
       }
     },
     close: () => controller.close(),

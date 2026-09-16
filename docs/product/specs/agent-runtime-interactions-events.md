@@ -732,8 +732,7 @@ export type AgentSessionEvent =
   | ({ type: 'run_finished' } & RunCompletion)
   | { type: 'notice'; name: string; payload: unknown };
 
-export type EventEnvelope = { v: 1; seq: number; event: AgentSessionEvent };
-export const PROTOCOL_VERSION = 1 as const;
+export type EventEnvelope = { seq: number; event: AgentSessionEvent };
 ```
 
 #### `src/main/agent/runtime/stream/projector.ts`

@@ -52,7 +52,7 @@ export function createRunEventBuffer() {
     const threadLog = beginLog(threadId);
     const append = (event: AgentSessionEvent) => {
       if (threadLog.ended) return;
-      const envelope: EventEnvelope = { v: 1, seq: threadLog.envelopes.length, event };
+      const envelope: EventEnvelope = { seq: threadLog.envelopes.length, event };
       threadLog.envelopes.push(envelope);
       for (const listener of threadLog.listeners) listener(envelope);
     };
