@@ -16,9 +16,16 @@ import {
   InteractionConflict,
   type PendingInteractions,
 } from './pending-interactions';
-import { createRunEventBuffer } from './stream/run-event-buffer';
+import { EventBuffer } from './stream/run-event-buffer';
 
 const log = createLogger('runner');
+
+/**
+ * Finished logs kept so a reader can still rejoin a run that just ended;
+ * beyond this the oldest finished ones are dropped. A log whose run is still
+ * going is never evicted.
+ */
+const MAX_FINISHED_LOGS = 64;
 
 /** Start a run using the selected provider/model. */
 export type RunRequest = RunInput & { providerId: string; modelId: string };
@@ -67,12 +74,25 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
   const { db } = deps;
   const bgShells = new BackgroundShells();
   const active = new Map<string, ActiveRun>();
-  const events = createRunEventBuffer();
+  const buffers = new Map<string, EventBuffer>();
   let disposed = false;
   let closing: Promise<void> | undefined;
 
   function assertIdle(threadId: string): void {
     if (active.has(threadId)) throw new Error(`Thread ${threadId} is already running`);
+  }
+
+  /** The thread's log for this run, superseding whatever it had. */
+  function openBuffer(threadId: string): EventBuffer {
+    const buffer = new EventBuffer();
+    // Reinsert so Map order stays usable as an LRU for evicting finished logs.
+    buffers.delete(threadId);
+    buffers.set(threadId, buffer);
+    for (const [id, kept] of buffers) {
+      if (buffers.size <= MAX_FINISHED_LOGS) break;
+      if (kept.closed) buffers.delete(id);
+    }
+    return buffer;
   }
 
   function start({ providerId, modelId, ...input }: RunRequest): RunHandle {
@@ -85,7 +105,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
     const abort = new AbortController();
     const pending = createPendingInteractions({ runId, abort });
 
-    const eventLog = events.begin(threadId);
+    const eventLog = openBuffer(threadId);
     const settled = executeRun({
       input,
       runId,
@@ -130,7 +150,7 @@ export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner 
     },
     isRunning: (threadId) => active.has(threadId),
     runningThreadIds: () => [...active.keys()],
-    subscribe: events.subscribe,
+    subscribe: (threadId, fromSeq) => buffers.get(threadId)?.subscribe(fromSeq) ?? null,
 
     respond(threadId, input) {
       const run = active.get(threadId);

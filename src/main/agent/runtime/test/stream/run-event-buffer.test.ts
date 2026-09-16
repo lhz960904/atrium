@@ -1,11 +1,6 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { AgentSessionEvent, EventEnvelope } from '@shared/protocol';
-import { createRunEventBuffer } from '../../stream/run-event-buffer';
-
-let buffer: ReturnType<typeof createRunEventBuffer>;
-beforeEach(() => {
-  buffer = createRunEventBuffer();
-});
+import { EventBuffer } from '../../stream/run-event-buffer';
 
 const turn = (runId: string): AgentSessionEvent[] => [
   { type: 'run_started', runId },
@@ -29,69 +24,77 @@ async function readEnvelopes(stream: ReadableStream<EventEnvelope>): Promise<Eve
   return envelopes;
 }
 
-const replay = (threadId: string, from = -1) =>
-  readEnvelopes(buffer.subscribe(threadId, from) as ReadableStream<EventEnvelope>);
+const types = (envelopes: EventEnvelope[]) => envelopes.map((e) => e.event.type);
 
-const run = (threadId: string, events: AgentSessionEvent[]) => {
-  const log = buffer.begin(threadId);
-  for (const event of events) log.emit(event);
-  log.close();
-};
+/** A log the run already finished writing. */
+function ran(events: AgentSessionEvent[]): EventBuffer {
+  const buffer = new EventBuffer();
+  for (const event of events) buffer.emit(event);
+  buffer.close();
+  return buffer;
+}
 
-describe('run event buffer', () => {
+describe('event buffer', () => {
   test('a run that emitted nothing leaves an empty, closed log', async () => {
-    buffer.begin('t-result').close();
-    expect(await replay('t-result')).toEqual([]);
+    const buffer = new EventBuffer();
+    expect(buffer.closed).toBe(false);
+    buffer.close();
+    expect(buffer.closed).toBe(true);
+    expect(await readEnvelopes(buffer.subscribe(-1))).toEqual([]);
   });
 
-  test('ignores late events from background work after the stream closes', async () => {
-    const log = buffer.begin('t-closed');
-    log.emit({ type: 'agent_end' });
-    log.close();
-    log.emit({ type: 'notice', name: 'title', payload: { data: { title: 'Late title' } } });
-    expect((await replay('t-closed')).map((frame) => frame.event.type)).toEqual(['agent_end']);
+  test('ignores late events from background work after the log closes', async () => {
+    const buffer = new EventBuffer();
+    buffer.emit({ type: 'agent_end' });
+    buffer.close();
+    buffer.emit({ type: 'notice', name: 'title', payload: { data: { title: 'Late title' } } });
+    expect(types(await readEnvelopes(buffer.subscribe(-1)))).toEqual(['agent_end']);
   });
 
   test('an ended log replays fully with contiguous seq and closes', async () => {
-    run('t-replay', turn('m1'));
-    const envelopes = await replay('t-replay');
+    const envelopes = await readEnvelopes(ran(turn('m1')).subscribe(-1));
     expect(envelopes.map((e) => e.seq)).toEqual(envelopes.map((_, i) => i));
     expect(envelopes[0]?.event.type).toBe('run_started');
     expect(envelopes.at(-1)?.event.type).toBe('run_finished');
   });
 
   test('replay from a seq skips everything at or before it', async () => {
-    run('t-from', turn('m1'));
-    const all = await replay('t-from');
-    expect(await replay('t-from', 2)).toEqual(all.filter((e) => e.seq > 2));
+    const buffer = ran(turn('m1'));
+    const all = await readEnvelopes(buffer.subscribe(-1));
+    expect(await readEnvelopes(buffer.subscribe(2))).toEqual(all.filter((e) => e.seq > 2));
   });
 
   test('a mid-run subscriber gets replay plus live tail with no gap', async () => {
-    const log = buffer.begin('t-live');
-    log.emit({ type: 'run_started', runId: 'm1' });
+    const buffer = new EventBuffer();
+    buffer.emit({ type: 'run_started', runId: 'm1' });
 
     // Subscribe after the run's first event, then let the rest flow.
-    const sse = buffer.subscribe('t-live', -1);
-    expect(sse).not.toBeNull();
-    for (const event of turn('m1').slice(1)) log.emit(event);
-    log.close();
+    const stream = buffer.subscribe(-1);
+    for (const event of turn('m1').slice(1)) buffer.emit(event);
+    buffer.close();
 
-    const envelopes = await readEnvelopes(sse as ReadableStream<EventEnvelope>);
+    const envelopes = await readEnvelopes(stream);
     expect(envelopes.map((e) => e.seq)).toEqual(envelopes.map((_, i) => i));
     expect(envelopes.at(-1)?.event.type).toBe('run_finished');
   });
 
-  test('a new run supersedes the thread log', async () => {
-    run('t-super', turn('m1'));
-    run('t-super', turn('m2'));
-    const envelopes = await replay('t-super');
-    expect(envelopes[0]?.seq).toBe(0);
-    const starts = envelopes.filter((e) => e.event.type === 'run_started');
-    expect(starts).toHaveLength(1);
-    expect(starts[0]?.event).toMatchObject({ runId: 'm2' });
+  test('a reader that goes away stops being written to', async () => {
+    const buffer = new EventBuffer();
+    buffer.emit({ type: 'run_started', runId: 'm1' });
+    const reader = buffer.subscribe(-1).getReader();
+    expect((await reader.read()).value?.event.type).toBe('run_started');
+    await reader.cancel();
+
+    // The log keeps going for everyone else.
+    buffer.emit({ type: 'agent_end' });
+    buffer.close();
+    expect(types(await readEnvelopes(buffer.subscribe(-1)))).toEqual(['run_started', 'agent_end']);
   });
 
-  test('unknown threads subscribe to null', () => {
-    expect(buffer.subscribe('t-none', -1)).toBeNull();
+  test('its entry points work detached from the instance', async () => {
+    const { emit, close, subscribe } = new EventBuffer();
+    emit({ type: 'agent_start' });
+    close();
+    expect(types(await readEnvelopes(subscribe(-1)))).toEqual(['agent_start']);
   });
 });

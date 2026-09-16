@@ -137,6 +137,10 @@ test('a failed execution releases the thread, seals its stream and allows the ne
     status: 'ok',
     messageId: next.runId,
   });
+  // The thread's log now holds the new run, not the one it superseded.
+  expect((await drain(runner.subscribe('t1', -1))).filter((t) => t === 'run_started')).toHaveLength(
+    1,
+  );
   runner.dispose();
 });
 

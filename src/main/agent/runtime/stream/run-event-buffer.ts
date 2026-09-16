@@ -1,115 +1,66 @@
 import type { AgentSessionEvent, EventEnvelope } from '@shared/protocol';
 
 /**
- * The wire's event store: a run appends its events to the thread's envelope
- * log, and readers replay the buffer from any seq then tail live. Readers get
- * envelopes; how they are framed for a transport is the caller's business.
+ * One run's event log. The run appends envelopes; readers replay from any seq
+ * and then tail live. Readers get envelopes — how they are framed for a
+ * transport is the caller's business.
  *
- * Memory bounds: one log per thread, superseded by the thread's next run, and
- * ended logs beyond a fixed count are evicted oldest-first. A single log holds
- * exactly one run.
+ * A reader is its own stream's controller, so replaying, tailing and ending all
+ * go through one object: there is a single set to keep, and a reader that goes
+ * away is removed in one place rather than unregistered from two.
+ *
+ * The entry points are bound, so a run can be handed `emit` alone without
+ * carrying the log it writes to.
  */
+export class EventBuffer {
+  private readonly envelopes: EventEnvelope[] = [];
+  private readonly readers = new Set<ReadableStreamDefaultController<EventEnvelope>>();
+  private ended = false;
 
-type ThreadLog = {
-  envelopes: EventEnvelope[];
-  listeners: Set<(envelope: EventEnvelope) => void>;
-  onEnd: Set<() => void>;
-  ended: boolean;
-};
-
-const MAX_FINISHED_LOGS = 64;
-
-/** Each coordinator owns its buffers; separate runners never share state. */
-export function createRunEventBuffer() {
-  const logs = new Map<string, ThreadLog>();
-
-  function beginLog(threadId: string): ThreadLog {
-    const fresh: ThreadLog = {
-      envelopes: [],
-      listeners: new Set(),
-      onEnd: new Set(),
-      ended: false,
-    };
-    // Reinsert so Map order stays usable as an LRU for evicting finished logs.
-    logs.delete(threadId);
-    logs.set(threadId, fresh);
-    for (const [id, threadLog] of logs) {
-      if (logs.size <= MAX_FINISHED_LOGS) break;
-      if (threadLog.ended) logs.delete(id);
-    }
-    return fresh;
+  /** Whether the run that writes this log has finished. */
+  get closed(): boolean {
+    return this.ended;
   }
 
-  /**
-   * Open a fresh log for the thread, superseding whatever it held. Creation is
-   * synchronous so the run's first event cannot precede a reader handed out at
-   * admission. The owner must close it whatever the run did: a reader tailing
-   * the log has to see it end.
-   */
-  function begin(threadId: string): RunEventLog {
-    const threadLog = beginLog(threadId);
-    return {
-      emit(event) {
-        if (threadLog.ended) return;
-        const envelope: EventEnvelope = { seq: threadLog.envelopes.length, event };
-        threadLog.envelopes.push(envelope);
-        for (const listener of threadLog.listeners) listener(envelope);
-      },
-      close() {
-        if (threadLog.ended) return;
-        threadLog.ended = true;
-        for (const fn of threadLog.onEnd) fn();
-        threadLog.listeners.clear();
-        threadLog.onEnd.clear();
-      },
-    };
-  }
+  /** Append one event and hand it to every live reader. */
+  emit = (event: AgentSessionEvent): void => {
+    if (this.ended) return;
+    const envelope: EventEnvelope = { seq: this.envelopes.length, event };
+    this.envelopes.push(envelope);
+    for (const reader of this.readers) reader.enqueue(envelope);
+  };
+
+  /** Seal the log: tailing readers end, and later events are ignored. */
+  close = (): void => {
+    if (this.ended) return;
+    this.ended = true;
+    for (const reader of this.readers) reader.close();
+    this.readers.clear();
+  };
 
   /**
-   * A thread's envelopes with seq > fromSeq, replay then live tail; null when
-   * the thread has no log. Snapshot and listener registration happen in the
-   * same synchronous start(), so no event can fall into the gap between replay
-   * and tail. An ended log replays fully and closes — that keeps a finished run
-   * inspectable until its log is superseded or evicted.
+   * Envelopes with seq > fromSeq, replay then live tail. The snapshot and the
+   * reader's registration happen in the same synchronous start(), so no event
+   * can fall into the gap between them. A sealed log replays fully and closes,
+   * which keeps a finished run inspectable until it is superseded or evicted.
    */
-  function subscribe(threadId: string, fromSeq: number): ReadableStream<EventEnvelope> | null {
-    const threadLog = logs.get(threadId);
-    if (!threadLog) return null;
-    let detach: (() => void) | undefined;
-
+  subscribe = (fromSeq: number): ReadableStream<EventEnvelope> => {
+    let reader: ReadableStreamDefaultController<EventEnvelope> | undefined;
     return new ReadableStream({
-      start(controller) {
-        const send = (envelope: EventEnvelope) => controller.enqueue(envelope);
-        for (const envelope of threadLog.envelopes) {
-          if (envelope.seq > fromSeq) send(envelope);
+      start: (controller) => {
+        for (const envelope of this.envelopes) {
+          if (envelope.seq > fromSeq) controller.enqueue(envelope);
         }
-        if (threadLog.ended) {
+        if (this.ended) {
           controller.close();
           return;
         }
-        const close = () => {
-          detach?.();
-          controller.close();
-        };
-        threadLog.listeners.add(send);
-        threadLog.onEnd.add(close);
-        detach = () => {
-          threadLog.listeners.delete(send);
-          threadLog.onEnd.delete(close);
-        };
+        reader = controller;
+        this.readers.add(controller);
       },
-      cancel() {
-        detach?.();
+      cancel: () => {
+        if (reader) this.readers.delete(reader);
       },
     });
-  }
-
-  return { begin, subscribe };
+  };
 }
-
-/** A run's write end of its replay buffer. */
-export type RunEventLog = {
-  emit: (event: AgentSessionEvent) => void;
-  /** Seal the log: tailing readers end, and later events are ignored. */
-  close: () => void;
-};
