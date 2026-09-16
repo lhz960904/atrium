@@ -1,6 +1,7 @@
-import type { StreamFn } from '@earendil-works/pi-agent-core';
-import type { Api, Model } from '@earendil-works/pi-ai';
+import type { AgentToolResult, StreamFn } from '@earendil-works/pi-agent-core';
+import type { Api, Model, ToolCall } from '@earendil-works/pi-ai';
 import type { ComputerUseHelper } from '@main/platform/computer-use';
+import type { ClarifyResult } from '@shared/chat-types';
 import type { RunContext } from '../runtime/run-context';
 import type { BackgroundShells } from '../sandbox/background-shells';
 import type { Sandbox } from '../sandbox/types';
@@ -34,6 +35,8 @@ export type ToolCtx = {
     model: Model<Api>;
     streamFn: StreamFn;
   };
+  /** Ask the user a clarification and wait for the answer; absent where nobody can answer. */
+  ask?: (call: ToolCall, signal?: AbortSignal) => Promise<AgentToolResult<ClarifyResult>>;
   /** The Computer Use helper (macOS desktop automation); absent off macOS. */
   computerUse?: ComputerUseHelper;
   /** Whether the active provider+model can consume image tool results (see

@@ -1,4 +1,5 @@
 import type { AtriumUIMessage } from '@shared/chat';
+import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
 import { isMcpToolName } from '@shared/mcp';
 import type {
   AgentSessionEvent,
@@ -7,6 +8,7 @@ import type {
   ToolCall,
   ToolExecutionResult,
 } from '@shared/protocol';
+import { contentText } from '@shared/protocol';
 
 /**
  * Rebuilds the run's assistant message, in the exact part shape the existing
@@ -50,28 +52,20 @@ export class RunAssembler {
   private turnParts = new Map<number, number>();
   /** toolCallId → parts index, run-wide (executions outlive their turn). */
   private toolParts = new Map<string, number>();
-  private approvalByTool = new Map<string, string>();
-
-  /** A continuation run extends an existing assistant message: seed its parts
-   *  so streamed events append after them, and index its tool parts — the
-   *  just-approved call executes now under its original toolCallId. */
-  constructor(seed?: { id: string; parts: Part[] }) {
-    if (!seed) return;
-    this.id = seed.id;
-    this.parts = [...seed.parts];
-    this.started = true;
-    seed.parts.forEach((part, index) => {
-      const toolCallId = (part as { toolCallId?: unknown }).toolCallId;
-      if (typeof toolCallId === 'string') this.toolParts.set(toolCallId, index);
-      const approvalId = (part as { approval?: { id?: unknown } }).approval?.id;
-      if (typeof approvalId === 'string') this.approvalByTool.set(toolCallId as string, approvalId);
-    });
-  }
+  /** What the run asked the user, by request id; a settled one carries its outcome. */
+  private interactions = new Map<
+    string,
+    { request: InteractionRequest; outcome?: InteractionOutcome }
+  >();
+  /** Calls the user denied: the error pi stands in for them must not replace the denial. */
+  private denied = new Set<string>();
 
   apply(event: AgentSessionEvent): void {
     switch (event.type) {
+      case 'run_started':
+        this.id = event.runId;
+        break;
       case 'message_start': {
-        if (this.id === '' && event.messageId) this.id = event.messageId;
         // Mirror the old per-step markers (every step opened with one).
         this.parts.push({ type: 'step-start' });
         this.started = true;
@@ -98,24 +92,45 @@ export class RunAssembler {
         this.endTool(event.toolCallId, event.toolName, event.result, event.isError);
         break;
       }
-      case 'approval_requested': {
-        this.approvalByTool.set(event.toolCallId, event.approvalId);
-        this.patchTool(event.toolCallId, undefined, {
-          state: 'approval-requested',
-          approval: { id: event.approvalId },
-        });
+      case 'interaction_requested':
+        this.interactions.set(event.request.id, { request: event.request });
+        this.applyRequest(event.request);
         break;
-      }
+      case 'interaction_resolved':
+        this.interactions.set(event.request.id, {
+          request: event.request,
+          outcome: event.outcome,
+        });
+        this.applyOutcome(event.request, event.outcome);
+        break;
       case 'notice':
         this.applyNotice(event.name, event.payload);
         break;
       case 'agent_end':
+        // The loop is done, but the run's persistence and cleanup are not.
+        break;
+      case 'run_finished':
         this.ended = true;
+        if (event.status === 'failed') this.failure = event.error;
         break;
       default:
         // turn brackets carry no render state; unknown events are future protocol.
         break;
     }
+  }
+
+  /** A request the run is still waiting on, by its id. */
+  openInteraction(id: string): InteractionRequest | undefined {
+    const entry = this.interactions.get(id);
+    return entry && !entry.outcome ? entry.request : undefined;
+  }
+
+  /** The request still waiting on a tool call. */
+  openInteractionForTool(toolCallId: string): InteractionRequest | undefined {
+    for (const { request, outcome } of this.interactions.values()) {
+      if (!outcome && request.toolCall.id === toolCallId) return request;
+    }
+    return undefined;
   }
 
   snapshot(): RunSnapshot {
@@ -220,7 +235,48 @@ export class RunAssembler {
         }
       }
     });
-    if (message.errorMessage) this.failure = message.errorMessage;
+    // A run the user stopped ends aborted; only a provider error is a failure to report.
+    if (message.stopReason === 'error' && message.errorMessage) this.failure = message.errorMessage;
+  }
+
+  private applyRequest(request: InteractionRequest): void {
+    const call = request.toolCall;
+    // A call this client never saw streamed still needs its input on the card.
+    if (!this.toolParts.has(call.id)) this.patchTool(call.id, call.name, { input: call.arguments });
+    if (request.kind === 'approval') {
+      this.patchTool(call.id, call.name, {
+        state: 'approval-requested',
+        approval: { id: request.id },
+      });
+    }
+  }
+
+  /** A decision only settles the ask; whether the tool worked arrives with its result. */
+  private applyOutcome(request: InteractionRequest, outcome: InteractionOutcome): void {
+    if (request.kind !== 'approval') return;
+    const { id: toolCallId, name } = request.toolCall;
+    const approval = { id: request.id };
+    if (outcome.kind === 'approved') {
+      this.patchTool(toolCallId, name, {
+        state: 'approval-responded',
+        approval: { ...approval, approved: true },
+      });
+    } else if (outcome.kind === 'denied') {
+      this.denied.add(toolCallId);
+      this.patchTool(toolCallId, name, {
+        state: 'output-denied',
+        approval: {
+          ...approval,
+          approved: false,
+          ...(outcome.reason && { reason: outcome.reason }),
+        },
+      });
+    } else if (outcome.kind === 'interrupted') {
+      this.patchTool(toolCallId, name, {
+        state: 'output-error',
+        errorText: 'The run stopped before this call was decided.',
+      });
+    }
   }
 
   private endTool(
@@ -229,7 +285,6 @@ export class RunAssembler {
     result: ToolExecutionResult,
     isError: boolean,
   ): void {
-    const details = result?.details as LoosePart | undefined;
     if (!isError) {
       this.patchTool(toolCallId, toolName, {
         state: 'output-available',
@@ -238,26 +293,16 @@ export class RunAssembler {
       });
       return;
     }
-    const approvalId = this.approvalByTool.get(toolCallId);
-    if (details?.denied === true && approvalId) {
-      this.patchTool(toolCallId, toolName, {
-        state: 'output-denied',
-        approval: { id: approvalId, approved: false },
-      });
-      return;
-    }
+    if (this.denied.has(toolCallId)) return;
     this.patchTool(toolCallId, toolName, {
       state: 'output-error',
-      errorText: typeof details?.errorText === 'string' ? details.errorText : 'Tool failed.',
+      errorText: contentText(result.content).trim() || 'Tool failed.',
     });
   }
 
   private applyNotice(name: string, payload: unknown): void {
     if (name === 'message-metadata' && payload && typeof payload === 'object') {
       this.metadata = { ...this.metadata, ...(payload as Record<string, unknown>) };
-    } else if (name === 'stream-error') {
-      const text = (payload as LoosePart | undefined)?.errorText;
-      this.failure = typeof text === 'string' ? text : 'stream error';
     } else if (name === 'file' && payload && typeof payload === 'object') {
       const file = payload as { url?: string; mediaType?: string };
       this.parts.push({

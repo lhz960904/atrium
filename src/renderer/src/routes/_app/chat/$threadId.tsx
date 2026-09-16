@@ -17,10 +17,15 @@ import { useChatModel } from '../../../lib/use-chat-model';
 import { useCompactionStore } from '../../../state/compaction-store';
 import { type SelectedModel, useModelStore } from '../../../state/model-store';
 import { usePendingInput } from '../../../state/pending-input-store';
+import { toast } from '../../../state/toast-store';
 
 export const Route = createFileRoute('/_app/chat/$threadId')({
   component: ChatView,
 });
+
+const showError = (error: unknown): void => {
+  toast.error(error instanceof Error ? error.message : String(error));
+};
 
 /** Composer attachments → file parts for sendMessage. */
 function toFileParts(attachments: Attachment[]) {
@@ -117,42 +122,21 @@ function ChatRunner({
     error,
   } = usePiChat(chat, { resume });
 
-  // Stopping: detach this client immediately, then tell main to abort the run
-  // (the producer is decoupled for resume, so stop() alone won't reach it).
-  // Seal dangling tool calls in the live view too — persistence seals them in
-  // the DB, but this Chat keeps its in-memory parts, so without the mirror
-  // seal a stopped tool would spin as "running" until the thread is reseeded.
+  // Stopping goes through the server, and the run's stream delivers its last
+  // events before the chat settles. Calls the run never got to start stay open
+  // in this in-memory view — persistence seals them in the DB — so they are
+  // sealed here too, or they would spin as "running" until a reseed.
   const onStop = useCallback((): void => {
-    stop();
-    setMessages(sealDanglingToolCalls);
-    void fetch(`${endpoint.baseUrl}/api/chat/${threadId}/abort`, {
-      method: 'POST',
-      headers: { 'x-atrium-token': endpoint.token },
-    }).catch(() => {});
-  }, [stop, setMessages, endpoint.baseUrl, endpoint.token, threadId]);
+    stop().then(() => setMessages(sealDanglingToolCalls), showError);
+  }, [stop, setMessages]);
 
-  // Cancelling a clarification: close the call so the next turn's history is
-  // valid, but don't auto-resume (the store's sendAutomaticallyWhen skips a
-  // cancelled clarify). The decision is recorded server-side without running
-  // the model, against the run that parked the call.
+  // Dismissing a question tells the run waiting on it; the run ends its turn.
   const onCancelClarify = useCallback(
     (toolCallId: string): void => {
       const output: ClarifyResult = { answers: [], cancelled: true };
-      addToolOutput({ tool: 'ask_clarification', toolCallId, output });
-      const runId = messages.find((m) =>
-        m.parts.some((p) => (p as { toolCallId?: string }).toolCallId === toolCallId),
-      )?.id;
-      if (!runId) return;
-      void fetch(`${endpoint.baseUrl}/api/chat/${threadId}/decisions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-atrium-token': endpoint.token },
-        body: JSON.stringify({
-          runId,
-          decisions: [{ toolCallId, kind: 'answered', output }],
-        }),
-      }).catch(() => {});
+      addToolOutput({ tool: 'ask_clarification', toolCallId, output }).catch(showError);
     },
-    [addToolOutput, messages, endpoint.baseUrl, endpoint.token, threadId],
+    [addToolOutput],
   );
 
   const utils = trpc.useUtils();
@@ -249,8 +233,9 @@ function ChatRunner({
     [model, threadId, rewind, setMessages, sendMessage],
   );
   const onClarify = useCallback(
-    (toolCallId: string, result: ClarifyResult) =>
-      addToolOutput({ tool: 'ask_clarification', toolCallId, output: result }),
+    (toolCallId: string, result: ClarifyResult) => {
+      addToolOutput({ tool: 'ask_clarification', toolCallId, output: result }).catch(showError);
+    },
     [addToolOutput],
   );
 

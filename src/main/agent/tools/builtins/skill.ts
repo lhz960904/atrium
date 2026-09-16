@@ -1,8 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
+import type { TextContent, ToolResultMessage } from '@earendil-works/pi-ai';
 import { stripFrontmatter } from '@main/utils/frontmatter';
-import type { Message, TextContent, ToolResultMessage } from '@shared/protocol';
-import type { ContextPreserver } from '../../runtime/compaction';
+import type { ContextPreserver } from '../../context/compaction';
 import type { RunContext } from '../../runtime/run-context';
 import { type ActiveSkill, SKILL_FILE, SKILL_SCRATCH_KEY, type Skill } from '../../skills/types';
 import { defineTool, Type, textResult } from '../define';

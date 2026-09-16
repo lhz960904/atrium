@@ -8,6 +8,8 @@ import type {
   ToolResultMessage,
   UserMessage,
 } from '@shared/protocol';
+import { contentText } from '@shared/protocol';
+import type { ToolApproval } from '@shared/ui-message';
 
 /**
  * Between the run-shaped message the renderer consumes and the per-message
@@ -36,13 +38,17 @@ type Part = AtriumUIMessage['parts'][number];
 type LoosePart = Record<string, unknown>;
 
 /** UI tool state that has no pi slot, keyed by toolCallId in row metadata. */
-type ToolStateExtras = Record<string, { state: string; approval?: unknown }>;
+export type ToolStateExtra =
+  | { state: 'input-available' }
+  | { state: 'approval-requested' | 'approval-responded' | 'output-denied'; approval: ToolApproval }
+  | { state: 'output-error'; errorText: string };
+export type ToolStateExtras = Record<string, ToolStateExtra>;
 
 // ---------------------------------------------------------------------------
 // user messages
 // ---------------------------------------------------------------------------
 
-export function splitUserMessage(msg: AtriumUIMessage): PiRow {
+export function splitUserMessage(msg: AtriumUIMessage): PiRow & { message: UserMessage } {
   const createdAt = (msg.metadata?.createdAt as number | undefined) ?? 0;
   const content = (msg.parts as LoosePart[]).map((part): TextContent | Content => {
     if (part.type === 'text') return { type: 'text', text: String(part.text ?? '') };
@@ -86,12 +92,16 @@ export function mergeAssistantMessage(runId: string, rows: PiRow[]): AtriumUIMes
       results.set((row.message as ToolResultMessage).toolCallId, row.message as ToolResultMessage);
   }
   const assistantRows = rows.filter((r) => r.role === 'assistant');
+  // Run-level tool state rides on the first row, but a call in any turn can need it.
+  const toolStates: ToolStateExtras = Object.assign(
+    {},
+    ...rows.map((row) => (row.metadata?.toolStates ?? {}) as ToolStateExtras),
+  );
 
   const parts: Part[] = [];
   let metadata: Record<string, unknown> | undefined;
   for (const [index, row] of assistantRows.entries()) {
     const rowMeta = (row.metadata ?? {}) as Record<string, unknown>;
-    const toolStates = (rowMeta.toolStates ?? {}) as ToolStateExtras;
     if (index === 0) {
       const { toolStates: _dropped, ...rest } = rowMeta;
       if (Object.keys(rest).length > 0) metadata = rest;
@@ -128,30 +138,36 @@ export function mergeAssistantMessage(runId: string, rows: PiRow[]): AtriumUIMes
 function mergeToolPart(
   call: ToolCall,
   result: ToolResultMessage | undefined,
-  extra: { state: string; approval?: unknown } | undefined,
+  extra: ToolStateExtra | undefined,
 ): Part {
   const base: LoosePart = isMcpToolName(call.name)
     ? { type: 'dynamic-tool', toolName: call.name, toolCallId: call.id }
     : { type: `tool-${call.name}`, toolCallId: call.id };
   base.input = call.arguments;
 
+  // A denial is the user's decision; the error result pi stands in for the
+  // blocked call must not replace it.
+  if (extra?.state === 'output-denied') {
+    return { ...base, state: 'output-denied', approval: extra.approval } as Part;
+  }
   if (result) {
-    const details = result.details as LoosePart | undefined;
     if (!result.isError) {
       Object.assign(base, { state: 'output-available', output: result.details });
-    } else if (details?.denied === true) {
-      Object.assign(base, { state: 'output-denied' });
-      if (extra?.approval !== undefined) base.approval = extra.approval;
     } else {
+      // pi puts a failure's reason in the model-facing content, which is the
+      // same text the live card reads.
       Object.assign(base, {
         state: 'output-error',
-        errorText: String(details?.errorText ?? 'Tool failed.'),
+        errorText: contentText(result.content).trim() || 'Tool failed.',
       });
     }
     return base as Part;
   }
 
+  if (extra?.state === 'output-error') {
+    return { ...base, state: 'output-error', errorText: extra.errorText } as Part;
+  }
   base.state = extra?.state ?? 'input-available';
-  if (extra?.approval !== undefined) base.approval = extra.approval;
+  if (extra && 'approval' in extra) base.approval = extra.approval;
   return base as Part;
 }

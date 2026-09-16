@@ -31,11 +31,11 @@ type ApprovalCardProps = {
   approval: PendingApproval;
   /** How many further approvals are queued behind this one. */
   more: number;
-  onApprove: (approvalId: string) => void;
+  onApprove: (approvalId: string) => Promise<void>;
   /** Trust this kind of call from now on, then approve (only offered when the
    *  crossing reduces to a rule — see approval.rule). */
-  onAlways: (approvalId: string) => void;
-  onDeny: (approvalId: string) => void;
+  onAlways: (approvalId: string) => Promise<void>;
+  onDeny: (approvalId: string) => Promise<void>;
 };
 
 /**
@@ -73,7 +73,13 @@ export function ApprovalCard({
     const send = kind === 'deny' ? onDeny : kind === 'always' ? onAlways : onApprove;
     timers.current.push(
       setTimeout(() => setShown(false), CONFIRM_HOLD_MS),
-      setTimeout(() => send(approval.approvalId), CONFIRM_HOLD_MS + SLIDE_MS),
+      setTimeout(() => {
+        // A decision that did not land brings the card back to be made again.
+        send(approval.approvalId).catch(() => {
+          setDecided(null);
+          setShown(true);
+        });
+      }, CONFIRM_HOLD_MS + SLIDE_MS),
     );
   };
 

@@ -1,16 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentMessage, Entry, Session } from '@earendil-works/pi-agent-core';
+import type { Entry, AgentMessage as Message, Session } from '@earendil-works/pi-agent-core';
 import type { SqliteSessionMetadata } from '@earendil-works/pi-session-backend-sqlite-node';
-import type { Fold } from '@main/agent/runtime/compaction';
-import { sealDanglingToolCalls } from '@main/agent/runtime/history';
-import { asStored } from '@main/agent/runtime/vocabulary';
+import type { Fold } from '@main/agent/context/compaction';
+import { sealDanglingToolCalls } from '@main/conversation/history';
 import type { Db } from '@main/db';
 import { projects, threads } from '@main/db/schema';
 import type { AtriumUIMessage } from '@shared/chat';
-import type { Message, ToolCall, ToolResultMessage } from '@shared/protocol';
+
 import { eq } from 'drizzle-orm';
 import { durable } from './durable';
-import { openToolCalls, projectHistory, projectMessages } from './project';
+import { projectHistory, projectMessages } from './project';
+import { interruptionTextFromEntries } from './recovery';
 import { sessionStore } from './store/repo';
 
 /**
@@ -99,36 +99,6 @@ export async function threadMessages(db: Db, threadId: string): Promise<AtriumUI
 }
 
 /**
- * The calls a thread's conversation is still waiting on the user for, by id.
- * The session is the authority: a client working from a stale view can only
- * ask about fewer calls than it thinks, never more.
- */
-export async function openThreadCalls(db: Db, threadId: string): Promise<Map<string, ToolCall>> {
-  const session = await findThreadSession(db, threadId);
-  if (!session) return new Map();
-  const entries = await session.findEntriesOnBranch({ order: 'oldestFirst' });
-  return new Map(openToolCalls(entries).map((call) => [call.id, call]));
-}
-
-/**
- * Close calls with the results the user's decisions produced, without running
- * the model — a cancelled clarification, where the user has taken the turn back
- * and will send again themselves. The call still has to be closed, or the next
- * request's history carries an unpaired call.
- */
-export async function settleThreadCalls(
-  db: Db,
-  threadId: string,
-  results: ToolResultMessage[],
-): Promise<void> {
-  if (results.length === 0) return;
-  const session = await findThreadSession(db, threadId);
-  if (!session) return;
-  for (const result of results) await session.appendMessage(durable(result) as never);
-  touchThread(db, threadId);
-}
-
-/**
  * Record a fold on the thread's conversation. The folded messages stay in the
  * session — only what the model is shown gets shorter, and the reader rebuilds
  * the shorter view from this entry.
@@ -141,7 +111,7 @@ export async function compactThread(db: Db, threadId: string, fold: Fold): Promi
       id: randomUUID(),
       type: 'compaction',
       summary: fold.summary,
-      retainedTail: durable(fold.retainedTail) as unknown as AgentMessage[],
+      retainedTail: durable(fold.retainedTail),
       tokensBefore: fold.tokensBefore,
     },
     'main',
@@ -161,12 +131,12 @@ export async function threadHistory(db: Db, threadId: string): Promise<Message[]
  *
  * A run cut off mid-tool — a crash, a kill — leaves a call whose result never
  * arrived, and a provider rejects any later request whose history holds one, so
- * one interrupted turn would wedge the thread for good. A call the user is
- * being asked about is closed here too; when their answer arrives it replaces
- * the placeholder rather than joining it.
+ * one interrupted turn would wedge the thread for good.
  */
 export function runnableHistory(entries: Entry[]): Message[] {
-  return sealDanglingToolCalls(asStored(projectHistory(entries)));
+  return sealDanglingToolCalls(projectHistory(entries), (call) =>
+    interruptionTextFromEntries(entries, call),
+  );
 }
 
 /**

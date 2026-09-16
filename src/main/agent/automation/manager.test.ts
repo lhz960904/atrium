@@ -61,11 +61,14 @@ function setup(runner?: (task: ScheduledTask) => Promise<ScheduledRunResult>) {
     db,
     // Every test injects `run`, so the real runner is never reached.
     runner: {
+      abort: unreachable,
+      isRunning: unreachable,
+      runningThreadIds: unreachable,
+      subscribe: unreachable,
       start: () => unreachable(),
-      resume: () => unreachable(),
-      settle: () => unreachable(),
+      respond: () => unreachable(),
       compact: () => unreachable(),
-      dispose: () => {},
+      dispose: () => Promise.resolve(),
     },
     defaultModel: () => ({ providerId: 'p', modelId: 'm' }),
     now: () => nowRef.v,

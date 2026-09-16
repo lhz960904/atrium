@@ -1,4 +1,5 @@
 import type { CredentialStore } from '@earendil-works/pi-ai';
+import type { Runner } from '@main/agent/runtime/runner';
 import type { Db } from '@main/db';
 import { initTRPC } from '@trpc/server';
 import type { ChatEndpoint } from '../http';
@@ -13,6 +14,7 @@ import type { ChatEndpoint } from '../http';
  * saved here is the key a request uses.
  */
 export type Context = {
+  runner: Runner;
   db: Db;
   chatEndpoint: ChatEndpoint;
   credentials: CredentialStore;
