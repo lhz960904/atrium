@@ -119,7 +119,10 @@ class RunExecution {
     } catch (error) {
       this.fail(error);
     }
-    await this.close();
+    // What the conversation did, captured before cleanup can overwrite it: a
+    // failed usage write says nothing about how the turn itself ended, and must
+    // not record a finished conversation as one that stopped.
+    await this.close(this.result.status);
     return { ...this.result, messageId: this.recorder?.messageId };
   }
 
@@ -324,13 +327,13 @@ class RunExecution {
    * Each mandatory cleanup still runs if an earlier one failed. No resource or
    * recording lifecycle crosses back into Runner through a callback.
    */
-  private async close(): Promise<void> {
+  private async close(outcome: RunResult['status']): Promise<void> {
     const { input, pending, signal } = this.opts;
     await this.attempt(() => this.reportUsage());
     await this.attempt(() => this.computerUse?.hideOverlay());
     // The recorder repairs what an interrupted run left behind, so it needs the
     // reason the run actually stopped for.
-    await this.attempt(() => this.recorder?.end(this.result.status, stopReasonOf(signal.reason)));
+    await this.attempt(() => this.recorder?.end(outcome, stopReasonOf(signal.reason)));
     pending.dispose();
     if (this.workspaceRoot && this.recorder?.messageId) {
       await recordTurn(this.workspaceRoot, input.threadId);

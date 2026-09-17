@@ -368,7 +368,11 @@ test('bookkeeping failure still ends the recording and stream', async () => {
   const { result, records, events } = await run(f);
   expect(result.status).toBe('failed');
   expect(result.error).toContain('usage write failed');
-  expect(records.find((r) => r.type === 'operation_finished')).toMatchObject({ outcome: 'failed' });
+  // The ledger failed, not the turn: the conversation is still recorded as one
+  // that finished, while the caller is told the run had a problem.
+  expect(records.find((r) => r.type === 'operation_finished')).toMatchObject({
+    outcome: 'completed',
+  });
   expect(events.at(-1)).toMatchObject({ type: 'run_finished', status: 'failed' });
 });
 
