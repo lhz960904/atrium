@@ -10,7 +10,7 @@ export const messagesRouter = router({
    */
   listByThread: publicProcedure
     .input(z.object({ threadId: z.string() }))
-    .query(({ ctx, input }) => threadMessages(ctx.db, input.threadId)),
+    .query(({ input }) => threadMessages(input.threadId)),
 
   /**
    * Take a thread back to just before one message — what editing an earlier

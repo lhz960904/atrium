@@ -18,7 +18,6 @@ import type { InteractionOutcome, InteractionRequest, RunStopReason } from '@sha
 import { eq } from 'drizzle-orm';
 
 import { INTERACTION_ENTRY, type InteractionEntryData } from '../project';
-import { sessionStore } from './repo';
 
 /** A run's stop reason, kept so a later boot can still name it. */
 export const RUN_STOP_ENTRY = 'atrium.run_stop';
@@ -325,12 +324,26 @@ export class SessionStore {
   }
 }
 
+let instance: SessionStore | undefined;
+
+/** Install the process's conversations, over the store it opened at boot. */
+export function openConversations(db: Db, repository: SqliteSessionRepository): void {
+  instance = new SessionStore(db, repository);
+}
+
+/** Forget them again, so a reopened database is never read through the old one. */
+export function closeConversations(): void {
+  instance = undefined;
+}
+
 /**
- * The app's conversations, over the repository this process opened at boot.
+ * The app's conversations.
  *
- * Built per call rather than held: the store keeps no state of its own, and
- * reading the repository each time is what lets a test stand one in.
+ * One per process, held rather than rebuilt: anything the store learns — which
+ * sessions it has already repaired, say — is only worth knowing if it outlives
+ * the call that learned it.
  */
-export function conversations(db: Db): SessionStore {
-  return new SessionStore(db, sessionStore());
+export function conversations(): SessionStore {
+  if (!instance) throw new Error('conversations not initialized — call openDb() first');
+  return instance;
 }

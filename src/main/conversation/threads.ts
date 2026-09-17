@@ -61,16 +61,16 @@ export function setThreadTitle(db: Db, threadId: string, title: string): void {
 }
 
 /** The conversation a thread's messages live in, or undefined if it has none yet. */
-export function findThreadSession(db: Db, threadId: string): Promise<ThreadSession | undefined> {
-  return conversations(db).forThread(threadId);
+export function findThreadSession(threadId: string): Promise<ThreadSession | undefined> {
+  return conversations().forThread(threadId);
 }
 
 /**
  * A thread's conversation in the shape the renderer consumes. A thread that has
  * never run has no session yet, which reads as an empty conversation.
  */
-export async function threadMessages(db: Db, threadId: string): Promise<AtriumUIMessage[]> {
-  const conversation = await findThreadSession(db, threadId);
+export async function threadMessages(threadId: string): Promise<AtriumUIMessage[]> {
+  const conversation = await findThreadSession(threadId);
   if (!conversation) return [];
   const [entries, records] = await Promise.all([conversation.entries(), conversation.records()]);
   return projectMessages(entries, records);
@@ -82,15 +82,15 @@ export async function threadMessages(db: Db, threadId: string): Promise<AtriumUI
  * the shorter view from this entry.
  */
 export async function compactThread(db: Db, threadId: string, fold: Fold): Promise<void> {
-  const conversation = await findThreadSession(db, threadId);
+  const conversation = await findThreadSession(threadId);
   if (!conversation) return;
   await conversation.appendCompaction(fold);
   touchThread(db, threadId);
 }
 
 /** A thread's transcript as the engine runs it, folded at its latest compaction. */
-export async function threadHistory(db: Db, threadId: string): Promise<Message[]> {
-  const conversation = await findThreadSession(db, threadId);
+export async function threadHistory(threadId: string): Promise<Message[]> {
+  const conversation = await findThreadSession(threadId);
   if (!conversation) return [];
   return runnableHistory(await conversation.entries());
 }
@@ -117,7 +117,7 @@ export function runnableHistory(entries: Entry[]): Message[] {
  * reason a re-run can never half-truncate a thread.
  */
 export async function rewindThread(db: Db, threadId: string, messageId: string): Promise<boolean> {
-  const conversation = await findThreadSession(db, threadId);
+  const conversation = await findThreadSession(threadId);
   if (!conversation) return false;
   // Any run still open would be left dangling past the new leaf; the next run
   // closes it, so there is nothing to do here but move the branch.
@@ -127,15 +127,11 @@ export async function rewindThread(db: Db, threadId: string, messageId: string):
 }
 
 /** Drop a thread's conversation. The thread row is the caller's to remove. */
-export function deleteThreadSession(db: Db, threadId: string): Promise<void> {
-  return conversations(db).deleteForThread(threadId);
+export function deleteThreadSession(threadId: string): Promise<void> {
+  return conversations().deleteForThread(threadId);
 }
 
 /** A thread's conversation, created on first use. */
-export function openThreadSession(
-  db: Db,
-  threadId: string,
-  workspaceRoot: string,
-): Promise<ThreadSession> {
-  return conversations(db).openForThread(threadId, workspaceRoot);
+export function openThreadSession(threadId: string, workspaceRoot: string): Promise<ThreadSession> {
+  return conversations().openForThread(threadId, workspaceRoot);
 }

@@ -32,7 +32,7 @@ mock.module('electron', () => ({
 }));
 
 const settings = await import('@main/settings/conf');
-const store = await import('@main/conversation/store/repo');
+const sessions = await import('@main/conversation/store/session');
 const context = await import('../../context/injectors');
 const { piModels } = await import('../../providers/registry');
 const { BackgroundShells } = await import('../../sandbox');
@@ -79,7 +79,10 @@ export async function runtimeFixture() {
     sqlite: sessionSqlite(raw),
     databasePath,
   });
-  spyOn(store, 'sessionStore').mockReturnValue(repo);
+  // A module singleton outlives mock.restore(), so it is installed and cleared
+  // explicitly rather than spied — otherwise one fixture's store leaks into the
+  // next test.
+  sessions.openConversations(db, repo);
   const config: Record<string, unknown> = {
     'computerUse.enabled': false,
     'general.autoGenerateTitle': false,
@@ -95,6 +98,7 @@ export async function runtimeFixture() {
   const model = faux.getModel();
   const bgShells = new BackgroundShells();
   disposers.push(async () => {
+    sessions.closeConversations();
     bgShells.killAll();
     piModels.deleteProvider(model.provider);
     await repo.close();

@@ -176,7 +176,7 @@ class RunExecution {
         ? getComputerUseHelper()
         : undefined;
 
-    const conversation = await openThreadSession(db, input.threadId, workspaceRoot);
+    const conversation = await openThreadSession(input.threadId, workspaceRoot);
     const recorder = createSessionRecorder({ conversation, runId });
     this.recorder = recorder;
     const prompt = input.userMessage

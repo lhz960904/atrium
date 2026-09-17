@@ -250,7 +250,7 @@ test('a denial blocks the tool and the model reads the reason', async () => {
   expect((await handle.settled).status).toBe('ok');
   expect(exec).not.toHaveBeenCalled();
   expect(f.faux.state.callCount).toBe(2);
-  const messages = await threadMessages(f.db, 't1');
+  const messages = await threadMessages('t1');
   expect(partFor(messages.at(-1)?.parts, 'call-1')).toMatchObject({ state: 'output-denied' });
   runner.dispose();
 });
@@ -280,7 +280,7 @@ test('an answered clarification becomes the tool result of the same run', async 
   expect(answer(['A', 'B'])).toBe('accepted');
   expect(await handle.settled).toMatchObject({ status: 'ok', messageId: handle.runId });
   expect(f.faux.state.callCount).toBe(2);
-  const messages = await threadMessages(f.db, 't1');
+  const messages = await threadMessages('t1');
   expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
   expect(partFor(messages.at(-1)?.parts, 'call-1')).toMatchObject({
     state: 'output-available',
@@ -307,7 +307,7 @@ test('cancelling a clarification ends the run without asking the model again', a
   });
   expect((await handle.settled).status).toBe('ok');
   expect(f.faux.state.callCount).toBe(1);
-  const messages = await threadMessages(f.db, 't1');
+  const messages = await threadMessages('t1');
   expect(partFor(messages.at(-1)?.parts, 'call-1')).toMatchObject({
     state: 'output-available',
     output: { answers: [], cancelled: true },

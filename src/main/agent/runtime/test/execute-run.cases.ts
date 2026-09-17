@@ -44,7 +44,7 @@ async function run(
     },
     ...overrides,
   });
-  const session = await findThreadSession(f.db, 't1');
+  const session = await findThreadSession('t1');
   const records = (await session?.records()) ?? [];
   return { events, result, session, records };
 }
@@ -87,7 +87,7 @@ test('owns begin, message persistence and end; the wire carries deltas and a fin
   expect(records.find((r) => r.type === 'operation_finished')).toMatchObject({
     outcome: 'completed',
   });
-  const messages = await threadMessages(f.db, 't1');
+  const messages = await threadMessages('t1');
   expect(messages.map((message) => message.id)).toEqual(['u1', 'r1']);
   expect(events[0]).toEqual({ type: 'run_started', runId: 'r1' });
   expect(events.some((event) => 'messageId' in event)).toBe(false);

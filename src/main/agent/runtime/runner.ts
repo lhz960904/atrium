@@ -163,7 +163,7 @@ export class Runner {
   async compact({ threadId, providerId, modelId }: CompactRequest): Promise<boolean> {
     // A waiting run still owns the thread's history.
     this.assertIdle(threadId);
-    const history = await threadHistory(this.db, threadId);
+    const history = await threadHistory(threadId);
     const model = resolvePiModel(this.db, providerId, modelId);
     const folded = await foldHistory({
       messages: history,

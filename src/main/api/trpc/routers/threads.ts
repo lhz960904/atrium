@@ -29,7 +29,7 @@ export const threadsRouter = router({
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
     const thread = ctx.db.select().from(threads).where(eq(threads.id, input.id)).get();
     if (!thread) return null;
-    return { ...thread, messages: await threadMessages(ctx.db, input.id) };
+    return { ...thread, messages: await threadMessages(input.id) };
   }),
 
   /** Create an empty thread. Returns the new id. */
@@ -66,7 +66,7 @@ export const threadsRouter = router({
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     // The conversation goes first: the thread row is what names it, so dropping
     // that first would strand the session in the store.
-    await deleteThreadSession(ctx.db, input.id);
+    await deleteThreadSession(input.id);
     ctx.db.delete(threads).where(eq(threads.id, input.id)).run();
   }),
 
