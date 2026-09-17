@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github.com/lhz960904/atrium/compare/v0.17.0...v0.17.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* **providers:** match Ark plan output caps and thinking support ([e9062e0](https://github.com/lhz960904/atrium/commit/e9062e09c03e39da53f1027eff57fd64397da381))
+
 ## [0.17.0](https://github.com/lhz960904/atrium/compare/v0.16.0...v0.17.0) (2026-09-14)
 
 
