@@ -1,9 +1,9 @@
-import type { Entry, AgentMessage as Message, Session } from '@earendil-works/pi-agent-core';
+import type { Entry, AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { ToolCall } from '@earendil-works/pi-ai';
 import type { InteractionOutcome, InteractionRequest, RunStopReason } from '@shared/interactions';
-import { durable } from './durable';
 import { sealDanglingToolCalls } from './history';
 import { INTERACTION_ENTRY, type InteractionEntryData } from './project';
+import { RUN_STOP_ENTRY, type RunStopEntryData, type ThreadSession } from './store/session';
 
 /**
  * What a run that never ended left behind, and how it is closed.
@@ -15,11 +15,6 @@ import { INTERACTION_ENTRY, type InteractionEntryData } from './project';
  * executes anything: a call that was approved before the crash may or may not
  * have run, and saying either would be a guess.
  */
-
-/** A run's stop reason, kept so a later boot can still name it. */
-export const RUN_STOP_ENTRY = 'atrium.run_stop';
-
-export type RunStopEntryData = { runId: string; reason: RunStopReason };
 
 const UNKNOWN: Record<RunStopReason, string> = {
   user_cancelled: 'The run was stopped before this tool returned; its outcome is unknown.',
@@ -84,8 +79,8 @@ export function interruptionTextFromEntries(entries: Entry[], call: ToolCall): s
 }
 
 /** The entries a run produced: everything between its start and the next run's. */
-async function readRun(session: Session, runId: string) {
-  const records = await session.findRecords({ order: 'oldestFirst' });
+async function readRun(conversation: ThreadSession, runId: string) {
+  const records = await conversation.records();
   const started = records.find(
     (record) => record.type === 'operation_started' && record.id === runId,
   );
@@ -96,7 +91,7 @@ async function readRun(session: Session, runId: string) {
   const next = records.find(
     (record) => record.type === 'operation_started' && record.seq > started.seq,
   );
-  const entries = await session.findEntriesOnBranch({ order: 'oldestFirst' });
+  const entries = await conversation.entries();
   const own = entries.filter(
     (entry) => entry.seq > started.seq && entry.seq < (next?.seq ?? Number.POSITIVE_INFINITY),
   );
@@ -104,13 +99,13 @@ async function readRun(session: Session, runId: string) {
 }
 
 export async function recoverInterruptedRun(
-  session: Session,
+  conversation: ThreadSession,
   runId: string,
   reason: RunStopReason,
   /** How the run is closed: a failure keeps saying so, everything else stopped. */
   outcome: 'aborted' | 'failed' = 'aborted',
 ): Promise<void> {
-  const run = await readRun(session, runId);
+  const run = await readRun(conversation, runId);
   if (!run || run.finished) return;
 
   const interactions = interactionsOf(run.entries);
@@ -126,50 +121,13 @@ export async function recoverInterruptedRun(
   )) {
     if (message.role !== 'toolResult' || answered.has(message.toolCallId)) continue;
     answered.add(message.toolCallId);
-    // A stable id makes a half-finished recovery resumable; the store rejects a
-    // duplicate outright, so the check is what makes a second pass safe.
-    const id = `${runId}:interrupted:${message.toolCallId}`;
-    if (await session.getEntry(id)) continue;
-    await session.appendEntry({ id, type: 'message', message: durable(message) }, 'main');
+    await conversation.appendInterruptedResult(runId, message.toolCallId, message);
   }
 
   for (const request of interactions.map((data) => data.request)) {
     if (settlementOf(interactions, request.toolCall.id)) continue;
-    const id = `${request.id}:resolved`;
-    if (await session.getEntry(id)) continue;
-    await session.appendEntry(
-      {
-        id,
-        type: 'custom',
-        customType: INTERACTION_ENTRY,
-        data: durable({ phase: 'resolved', request, outcome: { kind: 'interrupted', reason } }),
-      },
-      'main',
-    );
+    await conversation.settleInteraction(request, { kind: 'interrupted', reason });
   }
 
-  await session.appendRecord({
-    id: `${runId}:recovered`,
-    lane: 'main',
-    type: 'operation_finished',
-    runId,
-    outcome,
-  });
-}
-
-/** Record why a run stopped, so a later boot can still name it. */
-export async function recordRunStop(
-  session: Session,
-  runId: string,
-  reason: RunStopReason,
-): Promise<void> {
-  await session.appendEntry(
-    {
-      id: `${runId}:stopped`,
-      type: 'custom',
-      customType: RUN_STOP_ENTRY,
-      data: durable({ runId, reason } satisfies RunStopEntryData),
-    },
-    'main',
-  );
+  await conversation.finishRun(runId, outcome);
 }

@@ -1,17 +1,14 @@
-import { randomUUID } from 'node:crypto';
 import type {
   AgentEvent,
   AgentMessage,
   AgentMessage as Message,
-  Session,
 } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage } from '@earendil-works/pi-ai';
 import { createLogger } from '@main/utils/log';
 import type { InteractionOutcome, InteractionRequest, RunStopReason } from '@shared/interactions';
 
-import { durable } from './durable';
-import { INTERACTION_ENTRY, type InteractionEntryData } from './project';
-import { recordRunStop, recoverInterruptedRun } from './recovery';
+import { recoverInterruptedRun } from './recovery';
+import type { ThreadSession } from './store/session';
 
 const log = createLogger('session');
 
@@ -70,11 +67,11 @@ const contextSizeOf = (usage: AssistantMessage['usage']): number =>
   usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
 
 export function createSessionRecorder(opts: {
-  session: Session;
+  conversation: ThreadSession;
   /** The run's id, which is also its operation record's id. */
   runId: string;
 }): SessionRecorder {
-  const { session, runId } = opts;
+  const { conversation, runId } = opts;
   const totals: RunTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
   let contextTokens: number | undefined;
   let failure: string | undefined;
@@ -83,40 +80,20 @@ export function createSessionRecorder(opts: {
   let attempt = 0;
   let operationOpen = false;
 
-  const appendInteraction = async (id: string, data: InteractionEntryData) => {
-    await session.appendEntry(
-      { id, type: 'custom', customType: INTERACTION_ENTRY, data: durable(data) },
-      'main',
-    );
-    wrote = true;
-  };
-
   return {
     async begin(prompt) {
       // A lane holds one operation at a time, so anything still open has to be
       // closed first. It is open because the run that owned it never got to end
       // — the app died mid-turn — so its gaps are repaired here, before this
       // run's own entries land after them.
-      for (const open of await session.findOpenOperations('main')) {
+      for (const open of await conversation.openRuns()) {
         log.info(`recovering run ${open.id}, superseded by ${runId}`);
-        await recoverInterruptedRun(session, open.id, 'interrupted');
+        await recoverInterruptedRun(conversation, open.id, 'interrupted');
       }
-      await session.appendRecord({
-        id: runId,
-        lane: 'main',
-        type: 'operation_started',
-        sourceLeafId: await session.getLeafId(),
-        intent: { kind: 'run', originalPrompt: [], initialMessages: [] },
-      });
+      await conversation.startRun(runId);
       operationOpen = true;
       if (prompt) {
-        // Stored under the id the client minted, not one the store assigns:
-        // the live view already addresses the message by it, and editing that
-        // message later has to find the entry it became.
-        await session.appendEntry(
-          { id: prompt.id, type: 'message', message: durable(prompt.message) },
-          'main',
-        );
+        await conversation.appendPrompt(prompt.id, prompt.message);
         wrote = true;
       }
     },
@@ -144,54 +121,48 @@ export function createSessionRecorder(opts: {
         // it comes back as history, which would wedge the thread for good.
         if (message.content.length === 0) return;
 
-        const entryId = await session.appendMessage(durable(message));
+        const entryId = await conversation.appendTurn(message);
         wrote = true;
         messageId = runId;
-        await session.appendRecord({
-          id: randomUUID(),
-          lane: 'main',
-          type: 'usage',
-          cause: 'assistant',
+        await conversation.recordUsage({
           runId,
           entryId,
           attempt: ++attempt,
-          stopReason: message.stopReason === 'pending' ? 'stop' : message.stopReason,
-          usage: durable(usage),
+          stopReason: message.stopReason,
+          usage,
         });
         return;
       }
 
       if (message.role === 'toolResult') {
-        await session.appendMessage(durable(message));
+        await conversation.appendToolResult(message);
         wrote = true;
       }
     },
 
     // pi has no state for "waiting on the user", so it rides in entries of our
     // own. A request settles once, so each phase is written exactly once.
-    interactionRequested: (request) =>
-      appendInteraction(`${request.id}:requested`, { phase: 'requested', request }),
+    async interactionRequested(request) {
+      await conversation.recordInteractionRequested(request);
+      wrote = true;
+    },
 
-    interactionResolved: (request, outcome) =>
-      appendInteraction(`${request.id}:resolved`, { phase: 'resolved', request, outcome }),
+    async interactionResolved(request, outcome) {
+      await conversation.recordInteractionResolved(request, outcome);
+      wrote = true;
+    },
 
     async end(outcome, reason) {
       // begin may fail before opening the bracket, or after opening it while
       // writing the prompt. Only close the operation we actually own.
       if (!operationOpen) return;
       if (outcome === 'completed') {
-        await session.appendRecord({
-          id: randomUUID(),
-          lane: 'main',
-          type: 'operation_finished',
-          runId,
-          outcome,
-        });
+        await conversation.finishRun(runId, outcome);
       } else {
         // A run that stopped or failed can leave calls with no result. Recording
         // why first means a boot that never gets past here can still say it.
-        await recordRunStop(session, runId, reason ?? 'interrupted');
-        await recoverInterruptedRun(session, runId, reason ?? 'interrupted', outcome);
+        await conversation.recordRunStop(runId, reason ?? 'interrupted');
+        await recoverInterruptedRun(conversation, runId, reason ?? 'interrupted', outcome);
       }
       wrote = true;
       operationOpen = false;

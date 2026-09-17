@@ -15,6 +15,7 @@ import type { InteractionRequest } from '@shared/interactions';
 
 import { projectHistory, projectMessages } from '../project';
 import { createSessionRecorder } from '../session-recorder';
+import { ThreadSession } from '../store/session';
 import { sessionSqlite } from '../store/sqlite-driver';
 
 /**
@@ -37,7 +38,8 @@ async function session() {
     sqlite: sessionSqlite(new Database(databasePath)),
     databasePath,
   });
-  return { repo, session: await repo.create({ cwd: '/tmp/work' }) };
+  const created = await repo.create({ cwd: '/tmp/work' });
+  return { repo, session: created, conversation: new ThreadSession(created) };
 }
 
 const usage = (input: number, output: number) => ({
@@ -85,8 +87,8 @@ const read = async (s: Session) => ({
 });
 
 test('a turn is readable the moment its message lands, before the run ends', async () => {
-  const { repo, session: s } = await session();
-  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  const { repo, session: s, conversation } = await session();
+  const recorder = createSessionRecorder({ conversation, runId: 'r1' });
   await recorder.begin(user('hi'));
   expect(recorder.messageId).toBeUndefined();
   await recorder.observe(ended(assistant([{ type: 'text', text: 'first half' }])));
@@ -101,8 +103,8 @@ test('a turn is readable the moment its message lands, before the run ends', asy
 });
 
 test('an unfinished run leaves its operation open for a later boot to find', async () => {
-  const { repo, session: s } = await session();
-  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  const { repo, session: s, conversation } = await session();
+  const recorder = createSessionRecorder({ conversation, runId: 'r1' });
   await recorder.begin(user('hi'));
   await recorder.observe(ended(assistant([{ type: 'text', text: 'partial' }])));
 
@@ -113,8 +115,8 @@ test('an unfinished run leaves its operation open for a later boot to find', asy
 });
 
 test('usage is recorded per turn and adds up on the run', async () => {
-  const { repo, session: s } = await session();
-  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  const { repo, session: s, conversation } = await session();
+  const recorder = createSessionRecorder({ conversation, runId: 'r1' });
   await recorder.begin(user('hi'));
   await recorder.observe(
     ended(assistant([{ type: 'text', text: 'one' }], { usage: usage(100, 10) })),
@@ -137,8 +139,8 @@ test('usage is recorded per turn and adds up on the run', async () => {
 });
 
 test('a turn that produced nothing is not kept', async () => {
-  const { repo, session: s } = await session();
-  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  const { repo, session: s, conversation } = await session();
+  const recorder = createSessionRecorder({ conversation, runId: 'r1' });
   await recorder.begin(user('hi'));
   await recorder.observe(
     ended(assistant([], { stopReason: 'error', errorMessage: 'upstream exploded' })),
@@ -153,8 +155,8 @@ test('a turn that produced nothing is not kept', async () => {
 });
 
 test('a message carrying undefined is still storable', async () => {
-  const { repo, session: s } = await session();
-  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  const { repo, session: s, conversation } = await session();
+  const recorder = createSessionRecorder({ conversation, runId: 'r1' });
   await recorder.begin(user('run something'));
   await recorder.observe(
     ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
@@ -186,8 +188,8 @@ test('a message carrying undefined is still storable', async () => {
 });
 
 test("the user's turn keeps the id it was sent under", async () => {
-  const { repo, session: s } = await session();
-  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  const { repo, session: s, conversation } = await session();
+  const recorder = createSessionRecorder({ conversation, runId: 'r1' });
   const prompt = user('find me later');
   await recorder.begin(prompt);
   await recorder.end('completed');
@@ -201,14 +203,14 @@ test("the user's turn keeps the id it was sent under", async () => {
 });
 
 test('a new run closes one that never got to end', async () => {
-  const { repo, session: s } = await session();
-  const first = createSessionRecorder({ session: s, runId: 'r1' });
+  const { repo, session: s, conversation } = await session();
+  const first = createSessionRecorder({ conversation, runId: 'r1' });
   await first.begin(user('curl x'));
   await first.observe(ended(assistant([{ type: 'text', text: 'cut off' }])));
 
   // The process died before the first run could end. The lane holds one
   // operation at a time, so the next run only opens once that one is closed.
-  const second = createSessionRecorder({ session: s, runId: 'r2' });
+  const second = createSessionRecorder({ conversation, runId: 'r2' });
   await second.begin(user('try again'));
   await second.observe(ended(assistant([{ type: 'text', text: 'done' }])));
   await second.end('completed');
@@ -223,8 +225,8 @@ test('a new run closes one that never got to end', async () => {
 });
 
 test("a lost run's gap is repaired before the next run opens", async () => {
-  const { repo, session: s } = await session();
-  const first = createSessionRecorder({ session: s, runId: 'r1' });
+  const { repo, session: s, conversation } = await session();
+  const first = createSessionRecorder({ conversation, runId: 'r1' });
   await first.begin(user('curl x'));
   await first.observe(
     ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
@@ -232,7 +234,7 @@ test("a lost run's gap is repaired before the next run opens", async () => {
   // The process dies here: no tool result, no end.
 
   const prompt = user('try again');
-  const second = createSessionRecorder({ session: s, runId: 'r2' });
+  const second = createSessionRecorder({ conversation, runId: 'r2' });
   await second.begin(prompt);
   await second.end('completed');
 
@@ -254,8 +256,8 @@ test("a lost run's gap is repaired before the next run opens", async () => {
 });
 
 test('an approval is recorded once when asked and once when decided', async () => {
-  const { repo, session: s } = await session();
-  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  const { repo, session: s, conversation } = await session();
+  const recorder = createSessionRecorder({ conversation, runId: 'r1' });
   await recorder.begin(user('curl x'));
   await recorder.observe(
     ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),
@@ -284,8 +286,8 @@ test('an approval is recorded once when asked and once when decided', async () =
 });
 
 test('the error result a blocked call produces is kept as its real result', async () => {
-  const { repo, session: s } = await session();
-  const recorder = createSessionRecorder({ session: s, runId: 'r1' });
+  const { repo, session: s, conversation } = await session();
+  const recorder = createSessionRecorder({ conversation, runId: 'r1' });
   await recorder.begin(user('curl x'));
   await recorder.observe(
     ended(assistant([{ type: 'toolCall', id: 'c1', name: 'bash', arguments: {} }])),

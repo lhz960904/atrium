@@ -18,7 +18,12 @@ import type { InteractionOutcome, InteractionRequest, RunStopReason } from '@sha
 import { eq } from 'drizzle-orm';
 
 import { INTERACTION_ENTRY, type InteractionEntryData } from '../project';
-import { RUN_STOP_ENTRY, type RunStopEntryData } from '../recovery';
+import { sessionStore } from './repo';
+
+/** A run's stop reason, kept so a later boot can still name it. */
+export const RUN_STOP_ENTRY = 'atrium.run_stop';
+
+export type RunStopEntryData = { runId: string; reason: RunStopReason };
 
 /**
  * The one place that knows how a conversation is stored.
@@ -72,13 +77,14 @@ export class ThreadSession {
     return this.session.findOpenOperations(LANE);
   }
 
-  async hasRun(runId: string): Promise<boolean> {
+  /** When a run opened, as the store recorded it. */
+  async runStartedAt(runId: string): Promise<number | undefined> {
     const [started] = await this.session.findRecords({
       type: 'operation_started',
       runId,
       limit: 1,
     });
-    return started !== undefined;
+    return started?.timestamp;
   }
 
   /**
@@ -317,4 +323,14 @@ export class SessionStore {
     const sessions = await this.repository.list();
     return sessions.find((session) => session.id === sessionId);
   }
+}
+
+/**
+ * The app's conversations, over the repository this process opened at boot.
+ *
+ * Built per call rather than held: the store keeps no state of its own, and
+ * reading the repository each time is what lets a test stand one in.
+ */
+export function conversations(db: Db): SessionStore {
+  return new SessionStore(db, sessionStore());
 }
