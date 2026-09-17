@@ -87,7 +87,7 @@ test('owns begin, message persistence and end; the wire carries deltas and a fin
   expect(records.find((r) => r.type === 'operation_finished')).toMatchObject({
     outcome: 'completed',
   });
-  const messages = await conversations().messagesFor('t1');
+  const messages = await conversations().getUIMessagesByThreadID('t1');
   expect(messages.map((message) => message.id)).toEqual(['u1', 'r1']);
   expect(events[0]).toEqual({ type: 'run_started', runId: 'r1' });
   expect(events.some((event) => 'messageId' in event)).toBe(false);

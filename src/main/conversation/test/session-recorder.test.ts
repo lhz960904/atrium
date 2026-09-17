@@ -13,7 +13,7 @@ import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { InteractionRequest } from '@shared/interactions';
 
-import { INTERACTION_ENTRY, projectHistory, projectMessages } from '../project';
+import { getAgentMessages, getUIMessages, INTERACTION_ENTRY } from '../project';
 import { createSessionRecorder } from '../session-recorder';
 import { ThreadSession } from '../store/session';
 import { sessionSqlite } from '../store/sqlite-driver';
@@ -96,8 +96,8 @@ test('a turn is readable the moment its message lands, before the run ends', asy
 
   // No end() yet — this is what a crash mid-turn would leave behind.
   const { entries, records } = await read(s);
-  expect(projectHistory(entries).map((m) => m.role)).toEqual(['user', 'assistant']);
-  const [, reply] = projectMessages(entries, records);
+  expect(getAgentMessages(entries).map((m) => m.role)).toEqual(['user', 'assistant']);
+  const [, reply] = getUIMessages(entries, records);
   expect(reply.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'first half' }]);
   await repo.close();
 });
@@ -130,7 +130,7 @@ test('usage is recorded per turn and adds up on the run', async () => {
   expect(recorder.contextTokens).toBe(220);
 
   const { entries, records } = await read(s);
-  expect(projectMessages(entries, records)[1].metadata).toMatchObject({
+  expect(getUIMessages(entries, records)[1].metadata).toMatchObject({
     inputTokens: 300,
     outputTokens: 30,
     totalTokens: 330,
@@ -150,7 +150,7 @@ test('a turn that produced nothing is not kept', async () => {
   expect(recorder.failure).toBe('upstream exploded');
   const { entries } = await read(s);
   // Only the user turn: an empty assistant message would be rejected as history.
-  expect(projectHistory(entries).map((m) => m.role)).toEqual(['user']);
+  expect(getAgentMessages(entries).map((m) => m.role)).toEqual(['user']);
   await repo.close();
 });
 
@@ -177,7 +177,7 @@ test('a message carrying undefined is still storable', async () => {
   await recorder.end('completed');
 
   const { entries, records } = await read(s);
-  const [, reply] = projectMessages(entries, records);
+  const [, reply] = getUIMessages(entries, records);
   expect(reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1')).toMatchObject(
     {
       state: 'output-available',
@@ -198,7 +198,7 @@ test("the user's turn keeps the id it was sent under", async () => {
   // to find the entry it became — a store-assigned id would never match.
   expect(await s.getEntry(prompt.id)).toMatchObject({ type: 'message' });
   const { entries, records } = await read(s);
-  expect(projectMessages(entries, records)[0].id).toBe(prompt.id);
+  expect(getUIMessages(entries, records)[0].id).toBe(prompt.id);
   await repo.close();
 });
 
@@ -219,7 +219,7 @@ test('a new run closes one that never got to end', async () => {
   const { entries, records } = await read(s);
   const abandoned = records.find((r) => r.type === 'operation_finished' && r.runId === 'r1');
   expect(abandoned).toMatchObject({ outcome: 'aborted' });
-  const messages = projectMessages(entries, records);
+  const messages = getUIMessages(entries, records);
   expect(messages.map((m) => m.id)).toEqual([messages[0].id, 'r1', messages[2].id, 'r2']);
   await repo.close();
 });
@@ -268,7 +268,7 @@ test('an approval is recorded once when asked and once when decided', async () =
   let { entries, records } = await read(s);
   const card = (parts: readonly unknown[]) =>
     parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1');
-  expect(card(projectMessages(entries, records)[1].parts)).toMatchObject({
+  expect(card(getUIMessages(entries, records)[1].parts)).toMatchObject({
     state: 'approval-requested',
     approval: { id: asked.id },
   });
@@ -278,7 +278,7 @@ test('an approval is recorded once when asked and once when decided', async () =
   expect(
     entries.filter((entry) => entry.type === 'custom' && entry.customType === INTERACTION_ENTRY),
   ).toHaveLength(2);
-  expect(card(projectMessages(entries, records)[1].parts)).toMatchObject({
+  expect(card(getUIMessages(entries, records)[1].parts)).toMatchObject({
     state: 'output-denied',
     approval: { id: asked.id, approved: false },
   });
@@ -306,6 +306,6 @@ test('the error result a blocked call produces is kept as its real result', asyn
   await recorder.end('completed');
 
   const { entries } = await read(s);
-  expect(projectHistory(entries).filter((m) => m.role === 'toolResult')).toHaveLength(1);
+  expect(getAgentMessages(entries).filter((m) => m.role === 'toolResult')).toHaveLength(1);
   await repo.close();
 });

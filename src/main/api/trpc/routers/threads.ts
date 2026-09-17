@@ -29,7 +29,7 @@ export const threadsRouter = router({
   get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
     const thread = ctx.db.select().from(threads).where(eq(threads.id, input.id)).get();
     if (!thread) return null;
-    return { ...thread, messages: await conversations().messagesFor(input.id) };
+    return { ...thread, messages: await conversations().getUIMessagesByThreadID(input.id) };
   }),
 
   /** Create an empty thread. Returns the new id. */

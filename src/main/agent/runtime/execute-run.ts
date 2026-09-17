@@ -1,6 +1,6 @@
 import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
-import { projectHistory } from '@main/conversation/project';
+import { getAgentMessages } from '@main/conversation/project';
 import { createSessionRecorder, type SessionRecorder } from '@main/conversation/session-recorder';
 import { conversations } from '@main/conversation/store/session';
 import {
@@ -109,7 +109,7 @@ class RunExecution {
 
       const { conversation, recorder, workspaceRoot } = await this.open();
       const prepared = await this.prepare(workspaceRoot, recorder);
-      const history = projectHistory(await conversation.entries());
+      const history = getAgentMessages(await conversation.entries());
       if (getSettings('general.autoGenerateTitle')) this.startTitle(history);
       const messages = await this.foldForTurn(prepared, history);
 

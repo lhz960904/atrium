@@ -7,7 +7,7 @@ import type { AgentMessage, Session } from '@earendil-works/pi-agent-core';
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
-import { INTERACTION_ENTRY, openToolCalls, projectHistory, projectMessages } from '../project';
+import { getAgentMessages, getUIMessages, INTERACTION_ENTRY, openToolCalls } from '../project';
 import { sessionSqlite } from '../store/sqlite-driver';
 
 /**
@@ -126,7 +126,7 @@ test('a run folds into one assistant message carrying the user turn before it', 
   });
 
   const { entries, records } = await read(s);
-  const messages = projectMessages(entries, records);
+  const messages = getUIMessages(entries, records);
   expect(messages.map((m) => m.role)).toEqual(['user', 'assistant']);
   expect(messages[0].parts).toEqual([{ type: 'text', text: 'hello' }]);
   expect(messages[1].id).toBe('r1');
@@ -146,7 +146,7 @@ test('a tool call and its result merge into one card', async () => {
   });
 
   const { entries, records } = await read(s);
-  const [, reply] = projectMessages(entries, records);
+  const [, reply] = getUIMessages(entries, records);
   const tool = reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1');
   expect(tool).toMatchObject({
     type: 'tool-bash',
@@ -178,7 +178,7 @@ test("run metadata is rebuilt from the run's own records", async () => {
   });
 
   const { entries, records } = await read(s);
-  const [, reply] = projectMessages(entries, records);
+  const [, reply] = getUIMessages(entries, records);
   expect(reply.metadata).toMatchObject({
     providerId: 'anthropic',
     modelId: 'claude-x',
@@ -208,7 +208,7 @@ test('an open approval request keeps its card instead of spinning', async () => 
   );
 
   const { entries, records } = await read(s);
-  const [, reply] = projectMessages(entries, records);
+  const [, reply] = getUIMessages(entries, records);
   expect(reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c1')).toMatchObject(
     {
       state: 'approval-requested',
@@ -242,7 +242,7 @@ test('a request that was denied reads back as denied, not as waiting', async () 
   });
 
   const { entries, records } = await read(s);
-  const messages = projectMessages(entries, records);
+  const messages = getUIMessages(entries, records);
   expect(messages.at(-1)?.parts).toContainEqual(
     expect.objectContaining({
       toolCallId: 'call-1',
@@ -274,7 +274,7 @@ test('an approval asked in a later turn still reaches its card', async () => {
   );
 
   const { entries, records } = await read(s);
-  const [, reply] = projectMessages(entries, records);
+  const [, reply] = getUIMessages(entries, records);
   expect(reply.parts.find((p) => (p as { toolCallId?: string }).toolCallId === 'c2')).toMatchObject(
     { state: 'approval-requested', approval: { id: request.id } },
   );
@@ -301,7 +301,7 @@ test('a failed tool shows the text the tool returned', async () => {
   });
 
   const { entries, records } = await read(s);
-  expect(projectMessages(entries, records).at(-1)?.parts).toContainEqual(
+  expect(getUIMessages(entries, records).at(-1)?.parts).toContainEqual(
     expect.objectContaining({
       toolCallId: 'c1',
       state: 'output-error',
@@ -323,7 +323,7 @@ test('two runs stay separate messages', async () => {
   });
 
   const { entries, records } = await read(s);
-  const messages = projectMessages(entries, records);
+  const messages = getUIMessages(entries, records);
   expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
   // The assistant messages are addressed by their run; the user turns keep
   // their own entry ids, so nothing collides.
@@ -343,7 +343,7 @@ test('the engine transcript is every message in order, records ignored', async (
   });
 
   const { entries } = await read(s);
-  expect(projectHistory(entries).map((m) => m.role)).toEqual(['user', 'assistant', 'toolResult']);
+  expect(getAgentMessages(entries).map((m) => m.role)).toEqual(['user', 'assistant', 'toolResult']);
   await repo.close();
 });
 
@@ -370,7 +370,7 @@ test('a run left open does not swallow the run that follows it', async () => {
   });
 
   const { entries, records } = await read(s);
-  const messages = projectMessages(entries, records);
+  const messages = getUIMessages(entries, records);
   expect(messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
   // The second run's answer belongs to the second run, not the one left open.
   expect(messages[1].id).toBe('r1');
@@ -402,7 +402,7 @@ test('a fold hides what it covered from the model but not from the reader', asyn
   const { entries, records } = await read(s);
 
   // The model sees the summary in place of everything before the fold.
-  const history = projectHistory(entries);
+  const history = getAgentMessages(entries);
   expect(history[0]).toMatchObject({
     role: 'compactionSummary',
     summary: 'They discussed the earliest thing.',
@@ -410,7 +410,7 @@ test('a fold hides what it covered from the model but not from the reader', asyn
   expect(history.map((m) => m.role)).toEqual(['compactionSummary', 'user', 'assistant']);
 
   // The reader still sees the whole conversation, with the fold as a divider.
-  const messages = projectMessages(entries, records);
+  const messages = getUIMessages(entries, records);
   const divider = messages.find((m) => m.metadata?.kind === 'compaction');
   expect(divider?.parts).toEqual([{ type: 'text', text: 'They discussed the earliest thing.' }]);
   expect(messages.filter((m) => m.role === 'assistant')).toHaveLength(2);
@@ -434,8 +434,8 @@ test('rewinding the branch drops the tail from the conversation but keeps it sto
   await s.moveLane('main', edited?.parentId ?? null);
 
   const { entries, records } = await read(s);
-  expect(projectMessages(entries, records)).toEqual([]);
-  expect(projectHistory(entries)).toEqual([]);
+  expect(getUIMessages(entries, records)).toEqual([]);
+  expect(getAgentMessages(entries)).toEqual([]);
   // Nothing was deleted — the messages are still in the session, off-branch.
   expect((await s.findEntries()).length).toBeGreaterThan(3);
 
@@ -445,7 +445,7 @@ test('rewinding the branch drops the tail from the conversation but keeps it sto
     await s.appendMessage(assistant([{ type: 'text', text: 'a fresh answer' }]));
   });
   const after = await read(s);
-  expect(projectMessages(after.entries, after.records).map((m) => m.role)).toEqual([
+  expect(getUIMessages(after.entries, after.records).map((m) => m.role)).toEqual([
     'user',
     'assistant',
   ]);

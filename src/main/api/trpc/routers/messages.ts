@@ -11,7 +11,7 @@ export const messagesRouter = router({
    */
   listByThread: publicProcedure
     .input(z.object({ threadId: z.string() }))
-    .query(({ input }) => conversations().messagesFor(input.threadId)),
+    .query(({ input }) => conversations().getUIMessagesByThreadID(input.threadId)),
 
   /**
    * Take a thread back to just before one message — what editing an earlier

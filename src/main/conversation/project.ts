@@ -1,9 +1,11 @@
 import {
   type AgentMessage,
   buildSessionContext,
+  type CompactionEntry,
   type Entry,
   type LaneRecord,
   type MessageEntry,
+  type OperationFinishedRecord,
 } from '@earendil-works/pi-agent-core';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
@@ -51,7 +53,7 @@ const isMessage = (entry: Entry): entry is MessageEntry => entry.type === 'messa
 
 /** The runs a session's records describe, in order. */
 function runsOf(records: LaneRecord[]): Run[] {
-  const finished = new Map<string, LaneRecord & { type: 'operation_finished' }>();
+  const finished = new Map<string, OperationFinishedRecord>();
   for (const record of records) {
     if (record.type === 'operation_finished') finished.set(record.runId, record);
   }
@@ -205,14 +207,14 @@ function rowsOf(run: Run, entries: Entry[], records: LaneRecord[]): PiRow[] {
 }
 
 /** A session's conversation, in the shape the renderer consumes. */
-export function projectMessages(entries: Entry[], records: LaneRecord[]): AtriumUIMessage[] {
+export function getUIMessages(entries: Entry[], records: LaneRecord[]): AtriumUIMessage[] {
   const runs = runsOf(records);
   const out: AtriumUIMessage[] = [];
 
   // A fold is shown where it happened, as its own divider; the messages it
   // folded away stay in the list above it.
   const folds = entries.filter((entry) => entry.type === 'compaction');
-  const divider = (entry: Extract<Entry, { type: 'compaction' }>): AtriumUIMessage =>
+  const divider = (entry: CompactionEntry): AtriumUIMessage =>
     ({
       id: entry.id,
       role: 'user',
@@ -263,7 +265,7 @@ export function projectMessages(entries: Entry[], records: LaneRecord[]): Atrium
  * summary is a role pi owns, which never reaches storage or the wire — the
  * reader is handed a divider instead.
  */
-export function projectHistory(entries: Entry[]): AgentMessage[] {
+export function getAgentMessages(entries: Entry[]): AgentMessage[] {
   return buildSessionContext(entries).messages;
 }
 

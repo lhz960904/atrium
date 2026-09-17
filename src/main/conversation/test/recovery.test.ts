@@ -3,7 +3,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { AgentMessage, Entry, Session } from '@earendil-works/pi-agent-core';
+import type { AgentMessage, CustomEntry, Entry, Session } from '@earendil-works/pi-agent-core';
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { InteractionRequest } from '@shared/interactions';
@@ -179,7 +179,7 @@ test('a decision nobody answered is recorded as interrupted, and an answered one
 
   const { entries } = await read(s);
   const settlements = entries.filter(
-    (entry): entry is Extract<Entry, { type: 'custom' }> =>
+    (entry): entry is CustomEntry =>
       entry.type === 'custom' &&
       entry.customType === INTERACTION_ENTRY &&
       (entry.data as { phase: string }).phase === 'resolved',
