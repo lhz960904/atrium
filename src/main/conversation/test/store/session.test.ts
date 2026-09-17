@@ -93,16 +93,17 @@ test('a lane holds one run, and finishing it hands the lane back', async () => {
   await repository.close();
 });
 
-test('closing an interrupted run twice writes one record, not a collision', async () => {
+test('closing a run twice writes one record, not a collision', async () => {
   const { conversation, repository } = await thread();
   await conversation.startRun('r1');
 
-  expect(await conversation.finishInterruptedRun('r1')).toBe(true);
+  expect(await conversation.finishRun('r1', 'completed')).toBe(true);
   expect(await conversation.openRuns()).toEqual([]);
 
-  // The id is derived from the run, and ids are unique across records too, so
-  // an unguarded second pass would throw rather than no-op.
-  expect(await conversation.finishInterruptedRun('r1')).toBe(false);
+  // The process that opened a run and the one that repairs it never both know
+  // what the other did, and the id is derived, so an unguarded second close
+  // would throw rather than no-op.
+  expect(await conversation.finishRun('r1', 'aborted')).toBe(false);
   const finished = (await conversation.records()).filter((r) => r.type === 'operation_finished');
   expect(finished).toHaveLength(1);
   await repository.close();

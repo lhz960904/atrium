@@ -97,28 +97,17 @@ export class ThreadSession {
     });
   }
 
-  /** Close a run's bracket, which is also what releases the lane. */
-  async finishRun(runId: string, outcome: 'completed' | 'aborted' | 'failed'): Promise<void> {
-    await this.session.appendRecord({
-      id: randomUUID(),
-      lane: LANE,
-      type: 'operation_finished',
-      runId,
-      outcome,
-    });
-  }
-
   /**
-   * Close a run that was never closed by the process that opened it.
+   * Close a run's bracket, which is also what releases the lane. Answers
+   * whether this call was the one that closed it.
    *
-   * Asking whether the run already ended is what makes a repair safe to run
-   * twice: ids are unique across entries *and* records, so a second append
-   * under the same id throws rather than being ignored.
+   * Asking first is what lets a repair run twice: a run is closed by the
+   * process that opened it or, when that process died, by a later one, and
+   * neither knows what the other got to do. The id is derived from the run so
+   * that a second close is refused rather than quietly recorded twice — pi
+   * checks ids across entries *and* records, and a duplicate throws.
    */
-  async finishInterruptedRun(
-    runId: string,
-    outcome: 'aborted' | 'failed' = 'aborted',
-  ): Promise<boolean> {
+  async finishRun(runId: string, outcome: 'completed' | 'aborted' | 'failed'): Promise<boolean> {
     const [finished] = await this.session.findRecords({
       type: 'operation_finished',
       runId,
@@ -126,7 +115,7 @@ export class ThreadSession {
     });
     if (finished) return false;
     await this.session.appendRecord({
-      id: `${runId}:recovered`,
+      id: `${runId}:finished`,
       lane: LANE,
       type: 'operation_finished',
       runId,
