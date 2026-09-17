@@ -1,5 +1,5 @@
 import type { Entry, AgentMessage as Message } from '@earendil-works/pi-agent-core';
-import type { AssistantMessage, ToolCall } from '@earendil-works/pi-ai';
+import type { AssistantMessage, ToolCall, ToolResultMessage } from '@earendil-works/pi-ai';
 import type { InteractionOutcome, RunStopReason } from '@shared/interactions';
 import { INTERACTION_ENTRY, type InteractionEntryData } from './project';
 import type { ThreadSession } from './store/session';
@@ -29,23 +29,22 @@ const INTERRUPTED = 'The previous execution was interrupted; the tool outcome is
 const isToolCall = (content: { type: string }): content is ToolCall => content.type === 'toolCall';
 
 /**
- * Pair every tool call in a run with a result. A turn cut short leaves a call
- * whose result never arrived, and the transcript is read back from these
- * entries, so an unpaired one would sit in the conversation looking like it
- * were still running.
+ * A stand-in result for every call in a run that never got one. A turn cut
+ * short leaves a call whose result never arrived, and the transcript is read
+ * back from these entries, so an unpaired one would sit in the conversation
+ * looking like it were still running.
  */
-function sealDanglingToolCalls(messages: Message[]): Message[] {
+function missingResults(messages: Message[]): ToolResultMessage[] {
   const answered = new Set(
-    messages.flatMap((m) => (m.role === 'toolResult' ? [m.toolCallId] : [])),
+    messages.flatMap((message) => (message.role === 'toolResult' ? [message.toolCallId] : [])),
   );
-  const out: Message[] = [];
+  const missing: ToolResultMessage[] = [];
   for (const message of messages) {
-    out.push(message);
     if (message.role !== 'assistant') continue;
     for (const content of (message as AssistantMessage).content) {
       if (!isToolCall(content) || answered.has(content.id)) continue;
       answered.add(content.id);
-      out.push({
+      missing.push({
         role: 'toolResult',
         toolCallId: content.id,
         toolName: content.name,
@@ -55,7 +54,7 @@ function sealDanglingToolCalls(messages: Message[]): Message[] {
       });
     }
   }
-  return out;
+  return missing;
 }
 
 const interactionsOf = (entries: Entry[]): InteractionEntryData[] =>
@@ -108,14 +107,9 @@ export async function recoverInterruptedRun(
   const messages = run.entries.flatMap((entry) =>
     entry.type === 'message' ? [entry.message as Message] : [],
   );
-  const answered = new Set(
-    messages.flatMap((message) => (message.role === 'toolResult' ? [message.toolCallId] : [])),
-  );
 
-  for (const message of sealDanglingToolCalls(messages)) {
-    if (message.role !== 'toolResult' || answered.has(message.toolCallId)) continue;
-    answered.add(message.toolCallId);
-    await conversation.appendInterruptedResult(runId, message.toolCallId, message);
+  for (const result of missingResults(messages)) {
+    await conversation.appendInterruptedResult(runId, result.toolCallId, result);
   }
 
   for (const request of interactions.map((data) => data.request)) {
