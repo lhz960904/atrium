@@ -14,10 +14,15 @@ import type {
 import type { Fold } from '@main/agent/context/compaction';
 import type { Db } from '@main/db';
 import { threads } from '@main/db/schema';
+import type { AtriumUIMessage } from '@shared/chat';
 import type { InteractionOutcome, InteractionRequest, RunStopReason } from '@shared/interactions';
 import { eq } from 'drizzle-orm';
-
-import { INTERACTION_ENTRY, type InteractionEntryData } from '../project';
+import {
+  INTERACTION_ENTRY,
+  type InteractionEntryData,
+  projectHistory,
+  projectMessages,
+} from '../project';
 import { recoverInterruptedRun } from '../recovery';
 
 /** A run's stop reason, kept so a later boot can still name it. */
@@ -339,6 +344,24 @@ export class SessionStore {
     }
     await repair;
     return conversation;
+  }
+
+  /**
+   * A thread's conversation in the shape the renderer consumes. A thread that
+   * has never run has no session yet, which reads as an empty conversation.
+   */
+  async messagesFor(threadId: string): Promise<AtriumUIMessage[]> {
+    const conversation = await this.forThread(threadId);
+    if (!conversation) return [];
+    const [entries, records] = await Promise.all([conversation.entries(), conversation.records()]);
+    return projectMessages(entries, records);
+  }
+
+  /** A thread's transcript as the engine runs it, folded at its latest compaction. */
+  async historyFor(threadId: string): Promise<AgentMessage[]> {
+    const conversation = await this.forThread(threadId);
+    if (!conversation) return [];
+    return projectHistory(await conversation.entries());
   }
 
   /** Drop a thread's conversation. The thread row is the caller's to remove. */

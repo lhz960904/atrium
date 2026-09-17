@@ -2,9 +2,9 @@ import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import { projectHistory } from '@main/conversation/project';
 import { createSessionRecorder, type SessionRecorder } from '@main/conversation/session-recorder';
+import { conversations } from '@main/conversation/store/session';
 import {
   compactThread,
-  openThreadSession,
   resolveThreadWorkspace,
   setThreadTitle,
   touchThread,
@@ -176,7 +176,7 @@ class RunExecution {
         ? getComputerUseHelper()
         : undefined;
 
-    const conversation = await openThreadSession(input.threadId, workspaceRoot);
+    const conversation = await conversations().openForThread(input.threadId, workspaceRoot);
     const recorder = createSessionRecorder({ conversation, runId });
     this.recorder = recorder;
     const prompt = input.userMessage

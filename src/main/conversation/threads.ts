@@ -1,19 +1,17 @@
-import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { Fold } from '@main/agent/context/compaction';
 import type { Db } from '@main/db';
 import { projects, threads } from '@main/db/schema';
-import type { AtriumUIMessage } from '@shared/chat';
 
 import { eq } from 'drizzle-orm';
-import { projectHistory, projectMessages } from './project';
-import { conversations, type ThreadSession } from './store/session';
+import { conversations } from './store/session';
 
 /**
  * The join between the product's threads and the store's sessions.
  *
  * A thread row owns everything the product sorts, pins, archives and marks
- * unread by; the session owns the conversation. They are addressed by id from
- * here and nowhere else, which is what keeps either free to change shape.
+ * unread by; the session owns the conversation. Reading a conversation is the
+ * store's own business — what is left here either belongs to the row, or has to
+ * write to both at once.
  */
 
 /**
@@ -58,39 +56,16 @@ export function setThreadTitle(db: Db, threadId: string, title: string): void {
   db.update(threads).set({ title }).where(eq(threads.id, threadId)).run();
 }
 
-/** The conversation a thread's messages live in, or undefined if it has none yet. */
-export function findThreadSession(threadId: string): Promise<ThreadSession | undefined> {
-  return conversations().forThread(threadId);
-}
-
-/**
- * A thread's conversation in the shape the renderer consumes. A thread that has
- * never run has no session yet, which reads as an empty conversation.
- */
-export async function threadMessages(threadId: string): Promise<AtriumUIMessage[]> {
-  const conversation = await findThreadSession(threadId);
-  if (!conversation) return [];
-  const [entries, records] = await Promise.all([conversation.entries(), conversation.records()]);
-  return projectMessages(entries, records);
-}
-
 /**
  * Record a fold on the thread's conversation. The folded messages stay in the
  * session — only what the model is shown gets shorter, and the reader rebuilds
  * the shorter view from this entry.
  */
 export async function compactThread(db: Db, threadId: string, fold: Fold): Promise<void> {
-  const conversation = await findThreadSession(threadId);
+  const conversation = await conversations().forThread(threadId);
   if (!conversation) return;
   await conversation.appendCompaction(fold);
   touchThread(db, threadId);
-}
-
-/** A thread's transcript as the engine runs it, folded at its latest compaction. */
-export async function threadHistory(threadId: string): Promise<Message[]> {
-  const conversation = await findThreadSession(threadId);
-  if (!conversation) return [];
-  return projectHistory(await conversation.entries());
 }
 
 /**
@@ -102,21 +77,11 @@ export async function threadHistory(threadId: string): Promise<Message[]> {
  * reason a re-run can never half-truncate a thread.
  */
 export async function rewindThread(db: Db, threadId: string, messageId: string): Promise<boolean> {
-  const conversation = await findThreadSession(threadId);
+  const conversation = await conversations().forThread(threadId);
   if (!conversation) return false;
   // Any run still open would be left dangling past the new leaf; the next run
   // closes it, so there is nothing to do here but move the branch.
   if (!(await conversation.rewindTo(messageId))) return false;
   touchThread(db, threadId, { markRead: true });
   return true;
-}
-
-/** Drop a thread's conversation. The thread row is the caller's to remove. */
-export function deleteThreadSession(threadId: string): Promise<void> {
-  return conversations().deleteForThread(threadId);
-}
-
-/** A thread's conversation, created on first use. */
-export function openThreadSession(threadId: string, workspaceRoot: string): Promise<ThreadSession> {
-  return conversations().openForThread(threadId, workspaceRoot);
 }
