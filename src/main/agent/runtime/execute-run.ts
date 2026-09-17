@@ -100,8 +100,22 @@ class RunExecution {
   }
 
   async execute(): Promise<RunResult> {
+    const { runId, signal } = this.opts;
     try {
-      await this.runToEnd();
+      // First on the stream, before anything can await: a reader that replays
+      // from the start always learns which run it is reading.
+      this.opts.emit({ type: 'run_started', runId });
+      signal.throwIfAborted();
+
+      const { session, recorder, workspaceRoot } = await this.open();
+      const prepared = await this.prepare(workspaceRoot, recorder);
+      const history = runnableHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' }));
+      if (getSettings('general.autoGenerateTitle')) this.startTitle(history);
+      const messages = await this.foldForTurn(prepared, history);
+
+      const loop = this.buildLoop(prepared, messages, recorder);
+      await loop.run(signal);
+      this.result = this.settle();
     } catch (error) {
       this.fail(error);
     }
@@ -109,18 +123,31 @@ class RunExecution {
     return { ...this.result, messageId: this.recorder?.messageId };
   }
 
+  /**
+   * What the run amounts to as it stands. A failure the run itself recorded
+   * outranks a stop, because a recording failure during a wait is what stopped
+   * the run in the first place; a stop outranks a failed turn, which the user
+   * asked to abandon. `errorText` is what threw, used only when none of those
+   * already explain the outcome.
+   */
+  private settle(errorText?: string): RunResult {
+    const { runId, pending, signal } = this.opts;
+    if (pending.failure) return { runId, status: 'failed', error: pending.failure.message };
+    if (signal.aborted) return { runId, status: 'aborted' };
+    if (this.recorder?.failure) {
+      return { runId, status: 'failed', error: this.recorder.failure };
+    }
+    return errorText === undefined
+      ? { runId, status: 'completed' }
+      : { runId, status: 'failed', error: errorText };
+  }
+
   /** Keep the original failure when bookkeeping or cleanup fails afterwards. */
   private fail(error: unknown): void {
-    const { runId, pending, signal } = this.opts;
     const errorText = error instanceof Error ? error.message : String(error);
-    log.warn(`run ${runId} failed: ${errorText}`);
+    log.warn(`run ${this.opts.runId} failed: ${errorText}`);
     if (this.result.status === 'failed') return;
-    const failure = pending.failure;
-    this.result = failure
-      ? { runId, status: 'failed', error: failure.message }
-      : signal.aborted
-        ? { runId, status: 'aborted' }
-        : { runId, status: 'failed', error: errorText };
+    this.result = this.settle(errorText);
   }
 
   /** One cleanup step, whose failure must not stop the ones after it. */
@@ -130,33 +157,6 @@ class RunExecution {
     } catch (error) {
       this.fail(error);
     }
-  }
-
-  private async runToEnd(): Promise<void> {
-    const { runId, signal } = this.opts;
-    // First on the stream, before anything can await: a reader that replays from
-    // the start always learns which run it is reading.
-    this.opts.emit({ type: 'run_started', runId });
-    signal.throwIfAborted();
-
-    const { session, recorder, workspaceRoot } = await this.open();
-    const prepared = await this.prepare(workspaceRoot, recorder);
-    const history = runnableHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' }));
-    if (getSettings('general.autoGenerateTitle')) this.startTitle(history);
-    const messages = await this.foldForTurn(prepared, history);
-
-    const loop = this.buildLoop(prepared, messages, recorder);
-    await loop.run(signal);
-
-    // A recording failure during a wait stops the run through its signal, so it
-    // is checked before the signal is read as a cancellation.
-    this.result = this.opts.pending.failure
-      ? { runId, status: 'failed', error: this.opts.pending.failure.message }
-      : signal.aborted
-        ? { runId, status: 'aborted' }
-        : recorder.failure
-          ? { runId, status: 'failed', error: recorder.failure }
-          : { runId, status: 'completed' };
   }
 
   /**
