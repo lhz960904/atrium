@@ -417,6 +417,31 @@ test('a fold hides what it covered from the model but not from the reader', asyn
   await repo.close();
 });
 
+test('a fold the user asked for stays where it happened', async () => {
+  const { repo, session: s } = await session();
+  await run(s, 'r1', async (s) => {
+    await s.appendMessage(user('the first question'));
+    await s.appendMessage(assistant([{ type: 'text', text: 'an early answer' }]));
+  });
+  // Compaction the user asks for runs while the thread is idle, so it lands
+  // between two runs and belongs to neither.
+  await s.appendEntry(
+    { id: 'fold-1', type: 'compaction', summary: 'a summary', retainedTail: [], tokensBefore: 10 },
+    'main',
+  );
+  await run(s, 'r2', async (s) => {
+    await s.appendMessage(user('the second question'));
+    await s.appendMessage(assistant([{ type: 'text', text: 'a later answer' }]));
+  });
+
+  const { entries, records } = await read(s);
+  const order = getUIMessages(entries, records).map((message) =>
+    message.metadata?.kind === 'compaction' ? 'fold' : message.role,
+  );
+  expect(order).toEqual(['user', 'assistant', 'fold', 'user', 'assistant']);
+  await repo.close();
+});
+
 test('rewinding the branch drops the tail from the conversation but keeps it stored', async () => {
   const { repo, session: s } = await session();
   let editedId = '';

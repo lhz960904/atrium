@@ -1,7 +1,6 @@
 import {
   type AgentMessage,
   buildSessionContext,
-  type CompactionEntry,
   type Entry,
   type LaneRecord,
   type MessageEntry,
@@ -161,62 +160,63 @@ function toolStatesOf(entries: Entry[]): ToolStateExtras {
   return states;
 }
 
-/** A session's conversation, in the shape the renderer consumes. */
+/**
+ * A session's conversation, in the shape the renderer consumes.
+ *
+ * Entries already arrive in the order they happened, so this walks them once
+ * and emits what each one stands for. A run is the only thing that spans
+ * several: its turns and their results fold into a single message, emitted
+ * where the first of them landed, so a fold between two runs stays between
+ * them rather than being appended after everything else.
+ */
 export function getUIMessages(entries: Entry[], records: LaneRecord[]): AtriumUIMessage[] {
   const runs = runsOf(records);
   const out: AtriumUIMessage[] = [];
+  const folded = new Set<string>();
 
-  // A fold is shown where it happened, as its own divider; the messages it
-  // folded away stay in the list above it.
-  const folds = entries.filter((entry) => entry.type === 'compaction');
-  const divider = (entry: CompactionEntry): AtriumUIMessage =>
-    ({
-      id: entry.id,
-      role: 'user',
-      parts: [{ type: 'text', text: entry.summary }],
-      metadata: { kind: 'compaction', createdAt: entry.timestamp },
-    }) as AtriumUIMessage;
-
-  for (const run of runs) {
-    const own = entries.filter((entry) => entry.seq > run.startSeq && entry.seq < run.endSeq);
-    // The turn the user opened the run with is its own message, not part of the
-    // assistant's; everything the model produced folds into one.
-    for (const entry of own) {
-      if (isMessage(entry) && entry.message.role === 'user') {
-        out.push(
-          mergeUserMessage(entry.id, entry.message as UserMessage, { createdAt: entry.timestamp }),
-        );
-      }
+  for (const entry of entries) {
+    // A fold is shown where it happened, as its own divider; the messages it
+    // folded away stay in the list above it.
+    if (entry.type === 'compaction') {
+      out.push({
+        id: entry.id,
+        role: 'user',
+        parts: [{ type: 'text', text: entry.summary }],
+        metadata: { kind: 'compaction', createdAt: entry.timestamp },
+      } as AtriumUIMessage);
+      continue;
     }
+    if (!isMessage(entry)) continue;
+
+    // The turn the user opened a run with is its own message, not part of the
+    // assistant's; everything the model produced folds into one.
+    const message = entry.message as Message;
+    if (message.role === 'user') {
+      out.push(mergeUserMessage(entry.id, message as UserMessage, { createdAt: entry.timestamp }));
+      continue;
+    }
+
+    const run = runs.find((each) => entry.seq > each.startSeq && entry.seq < each.endSeq);
+    if (!run || folded.has(run.id)) continue;
+    folded.add(run.id);
+
+    const own = entries.filter((each) => each.seq > run.startSeq && each.seq < run.endSeq);
     const produced = own
       .filter(isMessage)
-      .map((entry) => entry.message as Message)
-      .filter(
-        (message): message is AssistantMessage | ToolResultMessage => message.role !== 'user',
-      );
-    if (produced.length > 0) {
-      out.push(
-        mergeAssistantMessage(run.id, {
-          messages: produced,
-          metadata: {
-            createdAt: run.startedAt,
-            ...(run.finishedAt === undefined ? {} : { durationMs: run.finishedAt - run.startedAt }),
-            ...modelOf(produced),
-            ...usageOf(records, run.id),
-          },
-          toolStates: toolStatesOf(own),
-        }),
-      );
-    }
-    for (const fold of folds) {
-      if (fold.seq > run.startSeq && fold.seq < run.endSeq) out.push(divider(fold));
-    }
-  }
-  // A fold the user asked for happens between runs, so it belongs to none.
-  for (const fold of folds) {
-    if (!runs.some((run) => fold.seq > run.startSeq && fold.seq < run.endSeq)) {
-      out.push(divider(fold));
-    }
+      .map((each) => each.message as Message)
+      .filter((each): each is AssistantMessage | ToolResultMessage => each.role !== 'user');
+    out.push(
+      mergeAssistantMessage(run.id, {
+        messages: produced,
+        metadata: {
+          createdAt: run.startedAt,
+          ...(run.finishedAt === undefined ? {} : { durationMs: run.finishedAt - run.startedAt }),
+          ...modelOf(produced),
+          ...usageOf(records, run.id),
+        },
+        toolStates: toolStatesOf(own),
+      }),
+    );
   }
 
   return out;
