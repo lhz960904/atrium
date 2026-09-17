@@ -18,6 +18,7 @@ import type { InteractionOutcome, InteractionRequest, RunStopReason } from '@sha
 import { eq } from 'drizzle-orm';
 
 import { INTERACTION_ENTRY, type InteractionEntryData } from '../project';
+import { recoverInterruptedRun } from '../recovery';
 
 /** A run's stop reason, kept so a later boot can still name it. */
 export const RUN_STOP_ENTRY = 'atrium.run_stop';
@@ -270,6 +271,16 @@ export class ThreadSession {
  * what leaves either free to change shape.
  */
 export class SessionStore {
+  /**
+   * The repair each session has already had, by session id.
+   *
+   * The promise rather than a flag, so two opens racing for the same session
+   * await one repair instead of both starting one. Once per process is also
+   * what keeps a repair away from a live run: a run opens its own conversation
+   * before it starts, so by the time it holds the lane this has already run.
+   */
+  private readonly repairs = new Map<string, Promise<void>>();
+
   constructor(
     private readonly db: Db,
     private readonly repository: SqliteSessionRepository,
@@ -283,7 +294,7 @@ export class SessionStore {
     // The row can outlive the session it names — a store rebuilt from scratch,
     // say. Treating that as "no conversation yet" keeps the thread openable.
     if (!metadata) return undefined;
-    return new ThreadSession(await this.repository.open(metadata));
+    return this.repaired(sessionId, await this.repository.open(metadata));
   }
 
   /**
@@ -298,7 +309,36 @@ export class SessionStore {
     const session = await this.repository.create({ cwd: workspaceRoot });
     const { id } = await session.getMetadata();
     this.db.update(threads).set({ sessionId: id }).where(eq(threads.id, threadId)).run();
+    // A session created here has nothing to repair, and saying so is what keeps
+    // a later read from treating the run about to open as something to close.
+    this.repairs.set(id, Promise.resolve());
     return new ThreadSession(session);
+  }
+
+  /**
+   * A conversation with whatever the last process left half-written closed off.
+   *
+   * Repairing when the session is opened rather than when the next run starts
+   * is what lets a thread nobody has written to since the crash still read
+   * correctly: a call with no result would otherwise sit in the transcript
+   * looking like it were still running.
+   */
+  private async repaired(
+    sessionId: string,
+    session: Session<SqliteSessionMetadata>,
+  ): Promise<ThreadSession> {
+    const conversation = new ThreadSession(session);
+    let repair = this.repairs.get(sessionId);
+    if (!repair) {
+      repair = (async () => {
+        for (const open of await conversation.openRuns()) {
+          await recoverInterruptedRun(conversation, open.id, 'interrupted');
+        }
+      })();
+      this.repairs.set(sessionId, repair);
+    }
+    await repair;
+    return conversation;
   }
 
   /** Drop a thread's conversation. The thread row is the caller's to remove. */

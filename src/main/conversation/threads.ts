@@ -1,13 +1,11 @@
-import type { Entry, AgentMessage as Message } from '@earendil-works/pi-agent-core';
+import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { Fold } from '@main/agent/context/compaction';
-import { sealDanglingToolCalls } from '@main/conversation/history';
 import type { Db } from '@main/db';
 import { projects, threads } from '@main/db/schema';
 import type { AtriumUIMessage } from '@shared/chat';
 
 import { eq } from 'drizzle-orm';
 import { projectHistory, projectMessages } from './project';
-import { interruptionTextFromEntries } from './recovery';
 import { conversations, type ThreadSession } from './store/session';
 
 /**
@@ -92,20 +90,7 @@ export async function compactThread(db: Db, threadId: string, fold: Fold): Promi
 export async function threadHistory(threadId: string): Promise<Message[]> {
   const conversation = await findThreadSession(threadId);
   if (!conversation) return [];
-  return runnableHistory(await conversation.entries());
-}
-
-/**
- * The transcript with every unanswered tool call closed.
- *
- * A run cut off mid-tool — a crash, a kill — leaves a call whose result never
- * arrived, and a provider rejects any later request whose history holds one, so
- * one interrupted turn would wedge the thread for good.
- */
-export function runnableHistory(entries: Entry[]): Message[] {
-  return sealDanglingToolCalls(projectHistory(entries), (call) =>
-    interruptionTextFromEntries(entries, call),
-  );
+  return projectHistory(await conversation.entries());
 }
 
 /**

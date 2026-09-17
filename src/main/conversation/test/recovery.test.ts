@@ -189,13 +189,16 @@ test('a decision nobody answered is recorded as interrupted, and an answered one
     (entry) => (entry.data as { outcome: { kind: string } }).outcome.kind,
   );
   expect(outcomes.sort()).toEqual(['denied', 'interrupted']);
-  // The call the user denied says so; the one nobody answered says it never ran.
+  // Which decision it was is carried by the settlement above, and that is what
+  // the card reads; the stand-in result only has to say the call was cut off.
   const denied = resultsFor(entries, 'c2')[0];
   const deniedText =
     denied?.type === 'message' && denied.message.role === 'toolResult'
       ? denied.message.content
       : undefined;
-  expect(deniedText).toMatchObject([{ type: 'text', text: expect.stringContaining('denied') }]);
+  expect(deniedText).toMatchObject([
+    { type: 'text', text: expect.stringContaining('interrupted') },
+  ]);
   await repo.close();
 });
 

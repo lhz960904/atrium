@@ -189,6 +189,59 @@ test('a thread gets its conversation on first use and the same one after', async
   await repository.close();
 });
 
+const calling = (id: string): AgentMessage =>
+  ({
+    role: 'assistant',
+    content: [{ type: 'toolCall', id, name: 'bash', arguments: {} }],
+    api: 'anthropic-messages',
+    provider: 'anthropic',
+    model: 'claude-x',
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: 'toolUse',
+    timestamp: 2,
+  }) as AgentMessage;
+
+test('opening a conversation closes what the process before it left open', async () => {
+  const { db, store, addThread, repository } = fixture();
+  addThread('t1');
+  const lost = await store.openForThread('t1', '/tmp/work');
+  await lost.startRun('r1');
+  await lost.appendTurn(calling('c1'));
+  // The process dies here: the call never got its result, and nothing closed
+  // the run. Until it is repaired the card reads as still running.
+
+  const nextProcess = new SessionStore(db, repository);
+  const reopened = await nextProcess.forThread('t1');
+
+  expect(await reopened?.openRuns()).toEqual([]);
+  const results = (await reopened?.entries())?.filter(
+    (entry) => entry.type === 'message' && entry.message.role === 'toolResult',
+  );
+  expect(results).toHaveLength(1);
+  await repository.close();
+});
+
+test('a run the store is still holding is never closed underneath it', async () => {
+  const { store, addThread, repository } = fixture();
+  addThread('t1');
+  // Opening is what repairs, and a run opens its conversation before it starts,
+  // so a later read must not mistake the live run for something to clean up.
+  const conversation = await store.openForThread('t1', '/tmp/work');
+  await conversation.startRun('r1');
+
+  const reader = await store.forThread('t1');
+
+  expect((await reader?.openRuns())?.map((run) => run.id)).toEqual(['r1']);
+  await repository.close();
+});
+
 test('a thread row naming a session the store lost reads as no conversation', async () => {
   const { db, store, addThread, repository } = fixture();
   addThread('t1');
