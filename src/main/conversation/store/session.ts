@@ -1,0 +1,331 @@
+import { randomUUID } from 'node:crypto';
+import type {
+  AgentMessage,
+  Entry,
+  LaneRecord,
+  OperationStartedRecord,
+  Session,
+} from '@earendil-works/pi-agent-core';
+import type { AssistantMessage } from '@earendil-works/pi-ai';
+import type {
+  SqliteSessionMetadata,
+  SqliteSessionRepository,
+} from '@earendil-works/pi-session-backend-sqlite-node';
+import type { Fold } from '@main/agent/context/compaction';
+import type { Db } from '@main/db';
+import { threads } from '@main/db/schema';
+import type { InteractionOutcome, InteractionRequest, RunStopReason } from '@shared/interactions';
+import { eq } from 'drizzle-orm';
+
+import { INTERACTION_ENTRY, type InteractionEntryData } from '../project';
+import { RUN_STOP_ENTRY, type RunStopEntryData } from '../recovery';
+
+/**
+ * The one place that knows how a conversation is stored.
+ *
+ * Every caller above this line speaks in intents — the run started, this turn
+ * landed, the user was asked something — and never in entries, records, lanes
+ * or durability. That is what keeps the store's shape free to change: pi's
+ * session API is the part of our dependency most likely to move under us, and
+ * a rewrite should be an edit to this file rather than a search across four.
+ */
+
+/**
+ * A conversation runs on one lane. Branching is pi's to offer and ours to
+ * ignore: a thread is a single line the user can rewind, never two at once.
+ */
+const LANE = 'main';
+
+/**
+ * What the store will accept: no `undefined`, no class instances, no non-finite
+ * numbers. Our messages routinely carry all three — a tool's `details` is
+ * whatever that tool returned — and one rejected append fails the whole turn.
+ * Serializing and parsing back is exactly the normalization that check asks
+ * for, so every write goes through it rather than trusting its caller.
+ */
+function durable<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/** A single thread's conversation, and every way this app writes to one. */
+export class ThreadSession {
+  constructor(private readonly session: Session<SqliteSessionMetadata>) {}
+
+  metadata(): Promise<SqliteSessionMetadata> {
+    return this.session.getMetadata();
+  }
+
+  entries(): Promise<Entry[]> {
+    return this.session.findEntriesOnBranch({ order: 'oldestFirst' });
+  }
+
+  records(): Promise<LaneRecord[]> {
+    return this.session.findRecords({ order: 'oldestFirst' });
+  }
+
+  entry(id: string): Promise<Entry | undefined> {
+    return this.session.getEntry(id);
+  }
+
+  /** Runs whose bracket was never closed, newest lane state first. */
+  openRuns(): Promise<OperationStartedRecord[]> {
+    return this.session.findOpenOperations(LANE);
+  }
+
+  async hasRun(runId: string): Promise<boolean> {
+    const [started] = await this.session.findRecords({
+      type: 'operation_started',
+      runId,
+      limit: 1,
+    });
+    return started !== undefined;
+  }
+
+  /**
+   * Open a run's bracket. It is what makes the run addressable when the session
+   * is read back, and an unfinished one is how a later boot knows the run never
+   * got to end. A lane holds one at a time, so this throws while another is
+   * open — the caller closes it first.
+   */
+  async startRun(runId: string): Promise<void> {
+    await this.session.appendRecord({
+      id: runId,
+      lane: LANE,
+      type: 'operation_started',
+      sourceLeafId: await this.session.getLeafId(),
+      intent: { kind: 'run', originalPrompt: [], initialMessages: [] },
+    });
+  }
+
+  /** Close a run's bracket, which is also what releases the lane. */
+  async finishRun(runId: string, outcome: 'completed' | 'aborted' | 'failed'): Promise<void> {
+    await this.session.appendRecord({
+      id: randomUUID(),
+      lane: LANE,
+      type: 'operation_finished',
+      runId,
+      outcome,
+    });
+  }
+
+  /**
+   * Close a run that was never closed by the process that opened it.
+   *
+   * Asking whether the run already ended is what makes a repair safe to run
+   * twice: ids are unique across entries *and* records, so a second append
+   * under the same id throws rather than being ignored.
+   */
+  async finishInterruptedRun(
+    runId: string,
+    outcome: 'aborted' | 'failed' = 'aborted',
+  ): Promise<boolean> {
+    const [finished] = await this.session.findRecords({
+      type: 'operation_finished',
+      runId,
+      limit: 1,
+    });
+    if (finished) return false;
+    await this.session.appendRecord({
+      id: `${runId}:recovered`,
+      lane: LANE,
+      type: 'operation_finished',
+      runId,
+      outcome,
+    });
+    return true;
+  }
+
+  /**
+   * The turn that opened a run, stored under the id its author already gave it:
+   * the live view addresses the message by it, and editing that message later
+   * has to find the entry it became.
+   */
+  async appendPrompt(id: string, message: AgentMessage): Promise<void> {
+    await this.session.appendEntry({ id, type: 'message', message: durable(message) }, LANE);
+  }
+
+  /** A finished turn. Returns the entry id its usage record is keyed to. */
+  appendTurn(message: AgentMessage): Promise<string> {
+    return this.session.appendMessage(durable(message));
+  }
+
+  appendToolResult(message: AgentMessage): Promise<string> {
+    return this.session.appendMessage(durable(message));
+  }
+
+  /**
+   * A tool result standing in for one that never arrived. The stable id makes a
+   * half-finished repair resumable: the store rejects a duplicate outright, so
+   * the check is what makes a second pass safe.
+   */
+  async appendInterruptedResult(
+    runId: string,
+    toolCallId: string,
+    message: AgentMessage,
+  ): Promise<boolean> {
+    const id = `${runId}:interrupted:${toolCallId}`;
+    if (await this.session.getEntry(id)) return false;
+    await this.session.appendEntry({ id, type: 'message', message: durable(message) }, LANE);
+    return true;
+  }
+
+  async recordUsage(entry: {
+    runId: string;
+    entryId: string;
+    attempt: number;
+    stopReason: AssistantMessage['stopReason'];
+    usage: AssistantMessage['usage'];
+  }): Promise<void> {
+    await this.session.appendRecord({
+      id: randomUUID(),
+      lane: LANE,
+      type: 'usage',
+      cause: 'assistant',
+      runId: entry.runId,
+      entryId: entry.entryId,
+      attempt: entry.attempt,
+      // A turn still streaming has no stop reason the record's enum admits.
+      stopReason: entry.stopReason === 'pending' ? 'stop' : entry.stopReason,
+      usage: durable(entry.usage),
+    });
+  }
+
+  /** pi has no state for "waiting on the user", so it rides in entries of ours. */
+  async recordInteractionRequested(request: InteractionRequest): Promise<void> {
+    await this.appendInteraction(`${request.id}:requested`, { phase: 'requested', request });
+  }
+
+  async recordInteractionResolved(
+    request: InteractionRequest,
+    outcome: InteractionOutcome,
+  ): Promise<void> {
+    await this.appendInteraction(`${request.id}:resolved`, {
+      phase: 'resolved',
+      request,
+      outcome,
+    });
+  }
+
+  /** Settle a request the run ended without answering. */
+  async settleInteraction(
+    request: InteractionRequest,
+    outcome: InteractionOutcome,
+  ): Promise<boolean> {
+    const id = `${request.id}:resolved`;
+    if (await this.session.getEntry(id)) return false;
+    await this.appendInteraction(id, { phase: 'resolved', request, outcome });
+    return true;
+  }
+
+  /** Why a run stopped, kept so a later boot can still name it. */
+  async recordRunStop(runId: string, reason: RunStopReason): Promise<void> {
+    await this.session.appendEntry(
+      {
+        id: `${runId}:stopped`,
+        type: 'custom',
+        customType: RUN_STOP_ENTRY,
+        data: durable({ runId, reason } satisfies RunStopEntryData),
+      },
+      LANE,
+    );
+  }
+
+  /**
+   * Record a fold. The folded messages stay in the session — only what the
+   * model is shown gets shorter, and the reader rebuilds the shorter view from
+   * this entry.
+   */
+  async appendCompaction(fold: Fold): Promise<void> {
+    await this.session.appendEntry(
+      {
+        id: randomUUID(),
+        type: 'compaction',
+        summary: fold.summary,
+        retainedTail: durable(fold.retainedTail),
+        tokensBefore: fold.tokensBefore,
+      },
+      LANE,
+    );
+  }
+
+  /**
+   * Take the conversation back to just before one entry. Nothing is deleted:
+   * the branch moves and the messages after it stay off to one side, which is
+   * why a re-run can never half-truncate a thread.
+   */
+  async rewindTo(entryId: string): Promise<boolean> {
+    const entry = await this.session.getEntry(entryId);
+    if (!entry) return false;
+    await this.session.moveLane(LANE, entry.parentId);
+    return true;
+  }
+
+  private async appendInteraction(id: string, data: InteractionEntryData): Promise<void> {
+    await this.session.appendEntry(
+      { id, type: 'custom', customType: INTERACTION_ENTRY, data: durable(data) },
+      LANE,
+    );
+  }
+}
+
+/**
+ * The app's conversations, addressed by thread.
+ *
+ * A thread row owns what the product sorts, pins and archives by; the session
+ * owns the conversation. They are joined by id here and nowhere else, which is
+ * what leaves either free to change shape.
+ */
+export class SessionStore {
+  constructor(
+    private readonly db: Db,
+    private readonly repository: SqliteSessionRepository,
+  ) {}
+
+  /** A thread's conversation, or undefined while it has never run. */
+  async forThread(threadId: string): Promise<ThreadSession | undefined> {
+    const sessionId = this.sessionIdOf(threadId);
+    if (!sessionId) return undefined;
+    const metadata = await this.metadataOf(sessionId);
+    // The row can outlive the session it names — a store rebuilt from scratch,
+    // say. Treating that as "no conversation yet" keeps the thread openable.
+    if (!metadata) return undefined;
+    return new ThreadSession(await this.repository.open(metadata));
+  }
+
+  /**
+   * A thread's conversation, created on first use. Creating it with the first
+   * turn rather than with the thread keeps a thread nobody wrote to free, and
+   * means the workspace it records is the one the turn actually ran in.
+   */
+  async openForThread(threadId: string, workspaceRoot: string): Promise<ThreadSession> {
+    const existing = await this.forThread(threadId);
+    if (existing) return existing;
+
+    const session = await this.repository.create({ cwd: workspaceRoot });
+    const { id } = await session.getMetadata();
+    this.db.update(threads).set({ sessionId: id }).where(eq(threads.id, threadId)).run();
+    return new ThreadSession(session);
+  }
+
+  /** Drop a thread's conversation. The thread row is the caller's to remove. */
+  async deleteForThread(threadId: string): Promise<void> {
+    const sessionId = this.sessionIdOf(threadId);
+    if (!sessionId) return;
+    const metadata = await this.metadataOf(sessionId);
+    if (metadata) await this.repository.delete(metadata);
+  }
+
+  private sessionIdOf(threadId: string): string | undefined {
+    const row = this.db
+      .select({ sessionId: threads.sessionId })
+      .from(threads)
+      .where(eq(threads.id, threadId))
+      .get();
+    return row?.sessionId ?? undefined;
+  }
+
+  private async metadataOf(sessionId: string): Promise<SqliteSessionMetadata | undefined> {
+    const sessions = await this.repository.list();
+    return sessions.find((session) => session.id === sessionId);
+  }
+}
