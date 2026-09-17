@@ -29,7 +29,12 @@ test('the schema advertises the scope default and the known categories', () => {
 test('an omitted scope still resolves to the project dir', async () => {
   // the schema's default is advisory: the engine validates but never fills it in
   const base = await tmp();
-  mock.module('electron', () => ({ app: { getPath: () => base } }));
+  // Bun caches a module mock's export shape for the whole process, so a partial
+  // electron here removes exports the suites that follow still import.
+  mock.module('electron', () => ({
+    app: { getPath: () => base },
+    shell: { openExternal: () => undefined },
+  }));
   const t = memoryTool({ workspaceRoot: '/ws/proj' } as ToolCtx);
   await runTool(t, { command: 'write', name: 'N', description: 'd', type: 'project', body: 'b' });
   expect(await readdir(join(base, 'memory', 'projects'))).toEqual(['^ws^proj']);
