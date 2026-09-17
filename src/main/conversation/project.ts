@@ -9,13 +9,14 @@ import {
 } from '@earendil-works/pi-agent-core';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
-import type { AssistantMessage, Message, ToolCall } from '@shared/protocol';
-import {
-  mergeAssistantMessage,
-  mergeUserMessage,
-  type PiRow,
-  type ToolStateExtras,
-} from './ui-messages';
+import type {
+  AssistantMessage,
+  Message,
+  ToolCall,
+  ToolResultMessage,
+  UserMessage,
+} from '@shared/protocol';
+import { mergeAssistantMessage, mergeUserMessage, type ToolStateExtras } from './ui-messages';
 
 /**
  * A session as the rest of the app reads it.
@@ -160,52 +161,6 @@ function toolStatesOf(entries: Entry[]): ToolStateExtras {
   return states;
 }
 
-/**
- * The rows one run's entries stand for. Assistant turns keep the
- * `<runId>:<turn>` key the renderer folds them by; a tool result is keyed by
- * the call it answers, which is how the merge pairs the two.
- */
-function rowsOf(run: Run, entries: Entry[], records: LaneRecord[]): PiRow[] {
-  const messages = entries.filter(isMessage).map((entry) => entry.message as Message);
-  const answered = messages.filter((m) => m.role === 'assistant');
-  const metadata: Record<string, unknown> = {
-    createdAt: run.startedAt,
-    ...(run.finishedAt === undefined ? {} : { durationMs: run.finishedAt - run.startedAt }),
-    ...modelOf(messages),
-    ...usageOf(records, run.id),
-  };
-  const toolStates = toolStatesOf(entries);
-  if (Object.keys(toolStates).length > 0) metadata.toolStates = toolStates;
-
-  const rows: PiRow[] = [];
-  let turn = 0;
-  for (const message of messages) {
-    if (message.role === 'assistant') {
-      rows.push({
-        id: `${run.id}:${turn}`,
-        runId: run.id,
-        role: 'assistant',
-        message: message as PiRow['message'],
-        // Run-level bookkeeping rides on the first row, as it always has.
-        metadata: turn === 0 ? metadata : null,
-      });
-      turn++;
-    } else if (message.role === 'toolResult') {
-      rows.push({
-        id: message.toolCallId,
-        runId: run.id,
-        role: 'toolResult',
-        message: message as PiRow['message'],
-        metadata: null,
-      });
-    }
-  }
-  // A run whose first turn never landed still needs somewhere to carry its
-  // metadata, or the card loses its timing and cost.
-  if (answered.length === 0 && rows.length > 0) rows[0].metadata = metadata;
-  return rows;
-}
-
 /** A session's conversation, in the shape the renderer consumes. */
 export function getUIMessages(entries: Entry[], records: LaneRecord[]): AtriumUIMessage[] {
   const runs = runsOf(records);
@@ -229,19 +184,30 @@ export function getUIMessages(entries: Entry[], records: LaneRecord[]): AtriumUI
     for (const entry of own) {
       if (isMessage(entry) && entry.message.role === 'user') {
         out.push(
-          mergeUserMessage({
-            id: entry.id,
-            runId: entry.id,
-            role: 'user',
-            message: entry.message as PiRow['message'],
-            metadata: { createdAt: entry.timestamp },
-          }),
+          mergeUserMessage(entry.id, entry.message as UserMessage, { createdAt: entry.timestamp }),
         );
       }
     }
-    const produced = own.filter((entry) => !(isMessage(entry) && entry.message.role === 'user'));
-    const rows = rowsOf(run, produced, records);
-    if (rows.length > 0) out.push(mergeAssistantMessage(run.id, rows));
+    const produced = own
+      .filter(isMessage)
+      .map((entry) => entry.message as Message)
+      .filter(
+        (message): message is AssistantMessage | ToolResultMessage => message.role !== 'user',
+      );
+    if (produced.length > 0) {
+      out.push(
+        mergeAssistantMessage(run.id, {
+          messages: produced,
+          metadata: {
+            createdAt: run.startedAt,
+            ...(run.finishedAt === undefined ? {} : { durationMs: run.finishedAt - run.startedAt }),
+            ...modelOf(produced),
+            ...usageOf(records, run.id),
+          },
+          toolStates: toolStatesOf(own),
+        }),
+      );
+    }
     for (const fold of folds) {
       if (fold.seq > run.startSeq && fold.seq < run.endSeq) out.push(divider(fold));
     }

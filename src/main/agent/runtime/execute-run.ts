@@ -180,7 +180,7 @@ class RunExecution {
     const recorder = createSessionRecorder({ conversation, runId });
     this.recorder = recorder;
     const prompt = input.userMessage
-      ? { id: input.userMessage.id, message: splitUserMessage(input.userMessage).message }
+      ? { id: input.userMessage.id, message: splitUserMessage(input.userMessage) }
       : undefined;
     await recorder.begin(prompt);
     touchThread(db, input.threadId, { markRead: prompt !== undefined });
