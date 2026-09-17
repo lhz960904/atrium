@@ -8,8 +8,8 @@ import { cleanupRuntime, deferred, runtimeFixture } from './runtime-fixture';
 afterEach(cleanupRuntime);
 
 const { executeRun } = await import('../execute-run');
-const { conversations } = await import('@main/conversation/store/session');
-const { ThreadSession } = await import('@main/conversation/store/session');
+const { conversations, ThreadSession } = await import('@main/conversation/store/session');
+const { INTERACTION_ENTRY } = await import('@main/conversation/project');
 const { LocalSandbox } = await import('../../sandbox');
 const computer = await import('@main/platform/computer-use');
 const tools = await import('../../tools/registry');
@@ -199,7 +199,7 @@ test('an answered clarification is the single real result of one operation', asy
     },
   });
   expect(
-    entries.filter((entry) => entry.type === 'custom' && entry.customType === 'atrium.interaction'),
+    entries.filter((entry) => entry.type === 'custom' && entry.customType === INTERACTION_ENTRY),
   ).toHaveLength(2);
   expect(events.filter((event) => event.type === 'interaction_resolved')).toHaveLength(1);
 });

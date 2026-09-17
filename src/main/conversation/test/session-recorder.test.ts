@@ -13,7 +13,7 @@ import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { InteractionRequest } from '@shared/interactions';
 
-import { projectHistory, projectMessages } from '../project';
+import { INTERACTION_ENTRY, projectHistory, projectMessages } from '../project';
 import { createSessionRecorder } from '../session-recorder';
 import { ThreadSession } from '../store/session';
 import { sessionSqlite } from '../store/sqlite-driver';
@@ -276,7 +276,7 @@ test('an approval is recorded once when asked and once when decided', async () =
   await recorder.interactionResolved(asked, { kind: 'denied', reason: 'not now' });
   ({ entries, records } = await read(s));
   expect(
-    entries.filter((entry) => entry.type === 'custom' && entry.customType === 'atrium.interaction'),
+    entries.filter((entry) => entry.type === 'custom' && entry.customType === INTERACTION_ENTRY),
   ).toHaveLength(2);
   expect(card(projectMessages(entries, records)[1].parts)).toMatchObject({
     state: 'output-denied',
