@@ -235,8 +235,32 @@ export class RunAssembler {
         }
       }
     });
+    this.countUsage(message);
     // A run the user stopped ends aborted; only a provider error is a failure to report.
     if (message.stopReason === 'error' && message.errorMessage) this.failure = message.errorMessage;
+  }
+
+  /**
+   * The run's usage, summed from the turns as they land. Every turn carries its
+   * own, so the totals are derived here rather than sent again: this mirrors
+   * what `usageOf` rebuilds from the stored usage records, so what a live run
+   * shows and what reopening the thread shows come out the same.
+   */
+  private countUsage(message: AssistantMessage): void {
+    const { usage } = message;
+    if (!usage) return;
+    const add = (key: string, value: number) =>
+      ((this.metadata[key] as number | undefined) ?? 0) + value;
+    this.metadata.providerId = message.provider;
+    this.metadata.modelId = message.model;
+    this.metadata.inputTokens = add('inputTokens', usage.input);
+    this.metadata.outputTokens = add('outputTokens', usage.output);
+    this.metadata.cacheReadTokens = add('cacheReadTokens', usage.cacheRead);
+    this.metadata.cacheCreationTokens = add('cacheCreationTokens', usage.cacheWrite);
+    this.metadata.totalTokens = add('totalTokens', usage.totalTokens);
+    // The prompt at the end of the latest turn, which is compaction's base.
+    this.metadata.contextTokens =
+      usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
   }
 
   private applyRequest(request: InteractionRequest): void {

@@ -342,6 +342,11 @@ class RunExecution {
     this.opts.emit({ type: 'run_finished', ...toRunCompletion(this.result, signal.reason) });
   }
 
+  /**
+   * What the reader cannot work out for itself. Token counts and the model ride
+   * on every turn it already receives, so only the run's own timing is sent;
+   * the ledger below is a separate concern from what the message displays.
+   */
   private reportUsage(): void {
     const { db, input, model, runId } = this.opts;
     if (!this.recorder) return;
@@ -358,12 +363,7 @@ class RunExecution {
     this.opts.emit({
       type: 'notice',
       name: 'message-metadata',
-      payload: {
-        createdAt: this.openedAt,
-        durationMs: Date.now() - this.openedAt,
-        contextTokens: this.recorder.contextTokens,
-        ...usage,
-      },
+      payload: { createdAt: this.openedAt, durationMs: Date.now() - this.openedAt },
     });
     if (this.recorder.wrote) {
       recordUsage(

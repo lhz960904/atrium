@@ -340,10 +340,37 @@ describe('run envelope', () => {
       ...open(),
       { type: 'notice', name: 'message-metadata', payload: { createdAt: 111 } },
       ...text(0, 'hi'),
-      { type: 'notice', name: 'message-metadata', payload: { durationMs: 5000, totalTokens: 9 } },
+      { type: 'notice', name: 'message-metadata', payload: { durationMs: 5000 } },
       ...close([{ type: 'text', text: 'hi' }]),
     ]);
-    expect(message?.metadata).toMatchObject({ createdAt: 111, durationMs: 5000, totalTokens: 9 });
+    expect(message?.metadata).toMatchObject({ createdAt: 111, durationMs: 5000 });
+  });
+
+  test('usage is summed from the turns, not sent alongside them', () => {
+    const turn = (input: number, output: number, cacheRead: number, total: number) => ({
+      ...assistant([]),
+      usage: { ...usage(), input, output, cacheRead, totalTokens: total },
+    });
+    const assembler = new RunAssembler();
+    for (const event of [
+      ...open(),
+      { type: 'message_end', message: turn(10, 2, 1, 13) },
+      { type: 'message_start', message: assistant([]) },
+      { type: 'message_end', message: turn(20, 3, 4, 27) },
+    ] as AgentSessionEvent[]) {
+      assembler.apply(event);
+    }
+    // The same totals `usageOf` rebuilds from the stored usage records.
+    expect(assembler.snapshot().message?.metadata).toMatchObject({
+      providerId: 'p',
+      modelId: 'm',
+      inputTokens: 30,
+      outputTokens: 5,
+      cacheReadTokens: 5,
+      totalTokens: 40,
+      // The latest turn's prompt size, not the sum.
+      contextTokens: 27,
+    });
   });
 
   test('the loop ending is not the run ending', () => {

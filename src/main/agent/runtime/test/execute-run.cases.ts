@@ -119,15 +119,11 @@ test('records usage once using the model identity', async () => {
       total_tokens: recorded.usage.totalTokens,
     },
   ]);
+  // Token counts ride on the turns themselves; the notice carries only what a
+  // reader cannot work out from them.
   expect(
     events.findLast((event) => event.type === 'notice' && event.name === 'message-metadata'),
-  ).toMatchObject({
-    payload: {
-      inputTokens: recorded.usage.input,
-      outputTokens: recorded.usage.output,
-      totalTokens: recorded.usage.totalTokens,
-    },
-  });
+  ).toMatchObject({ payload: { createdAt: expect.any(Number), durationMs: expect.any(Number) } });
 });
 
 test('a preparation failure closes the started recording as failed', async () => {
