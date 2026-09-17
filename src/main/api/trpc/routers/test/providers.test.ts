@@ -3,7 +3,12 @@ import type { Credential, CredentialStore } from '@earendil-works/pi-ai';
 import type { Db } from '@main/db';
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
 
-mock.module('electron', () => ({ shell: { openExternal: () => undefined } }));
+// Bun caches a module mock's export shape for the whole process, so a partial
+// electron here removes exports the suites around this one still import.
+mock.module('electron', () => ({
+  app: { getPath: () => '/tmp' },
+  shell: { openExternal: () => undefined },
+}));
 const { providersRouter } = await import('../providers');
 
 const definition: CustomProvider = {
@@ -59,7 +64,7 @@ function storeWith(saved = new Map<string, Credential>()): CredentialStore {
 }
 
 const caller = (db: Db, credentials: CredentialStore = storeWith()) =>
-  providersRouter.createCaller({ db, chatEndpoint: {} as never, credentials });
+  providersRouter.createCaller({ db, chatEndpoint: {} as never, credentials, runner: {} as never });
 
 test('a built-in provider takes no added models', async () => {
   const { db, writes } = rowWith({ enabledModels: ['deepseek-v4-flash'] });

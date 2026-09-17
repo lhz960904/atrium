@@ -1,4 +1,26 @@
 import type { ToolName } from '@shared/tools';
+import type { HookSet } from '../runtime/hook-compose';
+import type { RunContext } from '../runtime/run-context';
+import type { AtriumTool } from '../tools';
+import { type ActiveSkill, SKILL_SCRATCH_KEY } from './types';
+
+/**
+ * Narrow the offered tools to an active skill's allow-list. Always applied to
+ * the run's full set rather than to the previous turn's, so a narrowing can
+ * never compound: a skill that goes inactive gets every tool back. An
+ * allow-list that maps onto none of ours leaves the set open — a skill authored
+ * for another tool's vocabulary shouldn't accidentally ban everything.
+ */
+export function scopeToolsToSkill(
+  tools: AtriumTool[],
+  active: ActiveSkill | undefined,
+): AtriumTool[] {
+  if (!active) return tools;
+  const scoped = scopeToolsForSkill(active.allowedTools, tools.map((t) => t.name) as ToolName[]);
+  if (!scoped) return tools;
+  const allowed = new Set<string>(scoped);
+  return tools.filter((t) => allowed.has(t.name));
+}
 
 /**
  * Foreign-ecosystem tool names that map onto ours but don't normalize to the
@@ -43,4 +65,17 @@ export function scopeToolsForSkill(
     if (resolved) mapped.add(resolved);
   }
   return mapped.size > 0 ? [...mapped] : null;
+}
+
+/** Recompute from the full catalog so leaving a skill restores tools. Register before hard restrictions. */
+export function skillToolScope(tools: AtriumTool[], scratch: RunContext['scratch']): HookSet {
+  return {
+    name: 'skill-tool-scope',
+    prepareNextTurn: ({ context }) => ({
+      context: {
+        ...context,
+        tools: scopeToolsToSkill(tools, scratch.get(SKILL_SCRATCH_KEY) as ActiveSkill | undefined),
+      },
+    }),
+  };
 }

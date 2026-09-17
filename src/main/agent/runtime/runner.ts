@@ -1,318 +1,193 @@
 import { randomUUID } from 'node:crypto';
-import type { Session } from '@earendil-works/pi-agent-core';
-import { createRunJournal } from '@main/conversation/journal';
-import {
-  compactThread,
-  openThreadCalls,
-  openThreadSession,
-  resolveThreadWorkspace,
-  runnableHistory,
-  setThreadTitle,
-  settleThreadCalls,
-  threadHistory,
-  touchThread,
-} from '@main/conversation/threads';
-import { splitUserMessage } from '@main/conversation/ui-messages';
+import { compactThread, threadHistory } from '@main/conversation/threads';
 import type { Db } from '@main/db';
-import { recordUsage } from '@main/db/usage';
-import { getComputerUseHelper } from '@main/platform/computer-use';
-import { getSettings } from '@main/settings/conf';
 import { createLogger } from '@main/utils/log';
-import type { AtriumUIMessage } from '@shared/chat';
-import { DEFAULT_PERMISSION_MODE, type PermissionMode } from '@shared/permissions';
-import type { Message } from '@shared/protocol';
-import { mcpManager } from '../mcp/manager';
-import { buildMcpTools } from '../mcp/tool-adapter';
-import { modelRates, resolvePiModel, supportsImageToolResults } from '../providers/models';
-import { piStreamFn } from '../providers/registry';
-import { BackgroundShells, LocalSandbox } from '../sandbox';
-import { getSkills } from '../skills/registry';
-import { getTools } from '../tools';
+import type { DecideInteraction } from '@shared/interactions';
+import type { EventEnvelope } from '@shared/protocol';
+import { foldHistory } from '../context/compaction';
+import { createSummarizer } from '../context/summarize';
+import { resolvePiModel } from '../providers/models';
+import { BackgroundShells } from '../sandbox';
 import { preserveActiveSkill } from '../tools/builtins/skill';
 import { preserveTodos } from '../tools/builtins/todo';
-import { type Resolution, resultFor } from './approvals';
-import { foldHistory } from './compaction';
-import { type Complete, createCompleter } from './complete';
-import { runAgent } from './run';
-import { startThreadRun } from './runs';
-import { createSummarizer } from './summarize';
-import { generateThreadTitle } from './title';
+import { executeRun, type RunInput } from './execute-run';
+import { InteractionConflict, PendingInteractions } from './pending-interactions';
+import { EventBuffer } from './stream/run-event-buffer';
 
 const log = createLogger('runner');
 
-/** One turn to run on a thread. */
-export type RunRequest = {
-  threadId: string;
-  providerId: string;
-  modelId: string;
-  permissionMode?: PermissionMode;
-  /** A new user turn to append before the run starts. */
-  userMessage?: AtriumUIMessage;
-  /** Extend the run with this id — answering the calls it parked — instead of
-   *  opening a new one. */
-  resumeRunId?: string;
-  /** What the user decided about the calls the resumed run parked. */
-  resolutions?: Resolution[];
-};
+/**
+ * Finished logs kept so a reader can still rejoin a run that just ended;
+ * beyond this the oldest finished ones are dropped. A log whose run is still
+ * going is never evicted.
+ */
+const MAX_FINISHED_LOGS = 64;
 
-/** How a turn ended, for a caller that isn't reading the event stream. */
+/** Start a run using the selected provider/model. */
+export type RunRequest = RunInput & { providerId: string; modelId: string };
+
+/** What a caller awaiting a run learns of it; cancellation isn't an error. */
 export type RunOutcome = {
-  runId: string;
   status: 'ok' | 'error';
   error?: string;
-  /** The stored assistant message, when the run produced one. */
+  /** Set when the run stored an assistant message, which is the run's own id. */
   messageId?: string;
 };
 
-export type RunHandle = { runId: string; settled: Promise<RunOutcome> };
-
-/** A thread to fold on demand, and the model that writes the summary. */
+export type RunHandle = {
+  runId: string;
+  settled: Promise<RunOutcome>;
+};
 export type CompactRequest = { threadId: string; providerId: string; modelId: string };
 
-/** Continue the run that parked these calls, with what the user decided. */
-export type ResumeRequest = Omit<RunRequest, 'userMessage' | 'resumeRunId' | 'resolutions'> & {
+type ActiveRun = {
   runId: string;
-  decisions: Resolution[];
+  abort: AbortController;
+  pending: PendingInteractions;
+  settled: Promise<RunOutcome>;
 };
 
 /**
- * The composition root for a turn: everything a run needs — workspace, sandbox,
- * model, tools, permissions, persistence — is assembled here and nowhere else.
- *
- * It exists so that starting a turn is a function call rather than an HTTP
- * request. The chat endpoint and the scheduler are both callers; neither can
- * see how a run is put together, and neither has to reach the other through the
- * loopback interface to start one.
+ * Application-lifetime run management: admission, cancellation, decisions,
+ * replay and shared shells. All per-run assembly and recording belongs to
+ * executeRun.
  */
-export type Runner = {
-  /**
-   * Start a turn. Returns once the thread's event log exists — a caller can
-   * subscribe to the stream immediately — with a promise for the outcome.
-   * Throws synchronously when the request can't run at all (an unknown model).
-   */
-  start(request: RunRequest): RunHandle;
-  /**
-   * Answer the calls a run parked and let it continue. Null when none of the
-   * decisions name a call that is still open — the session is the authority, so
-   * a client working from a stale view can only ask for less than it thinks.
-   */
-  resume(request: ResumeRequest): Promise<RunHandle | null>;
-  /**
-   * Record decisions without running the model — a cancelled clarification,
-   * where the user has taken the turn back and will send again themselves. The
-   * calls still have to be closed, or the next request's history carries an
-   * unpaired call. Reports how many were settled.
-   */
-  settle(threadId: string, decisions: Resolution[]): Promise<number>;
-  /**
-   * Fold a thread's history now, at the user's request. Reports whether
-   * anything was folded — a conversation shorter than the floor folds nothing.
-   */
-  compact(request: CompactRequest): Promise<boolean>;
-  dispose(): void;
-};
+export class Runner {
+  private readonly db: Db;
+  private readonly defaultProjectRoot: string;
+  private readonly bgShells = new BackgroundShells();
+  /** The runs a caller can still address — decide, abort, await. A run leaves
+   *  the moment it settles. */
+  private readonly active = new Map<string, ActiveRun>();
+  /** One event log per thread, kept past its run so a reader can rejoin one
+   *  that just ended. Outlives `active`, which is why they are separate. */
+  private readonly buffers = new Map<string, EventBuffer>();
+  private disposed = false;
+  private closing: Promise<void> | undefined;
 
-/**
- * Resolve the auto-review reviewer model. Prefers the dedicated setting; when
- * unset, falls back to this turn's chat model so auto-review works out of the
- * box. Returns undefined (→ auto-review prompts) when nothing resolves — a
- * removed model.
- */
-function resolveReviewer(
-  db: Db,
-  fallback: { providerId: string; modelId: string },
-): Complete | undefined {
-  const configured = getSettings('permissions.reviewerModel');
-  const picked = configured ?? fallback;
-  try {
-    const model = resolvePiModel(db, picked.providerId, picked.modelId);
-    log.info(
-      `reviewer = ${picked.providerId}/${picked.modelId}${configured ? '' : ' (inherited chat model)'}`,
-    );
-    return createCompleter({ model, streamFn: piStreamFn });
-  } catch (err) {
-    log.info(`reviewer unresolved (${picked.providerId}/${picked.modelId}) → prompts: ${err}`);
-    return undefined;
+  constructor(deps: { db: Db; defaultProjectRoot: string }) {
+    this.db = deps.db;
+    this.defaultProjectRoot = deps.defaultProjectRoot;
   }
-}
 
-/**
- * When a run first opened. A continuation reports the moment the run began, not
- * the moment it resumed, so the card it extends doesn't appear to restart.
- */
-async function runStartedAt(session: Session, runId: string): Promise<number> {
-  const [started] = await session.findRecords({ type: 'operation_started', runId, limit: 1 });
-  return started?.timestamp ?? Date.now();
-}
+  private assertIdle(threadId: string): void {
+    if (this.active.has(threadId)) throw new Error(`Thread ${threadId} is already running`);
+  }
 
-export function createRunner(deps: { db: Db; projectlessRoot: string }): Runner {
-  const { db } = deps;
-  // Long-running shells (dev servers, watchers) outlive a turn, so the registry
-  // is one instance held for the runner's lifetime, not per-run.
-  const bgShells = new BackgroundShells();
+  /** The thread's log for this run, superseding whatever it had. */
+  private openBuffer(threadId: string): EventBuffer {
+    const buffer = new EventBuffer();
+    // Reinsert so Map order stays usable as an LRU for evicting finished logs.
+    this.buffers.delete(threadId);
+    this.buffers.set(threadId, buffer);
+    for (const [id, kept] of this.buffers) {
+      if (this.buffers.size <= MAX_FINISHED_LOGS) break;
+      if (kept.closed) this.buffers.delete(id);
+    }
+    return buffer;
+  }
 
-  function start(request: RunRequest): RunHandle {
-    const { threadId, providerId, modelId } = request;
-    // The thread's workspace: its project's directory, or the projectless
-    // fallback. Drives the sandbox and the tools below.
-    const workspaceRoot = resolveThreadWorkspace(db, threadId, deps.projectlessRoot);
+  /** Returns once the stream exists. Invalid models and busy threads throw synchronously. */
+  start({ providerId, modelId, ...input }: RunRequest): RunHandle {
+    const { threadId } = input;
+    if (this.disposed) throw new Error('Runner is disposed');
+    this.assertIdle(threadId);
+    // Admission stays synchronous, before replacing this thread's replay buffer.
+    const model = resolvePiModel(this.db, providerId, modelId);
+    const runId = randomUUID();
     const abort = new AbortController();
-    const sandbox = new LocalSandbox(workspaceRoot);
-    const skills = getSkills();
-    const mode = request.permissionMode ?? DEFAULT_PERMISSION_MODE;
-    const computerUse =
-      process.platform === 'darwin' && getSettings('computerUse.enabled')
-        ? getComputerUseHelper()
-        : undefined;
-    const piModel = resolvePiModel(db, providerId, modelId);
-    const supportsImages = supportsImageToolResults(piModel);
-    // A continuation extends the run it answers, so the model's next turns
-    // land in that same stored run instead of opening a second one.
-    const runId = request.resumeRunId ?? randomUUID();
-    // Resolve the reviewer only when auto-review can actually use it; a
-    // misconfigured/removed model resolves to undefined, so auto-review simply
-    // falls back to prompting rather than failing the turn.
-    const review =
-      mode === 'auto-review' ? resolveReviewer(db, { providerId, modelId }) : undefined;
+    const pending = new PendingInteractions({ runId, abort });
 
-    let result: Awaited<ReturnType<typeof runAgent>> | undefined;
-    const finished = startThreadRun(
-      threadId,
-      async (piLog) => {
-        // The conversation lives in the thread's session, created with its
-        // first turn. Opening the run and appending the turn that started it
-        // happen before the history is read, so the loop sees them.
-        const session = await openThreadSession(db, threadId, workspaceRoot);
-        const journal = createRunJournal({
-          session,
-          runId,
-          resuming: request.resumeRunId !== undefined,
-        });
-        const prompt = request.userMessage
-          ? {
-              id: request.userMessage.id,
-              message: splitUserMessage(request.userMessage).message as Message,
-            }
-          : undefined;
-        await journal.begin(prompt);
-        // Sending counts as reading: a thread must never flash unread from
-        // the user's own message.
-        touchThread(db, threadId, { markRead: prompt !== undefined });
-        const openedAt = await runStartedAt(session, runId);
-
-        result = await runAgent({
-          runId,
-          providerId,
-          modelId,
-          piModel,
-          streamFn: piStreamFn,
-          messages: runnableHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' })),
-          workspaceRoot,
-          threadId,
-          db,
-          sandbox,
-          skills,
-          permissionMode: mode,
-          permission: { mode, rules: getSettings('permissions.trustRules'), review },
-          resolutions: request.resolutions,
-          journal,
-          openedAt,
-          persistCheckpoint: (fold) => compactThread(db, threadId, fold),
-          abortSignal: abort.signal,
-          emit: piLog.append,
-          recordUsage: (u) =>
-            recordUsage(db, { threadId, kind: 'chat', ...u }, modelRates(piModel)),
-          generateTitle: getSettings('general.autoGenerateTitle')
-            ? ({ messages, complete }) =>
-                generateThreadTitle({
-                  messages,
-                  complete,
-                  onTitle: (title) => {
-                    setThreadTitle(db, threadId, title);
-                    piLog.append({ type: 'notice', name: 'title', payload: { data: { title } } });
-                  },
-                })
-            : undefined,
-          onSettled: () => computerUse?.hideOverlay(),
-          buildTools: (run) =>
-            getTools({
-              sandbox,
-              workspaceRoot,
-              run,
-              skills,
-              // A nested loop (the task tool) runs on the same handles as this turn.
-              engine: { model: piModel, streamFn: piStreamFn },
-              bgShells,
-              supportsImageToolResults: supportsImages,
-              computerUse,
-              mcpTools: buildMcpTools(mcpManager.catalog(), mcpManager, {
-                supportsImageToolResults: supportsImages,
-                workspaceRoot,
-              }),
-            }),
-        });
-      },
-      abort,
-    );
-
-    return {
+    const eventLog = this.openBuffer(threadId);
+    const settled = executeRun({
+      input,
       runId,
-      settled: finished.then(() => ({
-        runId,
-        status: result?.status ?? 'error',
-        error: result?.error ?? (result ? undefined : 'the run ended without reporting'),
-        messageId: result?.stored ? runId : undefined,
-      })),
-    };
+      model,
+      db: this.db,
+      defaultProjectRoot: this.defaultProjectRoot,
+      bgShells: this.bgShells,
+      signal: abort.signal,
+      pending,
+      emit: eventLog.emit,
+    })
+      .then(
+        (result): RunOutcome => ({
+          status: result.status === 'failed' ? 'error' : 'ok',
+          error: result.error,
+          messageId: result.messageId,
+        }),
+        (error): RunOutcome => {
+          const errorText = error instanceof Error ? error.message : String(error);
+          log.warn(`run ${runId} failed: ${errorText}`);
+          return { status: 'error', error: errorText };
+        },
+      )
+      .finally(() => {
+        // Whatever the run did, its readers have to see the log end.
+        eventLog.close();
+        this.active.delete(threadId);
+      });
+    this.active.set(threadId, { runId, abort, pending, settled });
+
+    return { runId, settled };
   }
 
-  return {
-    start,
+  abort(threadId: string): boolean {
+    const run = this.active.get(threadId);
+    if (!run) return false;
+    run.pending.cancel('user_cancelled');
+    return true;
+  }
 
-    async resume({ threadId, runId, decisions, ...rest }) {
-      const open = await openThreadCalls(db, threadId);
-      const resolutions = decisions.filter((d) => open.has(d.toolCallId));
-      if (resolutions.length === 0) return null;
-      return start({ ...rest, threadId, resumeRunId: runId, resolutions });
-    },
+  isRunning(threadId: string): boolean {
+    return this.active.has(threadId);
+  }
 
-    async settle(threadId, decisions) {
-      const open = await openThreadCalls(db, threadId);
-      const results = decisions.flatMap((decision) => {
-        const call = open.get(decision.toolCallId);
-        const result = call && resultFor(call, decision);
-        return result ? [result] : [];
-      });
-      await settleThreadCalls(db, threadId, results);
-      return results.length;
-    },
+  runningThreadIds(): string[] {
+    return [...this.active.keys()];
+  }
 
-    async compact({ threadId, providerId, modelId }) {
-      const history = await threadHistory(db, threadId);
-      const piModel = resolvePiModel(db, providerId, modelId);
-      // Forced compaction is aggressive on purpose: the automatic path keeps a
-      // quarter of the window, so a short chat folds nothing — but the user
-      // asked to compact now, so only the recent floor is kept.
-      const folded = await foldHistory({
-        messages: history,
-        summarize: createSummarizer({
-          model: piModel,
-          streamFn: piStreamFn,
-        }),
-        contextWindow: piModel.contextWindow,
-        preservers: [preserveTodos, preserveActiveSkill],
-        keepRecentTokens: 0,
-      });
-      if (!folded) return false;
-      await compactThread(db, threadId, folded);
-      log.info(
-        `forced compaction folded ${history.length - folded.retainedTail.length} of ${history.length} messages`,
-      );
-      return true;
-    },
+  subscribe(threadId: string, fromSeq: number): ReadableStream<EventEnvelope> | null {
+    return this.buffers.get(threadId)?.subscribe(fromSeq) ?? null;
+  }
 
-    dispose() {
-      bgShells.killAll();
-    },
-  };
+  /** Hand a decision to the run waiting on it; throws when that run is not waiting. */
+  respond(threadId: string, input: DecideInteraction): 'accepted' | 'already_accepted' {
+    const run = this.active.get(threadId);
+    if (!run || run.runId !== input.runId || run.abort.signal.aborted) {
+      throw new InteractionConflict('The interaction is no longer active.');
+    }
+    return run.pending.respond(input);
+  }
+
+  async compact({ threadId, providerId, modelId }: CompactRequest): Promise<boolean> {
+    // A waiting run still owns the thread's history.
+    this.assertIdle(threadId);
+    const history = await threadHistory(this.db, threadId);
+    const model = resolvePiModel(this.db, providerId, modelId);
+    const folded = await foldHistory({
+      messages: history,
+      summarize: createSummarizer(model),
+      contextWindow: model.contextWindow,
+      preservers: [preserveTodos, preserveActiveSkill],
+      // User-requested compaction keeps only the recent floor.
+      keepRecentTokens: 0,
+    });
+    if (!folded) return false;
+    await compactThread(this.db, threadId, folded);
+    return true;
+  }
+
+  /** Stop accepting runs, cancel the live ones and wait for them to settle. */
+  dispose(): Promise<void> {
+    if (this.closing) return this.closing;
+    this.disposed = true;
+    // Cancelling is a request; a run is only really over once its own
+    // recording and cleanup have finished, which is what callers wait for.
+    const running = [...this.active.values()].map((run) => run.settled);
+    for (const run of this.active.values()) run.pending.cancel('app_shutdown');
+    this.bgShells.killAll();
+    this.closing = Promise.allSettled(running).then(() => undefined);
+    return this.closing;
+  }
 }

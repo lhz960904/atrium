@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, expect, test } from 'bun:test';
+import type { Runner } from '@main/agent/runtime/runner';
 import type { Db } from '@main/db';
 import type { ScheduledTask } from '@main/db/schema';
 import * as schema from '@main/db/schema';
@@ -61,12 +62,15 @@ function setup(runner?: (task: ScheduledTask) => Promise<ScheduledRunResult>) {
     db,
     // Every test injects `run`, so the real runner is never reached.
     runner: {
+      abort: unreachable,
+      isRunning: unreachable,
+      runningThreadIds: unreachable,
+      subscribe: unreachable,
       start: () => unreachable(),
-      resume: () => unreachable(),
-      settle: () => unreachable(),
+      respond: () => unreachable(),
       compact: () => unreachable(),
-      dispose: () => {},
-    },
+      dispose: () => Promise.resolve(),
+    } as unknown as Runner,
     defaultModel: () => ({ providerId: 'p', modelId: 'm' }),
     now: () => nowRef.v,
     run: runner ?? (async () => ({ status: 'ok', messageId: 'a1' })),

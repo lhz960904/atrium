@@ -1,14 +1,9 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
+import type { InteractionDecision, InteractionRequest } from '@shared/interactions';
 import type { PermissionMode } from '@shared/permissions';
-import type { EventEnvelope, ToolDecision } from '@shared/protocol';
-import {
-  type ChatStatus,
-  generateId,
-  getToolName,
-  isStaticToolUIPart,
-  isToolOrDynamicToolUIPart,
-} from '@shared/ui-message';
+import type { EventEnvelope } from '@shared/protocol';
+import { type ChatStatus, generateId } from '@shared/ui-message';
 import { RunAssembler } from './reduce';
 
 /**
@@ -17,10 +12,10 @@ import { RunAssembler } from './reduce';
  * SSE; reconnects replay the envelope log from seq 0. Messages are assembled
  * by RunAssembler in the part shape the components already consume.
  *
- * Continuations (a clarify answered, an approval decided) post the user's
- * decisions to the run that parked those calls and seed the assembler with the
- * message's parts, so the new run's events extend that message in place.
- * Auto-resume replicates useChat's sendAutomaticallyWhen contract.
+ * A run that asks the user something keeps streaming while it waits. The
+ * decision goes out as its own short request to that run; what follows — the
+ * tool running, the reply continuing — arrives on the same stream, so nothing
+ * here marks a call done on the user's say-so.
  */
 
 export type PiChatSnapshot = {
@@ -49,63 +44,35 @@ export type PiChatInit = {
 };
 
 type Part = AtriumUIMessage['parts'][number];
-type LoosePart = Record<string, unknown>;
 
 const NOTIFY_THROTTLE_MS = 50;
 
-/** A cancelled clarification resolves its tool call but must NOT auto-resume —
- *  the user took back the turn and sends again themselves. */
-function lastClarifyCancelled(messages: AtriumUIMessage[]): boolean {
-  const last = messages.at(-1);
-  if (!last || last.role !== 'assistant') return false;
-  return last.parts.some(
-    (p) =>
-      isStaticToolUIPart(p) &&
-      getToolName(p) === 'ask_clarification' &&
-      p.state === 'output-available' &&
-      (p.output as ClarifyResult | undefined)?.cancelled === true,
-  );
-}
+const EXPIRED_TEXT = 'The run ended before this was decided.';
 
-/** The last message's final-step tool parts — the ones a resume decision reads. */
-function lastStepToolParts(messages: AtriumUIMessage[]) {
-  const last = messages.at(-1);
-  if (!last || last.role !== 'assistant') return [];
-  const stepStart = last.parts.findLastIndex((p) => p.type === 'step-start');
-  return last.parts.slice(stepStart + 1).filter(isToolOrDynamicToolUIPart);
-}
+/** Rejoins attempted before a dropped stream is treated as a lost run. */
+const RECONNECT_ATTEMPTS = 3;
 
-/** Every tool call of the last step has its result — the turn can continue. */
-function toolRoundComplete(messages: AtriumUIMessage[]): boolean {
-  const tools = lastStepToolParts(messages);
-  return tools.length > 0 && tools.every((p) => p.state === 'output-available');
-}
+/** States a card is in only while a run is there to answer it. */
+const WAITING_STATES = new Set(['approval-requested', 'input-available', 'input-streaming']);
 
-/** The user's answers for the last step's parked calls, as the wire states them. */
-function decisionsOf(messages: AtriumUIMessage[]): ToolDecision[] {
-  const out: ToolDecision[] = [];
-  for (const part of lastStepToolParts(messages)) {
-    const toolCallId = part.toolCallId;
-    if (part.state === 'approval-responded') {
-      out.push(
-        part.approval?.approved
-          ? { toolCallId, kind: 'approved' }
-          : { toolCallId, kind: 'denied', reason: part.approval?.reason },
-      );
-    } else if (part.state === 'output-available') {
-      out.push({ toolCallId, kind: 'answered', output: part.output });
-    }
-  }
-  return out;
-}
-
-/** Every pending approval got its answer — the turn can continue and execute. */
-function approvalsAnswered(messages: AtriumUIMessage[]): boolean {
-  const tools = lastStepToolParts(messages);
-  return (
-    tools.some((p) => p.state === 'approval-responded') &&
-    tools.every((p) => p.state !== 'approval-requested')
-  );
+/**
+ * Nothing is waiting on a run that is no longer there. The cards it left behind
+ * become terminal so they can't be submitted to a run that ended; what it did
+ * finish is untouched, and the stored conversation is repaired by the next run.
+ */
+function expireInactiveInteractions(messages: AtriumUIMessage[]): AtriumUIMessage[] {
+  return messages.map((message) => {
+    if (!message.parts.some((part) => WAITING_STATES.has((part as { state?: string }).state ?? '')))
+      return message;
+    return {
+      ...message,
+      parts: message.parts.map((part) =>
+        WAITING_STATES.has((part as { state?: string }).state ?? '')
+          ? ({ ...part, state: 'output-error', errorText: EXPIRED_TEXT } as Part)
+          : part,
+      ),
+    };
+  });
 }
 
 export class PiChat {
@@ -120,6 +87,10 @@ export class PiChat {
   private notifyTimer: ReturnType<typeof setTimeout> | null = null;
   private inflight: AbortController | null = null;
   private lastSeq = -1;
+  /** The attached stream's reading, so a stop can wait for the run's last events. */
+  private streaming: Promise<void> | null = null;
+  /** Requests with a decision on its way, so a second click can't send another. */
+  private submitting = new Set<string>();
   private readonly fetchFn: typeof fetch;
 
   constructor(private readonly init: PiChatInit) {
@@ -155,37 +126,44 @@ export class PiChat {
       metadata: { createdAt: Date.now() },
     };
     this.history = [...this.history, message];
-    void this.post({ path: '/api/chat', body: { message } });
+    this.streaming = this.post({ path: '/api/chat', body: { message } });
   };
 
   /** Reconnect to a still-running stream; a 204 means nothing to rejoin. */
   resume = (): void => {
     if (this.isBusy) return;
     const abort = this.begin('streaming');
-    void (async () => {
+    this.streaming = (async () => {
       try {
-        const res = await this.fetchFn(
-          `${this.init.baseUrl}/api/chat/${this.threadId}/pi-events?from=-1`,
-          { headers: { 'x-atrium-token': this.init.token }, signal: abort.signal },
-        );
+        const res = await this.fetchFn(this.eventsUrl(), {
+          headers: { 'x-atrium-token': this.init.token },
+          signal: abort.signal,
+        });
         if (res.status === 204 || !res.body) {
+          this.history = expireInactiveInteractions(this.history);
           this.settle();
           return;
         }
-        await this.consume(res.body);
-        this.finalizeRun();
+        await this.attach(res.body, abort);
       } catch (err) {
         if (!abort.signal.aborted) this.failWith(err);
       }
     })();
   };
 
-  stop = (): void => {
-    // Keep whatever streamed; the route seals dangling tool parts and tells
-    // main to abort the producer.
-    this.inflight?.abort();
-    this.inflight = null;
-    this.finalizeRun();
+  /**
+   * Stop the run on the server, then let its stream deliver the final events.
+   * Closing the stream alone would leave the run going, so a request that fails
+   * leaves it running and rejects for the caller to show.
+   */
+  stop = async (): Promise<void> => {
+    if (!this.isBusy) return;
+    const res = await this.fetchFn(`${this.init.baseUrl}/api/chat/${this.threadId}/abort`, {
+      method: 'POST',
+      headers: { 'x-atrium-token': this.init.token },
+    });
+    if (!res.ok) throw new Error(`Stopping the run failed (${res.status}).`);
+    await this.streaming;
   };
 
   setMessages = (
@@ -196,45 +174,51 @@ export class PiChat {
     this.notify(true);
   };
 
-  addToolOutput = (input: { tool?: string; toolCallId: string; output: unknown }): void => {
-    this.patchToolPart(input.toolCallId, () => ({
-      state: 'output-available',
-      output: input.output,
-    }));
-    this.maybeAutoResume();
+  /** Answer, or dismiss, the question the run is waiting on. */
+  addToolOutput = async (input: {
+    tool?: string;
+    toolCallId: string;
+    output: unknown;
+  }): Promise<void> => {
+    const result = input.output as ClarifyResult;
+    const decision: InteractionDecision = result.cancelled
+      ? { kind: 'cancelled' }
+      : { kind: 'answered', answers: result.answers.map((item) => item.answer) };
+    await this.submitDecision(this.run?.openInteractionForTool(input.toolCallId), decision);
   };
 
-  addToolApprovalResponse = (input: { id: string; approved: boolean; reason?: string }): void => {
-    this.patchApprovalPart(input.id, {
-      state: 'approval-responded',
-      approval: { id: input.id, approved: input.approved, reason: input.reason },
-    });
-    this.maybeAutoResume();
+  addToolApprovalResponse = async (input: {
+    id: string;
+    approved: boolean;
+    reason?: string;
+  }): Promise<void> => {
+    const decision: InteractionDecision = input.approved
+      ? { kind: 'approved' }
+      : { kind: 'denied', ...(input.reason && { reason: input.reason }) };
+    await this.submitDecision(this.run?.openInteraction(input.id), decision);
   };
 
-  /** useChat's sendAutomaticallyWhen contract: a completed tool round or an
-   *  answered approval resumes the turn the decisions belong to. */
-  private maybeAutoResume(): void {
-    if (this.isBusy) return;
-    const messages = this.merged();
-    const last = messages.at(-1);
-    if (!last || last.role !== 'assistant') return;
-    const complete = toolRoundComplete(messages) || approvalsAnswered(messages);
-    if (!complete || lastClarifyCancelled(messages)) return;
-    void this.post({
-      path: `/api/chat/${this.threadId}/resume`,
-      body: { runId: last.id, decisions: decisionsOf(messages) },
-      // A continuation extends the assistant message in place: seed the
-      // assembler with its parts so the streamed tail lands after them.
-      seed: { id: last.id, parts: last.parts },
-    });
+  private async submitDecision(
+    request: InteractionRequest | undefined,
+    decision: InteractionDecision,
+  ): Promise<void> {
+    // Only the stream the run is still writing can be waiting; a card from history can't.
+    if (!request) throw new Error('The interaction is no longer active.');
+    if (this.submitting.has(request.id)) return;
+    this.submitting.add(request.id);
+    try {
+      const res = await this.fetchFn(`${this.init.baseUrl}/api/chat/${this.threadId}/decisions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-atrium-token': this.init.token },
+        body: JSON.stringify({ runId: request.runId, interactionId: request.id, decision }),
+      });
+      if (!res.ok) throw new Error(`The decision was not accepted (${res.status}).`);
+    } finally {
+      this.submitting.delete(request.id);
+    }
   }
 
-  private async post(input: {
-    path: string;
-    body: Record<string, unknown>;
-    seed?: { id: string; parts: Part[] };
-  }): Promise<void> {
+  private async post(input: { path: string; body: Record<string, unknown> }): Promise<void> {
     const abort = this.begin('submitted');
     try {
       const res = await this.fetchFn(`${this.init.baseUrl}${input.path}`, {
@@ -246,10 +230,60 @@ export class PiChat {
       if (!res.ok || !res.body) {
         throw new Error(`chat request failed (${res.status}) ${await res.text().catch(() => '')}`);
       }
-      await this.consume(res.body, input.seed);
-      this.finalizeRun();
+      await this.attach(res.body, abort);
     } catch (err) {
       if (!abort.signal.aborted) this.failWith(err);
+    }
+  }
+
+  private eventsUrl(): string {
+    return `${this.init.baseUrl}/api/chat/${this.threadId}/pi-events?from=-1`;
+  }
+
+  /**
+   * Read a run's stream to its end, rejoining when it drops early: the
+   * connection can die — a sleep long enough to lose the socket, a network
+   * blip — while the run itself is still going on the other side. A dying
+   * connection errors far more often than it ends cleanly, so both count as a
+   * drop and only the caller's own abort stops the attempts. The server
+   * replays from the start of the log, so each rejoin resets the seq floor and
+   * rebuilds the message rather than continuing from a half-read one.
+   */
+  private async attach(body: ReadableStream<Uint8Array>, abort: AbortController): Promise<void> {
+    let finished = await this.read(body);
+    for (let attempt = 0; !finished && attempt < RECONNECT_ATTEMPTS; attempt++) {
+      if (abort.signal.aborted) return;
+      const rejoined = await this.rejoin(abort.signal);
+      if (rejoined === 'gone') break;
+      if (rejoined === 'unreachable') continue;
+      this.lastSeq = -1;
+      finished = await this.read(rejoined);
+    }
+    if (abort.signal.aborted) return;
+    this.finalizeRun(finished);
+  }
+
+  /** A stream that dies mid-read is a drop, not a failure: it reads as unfinished. */
+  private async read(body: ReadableStream<Uint8Array>): Promise<boolean> {
+    try {
+      return await this.consume(body);
+    } catch {
+      return false;
+    }
+  }
+
+  /** The run's stream again, or why there isn't one: ended, or still out of reach. */
+  private async rejoin(
+    signal: AbortSignal,
+  ): Promise<ReadableStream<Uint8Array> | 'gone' | 'unreachable'> {
+    try {
+      const res = await this.fetchFn(this.eventsUrl(), {
+        headers: { 'x-atrium-token': this.init.token },
+        signal,
+      });
+      return res.status === 204 || !res.body ? 'gone' : res.body;
+    } catch {
+      return 'unreachable';
     }
   }
 
@@ -264,11 +298,14 @@ export class PiChat {
     return abort;
   }
 
-  private async consume(
-    body: ReadableStream<Uint8Array>,
-    seed?: { id: string; parts: Part[] },
-  ): Promise<void> {
-    this.run = new RunAssembler(seed);
+  /**
+   * Reads the run's stream; false when it ended before the run said it had.
+   * The assembler is replaced by the first envelope that actually arrives, so a
+   * rejoin that delivers nothing keeps what the dropped stream had built.
+   */
+  private async consume(body: ReadableStream<Uint8Array>): Promise<boolean> {
+    let assembling = false;
+    let finished = false;
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -285,23 +322,39 @@ export class PiChat {
         const envelope = JSON.parse(frame.slice('data: '.length)) as EventEnvelope;
         if (envelope.seq <= this.lastSeq) continue;
         this.lastSeq = envelope.seq;
+        if (!assembling) {
+          assembling = true;
+          this.run = new RunAssembler();
+        }
         if (this.status !== 'streaming') this.status = 'streaming';
         this.run?.apply(envelope.event);
+        if (envelope.event.type === 'run_finished') finished = true;
         if (envelope.event.type === 'notice') {
           this.init.onNotice(envelope.event.name, envelope.event.payload);
         }
         this.notify();
       }
     }
+    return finished;
   }
 
-  /** Fold the finished (or detached) run into history, keyed by message id. */
-  private finalizeRun(): void {
+  /**
+   * Fold the finished (or detached) run into history, keyed by message id. A
+   * stream that could not be rejoined is a lost connection, not a finished run:
+   * what arrived is kept, but nothing is reading that run any more, so the
+   * cards it was waiting on are expired rather than left looking answerable.
+   * A later resume that reaches a live run replays them as live again.
+   */
+  private finalizeRun(finished = true): void {
     const live = this.run?.snapshot();
     this.run = null;
     this.inflight = null;
     if (live?.message) this.history = upsertById(this.history, live.message);
     if (live?.error) this.failure = new Error(live.error);
+    else if (!finished) {
+      this.history = expireInactiveInteractions(this.history);
+      this.failure = new Error('The connection to the run was interrupted.');
+    }
     this.settle();
   }
 
@@ -321,37 +374,6 @@ export class PiChat {
     const live = this.run?.snapshot().message;
     if (!live) return [...this.history];
     return [...this.history.filter((m) => m.id !== live.id), live];
-  }
-
-  private patchToolPart(toolCallId: string, patch: (part: LoosePart) => LoosePart): void {
-    this.history = this.history.map((message) => {
-      const index = message.parts.findIndex(
-        (p) => isToolOrDynamicToolUIPart(p) && p.toolCallId === toolCallId,
-      );
-      if (index === -1) return message;
-      const parts = [...message.parts];
-      parts[index] = {
-        ...(parts[index] as LoosePart),
-        ...patch(parts[index] as LoosePart),
-      } as Part;
-      return { ...message, parts };
-    });
-    this.notify(true);
-  }
-
-  private patchApprovalPart(approvalId: string, fields: LoosePart): void {
-    this.history = this.history.map((message) => {
-      const index = message.parts.findIndex(
-        (p) =>
-          isToolOrDynamicToolUIPart(p) &&
-          (p as LoosePart & { approval?: { id?: string } }).approval?.id === approvalId,
-      );
-      if (index === -1) return message;
-      const parts = [...message.parts];
-      parts[index] = { ...(parts[index] as LoosePart), ...fields } as Part;
-      return { ...message, parts };
-    });
-    this.notify(true);
   }
 
   private notify(immediate = false): void {

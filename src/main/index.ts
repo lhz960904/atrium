@@ -13,8 +13,7 @@ import { runDream, startDreamScheduler } from './agent/memory';
 import { createCredentialStore } from './agent/providers/credential-store';
 import { firstEnabledModel, resolvePiModel } from './agent/providers/models';
 import { piStreamFn, refreshProviders, useCredentialStore } from './agent/providers/registry';
-import { createRunner, type Runner } from './agent/runtime/runner';
-import { getRunningThreadIds } from './agent/runtime/runs';
+import { Runner } from './agent/runtime/runner';
 import { refreshSkills } from './agent/skills/registry';
 import { startHttpServer } from './api/http';
 import { appRouter } from './api/trpc/router';
@@ -31,13 +30,19 @@ import { loadShellEnv } from './platform/shell-env';
 import { updaterManager } from './platform/updater';
 import { getSettings, openSettings } from './settings/conf';
 import { attachWindowStatePersistence, getInitialWindowState } from './settings/window-state';
-import { initLogging } from './utils/log';
+import { drainWithin } from './utils/drain';
+import { createLogger, initLogging } from './utils/log';
 
 // Kept alive across hide/show so reopening from the Dock restores the exact
 // prior view instead of booting a fresh window. isQuitting lets the real quit
 // (Cmd+Q / before-quit) bypass the hide-on-close interception below.
+const log = createLogger('app');
+
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
+let installingUpdate = false;
+let quitReady = false;
+let closing: Promise<void> | undefined;
 
 // Privileged scheme registration has to happen before the app is ready.
 registerFaviconScheme();
@@ -155,14 +160,14 @@ app.whenReady().then(async () => {
   refreshProviders(db);
   openSettings();
 
-  // Fallback workspace root for projectless conversations; project-scoped
+  // Fallback workspace root for conversations with no project; project-scoped
   // threads run in their project's directory instead, resolved per request.
-  const projectlessRoot = join(homedir(), 'Documents', 'Atrium');
-  mkdirSync(projectlessRoot, { recursive: true });
+  const defaultProjectRoot = join(homedir(), 'Documents', 'Atrium');
+  mkdirSync(defaultProjectRoot, { recursive: true });
 
   // One composition root for every turn — the chat endpoint and the scheduler
   // are both callers of it.
-  const runs = createRunner({ db, projectlessRoot });
+  const runs = new Runner({ db, defaultProjectRoot });
   runner = runs;
 
   // Bring the chat server up first — it's a fast port bind — so the IPC handler
@@ -181,7 +186,7 @@ app.whenReady().then(async () => {
   createIPCHandler({
     router: appRouter,
     windows: [win],
-    createContext: async () => ({ db, chatEndpoint, credentials }),
+    createContext: async () => ({ db, chatEndpoint, credentials, runner: runs }),
   });
   registerComputerUseDrag();
   registerDragOverlay(() => mainWindow ?? undefined);
@@ -196,6 +201,7 @@ app.whenReady().then(async () => {
     getWindow: () => mainWindow,
     onBeforeInstall: () => {
       isQuitting = true;
+      installingUpdate = true;
       // Kill the helper before the update relaunch: a mid-request child would
       // survive the swap as an orphan still showing its cursor overlay.
       disposeComputerUseHelper();
@@ -251,7 +257,7 @@ app.whenReady().then(async () => {
     createIPCHandler({
       router: appRouter,
       windows: [next],
-      createContext: async () => ({ db, chatEndpoint, credentials }),
+      createContext: async () => ({ db, chatEndpoint, credentials, runner: runs }),
     });
   };
 
@@ -263,7 +269,7 @@ app.whenReady().then(async () => {
     startScheduledTasks({
       db,
       runner: runs,
-      runningThreadIds: getRunningThreadIds,
+      runningThreadIds: runs.runningThreadIds,
       defaultModel: () => {
         // The renderer only persists general.defaultModel on an explicit pick, so
         // it can be null even when the user has a working model — fall back to the
@@ -306,17 +312,54 @@ app.on('window-all-closed', () => {
   }
 });
 
-app.on('before-quit', () => {
-  isQuitting = true;
-  // Best effort: this clears the lease heartbeats synchronously, while the
-  // release itself races the connection closing below. Their TTL is the
-  // backstop — a thread whose lease outlived the app is openable again once it
-  // expires — so a failure here is expected and not worth reporting.
+/**
+ * Quit in order: stop new work, let the live runs record how they ended, then
+ * close what they were writing to. Three seconds is the ceiling on that wait,
+ * not a promise that a tool ignoring cancellation has stopped — whatever is
+ * left unfinished is repaired on the next launch.
+ */
+async function shutdown(): Promise<void> {
+  const attempt = async (step: string, run: () => unknown) => {
+    try {
+      await run();
+    } catch (error) {
+      log.warn(`shutdown step ${step} failed: ${error}`);
+    }
+  };
+  await attempt('scheduled', () => scheduledManager.dispose());
+  await attempt('runner', () => drainWithin(runner?.dispose() ?? Promise.resolve(), 3000));
+  await attempt('mcp', () => mcpManager.dispose());
+  await attempt('updater', () => updaterManager.dispose());
+  await attempt('computer-use', () => disposeComputerUseHelper());
+  await attempt('session-store', () => closeSessionStore());
+  await attempt('db', () => closeDb());
+}
+
+/** The old best-effort teardown, for the one path that must not be held up. */
+function disposeImmediately(): void {
   void closeSessionStore().catch(() => {});
-  runner?.dispose();
+  void runner?.dispose();
   scheduledManager.dispose();
   void mcpManager.dispose();
   updaterManager.dispose();
   disposeComputerUseHelper();
   closeDb();
+}
+
+app.on('before-quit', (event) => {
+  isQuitting = true;
+  // Squirrel drives its own quit and stalls if a listener defers it (see
+  // updater.install), so the update path keeps the synchronous teardown.
+  if (installingUpdate) {
+    disposeImmediately();
+    return;
+  }
+  if (quitReady) return;
+  event.preventDefault();
+  if (!closing) {
+    closing = shutdown().finally(() => {
+      quitReady = true;
+      app.quit();
+    });
+  }
 });

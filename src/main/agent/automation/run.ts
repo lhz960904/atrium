@@ -17,23 +17,6 @@ export type ScheduledRunResult = {
   messageId?: string;
 };
 
-/**
- * Keep macOS App Nap / OS suspension from freezing a headless run mid-turn.
- * Electron is required lazily so the manager's import graph stays testable
- * outside an Electron context; a non-Electron context degrades to a no-op.
- */
-function blockSuspension(): () => void {
-  try {
-    const { powerSaveBlocker } = require('electron') as typeof import('electron');
-    const id = powerSaveBlocker.start('prevent-app-suspension');
-    return () => {
-      if (powerSaveBlocker.isStarted(id)) powerSaveBlocker.stop(id);
-    };
-  } catch {
-    return () => {};
-  }
-}
-
 /** Start time of the task's most recent *completed* run (excludes the current
  *  in-flight one, which has no finishedAt yet). Undefined on the first run. */
 function lastCompletedRunAt(db: Db, taskId: string): Date | undefined {
@@ -53,7 +36,11 @@ function lastCompletedRunAt(db: Db, taskId: string): Date | undefined {
  * consecutive-failure auto-pause; the messages are persisted by the run itself.
  */
 export async function runScheduledTask(
-  deps: { db: Db; runner: Runner; defaultModel: () => SelectedModel | null },
+  deps: {
+    db: Db;
+    runner: Runner;
+    defaultModel: () => SelectedModel | null;
+  },
   task: ScheduledTask,
 ): Promise<ScheduledRunResult> {
   if (!task.threadId) return { status: 'error', error: 'Scheduled task has no bound thread.' };
@@ -82,25 +69,23 @@ export async function runScheduledTask(
     parts: [{ type: 'text', text: `${header}\n\n${task.prompt}` }],
   };
 
-  const release = blockSuspension();
   try {
-    const outcome = await deps.runner.start({
+    const handle = deps.runner.start({
       threadId: task.threadId,
       providerId: model.providerId,
       modelId: model.modelId,
       permissionMode: task.permissionMode,
       userMessage: message,
-    }).settled;
+    });
+    const outcome = await handle.settled;
     if (outcome.status === 'error') {
       log.error(`task ${task.id} run failed: ${outcome.error}`);
     }
-    return { status: outcome.status, error: outcome.error, messageId: outcome.messageId };
+    return outcome;
   } catch (err) {
     // A request the runner refuses outright (an unresolvable model) throws
     // before the run ever starts.
     log.error(`task ${task.id} could not start`, err);
     return { status: 'error', error: err instanceof Error ? err.message : String(err) };
-  } finally {
-    release();
   }
 }

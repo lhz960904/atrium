@@ -1,11 +1,15 @@
 import { serve } from '@hono/node-server';
-import type { Resolution } from '@main/agent/runtime/approvals';
+import {
+  InteractionConflict,
+  InvalidInteractionDecision,
+} from '@main/agent/runtime/pending-interactions';
 import type { Runner } from '@main/agent/runtime/runner';
-import { abortThreadRun, isThreadRunning } from '@main/agent/runtime/runs';
-import { subscribePiEvents } from '@main/agent/runtime/stream/event-log';
 import type { AtriumUIMessage } from '@shared/chat';
+import { decideInteractionSchema } from '@shared/interactions';
 import type { PermissionMode } from '@shared/permissions';
+import type { EventEnvelope } from '@shared/protocol';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 
 export type ChatEndpoint = { port: number; token: string };
@@ -16,11 +20,25 @@ const PI_SSE_HEADERS = {
   Connection: 'keep-alive',
 } as const;
 
+const DECISION_BODY_LIMIT = 64 * 1024;
+
+/** Frame the run's envelopes as SSE; the event log itself carries no transport. */
+function sseFrames(envelopes: ReadableStream<EventEnvelope>): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return envelopes.pipeThrough(
+    new TransformStream<EventEnvelope, Uint8Array>({
+      transform(envelope, controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(envelope)}\n\n`));
+      },
+    }),
+  );
+}
+
 /** The POST response is the just-started run's event stream from seq 0. */
-function runResponse(threadId: string): Response {
-  const sse = subscribePiEvents(threadId, -1);
-  return sse
-    ? new Response(sse, { headers: PI_SSE_HEADERS })
+function runResponse(runner: Runner, threadId: string): Response {
+  const envelopes = runner.subscribe(threadId, -1);
+  return envelopes
+    ? new Response(sseFrames(envelopes), { headers: PI_SSE_HEADERS })
     : new Response('event log missing', { status: 500 });
 }
 
@@ -38,9 +56,6 @@ type RunBody = {
 // its absence is a bug, not a degraded mode.
 type ChatBody = RunBody & { message: AtriumUIMessage };
 
-/** The user's answers for the calls a run parked, addressed to that run. */
-type DecisionsBody = { runId: string; decisions: Resolution[] };
-
 /**
  * Localhost HTTP server for AI streaming. Lives alongside electron-trpc: tRPC
  * handles CRUD, this handles the chat stream — a long-lived HTTP response the
@@ -52,7 +67,7 @@ type DecisionsBody = { runId: string; decisions: Resolution[] };
  * event log into an SSE body. It owns no state and reaches no database — every
  * decision about what a request means belongs to the runner.
  */
-export function startHttpServer(deps: { token: string; runner: Runner }): Promise<ChatEndpoint> {
+export function createChatApp(deps: { token: string; runner: Runner }): Hono {
   const app = new Hono();
   // Renderer is a different origin (localhost:5173 in dev, file:// in prod);
   // CORS must run before auth so the credential-less preflight isn't 401'd.
@@ -76,44 +91,42 @@ export function startHttpServer(deps: { token: string; runner: Runner }): Promis
     if (message?.role !== 'user') return c.text('chat takes a user message', 400);
 
     deps.runner.start({ threadId, providerId, modelId, permissionMode, userMessage: message });
-    return runResponse(threadId);
+    return runResponse(deps.runner, threadId);
   });
 
   /**
-   * Continue a run with what the user decided about the calls it parked — an
-   * approval answered, a clarification filled in. The decisions travel as
-   * decisions: which calls are still open is the runner's answer, so a client
-   * that is out of date can only ask for less than it thinks, never for more.
+   * The user's decision for a call a running turn is waiting on. Accepting it
+   * only wakes that call: whether the tool then runs, and what it returns,
+   * arrives on the run's own stream. The body names the interaction, never the
+   * tool or its arguments, and a decision never starts a run.
    */
-  app.post('/api/chat/:threadId/resume', async (c) => {
-    const threadId = c.req.param('threadId');
-    const { providerId, modelId, permissionMode, runId, decisions } = await c.req.json<
-      RunBody & DecisionsBody
-    >();
-    const handle = await deps.runner.resume({
-      threadId,
-      providerId,
-      modelId,
-      permissionMode,
-      runId,
-      decisions: decisions ?? [],
-    });
-    return handle ? runResponse(threadId) : c.text('no open call to resume', 409);
-  });
-
-  // Record decisions without running the model — a cancelled clarification,
-  // where the user has taken the turn back and will send again themselves.
-  app.post('/api/chat/:threadId/decisions', async (c) => {
-    const { decisions } = await c.req.json<DecisionsBody>();
-    const settled = await deps.runner.settle(c.req.param('threadId'), decisions ?? []);
-    return c.json({ settled });
-  });
+  app.post(
+    '/api/chat/:threadId/decisions',
+    bodyLimit({
+      maxSize: DECISION_BODY_LIMIT,
+      onError: (c) => c.json({ error: 'payload_too_large' }, 413),
+    }),
+    async (c) => {
+      const parsed = decideInteractionSchema.safeParse(await c.req.json().catch(() => undefined));
+      if (!parsed.success) return c.json({ error: 'invalid_decision' }, 400);
+      try {
+        const status = deps.runner.respond(c.req.param('threadId'), parsed.data);
+        return c.json({ status }, 202);
+      } catch (error) {
+        if (error instanceof InteractionConflict) return c.json({ error: error.message }, 409);
+        if (error instanceof InvalidInteractionDecision) {
+          return c.json({ error: error.message }, 400);
+        }
+        throw error;
+      }
+    },
+  );
 
   // Stop a thread's in-flight generation. Aborts the agent loop server-side
-  // (closing the client stream alone can't, since the run is decoupled for
-  // resume); whatever was generated so far is persisted as the turn ends.
+  // (closing the client stream alone can't: the run outlives its readers);
+  // whatever was generated so far is persisted as the turn ends.
   app.post('/api/chat/:threadId/abort', (c) => {
-    const aborted = abortThreadRun(c.req.param('threadId'));
+    const aborted = deps.runner.abort(c.req.param('threadId'));
     return c.json({ aborted });
   });
 
@@ -135,12 +148,22 @@ export function startHttpServer(deps: { token: string; runner: Runner }): Promis
   // message is already in the DB the client seeds from, so replaying its log
   // would duplicate the content.
   app.get('/api/chat/:threadId/pi-events', (c) => {
-    if (!isThreadRunning(c.req.param('threadId'))) return c.body(null, 204);
+    if (!deps.runner.isRunning(c.req.param('threadId'))) return c.body(null, 204);
     const raw = Number(c.req.query('from') ?? '-1');
-    const sse = subscribePiEvents(c.req.param('threadId'), Number.isFinite(raw) ? raw : -1);
-    return sse ? new Response(sse, { headers: PI_SSE_HEADERS }) : c.body(null, 204);
+    const envelopes = deps.runner.subscribe(
+      c.req.param('threadId'),
+      Number.isFinite(raw) ? raw : -1,
+    );
+    return envelopes
+      ? new Response(sseFrames(envelopes), { headers: PI_SSE_HEADERS })
+      : c.body(null, 204);
   });
 
+  return app;
+}
+
+export function startHttpServer(deps: { token: string; runner: Runner }): Promise<ChatEndpoint> {
+  const app = createChatApp(deps);
   // serve() binds asynchronously; the real port arrives in the listening
   // callback (server.address() is null synchronously right after).
   return new Promise((resolve) => {

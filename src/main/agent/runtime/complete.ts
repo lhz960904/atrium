@@ -1,41 +1,34 @@
-import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
+import { piModels } from '../providers/registry';
 
-/**
- * One question, one answer, no tools — the shape every side call the agent
- * makes happens to have: the compaction summary, the thread title, the
- * auto-review verdict. They all go through the turn's own stream rather than a
- * second, non-streaming client: the provider is already known to work for it,
- * and one code path means one place for a provider quirk to be handled.
- */
-export type Complete = (input: {
+/** One model request, no Agent or tool loop; pi owns provider dispatch and credentials. */
+export async function complete({
+  model,
+  system,
+  prompt,
+  signal,
+}: {
+  model: Model<Api>;
   system: string;
   prompt: string;
   signal?: AbortSignal;
-}) => Promise<string>;
-
-export type CompleteDeps = {
-  model: Model<Api>;
-  streamFn: StreamFn;
-};
-
-export function createCompleter(deps: CompleteDeps): Complete {
-  return async ({ system, prompt, signal }) => {
-    const stream = await deps.streamFn(
-      deps.model,
-      {
-        systemPrompt: system,
-        messages: [{ role: 'user', content: prompt, timestamp: Date.now() }],
-      },
-      { signal },
-    );
-    const message = await stream.result();
-    if (message.stopReason === 'error' || message.stopReason === 'aborted') {
-      throw new Error(message.errorMessage ?? `call ${message.stopReason}`);
-    }
-    return message.content
-      .flatMap((part) => (part.type === 'text' ? [part.text] : []))
-      .join('\n')
-      .trim();
-  };
+}): Promise<string> {
+  signal?.throwIfAborted();
+  const message = await piModels.completeSimple(
+    model,
+    {
+      systemPrompt: system,
+      messages: [{ role: 'user', content: prompt, timestamp: Date.now() }],
+      tools: [],
+    },
+    { signal },
+  );
+  signal?.throwIfAborted();
+  if (message.stopReason === 'error' || message.stopReason === 'aborted') {
+    throw new Error(message.errorMessage ?? `call ${message.stopReason}`);
+  }
+  return message.content
+    .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+    .join('\n')
+    .trim();
 }
