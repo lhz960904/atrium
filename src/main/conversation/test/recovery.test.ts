@@ -3,12 +3,13 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { AgentMessage, Entry, Session } from '@earendil-works/pi-agent-core';
+import type { AgentMessage, CustomEntry, Entry, Session } from '@earendil-works/pi-agent-core';
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { InteractionRequest } from '@shared/interactions';
 import { INTERACTION_ENTRY } from '../project';
 import { recoverInterruptedRun } from '../recovery';
+import { ThreadSession } from '../store/session';
 import { sessionSqlite } from '../store/sqlite-driver';
 
 /**
@@ -110,7 +111,7 @@ test('a call that never returned is closed as unknown, and the run is closed', a
     await s.appendMessage(calling('c1'));
   });
 
-  await recoverInterruptedRun(s, 'r1', 'app_shutdown');
+  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'app_shutdown');
 
   const { entries, records } = await read(s);
   const [sealed] = resultsFor(entries, 'c1');
@@ -131,7 +132,7 @@ test('a real result is kept and never joined by a second one', async () => {
     await s.appendMessage(result('c1', 'the real output'));
   });
 
-  await recoverInterruptedRun(s, 'r1', 'interrupted');
+  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'interrupted');
 
   const { entries } = await read(s);
   const kept = resultsFor(entries, 'c1');
@@ -147,10 +148,10 @@ test('recovering twice writes nothing the first pass did not', async () => {
     await s.appendMessage(calling('c1'));
   });
 
-  await recoverInterruptedRun(s, 'r1', 'interrupted');
+  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'interrupted');
   const first = await read(s);
   // A second boot finds the same run: the ids are stable, so this must not throw.
-  await recoverInterruptedRun(s, 'r1', 'interrupted');
+  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'interrupted');
   const second = await read(s);
 
   expect(second.entries).toHaveLength(first.entries.length);
@@ -174,11 +175,11 @@ test('a decision nobody answered is recorded as interrupted, and an answered one
     });
   });
 
-  await recoverInterruptedRun(s, 'r1', 'user_cancelled');
+  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'user_cancelled');
 
   const { entries } = await read(s);
   const settlements = entries.filter(
-    (entry): entry is Extract<Entry, { type: 'custom' }> =>
+    (entry): entry is CustomEntry =>
       entry.type === 'custom' &&
       entry.customType === INTERACTION_ENTRY &&
       (entry.data as { phase: string }).phase === 'resolved',
@@ -188,13 +189,16 @@ test('a decision nobody answered is recorded as interrupted, and an answered one
     (entry) => (entry.data as { outcome: { kind: string } }).outcome.kind,
   );
   expect(outcomes.sort()).toEqual(['denied', 'interrupted']);
-  // The call the user denied says so; the one nobody answered says it never ran.
+  // Which decision it was is carried by the settlement above, and that is what
+  // the card reads; the stand-in result only has to say the call was cut off.
   const denied = resultsFor(entries, 'c2')[0];
   const deniedText =
     denied?.type === 'message' && denied.message.role === 'toolResult'
       ? denied.message.content
       : undefined;
-  expect(deniedText).toMatchObject([{ type: 'text', text: expect.stringContaining('denied') }]);
+  expect(deniedText).toMatchObject([
+    { type: 'text', text: expect.stringContaining('interrupted') },
+  ]);
   await repo.close();
 });
 
@@ -213,7 +217,7 @@ test('a run that already ended is left alone', async () => {
   });
   const before = await read(s);
 
-  await recoverInterruptedRun(s, 'r1', 'interrupted');
+  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'interrupted');
 
   const after = await read(s);
   expect(after.entries).toHaveLength(before.entries.length);

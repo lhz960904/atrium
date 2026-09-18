@@ -1,11 +1,11 @@
 import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
+import { getAgentMessages } from '@main/conversation/project';
 import { createSessionRecorder, type SessionRecorder } from '@main/conversation/session-recorder';
+import { conversations } from '@main/conversation/store/session';
 import {
   compactThread,
-  openThreadSession,
   resolveThreadWorkspace,
-  runnableHistory,
   setThreadTitle,
   touchThread,
 } from '@main/conversation/threads';
@@ -107,9 +107,9 @@ class RunExecution {
       this.opts.emit({ type: 'run_started', runId });
       signal.throwIfAborted();
 
-      const { session, recorder, workspaceRoot } = await this.open();
+      const { conversation, recorder, workspaceRoot } = await this.open();
       const prepared = await this.prepare(workspaceRoot, recorder);
-      const history = runnableHistory(await session.findEntriesOnBranch({ order: 'oldestFirst' }));
+      const history = getAgentMessages(await conversation.entries());
       if (getSettings('general.autoGenerateTitle')) this.startTitle(history);
       const messages = await this.foldForTurn(prepared, history);
 
@@ -176,22 +176,21 @@ class RunExecution {
         ? getComputerUseHelper()
         : undefined;
 
-    const session = await openThreadSession(db, input.threadId, workspaceRoot);
-    const recorder = createSessionRecorder({ session, runId });
+    const conversation = await conversations().openForThread(input.threadId, workspaceRoot);
+    const recorder = createSessionRecorder({ conversation, runId });
     this.recorder = recorder;
     const prompt = input.userMessage
-      ? { id: input.userMessage.id, message: splitUserMessage(input.userMessage).message }
+      ? { id: input.userMessage.id, message: splitUserMessage(input.userMessage) }
       : undefined;
     await recorder.begin(prompt);
     touchThread(db, input.threadId, { markRead: prompt !== undefined });
-    const [started] = await session.findRecords({ type: 'operation_started', runId, limit: 1 });
-    this.openedAt = started?.timestamp ?? this.openedAt;
+    this.openedAt = (await conversation.runStartedAt(runId)) ?? this.openedAt;
     this.opts.emit({
       type: 'notice',
       name: 'message-metadata',
       payload: { createdAt: this.openedAt },
     });
-    return { session, recorder, workspaceRoot };
+    return { conversation, recorder, workspaceRoot };
   }
 
   /** A title may finish after the run; save it but never reopen its stream. */

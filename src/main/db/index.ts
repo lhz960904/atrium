@@ -1,5 +1,6 @@
 import { join } from 'node:path';
-import { openSessionStore } from '@main/conversation/store/repo';
+import { openSessionStore, sessionStore } from '@main/conversation/store/repo';
+import { closeConversations, openConversations } from '@main/conversation/store/session';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
@@ -36,6 +37,7 @@ export function openDb(): Db {
 
   migrate(_db, { migrationsFolder: migrationsFolder() });
   openSessionStore(_raw, dbPath);
+  openConversations(_db, sessionStore());
 
   return _db;
 }
@@ -46,6 +48,7 @@ export function getDb(): Db {
 }
 
 export function closeDb(): void {
+  closeConversations();
   _raw?.close();
   _raw = null;
   _db = null;
