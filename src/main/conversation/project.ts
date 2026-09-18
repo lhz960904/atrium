@@ -15,7 +15,13 @@ import type {
   ToolResultMessage,
   UserMessage,
 } from '@shared/protocol';
-import { mergeAssistantMessage, mergeUserMessage, type ToolStateExtras } from './ui-messages';
+import { approvalFields } from '@shared/tool-part';
+import {
+  mergeAssistantMessage,
+  mergeUserMessage,
+  type ToolStateExtra,
+  type ToolStateExtras,
+} from './ui-messages';
 
 /**
  * A session as the rest of the app reads it.
@@ -38,8 +44,6 @@ export const INTERACTION_ENTRY = 'atrium.interaction';
 export type InteractionEntryData =
   | { phase: 'requested'; request: InteractionRequest }
   | { phase: 'resolved'; request: InteractionRequest; outcome: InteractionOutcome };
-
-const INTERRUPTED_TEXT = 'The run stopped before this call was decided.';
 
 type Run = {
   id: string;
@@ -138,24 +142,9 @@ function toolStatesOf(entries: Entry[]): ToolStateExtras {
           : { state: 'input-available' };
       continue;
     }
-    const { outcome } = data;
-    if (outcome.kind === 'denied') {
-      states[callId] = {
-        state: 'output-denied',
-        approval: {
-          ...approval,
-          approved: false,
-          ...(outcome.reason && { reason: outcome.reason }),
-        },
-      };
-    } else if (outcome.kind === 'approved') {
-      states[callId] = { state: 'approval-responded', approval: { ...approval, approved: true } };
-    } else if (outcome.kind === 'interrupted') {
-      states[callId] = { state: 'output-error', errorText: INTERRUPTED_TEXT };
-    } else {
-      // An answer or a cancellation is carried by the call's own result.
-      delete states[callId];
-    }
+    const fields = approvalFields(data.request.id, data.outcome);
+    if (fields) states[callId] = fields as ToolStateExtra;
+    else delete states[callId];
   }
   return states;
 }

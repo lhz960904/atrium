@@ -1,5 +1,4 @@
 import type { AtriumUIMessage } from '@shared/chat';
-import { isMcpToolName } from '@shared/mcp';
 import type {
   AssistantMessage,
   Content,
@@ -8,7 +7,7 @@ import type {
   ToolResultMessage,
   UserMessage,
 } from '@shared/protocol';
-import { contentText } from '@shared/protocol';
+import { toolPartIdentity, toolResultFields } from '@shared/tool-part';
 import type { ToolApproval } from '@shared/ui-message';
 
 /**
@@ -131,10 +130,7 @@ function mergeToolPart(
   result: ToolResultMessage | undefined,
   extra: ToolStateExtra | undefined,
 ): Part {
-  const base: LoosePart = isMcpToolName(call.name)
-    ? { type: 'dynamic-tool', toolName: call.name, toolCallId: call.id }
-    : { type: `tool-${call.name}`, toolCallId: call.id };
-  base.input = call.arguments;
+  const base: LoosePart = { ...toolPartIdentity(call.name, call.id), input: call.arguments };
 
   // A denial is the user's decision; the error result pi stands in for the
   // blocked call must not replace it.
@@ -142,16 +138,7 @@ function mergeToolPart(
     return { ...base, state: 'output-denied', approval: extra.approval } as Part;
   }
   if (result) {
-    if (!result.isError) {
-      Object.assign(base, { state: 'output-available', output: result.details });
-    } else {
-      // pi puts a failure's reason in the model-facing content, which is the
-      // same text the live card reads.
-      Object.assign(base, {
-        state: 'output-error',
-        errorText: contentText(result.content).trim() || 'Tool failed.',
-      });
-    }
+    Object.assign(base, toolResultFields(result, Boolean(result.isError)));
     return base as Part;
   }
 
