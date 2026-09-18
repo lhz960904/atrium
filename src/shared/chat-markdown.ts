@@ -35,10 +35,9 @@ export function renderChatMarkdown(opts: {
   return `# ${opts.title}\n\n${turns.join('\n\n')}\n`;
 }
 
-/** The persisted summary + ack pair a compaction fold leaves behind. */
+/** The divider a compaction fold leaves behind, shown in place of what it covers. */
 function isCompactionCheckpoint(msg: UIMessage): boolean {
-  const kind = (msg.metadata as { kind?: string } | undefined)?.kind;
-  return kind === 'compaction' || kind === 'compaction-ack';
+  return (msg.metadata as { kind?: string } | undefined)?.kind === 'compaction';
 }
 
 function renderBody(msg: UIMessage, labels: ChatMarkdownLabels): string {

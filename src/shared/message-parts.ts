@@ -28,9 +28,7 @@ export type NormalizedPart =
   | { kind: 'reasoning'; text: string }
   | { kind: 'tool-call'; name: string; input: unknown }
   | { kind: 'tool-result'; name: string; output: NormalizedToolOutput }
-  | { kind: 'file'; mediaType?: string; url?: string; filename?: string }
-  | { kind: 'source'; title?: string; url?: string; filename?: string }
-  | { kind: 'data'; dataType: string; data: unknown };
+  | { kind: 'file'; mediaType?: string; url?: string; filename?: string };
 
 /** JSON-stringify arbitrary content for size/transcript purposes; never throws. */
 export function stringifyUnknown(value: unknown): string {
@@ -126,18 +124,6 @@ function fromUIParts(parts: UIMessageLike['parts']): NormalizedPart[] {
         url: part.url as string | undefined,
         filename: part.filename as string | undefined,
       });
-    } else if (part.type === 'source-url') {
-      out.push({
-        kind: 'source',
-        title: part.title as string | undefined,
-        url: part.url as string | undefined,
-      });
-    } else if (part.type === 'source-document') {
-      out.push({
-        kind: 'source',
-        title: part.title as string | undefined,
-        filename: part.filename as string | undefined,
-      });
     } else if (part.type.startsWith('tool-') || part.type === 'dynamic-tool') {
       const name =
         part.type === 'dynamic-tool'
@@ -155,8 +141,6 @@ function fromUIParts(parts: UIMessageLike['parts']): NormalizedPart[] {
           output: { text: String(part.errorText ?? ''), images: [], error: true },
         });
       }
-    } else if (part.type.startsWith('data-')) {
-      out.push({ kind: 'data', dataType: part.type.slice('data-'.length), data: part.data });
     }
     // step-start carries no content.
   }
