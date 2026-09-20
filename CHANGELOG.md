@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.1](https://github.com/lhz960904/atrium/compare/v0.17.0...v0.17.1) (2026-09-20)
+
+
+### Bug Fixes
+
+* **conversation:** repair a lost run on open and keep folds in place ([#117](https://github.com/lhz960904/atrium/issues/117)) ([a70c0e6](https://github.com/lhz960904/atrium/commit/a70c0e67396275d013e524391ce1eda011baf844))
+* **providers:** match Ark plan output caps and thinking support ([e9062e0](https://github.com/lhz960904/atrium/commit/e9062e09c03e39da53f1027eff57fd64397da381))
+
 ## [0.17.0](https://github.com/lhz960904/atrium/compare/v0.16.0...v0.17.0) (2026-09-14)
 
 
