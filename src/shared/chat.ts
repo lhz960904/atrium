@@ -6,31 +6,6 @@ import type { UIMessage } from './ui-message';
 export type SubagentActivityTool = { id: string; name: ToolName; input: unknown };
 
 /**
- * Transient UI data parts the server streams via writer.write — delivered to
- * the client's onData, never persisted into messages. `compaction` announces
- * an in-progress cross-turn fold (phase start/done) so the UI shows a live
- * indicator. Within-turn folds aren't surfaced (internal, not persisted).
- * `subagent` bubbles a delegated subagent's activity (keyed by the task tool's
- * call id) so its card can show a live nested trace; never persisted, so a
- * reloaded card shows just the result.
- */
-export type AtriumDataParts = {
-  compaction: { phase: 'start' | 'done' };
-  subagent:
-    | { id: string; phase: 'start' }
-    | { id: string; phase: 'step'; tools: SubagentActivityTool[] }
-    | { id: string; phase: 'done'; status: 'done' | 'failed' };
-  /** A boundary-crossing tool call the auto-review reviewer silently approved.
-   *  Transient — drives a persistent "reviewed" badge on the tool marker (keyed
-   *  by toolCallId) and a one-shot toast above the composer (showing subject).
-   *  Lost on reload: the call's result persists, this is just an in-session hint. */
-  autoReview: { toolCallId: string; subject: string };
-  /** A model-generated thread title pushed mid-turn on the first turn; the open
-   *  chat and sidebar update live, the DB is updated in parallel. */
-  title: { title: string };
-};
-
-/**
  * Per-assistant-message observability, minted server-side via the stream's
  * messageMetadata callback and persisted alongside parts. `durationMs` drives
  * the "Worked for …" trace header; it's only present once a turn finishes.
@@ -54,10 +29,8 @@ export type AtriumMessageMetadata = {
   cacheCreationTokens?: number;
   /** Prompt tokens at turn end (last step input+output) — compaction's counting base. */
   contextTokens?: number;
-  /** Marks the persisted compaction checkpoint pair (summary + its ack). */
-  kind?: 'compaction' | 'compaction-ack';
-  /** On a 'compaction' summary, the id of the last folded message. */
-  coveredThroughId?: string;
+  /** Marks a fold's divider, which is shown in place of the messages it covers. */
+  kind?: 'compaction';
 };
 
 /**
@@ -65,4 +38,4 @@ export type AtriumMessageMetadata = {
  * streamed over /api/chat, rendered by the chat components). The tools generic
  * makes tool parts (name, input, output) strongly typed end to end.
  */
-export type AtriumUIMessage = UIMessage<AtriumMessageMetadata, AtriumDataParts, AtriumTools>;
+export type AtriumUIMessage = UIMessage<AtriumMessageMetadata, AtriumTools>;

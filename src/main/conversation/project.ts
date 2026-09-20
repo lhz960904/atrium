@@ -4,14 +4,22 @@ import {
   type Entry,
   type LaneRecord,
   type MessageEntry,
+  type OperationFinishedRecord,
 } from '@earendil-works/pi-agent-core';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
-import type { AssistantMessage, Message, ToolCall } from '@shared/protocol';
+import type {
+  AssistantMessage,
+  Message,
+  ToolCall,
+  ToolResultMessage,
+  UserMessage,
+} from '@shared/protocol';
+import { approvalFields } from '@shared/tool-part';
 import {
   mergeAssistantMessage,
   mergeUserMessage,
-  type PiRow,
+  type ToolStateExtra,
   type ToolStateExtras,
 } from './ui-messages';
 
@@ -37,8 +45,6 @@ export type InteractionEntryData =
   | { phase: 'requested'; request: InteractionRequest }
   | { phase: 'resolved'; request: InteractionRequest; outcome: InteractionOutcome };
 
-const INTERRUPTED_TEXT = 'The run stopped before this call was decided.';
-
 type Run = {
   id: string;
   startSeq: number;
@@ -51,7 +57,7 @@ const isMessage = (entry: Entry): entry is MessageEntry => entry.type === 'messa
 
 /** The runs a session's records describe, in order. */
 function runsOf(records: LaneRecord[]): Run[] {
-  const finished = new Map<string, LaneRecord & { type: 'operation_finished' }>();
+  const finished = new Map<string, OperationFinishedRecord>();
   for (const record of records) {
     if (record.type === 'operation_finished') finished.set(record.runId, record);
   }
@@ -136,119 +142,70 @@ function toolStatesOf(entries: Entry[]): ToolStateExtras {
           : { state: 'input-available' };
       continue;
     }
-    const { outcome } = data;
-    if (outcome.kind === 'denied') {
-      states[callId] = {
-        state: 'output-denied',
-        approval: {
-          ...approval,
-          approved: false,
-          ...(outcome.reason && { reason: outcome.reason }),
-        },
-      };
-    } else if (outcome.kind === 'approved') {
-      states[callId] = { state: 'approval-responded', approval: { ...approval, approved: true } };
-    } else if (outcome.kind === 'interrupted') {
-      states[callId] = { state: 'output-error', errorText: INTERRUPTED_TEXT };
-    } else {
-      // An answer or a cancellation is carried by the call's own result.
-      delete states[callId];
-    }
+    const fields = approvalFields(data.request.id, data.outcome);
+    if (fields) states[callId] = fields as ToolStateExtra;
+    else delete states[callId];
   }
   return states;
 }
 
 /**
- * The rows one run's entries stand for. Assistant turns keep the
- * `<runId>:<turn>` key the renderer folds them by; a tool result is keyed by
- * the call it answers, which is how the merge pairs the two.
+ * A session's conversation, in the shape the renderer consumes.
+ *
+ * Entries already arrive in the order they happened, so this walks them once
+ * and emits what each one stands for. A run is the only thing that spans
+ * several: its turns and their results fold into a single message, emitted
+ * where the first of them landed, so a fold between two runs stays between
+ * them rather than being appended after everything else.
  */
-function rowsOf(run: Run, entries: Entry[], records: LaneRecord[]): PiRow[] {
-  const messages = entries.filter(isMessage).map((entry) => entry.message as Message);
-  const answered = messages.filter((m) => m.role === 'assistant');
-  const metadata: Record<string, unknown> = {
-    createdAt: run.startedAt,
-    ...(run.finishedAt === undefined ? {} : { durationMs: run.finishedAt - run.startedAt }),
-    ...modelOf(messages),
-    ...usageOf(records, run.id),
-  };
-  const toolStates = toolStatesOf(entries);
-  if (Object.keys(toolStates).length > 0) metadata.toolStates = toolStates;
-
-  const rows: PiRow[] = [];
-  let turn = 0;
-  for (const message of messages) {
-    if (message.role === 'assistant') {
-      rows.push({
-        id: `${run.id}:${turn}`,
-        runId: run.id,
-        role: 'assistant',
-        message: message as PiRow['message'],
-        // Run-level bookkeeping rides on the first row, as it always has.
-        metadata: turn === 0 ? metadata : null,
-      });
-      turn++;
-    } else if (message.role === 'toolResult') {
-      rows.push({
-        id: message.toolCallId,
-        runId: run.id,
-        role: 'toolResult',
-        message: message as PiRow['message'],
-        metadata: null,
-      });
-    }
-  }
-  // A run whose first turn never landed still needs somewhere to carry its
-  // metadata, or the card loses its timing and cost.
-  if (answered.length === 0 && rows.length > 0) rows[0].metadata = metadata;
-  return rows;
-}
-
-/** A session's conversation, in the shape the renderer consumes. */
-export function projectMessages(entries: Entry[], records: LaneRecord[]): AtriumUIMessage[] {
+export function getUIMessages(entries: Entry[], records: LaneRecord[]): AtriumUIMessage[] {
   const runs = runsOf(records);
   const out: AtriumUIMessage[] = [];
+  const folded = new Set<string>();
 
-  // A fold is shown where it happened, as its own divider; the messages it
-  // folded away stay in the list above it.
-  const folds = entries.filter((entry) => entry.type === 'compaction');
-  const divider = (entry: Extract<Entry, { type: 'compaction' }>): AtriumUIMessage =>
-    ({
-      id: entry.id,
-      role: 'user',
-      parts: [{ type: 'text', text: entry.summary }],
-      metadata: { kind: 'compaction', createdAt: entry.timestamp },
-    }) as AtriumUIMessage;
+  for (const entry of entries) {
+    // A fold is shown where it happened, as its own divider; the messages it
+    // folded away stay in the list above it.
+    if (entry.type === 'compaction') {
+      out.push({
+        id: entry.id,
+        role: 'user',
+        parts: [{ type: 'text', text: entry.summary }],
+        metadata: { kind: 'compaction', createdAt: entry.timestamp },
+      } as AtriumUIMessage);
+      continue;
+    }
+    if (!isMessage(entry)) continue;
 
-  for (const run of runs) {
-    const own = entries.filter((entry) => entry.seq > run.startSeq && entry.seq < run.endSeq);
-    // The turn the user opened the run with is its own message, not part of the
+    // The turn the user opened a run with is its own message, not part of the
     // assistant's; everything the model produced folds into one.
-    for (const entry of own) {
-      if (isMessage(entry) && entry.message.role === 'user') {
-        out.push(
-          mergeUserMessage({
-            id: entry.id,
-            runId: entry.id,
-            role: 'user',
-            message: entry.message as PiRow['message'],
-            metadata: { createdAt: entry.timestamp },
-          }),
-        );
-      }
+    const message = entry.message as Message;
+    if (message.role === 'user') {
+      out.push(mergeUserMessage(entry.id, message as UserMessage, { createdAt: entry.timestamp }));
+      continue;
     }
-    const produced = own.filter((entry) => !(isMessage(entry) && entry.message.role === 'user'));
-    const rows = rowsOf(run, produced, records);
-    if (rows.length > 0) out.push(mergeAssistantMessage(run.id, rows));
-    for (const fold of folds) {
-      if (fold.seq > run.startSeq && fold.seq < run.endSeq) out.push(divider(fold));
-    }
-  }
-  // A fold the user asked for happens between runs, so it belongs to none.
-  for (const fold of folds) {
-    if (!runs.some((run) => fold.seq > run.startSeq && fold.seq < run.endSeq)) {
-      out.push(divider(fold));
-    }
+
+    const run = runs.find((each) => entry.seq > each.startSeq && entry.seq < each.endSeq);
+    if (!run || folded.has(run.id)) continue;
+    folded.add(run.id);
+
+    const own = entries.filter((each) => each.seq > run.startSeq && each.seq < run.endSeq);
+    const produced = own
+      .filter(isMessage)
+      .map((each) => each.message as Message)
+      .filter((each): each is AssistantMessage | ToolResultMessage => each.role !== 'user');
+    out.push(
+      mergeAssistantMessage(run.id, {
+        messages: produced,
+        metadata: {
+          createdAt: run.startedAt,
+          ...(run.finishedAt === undefined ? {} : { durationMs: run.finishedAt - run.startedAt }),
+          ...modelOf(produced),
+          ...usageOf(records, run.id),
+        },
+        toolStates: toolStatesOf(own),
+      }),
+    );
   }
 
   return out;
@@ -263,7 +220,7 @@ export function projectMessages(entries: Entry[], records: LaneRecord[]): Atrium
  * summary is a role pi owns, which never reaches storage or the wire — the
  * reader is handed a divider instead.
  */
-export function projectHistory(entries: Entry[]): AgentMessage[] {
+export function getAgentMessages(entries: Entry[]): AgentMessage[] {
   return buildSessionContext(entries).messages;
 }
 

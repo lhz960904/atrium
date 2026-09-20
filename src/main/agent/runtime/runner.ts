@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { compactThread, threadHistory } from '@main/conversation/threads';
+import { conversations } from '@main/conversation/store/session';
+import { compactThread } from '@main/conversation/threads';
 import type { Db } from '@main/db';
 import { createLogger } from '@main/utils/log';
 import type { DecideInteraction } from '@shared/interactions';
@@ -163,7 +164,7 @@ export class Runner {
   async compact({ threadId, providerId, modelId }: CompactRequest): Promise<boolean> {
     // A waiting run still owns the thread's history.
     this.assertIdle(threadId);
-    const history = await threadHistory(this.db, threadId);
+    const history = await conversations().getAgentMessagesByThreadID(threadId);
     const model = resolvePiModel(this.db, providerId, modelId);
     const folded = await foldHistory({
       messages: history,

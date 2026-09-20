@@ -1,5 +1,4 @@
 import type { AtriumUIMessage } from '@shared/chat';
-import { isMcpToolName } from '@shared/mcp';
 import type {
   AssistantMessage,
   Content,
@@ -8,7 +7,7 @@ import type {
   ToolResultMessage,
   UserMessage,
 } from '@shared/protocol';
-import { contentText } from '@shared/protocol';
+import { toolPartIdentity, toolResultFields } from '@shared/tool-part';
 import type { ToolApproval } from '@shared/ui-message';
 
 /**
@@ -22,17 +21,9 @@ import type { ToolApproval } from '@shared/ui-message';
  * fold and this is it.
  *
  * UI-only tool state pi has no slot for — a pending or answered approval, a
- * call still streaming its input — is carried alongside under `toolStates`, so
+ * call still streaming its input — is passed alongside the run's messages, so
  * the message JSON itself stays a clean subset of pi's vocabulary.
  */
-
-export type PiRow = {
-  id: string;
-  runId: string;
-  role: 'user' | 'assistant' | 'toolResult';
-  message: UserMessage | AssistantMessage | ToolResultMessage;
-  metadata: Record<string, unknown> | null;
-};
 
 type Part = AtriumUIMessage['parts'][number];
 type LoosePart = Record<string, unknown>;
@@ -48,36 +39,33 @@ export type ToolStateExtras = Record<string, ToolStateExtra>;
 // user messages
 // ---------------------------------------------------------------------------
 
-export function splitUserMessage(msg: AtriumUIMessage): PiRow & { message: UserMessage } {
+export function splitUserMessage(msg: AtriumUIMessage): UserMessage {
   const createdAt = (msg.metadata?.createdAt as number | undefined) ?? 0;
   const content = (msg.parts as LoosePart[]).map((part): TextContent | Content => {
     if (part.type === 'text') return { type: 'text', text: String(part.text ?? '') };
     // Attachments and composer extensions round-trip verbatim as unknown types.
     return part as Content;
   });
-  return {
-    id: msg.id,
-    runId: msg.id,
-    role: 'user',
-    message: { role: 'user', content: content as UserMessage['content'], timestamp: createdAt },
-    metadata: (msg.metadata as Record<string, unknown> | undefined) ?? null,
-  };
+  return { role: 'user', content: content as UserMessage['content'], timestamp: createdAt };
 }
 
-export function mergeUserMessage(row: PiRow): AtriumUIMessage {
-  const message = row.message as UserMessage;
+export function mergeUserMessage(
+  id: string,
+  message: UserMessage,
+  metadata: Record<string, unknown>,
+): AtriumUIMessage {
   const content =
     typeof message.content === 'string'
       ? [{ type: 'text', text: message.content }]
       : message.content;
   return {
-    id: row.id,
+    id,
     role: 'user',
     parts: (content as LoosePart[]).map((part): Part => {
       if (part.type === 'text') return { type: 'text', text: String(part.text ?? '') };
       return part as Part;
     }),
-    metadata: (row.metadata ?? undefined) as AtriumUIMessage['metadata'],
+    metadata: metadata as AtriumUIMessage['metadata'],
   };
 }
 
@@ -85,39 +73,33 @@ export function mergeUserMessage(row: PiRow): AtriumUIMessage {
 // assistant runs → per-turn assistant rows + toolResult rows
 // ---------------------------------------------------------------------------
 
-export function mergeAssistantMessage(runId: string, rows: PiRow[]): AtriumUIMessage {
+/** One run, folded into the single assistant message the renderer draws. */
+export function mergeAssistantMessage(
+  runId: string,
+  run: {
+    /** The run's own turns and tool results, in the order they landed. */
+    messages: (AssistantMessage | ToolResultMessage)[];
+    /** Timing, model and cost — what the card shows about the run itself. */
+    metadata: Record<string, unknown>;
+    /** Tool state pi has no slot for, keyed by call id. */
+    toolStates: ToolStateExtras;
+  },
+): AtriumUIMessage {
   const results = new Map<string, ToolResultMessage>();
-  for (const row of rows) {
-    if (row.role === 'toolResult')
-      results.set((row.message as ToolResultMessage).toolCallId, row.message as ToolResultMessage);
+  for (const message of run.messages) {
+    if (message.role === 'toolResult') results.set(message.toolCallId, message);
   }
-  const assistantRows = rows.filter((r) => r.role === 'assistant');
-  // Run-level tool state rides on the first row, but a call in any turn can need it.
-  const toolStates: ToolStateExtras = Object.assign(
-    {},
-    ...rows.map((row) => (row.metadata?.toolStates ?? {}) as ToolStateExtras),
-  );
+  const turns = run.messages.filter((m): m is AssistantMessage => m.role === 'assistant');
+  const { toolStates } = run;
 
   const parts: Part[] = [];
-  let metadata: Record<string, unknown> | undefined;
-  for (const [index, row] of assistantRows.entries()) {
-    const rowMeta = (row.metadata ?? {}) as Record<string, unknown>;
-    if (index === 0) {
-      const { toolStates: _dropped, ...rest } = rowMeta;
-      if (Object.keys(rest).length > 0) metadata = rest;
-    }
+  for (const turn of turns) {
     parts.push({ type: 'step-start' });
-    for (const content of (row.message as AssistantMessage).content as LoosePart[]) {
+    for (const content of turn.content as LoosePart[]) {
       if (content.type === 'text') {
         parts.push({ type: 'text', text: String(content.text ?? '') });
       } else if (content.type === 'thinking') {
-        parts.push({
-          type: 'reasoning',
-          text: String(content.thinking ?? ''),
-          ...(content.thinkingSignature
-            ? { providerMetadata: { anthropic: { signature: content.thinkingSignature } } }
-            : {}),
-        } as Part);
+        parts.push({ type: 'reasoning', text: String(content.thinking ?? '') });
       } else if (content.type === 'toolCall') {
         const call = content as unknown as ToolCall;
         parts.push(mergeToolPart(call, results.get(call.id), toolStates[call.id]));
@@ -131,7 +113,9 @@ export function mergeAssistantMessage(runId: string, rows: PiRow[]): AtriumUIMes
     id: runId,
     role: 'assistant',
     parts,
-    metadata: metadata as AtriumUIMessage['metadata'],
+    metadata: (Object.keys(run.metadata).length > 0
+      ? run.metadata
+      : undefined) as AtriumUIMessage['metadata'],
   };
 }
 
@@ -140,10 +124,7 @@ function mergeToolPart(
   result: ToolResultMessage | undefined,
   extra: ToolStateExtra | undefined,
 ): Part {
-  const base: LoosePart = isMcpToolName(call.name)
-    ? { type: 'dynamic-tool', toolName: call.name, toolCallId: call.id }
-    : { type: `tool-${call.name}`, toolCallId: call.id };
-  base.input = call.arguments;
+  const base: LoosePart = { ...toolPartIdentity(call.name, call.id), input: call.arguments };
 
   // A denial is the user's decision; the error result pi stands in for the
   // blocked call must not replace it.
@@ -151,16 +132,7 @@ function mergeToolPart(
     return { ...base, state: 'output-denied', approval: extra.approval } as Part;
   }
   if (result) {
-    if (!result.isError) {
-      Object.assign(base, { state: 'output-available', output: result.details });
-    } else {
-      // pi puts a failure's reason in the model-facing content, which is the
-      // same text the live card reads.
-      Object.assign(base, {
-        state: 'output-error',
-        errorText: contentText(result.content).trim() || 'Tool failed.',
-      });
-    }
+    Object.assign(base, toolResultFields(result, Boolean(result.isError)));
     return base as Part;
   }
 

@@ -1,6 +1,5 @@
 import type { AtriumUIMessage } from '@shared/chat';
 import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
-import { isMcpToolName } from '@shared/mcp';
 import type {
   AgentSessionEvent,
   AssistantMessage,
@@ -8,7 +7,7 @@ import type {
   ToolCall,
   ToolExecutionResult,
 } from '@shared/protocol';
-import { contentText } from '@shared/protocol';
+import { approvalFields, toolPartIdentity, toolResultFields } from '@shared/tool-part';
 
 /**
  * Rebuilds the run's assistant message, in the exact part shape the existing
@@ -33,12 +32,8 @@ export type RunSnapshot = {
 type Part = AtriumUIMessage['parts'][number];
 type LoosePart = Record<string, unknown>;
 
-const toolPartType = (name: string) => (isMcpToolName(name) ? 'dynamic-tool' : `tool-${name}`);
-
 function makeToolPart(name: string, toolCallId: string): LoosePart {
-  const part: LoosePart = { type: toolPartType(name), toolCallId, state: 'input-streaming' };
-  if (part.type === 'dynamic-tool') part.toolName = name;
-  return part;
+  return { ...toolPartIdentity(name, toolCallId), state: 'input-streaming' };
 }
 
 export class RunAssembler {
@@ -279,28 +274,10 @@ export class RunAssembler {
   private applyOutcome(request: InteractionRequest, outcome: InteractionOutcome): void {
     if (request.kind !== 'approval') return;
     const { id: toolCallId, name } = request.toolCall;
-    const approval = { id: request.id };
-    if (outcome.kind === 'approved') {
-      this.patchTool(toolCallId, name, {
-        state: 'approval-responded',
-        approval: { ...approval, approved: true },
-      });
-    } else if (outcome.kind === 'denied') {
-      this.denied.add(toolCallId);
-      this.patchTool(toolCallId, name, {
-        state: 'output-denied',
-        approval: {
-          ...approval,
-          approved: false,
-          ...(outcome.reason && { reason: outcome.reason }),
-        },
-      });
-    } else if (outcome.kind === 'interrupted') {
-      this.patchTool(toolCallId, name, {
-        state: 'output-error',
-        errorText: 'The run stopped before this call was decided.',
-      });
-    }
+    // Remembered so the error pi stands in for the blocked call is ignored.
+    if (outcome.kind === 'denied') this.denied.add(toolCallId);
+    const fields = approvalFields(request.id, outcome);
+    if (fields) this.patchTool(toolCallId, name, fields as LoosePart);
   }
 
   private endTool(
@@ -309,18 +286,12 @@ export class RunAssembler {
     result: ToolExecutionResult,
     isError: boolean,
   ): void {
-    if (!isError) {
-      this.patchTool(toolCallId, toolName, {
-        state: 'output-available',
-        output: result?.details,
-        preliminary: undefined,
-      });
-      return;
-    }
-    if (this.denied.has(toolCallId)) return;
+    // A denial is the user's decision; the error pi stands in for the blocked
+    // call must not replace it.
+    if (isError && this.denied.has(toolCallId)) return;
     this.patchTool(toolCallId, toolName, {
-      state: 'output-error',
-      errorText: contentText(result.content).trim() || 'Tool failed.',
+      ...toolResultFields(result, isError),
+      ...(isError ? {} : { preliminary: undefined }),
     });
   }
 

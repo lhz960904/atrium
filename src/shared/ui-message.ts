@@ -1,39 +1,19 @@
 /**
- * Self-owned copy of the UI message vocabulary the chat surface renders —
- * frozen from the AI SDK part shapes the components already consume, so the
- * renderer carries no SDK dependency. The eventual renderer redesign migrates
- * components onto pi shapes directly and retires this module.
+ * The vocabulary the chat surface renders. Its shapes began as the AI SDK's,
+ * which is no longer a dependency, so what is left is only what the components
+ * actually read — the transient data-part channel it also defined is gone,
+ * replaced by notices the chat store routes to their own stores.
  */
 
 export type ChatStatus = 'submitted' | 'streaming' | 'ready' | 'error';
 
-export type TextUIPart = { type: 'text'; text: string; state?: 'streaming' | 'done' };
+type TextUIPart = { type: 'text'; text: string; state?: 'streaming' | 'done' };
 
-export type ReasoningUIPart = {
-  type: 'reasoning';
-  text: string;
-  state?: 'streaming' | 'done';
-  providerMetadata?: Record<string, unknown>;
-};
+type ReasoningUIPart = { type: 'reasoning'; text: string; state?: 'streaming' | 'done' };
 
-export type FileUIPart = { type: 'file'; url: string; mediaType: string; filename?: string };
+type FileUIPart = { type: 'file'; url: string; mediaType: string; filename?: string };
 
-export type SourceUrlUIPart = {
-  type: 'source-url';
-  sourceId?: string;
-  url: string;
-  title?: string;
-};
-
-export type SourceDocumentUIPart = {
-  type: 'source-document';
-  sourceId?: string;
-  mediaType?: string;
-  title?: string;
-  filename?: string;
-};
-
-export type StepStartUIPart = { type: 'step-start' };
+type StepStartUIPart = { type: 'step-start' };
 
 export type ToolApproval = { id: string; approved?: boolean; reason?: string };
 
@@ -119,27 +99,16 @@ export type DynamicToolUIPart = {
   title?: string;
 } & ToolStates;
 
-export type DataUIPart<DATA extends Record<string, unknown>> = ValueOf<{
-  [NAME in keyof DATA & string]: { type: `data-${NAME}`; id?: string; data: DATA[NAME] };
-}>;
-
-export type UIMessagePart<
-  DATA extends Record<string, unknown>,
-  TOOLS extends Record<string, { input: unknown; output: unknown }>,
-> =
+type UIMessagePart<TOOLS extends Record<string, { input: unknown; output: unknown }>> =
   | TextUIPart
   | ReasoningUIPart
   | FileUIPart
-  | SourceUrlUIPart
-  | SourceDocumentUIPart
   | StepStartUIPart
-  | DataUIPart<DATA>
   | ToolUIPart<TOOLS>
   | DynamicToolUIPart;
 
 export type UIMessage<
   METADATA = unknown,
-  DATA extends Record<string, unknown> = Record<string, unknown>,
   TOOLS extends Record<string, { input: unknown; output: unknown }> = Record<
     string,
     { input: unknown; output: unknown }
@@ -148,7 +117,7 @@ export type UIMessage<
   id: string;
   role: 'system' | 'user' | 'assistant';
   metadata?: METADATA;
-  parts: UIMessagePart<DATA, TOOLS>[];
+  parts: UIMessagePart<TOOLS>[];
 };
 
 // ---------------------------------------------------------------------------
@@ -161,10 +130,7 @@ export function isStaticToolUIPart<P extends { type: string }>(
   return part.type.startsWith('tool-');
 }
 
-/** Alias kept for call sites that used the SDK's older name. */
-export const isToolUIPart = isStaticToolUIPart;
-
-export function isDynamicToolUIPart<P extends { type: string }>(
+function isDynamicToolUIPart<P extends { type: string }>(
   part: P,
 ): part is Extract<P, { type: 'dynamic-tool' }> {
   return part.type === 'dynamic-tool';
@@ -174,12 +140,6 @@ export function isToolOrDynamicToolUIPart<P extends { type: string }>(
   part: P,
 ): part is Extract<P, { type: `tool-${string}` } | { type: 'dynamic-tool' }> {
   return isStaticToolUIPart(part) || isDynamicToolUIPart(part);
-}
-
-export function isDataUIPart<P extends { type: string }>(
-  part: P,
-): part is Extract<P, { type: `data-${string}` }> {
-  return part.type.startsWith('data-');
 }
 
 export function getStaticToolName<TOOLS extends Record<string, unknown>>(part: {

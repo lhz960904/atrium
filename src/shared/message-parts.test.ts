@@ -73,11 +73,6 @@ test('a UI tool error yields an error result', () => {
   });
 });
 
-test('data parts carry their payload and type', () => {
-  const msg = ui('assistant', [{ type: 'data-title', data: { title: 'T' } }]);
-  expect(normalizedParts(msg)).toEqual([{ kind: 'data', dataType: 'title', data: { title: 'T' } }]);
-});
-
 test('textOfMessage joins only text parts', () => {
   const msg = ui('user', [
     { type: 'text', text: 'a' },

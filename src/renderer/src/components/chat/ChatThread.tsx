@@ -159,8 +159,6 @@ export function ChatThread({
           <div ref={contentRef} className="mx-auto max-w-[760px] px-2 py-6">
             {messages.map((msg) => {
               const kind = msg.metadata?.kind;
-              // The ack is an internal alternation placeholder — never shown.
-              if (kind === 'compaction-ack') return null;
               if (kind === 'compaction') {
                 return <CompactionDivider key={msg.id} summary={messageText(msg.parts)} />;
               }
