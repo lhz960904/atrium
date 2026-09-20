@@ -9,12 +9,7 @@ export type ChatStatus = 'submitted' | 'streaming' | 'ready' | 'error';
 
 type TextUIPart = { type: 'text'; text: string; state?: 'streaming' | 'done' };
 
-type ReasoningUIPart = {
-  type: 'reasoning';
-  text: string;
-  state?: 'streaming' | 'done';
-  providerMetadata?: Record<string, unknown>;
-};
+type ReasoningUIPart = { type: 'reasoning'; text: string; state?: 'streaming' | 'done' };
 
 type FileUIPart = { type: 'file'; url: string; mediaType: string; filename?: string };
 

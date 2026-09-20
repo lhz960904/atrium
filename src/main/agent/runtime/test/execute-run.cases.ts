@@ -253,6 +253,28 @@ test('a decision that cannot be recorded stops the run instead of approving it',
   expect(f.faux.state.callCount).toBe(1);
 });
 
+test('a denied call is answered and the run carries on', async () => {
+  const f = await runtimeFixture();
+  const exec = spyOn(LocalSandbox.prototype, 'exec').mockResolvedValue({
+    output: 'ran',
+    exitCode: 0,
+  });
+  f.faux.setResponses([bash(), fauxAssistantMessage('understood, another way then')]);
+  const { result, records } = await run(f, {
+    onEvent: decide({ kind: 'denied', reason: 'not that one' }),
+  });
+
+  // A denial is an answer, not a stop: pi turns it into an error tool result
+  // and the loop takes another turn, which is what DENIED_TEXT is worded for.
+  // It would end the run instead if anything ever set `terminate`.
+  expect(result.status).toBe('completed');
+  expect(exec).not.toHaveBeenCalled();
+  expect(f.faux.state.callCount).toBe(2);
+  expect(records.find((record) => record.type === 'operation_finished')).toMatchObject({
+    outcome: 'completed',
+  });
+});
+
 test('full access uses the same permission mode in the prompt and gate', async () => {
   const f = await runtimeFixture();
   const exec = spyOn(LocalSandbox.prototype, 'exec').mockResolvedValue({

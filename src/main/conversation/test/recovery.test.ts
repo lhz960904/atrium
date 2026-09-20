@@ -125,6 +125,26 @@ test('a call that never returned is closed as unknown, and the run is closed', a
   await repo.close();
 });
 
+test('a repair lands inside the run, before the record that closes it', async () => {
+  const { repo, session: s } = await session();
+  await lostRun(s, async (s) => {
+    await s.appendMessage(calling('c1'));
+  });
+
+  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'interrupted');
+
+  const { entries, records } = await read(s);
+  const repaired = entries.find(
+    (entry) => entry.type === 'message' && entry.message.role === 'toolResult',
+  );
+  const closed = records.find((record) => record.type === 'operation_finished');
+  // Closing the run has to stay the last thing recovery does. A run's entries
+  // are the ones inside its bracket, so a repair written after the record that
+  // ends it would fall outside and disappear from the conversation.
+  expect(repaired?.seq).toBeLessThan(closed?.seq ?? 0);
+  await repo.close();
+});
+
 test('a real result is kept and never joined by a second one', async () => {
   const { repo, session: s } = await session();
   await lostRun(s, async (s) => {

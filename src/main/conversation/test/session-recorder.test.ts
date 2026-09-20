@@ -285,6 +285,28 @@ test('an approval is recorded once when asked and once when decided', async () =
   await repo.close();
 });
 
+test('a stopped run still hands the model a result next to the call', async () => {
+  const { repo, session: s, conversation } = await session();
+  const recorder = createSessionRecorder({ conversation, runId: 'r1' });
+  await recorder.begin(user('run it'));
+  await recorder.observe(
+    ended(
+      assistant([
+        { type: 'text', text: 'running' },
+        { type: 'toolCall', id: 'c1', name: 'bash', arguments: {} },
+      ]),
+    ),
+  );
+  await recorder.end('aborted', 'user_cancelled');
+
+  // The stop reason is stored between the call and its stand-in result, and pi
+  // leaves custom entries out of the context it builds — so a provider still
+  // sees the result immediately after the call it answers, as it requires.
+  const { entries } = await read(s);
+  expect(getAgentMessages(entries).map((m) => m.role)).toEqual(['user', 'assistant', 'toolResult']);
+  await repo.close();
+});
+
 test('the error result a blocked call produces is kept as its real result', async () => {
   const { repo, session: s, conversation } = await session();
   const recorder = createSessionRecorder({ conversation, runId: 'r1' });

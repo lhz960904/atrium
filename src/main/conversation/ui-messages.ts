@@ -99,13 +99,7 @@ export function mergeAssistantMessage(
       if (content.type === 'text') {
         parts.push({ type: 'text', text: String(content.text ?? '') });
       } else if (content.type === 'thinking') {
-        parts.push({
-          type: 'reasoning',
-          text: String(content.thinking ?? ''),
-          ...(content.thinkingSignature
-            ? { providerMetadata: { anthropic: { signature: content.thinkingSignature } } }
-            : {}),
-        } as Part);
+        parts.push({ type: 'reasoning', text: String(content.thinking ?? '') });
       } else if (content.type === 'toolCall') {
         const call = content as unknown as ToolCall;
         parts.push(mergeToolPart(call, results.get(call.id), toolStates[call.id]));
