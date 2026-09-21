@@ -114,10 +114,10 @@ export function approvalGate(ctx: ApprovalContext) {
       subject,
       risk: RISK[verdict.crossing.code],
       abortSignal: ctx.abortSignal,
-      onUsage: ctx.onUsage,
-    }).then((review) => {
-      log.info(`${toolName} crossing → reviewer ${review}: ${subject}`);
-      if (review === 'deny') return true;
+    }).then(({ verdict, usage }) => {
+      log.info(`${toolName} crossing → reviewer ${verdict}: ${subject}`);
+      if (usage) ctx.onUsage?.(usage);
+      if (verdict === 'deny') return true;
       if (toolCallId) ctx.onReviewed?.({ toolCallId, subject });
       return false;
     });

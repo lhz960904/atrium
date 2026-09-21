@@ -40,12 +40,14 @@ test.each([
 test('a cancelled review falls back to asking without a model request', async () => {
   const model = verdictModel('ALLOW');
   const signal = AbortSignal.abort();
-  expect(await reviewBoundaryCrossing({ model, subject: 'x', abortSignal: signal })).toBe('deny');
+  expect((await reviewBoundaryCrossing({ model, subject: 'x', abortSignal: signal })).verdict).toBe(
+    'deny',
+  );
   expect(piModels.completeSimple).not.toHaveBeenCalled();
 });
 
 test('an explicit ALLOW auto-approves', async () => {
-  const verdict = await reviewBoundaryCrossing({
+  const { verdict } = await reviewBoundaryCrossing({
     model: verdictModel('ALLOW'),
     subject: 'curl https://example.com',
     risk: NET_RISK,
@@ -55,11 +57,13 @@ test('an explicit ALLOW auto-approves', async () => {
 
 test('a DENY falls back to a prompt', async () => {
   expect(
-    await reviewBoundaryCrossing({
-      model: verdictModel('DENY'),
-      subject: 'rm -rf /',
-      risk: 'is a potentially destructive command',
-    }),
+    (
+      await reviewBoundaryCrossing({
+        model: verdictModel('DENY'),
+        subject: 'rm -rf /',
+        risk: 'is a potentially destructive command',
+      })
+    ).verdict,
   ).toBe('deny');
 });
 
@@ -75,13 +79,14 @@ test('verdict parsing is forgiving but safe: extra prose, casing, and DENY-wins'
   ];
   for (const [reply, expected] of cases) {
     expect(
-      await reviewBoundaryCrossing({ model: verdictModel(reply), subject: 'x', risk: NET_RISK }),
+      (await reviewBoundaryCrossing({ model: verdictModel(reply), subject: 'x', risk: NET_RISK }))
+        .verdict,
     ).toBe(expected);
   }
 });
 
 test('a model error resolves to deny, never a silent allow', async () => {
-  const verdict = await reviewBoundaryCrossing({
+  const { verdict } = await reviewBoundaryCrossing({
     model: verdictModel(() => Promise.reject(new Error('model unreachable'))),
     subject: 'curl https://example.com',
     risk: NET_RISK,

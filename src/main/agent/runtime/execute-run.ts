@@ -218,8 +218,8 @@ class RunExecution {
     generateThreadTitle({
       messages: history,
       model,
-      onUsage: (usage) => this.spend({ kind: 'title', usage }),
-      onTitle: (title) => {
+      onTitle: (title, usage) => {
+        this.spend({ kind: 'title', usage });
         threadStore().setTitle(input.threadId, title);
         if (!this.finished) {
           this.opts.emit({ type: 'notice', name: 'title', payload: { data: { title } } });

@@ -1,6 +1,6 @@
 // Invoked by runtime.test.ts in an isolated Electron host stub.
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
-import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
+import { fauxAssistantMessage, fauxToolCall, type Usage } from '@earendil-works/pi-ai';
 import type { AgentSessionEvent } from '@shared/protocol';
 import { PendingInteractions } from '../pending-interactions';
 import { cleanupRuntime, deferred, runtimeFixture } from './runtime-fixture';
@@ -71,6 +71,15 @@ const bash = () =>
       stopReason: 'toolUse',
     },
   );
+
+const usageOf = (totalTokens: number): Usage => ({
+  input: totalTokens,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+});
 
 const decide =
   (decision: Parameters<PendingInteractions['respond']>[0]['decision']) =>
@@ -410,7 +419,7 @@ test('a late title is saved without emitting after the run finished', async () =
   spyOn(title, 'generateThreadTitle').mockImplementation((opts) => ready.resolve(opts));
   const { events } = await run(f);
   const count = events.length;
-  (await ready.promise).onTitle('Late title');
+  (await ready.promise).onTitle('Late title', usageOf(0));
   expect(f.raw.query('SELECT title FROM threads').get()).toEqual({ title: 'Late title' });
   expect(events).toHaveLength(count);
   expect(events.at(-1)?.type).toBe('run_finished');
@@ -423,14 +432,7 @@ test('a late title records what it spent against the closed run', async () => {
   spyOn(title, 'generateThreadTitle').mockImplementation((opts) => ready.resolve(opts));
   const { conversation } = await run(f);
 
-  (await ready.promise).onUsage?.({
-    input: 40,
-    output: 6,
-    cacheRead: 0,
-    cacheWrite: 0,
-    totalTokens: 46,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.0001 },
-  });
+  (await ready.promise).onTitle('Late title', usageOf(46));
   // The write is fire-and-forget, so wait for it rather than for the call.
   await Promise.resolve();
 
