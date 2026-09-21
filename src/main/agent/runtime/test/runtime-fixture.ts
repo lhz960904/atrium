@@ -84,7 +84,7 @@ export async function runtimeFixture() {
   // explicitly rather than spied — otherwise one fixture's store leaks into the
   // next test.
   threadRows.openThreadStore(db);
-  sessions.openConversations(repo);
+  sessions.openConversationStore(repo);
   const config: Record<string, unknown> = {
     'computerUse.enabled': false,
     'general.autoGenerateTitle': false,
@@ -100,7 +100,7 @@ export async function runtimeFixture() {
   const model = faux.getModel();
   const bgShells = new BackgroundShells();
   disposers.push(async () => {
-    sessions.closeConversations();
+    sessions.closeConversationStore();
     threadRows.closeThreadStore();
     bgShells.killAll();
     piModels.deleteProvider(model.provider);

@@ -1,4 +1,4 @@
-import { conversations } from '@main/conversation/store/conversation';
+import { conversationStore } from '@main/conversation/store/conversation';
 import { threadStore } from '@main/conversation/store/threads';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
@@ -20,7 +20,7 @@ export const threadsRouter = router({
   get: publicProcedure.input(byId).query(async ({ input }) => {
     const thread = threadStore().get(input.id);
     if (!thread) return null;
-    return { ...thread, messages: await conversations().getUIMessagesByThreadID(input.id) };
+    return { ...thread, messages: await conversationStore().getUIMessagesByThreadID(input.id) };
   }),
 
   create: publicProcedure
@@ -38,7 +38,7 @@ export const threadsRouter = router({
   delete: publicProcedure.input(byId).mutation(async ({ input }) => {
     // The conversation goes first: the thread row is what names it, so dropping
     // that first would strand the session in the store.
-    await conversations().deleteForThread(input.id);
+    await conversationStore().deleteForThread(input.id);
     threadStore().remove(input.id);
   }),
 

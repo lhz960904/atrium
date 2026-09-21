@@ -1,6 +1,6 @@
 import type { Fold } from '@main/agent/context/compaction';
 
-import { conversations } from './store/conversation';
+import { conversationStore } from './store/conversation';
 import { threadStore } from './store/threads';
 
 /**
@@ -19,7 +19,7 @@ import { threadStore } from './store/threads';
  * the shorter view from this entry.
  */
 export async function compactThread(threadId: string, fold: Fold): Promise<void> {
-  const conversation = await conversations().forThread(threadId);
+  const conversation = await conversationStore().forThread(threadId);
   if (!conversation) return;
   await conversation.appendCompaction(fold);
   threadStore().touch(threadId);
@@ -34,7 +34,7 @@ export async function compactThread(threadId: string, fold: Fold): Promise<void>
  * reason a re-run can never half-truncate a thread.
  */
 export async function rewindThread(threadId: string, messageId: string): Promise<boolean> {
-  const conversation = await conversations().forThread(threadId);
+  const conversation = await conversationStore().forThread(threadId);
   if (!conversation) return false;
   // Any run still open would be left dangling past the new leaf; the next run
   // closes it, so there is nothing to do here but move the branch.

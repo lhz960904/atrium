@@ -375,13 +375,13 @@ export class ConversationStore {
 
 let instance: ConversationStore | undefined;
 
-/** Install the process's conversations, over the store it opened at boot. */
-export function openConversations(repository: SqliteSessionRepository): void {
+/** Install the process's conversations, over the repository opened at boot. */
+export function openConversationStore(repository: SqliteSessionRepository): void {
   instance = new ConversationStore(repository);
 }
 
 /** Forget them again, so a reopened database is never read through the old one. */
-export function closeConversations(): void {
+export function closeConversationStore(): void {
   instance = undefined;
 }
 
@@ -392,7 +392,7 @@ export function closeConversations(): void {
  * sessions it has already repaired, say — is only worth knowing if it outlives
  * the call that learned it.
  */
-export function conversations(): ConversationStore {
-  if (!instance) throw new Error('conversations not initialized — call openDb() first');
+export function conversationStore(): ConversationStore {
+  if (!instance) throw new Error('conversation store not initialized — call openDb() first');
   return instance;
 }

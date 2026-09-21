@@ -1,4 +1,4 @@
-import { conversations } from '@main/conversation/store/conversation';
+import { conversationStore } from '@main/conversation/store/conversation';
 import { rewindThread } from '@main/conversation/threads';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
@@ -11,7 +11,7 @@ export const messagesRouter = router({
    */
   listByThread: publicProcedure
     .input(z.object({ threadId: z.string() }))
-    .query(({ input }) => conversations().getUIMessagesByThreadID(input.threadId)),
+    .query(({ input }) => conversationStore().getUIMessagesByThreadID(input.threadId)),
 
   /**
    * Take a thread back to just before one message — what editing an earlier

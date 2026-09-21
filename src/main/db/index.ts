@@ -1,5 +1,8 @@
 import { join } from 'node:path';
-import { closeConversations, openConversations } from '@main/conversation/store/conversation';
+import {
+  closeConversationStore,
+  openConversationStore,
+} from '@main/conversation/store/conversation';
 import { openSessionRepository, sessionRepository } from '@main/conversation/store/repo';
 import { closeThreadStore, openThreadStore } from '@main/conversation/store/threads';
 import Database from 'better-sqlite3';
@@ -39,7 +42,7 @@ export function openDb(): Db {
   migrate(_db, { migrationsFolder: migrationsFolder() });
   openSessionRepository(_raw, dbPath);
   openThreadStore(_db);
-  openConversations(sessionRepository());
+  openConversationStore(sessionRepository());
 
   return _db;
 }
@@ -51,7 +54,7 @@ export function getDb(): Db {
 
 export function closeDb(): void {
   closeThreadStore();
-  closeConversations();
+  closeConversationStore();
   _raw?.close();
   _raw = null;
   _db = null;

@@ -8,7 +8,7 @@ import { cleanupRuntime, deferred, runtimeFixture } from './runtime-fixture';
 afterEach(cleanupRuntime);
 
 const { executeRun } = await import('../execute-run');
-const { conversations, Conversation } = await import('@main/conversation/store/conversation');
+const { conversationStore, Conversation } = await import('@main/conversation/store/conversation');
 const { INTERACTION_ENTRY } = await import('@main/conversation/project');
 const { LocalSandbox } = await import('../../sandbox');
 const computer = await import('@main/platform/computer-use');
@@ -44,7 +44,7 @@ async function run(
     },
     ...overrides,
   });
-  const conversation = await conversations().forThread('t1');
+  const conversation = await conversationStore().forThread('t1');
   const records = (await conversation?.records()) ?? [];
   return { events, result, conversation, records };
 }
@@ -87,7 +87,7 @@ test('owns begin, message persistence and end; the wire carries deltas and a fin
   expect(records.find((r) => r.type === 'operation_finished')).toMatchObject({
     outcome: 'completed',
   });
-  const messages = await conversations().getUIMessagesByThreadID('t1');
+  const messages = await conversationStore().getUIMessagesByThreadID('t1');
   expect(messages.map((message) => message.id)).toEqual(['u1', 'r1']);
   expect(events[0]).toEqual({ type: 'run_started', runId: 'r1' });
   expect(events.some((event) => 'messageId' in event)).toBe(false);
