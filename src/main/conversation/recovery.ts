@@ -2,7 +2,7 @@ import type { Entry, AgentMessage as Message } from '@earendil-works/pi-agent-co
 import type { AssistantMessage, ToolCall, ToolResultMessage } from '@earendil-works/pi-ai';
 import type { InteractionOutcome, RunStopReason } from '@shared/interactions';
 import { INTERACTION_ENTRY, type InteractionEntryData } from './project';
-import type { ThreadSession } from './store/session';
+import type { Conversation } from './store/conversation';
 
 /**
  * What a run that never ended left behind, and how it is closed.
@@ -74,7 +74,7 @@ const settlementOf = (
   )?.outcome;
 
 /** The entries a run produced: everything between its start and the next run's. */
-async function readRun(conversation: ThreadSession, runId: string) {
+async function readRun(conversation: Conversation, runId: string) {
   const records = await conversation.records();
   const started = records.find(
     (record) => record.type === 'operation_started' && record.id === runId,
@@ -94,7 +94,7 @@ async function readRun(conversation: ThreadSession, runId: string) {
 }
 
 export async function recoverInterruptedRun(
-  conversation: ThreadSession,
+  conversation: Conversation,
   runId: string,
   reason: RunStopReason,
   /** How the run is closed: a failure keeps saying so, everything else stopped. */

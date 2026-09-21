@@ -12,11 +12,8 @@ import type {
   SqliteSessionRepository,
 } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { Fold } from '@main/agent/context/compaction';
-import type { Db } from '@main/db';
-import { threads } from '@main/db/schema';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { InteractionOutcome, InteractionRequest, RunStopReason } from '@shared/interactions';
-import { eq } from 'drizzle-orm';
 import {
   getAgentMessages,
   getUIMessages,
@@ -24,6 +21,7 @@ import {
   type InteractionEntryData,
 } from '../project';
 import { recoverInterruptedRun } from '../recovery';
+import { threadStore } from './threads';
 
 /** A run's stop reason, kept so a later boot can still name it. */
 export const RUN_STOP_ENTRY = 'atrium.run_stop';
@@ -58,7 +56,7 @@ function durable<T>(value: T): T {
 }
 
 /** A single thread's conversation, and every way this app writes to one. */
-export class ThreadSession {
+export class Conversation {
   constructor(private readonly session: Session<SqliteSessionMetadata>) {}
 
   metadata(): Promise<SqliteSessionMetadata> {
@@ -271,11 +269,11 @@ export class ThreadSession {
 /**
  * The app's conversations, addressed by thread.
  *
- * A thread row owns what the product sorts, pins and archives by; the session
- * owns the conversation. They are joined by id here and nowhere else, which is
- * what leaves either free to change shape.
+ * A thread row owns what the product sorts, pins and archives by; a
+ * conversation owns the messages. They are joined by id here and nowhere else,
+ * which is what leaves either free to change shape.
  */
-export class SessionStore {
+export class ConversationStore {
   /**
    * The repair each session has already had, by session id.
    *
@@ -286,14 +284,11 @@ export class SessionStore {
    */
   private readonly repairs = new Map<string, Promise<void>>();
 
-  constructor(
-    private readonly db: Db,
-    private readonly repository: SqliteSessionRepository,
-  ) {}
+  constructor(private readonly repository: SqliteSessionRepository) {}
 
   /** A thread's conversation, or undefined while it has never run. */
-  async forThread(threadId: string): Promise<ThreadSession | undefined> {
-    const sessionId = this.sessionIdOf(threadId);
+  async forThread(threadId: string): Promise<Conversation | undefined> {
+    const sessionId = threadStore().sessionId(threadId);
     if (!sessionId) return undefined;
     const metadata = await this.metadataOf(sessionId);
     // The row can outlive the session it names — a store rebuilt from scratch,
@@ -307,17 +302,17 @@ export class SessionStore {
    * turn rather than with the thread keeps a thread nobody wrote to free, and
    * means the workspace it records is the one the turn actually ran in.
    */
-  async openForThread(threadId: string, workspaceRoot: string): Promise<ThreadSession> {
+  async openForThread(threadId: string, workspaceRoot: string): Promise<Conversation> {
     const existing = await this.forThread(threadId);
     if (existing) return existing;
 
     const session = await this.repository.create({ cwd: workspaceRoot });
     const { id } = await session.getMetadata();
-    this.db.update(threads).set({ sessionId: id }).where(eq(threads.id, threadId)).run();
+    threadStore().bindSession(threadId, id);
     // A session created here has nothing to repair, and saying so is what keeps
     // a later read from treating the run about to open as something to close.
     this.repairs.set(id, Promise.resolve());
-    return new ThreadSession(session);
+    return new Conversation(session);
   }
 
   /**
@@ -331,8 +326,8 @@ export class SessionStore {
   private async repaired(
     sessionId: string,
     session: Session<SqliteSessionMetadata>,
-  ): Promise<ThreadSession> {
-    const conversation = new ThreadSession(session);
+  ): Promise<Conversation> {
+    const conversation = new Conversation(session);
     let repair = this.repairs.get(sessionId);
     if (!repair) {
       repair = (async () => {
@@ -366,19 +361,10 @@ export class SessionStore {
 
   /** Drop a thread's conversation. The thread row is the caller's to remove. */
   async deleteForThread(threadId: string): Promise<void> {
-    const sessionId = this.sessionIdOf(threadId);
+    const sessionId = threadStore().sessionId(threadId);
     if (!sessionId) return;
     const metadata = await this.metadataOf(sessionId);
     if (metadata) await this.repository.delete(metadata);
-  }
-
-  private sessionIdOf(threadId: string): string | undefined {
-    const row = this.db
-      .select({ sessionId: threads.sessionId })
-      .from(threads)
-      .where(eq(threads.id, threadId))
-      .get();
-    return row?.sessionId ?? undefined;
   }
 
   private async metadataOf(sessionId: string): Promise<SqliteSessionMetadata | undefined> {
@@ -387,15 +373,15 @@ export class SessionStore {
   }
 }
 
-let instance: SessionStore | undefined;
+let instance: ConversationStore | undefined;
 
-/** Install the process's conversations, over the store it opened at boot. */
-export function openConversations(db: Db, repository: SqliteSessionRepository): void {
-  instance = new SessionStore(db, repository);
+/** Install the process's conversations, over the repository opened at boot. */
+export function openConversationStore(repository: SqliteSessionRepository): void {
+  instance = new ConversationStore(repository);
 }
 
 /** Forget them again, so a reopened database is never read through the old one. */
-export function closeConversations(): void {
+export function closeConversationStore(): void {
   instance = undefined;
 }
 
@@ -406,7 +392,7 @@ export function closeConversations(): void {
  * sessions it has already repaired, say — is only worth knowing if it outlives
  * the call that learned it.
  */
-export function conversations(): SessionStore {
-  if (!instance) throw new Error('conversations not initialized — call openDb() first');
+export function conversationStore(): ConversationStore {
+  if (!instance) throw new Error('conversation store not initialized — call openDb() first');
   return instance;
 }

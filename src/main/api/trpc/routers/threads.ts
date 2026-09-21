@@ -1,38 +1,28 @@
-import { randomUUID } from 'node:crypto';
-import { conversations } from '@main/conversation/store/session';
-import { projects, threads } from '@main/db/schema';
-import { desc, eq, isNull } from 'drizzle-orm';
+import { conversationStore } from '@main/conversation/store/conversation';
+import { threadStore } from '@main/conversation/store/threads';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
 
 /** A thread's bound model; null = inherit general.defaultModel. */
 const modelInput = z.object({ providerId: z.string(), modelId: z.string() }).nullable();
 
+const byId = z.object({ id: z.string() });
+
 export const threadsRouter = router({
   /** Active (non-archived) threads, most-recently-updated first. */
-  list: publicProcedure.query(({ ctx }) => {
-    return ctx.db
-      .select()
-      .from(threads)
-      .where(isNull(threads.archivedAt))
-      .orderBy(desc(threads.updatedAt))
-      .all();
-  }),
+  list: publicProcedure.query(() => threadStore().list()),
 
   /** Thread ids whose agent is currently generating — the source of truth lives
    *  in the main process, so the sidebar spinner stays correct across reloads. */
   running: publicProcedure.query(({ ctx }) => ctx.runner.runningThreadIds()),
 
-  /** One thread + its messages ordered chronologically. Returns null if not found.
-   *  Messages go through the persistence merge layer, so pi-native rows and
-   *  legacy rows come back in the same run-shaped form. */
-  get: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
-    const thread = ctx.db.select().from(threads).where(eq(threads.id, input.id)).get();
+  /** One thread plus its conversation, or null when there is no such thread. */
+  get: publicProcedure.input(byId).query(async ({ input }) => {
+    const thread = threadStore().get(input.id);
     if (!thread) return null;
-    return { ...thread, messages: await conversations().getUIMessagesByThreadID(input.id) };
+    return { ...thread, messages: await conversationStore().getUIMessagesByThreadID(input.id) };
   }),
 
-  /** Create an empty thread. Returns the new id. */
   create: publicProcedure
     .input(
       z
@@ -43,102 +33,30 @@ export const threadsRouter = router({
         })
         .optional(),
     )
-    .mutation(({ ctx, input }) => {
-      const id = randomUUID();
-      ctx.db
-        .insert(threads)
-        .values({
-          id,
-          title: input?.title ?? null,
-          projectId: input?.projectId ?? null,
-          modelProviderId: input?.model?.providerId ?? null,
-          modelId: input?.model?.modelId ?? null,
-        })
-        .run();
-      return { id };
-    }),
+    .mutation(({ input }) => ({ id: threadStore().create(input ?? {}) })),
 
-  /**
-   * Atomically create a thread + its first message. Used by the home composer
-   * so we never leave empty threads behind when the message insert fails.
-   */
-  /** Delete a thread; its conversation and artifacts go with it. */
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+  delete: publicProcedure.input(byId).mutation(async ({ input }) => {
     // The conversation goes first: the thread row is what names it, so dropping
     // that first would strand the session in the store.
-    await conversations().deleteForThread(input.id);
-    ctx.db.delete(threads).where(eq(threads.id, input.id)).run();
+    await conversationStore().deleteForThread(input.id);
+    threadStore().remove(input.id);
   }),
 
-  /** Mark a thread read up to now, clearing its sidebar unread dot. */
-  markRead: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    ctx.db.update(threads).set({ lastReadAt: new Date() }).where(eq(threads.id, input.id)).run();
-  }),
+  markRead: publicProcedure.input(byId).mutation(({ input }) => threadStore().markRead(input.id)),
 
-  /**
-   * Rename a thread; bumps updatedAt so it floats to the top of the sidebar.
-   * Advance lastReadAt in lockstep — a rename is a deliberate edit by someone
-   * viewing the thread, so it must not trip the unread dot the way new activity
-   * does (which bumps updatedAt past lastReadAt).
-   */
   updateTitle: publicProcedure
     .input(z.object({ id: z.string(), title: z.string() }))
-    .mutation(({ ctx, input }) => {
-      const now = new Date();
-      ctx.db
-        .update(threads)
-        .set({ title: input.title, updatedAt: now, lastReadAt: now })
-        .where(eq(threads.id, input.id))
-        .run();
-    }),
+    .mutation(({ input }) => threadStore().rename(input.id, input.title)),
 
-  /** Bind (or clear) this thread's model; null = inherit general.defaultModel.
-   *  Doesn't touch updatedAt — picking a model isn't thread activity. */
   setModel: publicProcedure
     .input(z.object({ id: z.string(), model: modelInput }))
-    .mutation(({ ctx, input }) => {
-      ctx.db
-        .update(threads)
-        .set({
-          modelProviderId: input.model?.providerId ?? null,
-          modelId: input.model?.modelId ?? null,
-        })
-        .where(eq(threads.id, input.id))
-        .run();
-    }),
+    .mutation(({ input }) => threadStore().setModel(input.id, input.model)),
 
-  /** Archive a thread — drops it from the sidebar list without deleting it. */
-  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    ctx.db.update(threads).set({ archivedAt: new Date() }).where(eq(threads.id, input.id)).run();
-  }),
+  archive: publicProcedure.input(byId).mutation(({ input }) => threadStore().archive(input.id)),
 
-  /**
-   * Restore an archived thread back into the sidebar list. If its project was
-   * archived too, revive the project — otherwise the thread would point at a
-   * hidden project and never show up.
-   */
-  unarchive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    const thread = ctx.db
-      .select({ projectId: threads.projectId })
-      .from(threads)
-      .where(eq(threads.id, input.id))
-      .get();
-    ctx.db.update(threads).set({ archivedAt: null }).where(eq(threads.id, input.id)).run();
-    if (thread?.projectId) {
-      ctx.db
-        .update(projects)
-        .set({ archivedAt: null })
-        .where(eq(projects.id, thread.projectId))
-        .run();
-    }
-  }),
+  unarchive: publicProcedure.input(byId).mutation(({ input }) => threadStore().unarchive(input.id)),
 
-  /** Pin / unpin to the sidebar's Pinned section; doesn't reorder by recency. */
-  pin: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    ctx.db.update(threads).set({ pinned: true }).where(eq(threads.id, input.id)).run();
-  }),
+  pin: publicProcedure.input(byId).mutation(({ input }) => threadStore().pin(input.id, true)),
 
-  unpin: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    ctx.db.update(threads).set({ pinned: false }).where(eq(threads.id, input.id)).run();
-  }),
+  unpin: publicProcedure.input(byId).mutation(({ input }) => threadStore().pin(input.id, false)),
 });

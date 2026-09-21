@@ -2,13 +2,9 @@ import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import { getAgentMessages } from '@main/conversation/project';
 import { createSessionRecorder, type SessionRecorder } from '@main/conversation/session-recorder';
-import { conversations } from '@main/conversation/store/session';
-import {
-  compactThread,
-  resolveThreadWorkspace,
-  setThreadTitle,
-  touchThread,
-} from '@main/conversation/threads';
+import { conversationStore } from '@main/conversation/store/conversation';
+import { threadStore } from '@main/conversation/store/threads';
+import { compactThread } from '@main/conversation/threads';
 import { generateThreadTitle } from '@main/conversation/title';
 import { splitUserMessage } from '@main/conversation/ui-messages';
 import type { Db } from '@main/db';
@@ -168,22 +164,22 @@ class RunExecution {
    * state that only exists once this has run.
    */
   private async open() {
-    const { input, db, runId } = this.opts;
-    const workspaceRoot = resolveThreadWorkspace(db, input.threadId, this.opts.defaultProjectRoot);
+    const { input, runId } = this.opts;
+    const workspaceRoot = threadStore().workspaceRoot(input.threadId, this.opts.defaultProjectRoot);
     this.workspaceRoot = workspaceRoot;
     this.computerUse =
       process.platform === 'darwin' && getSettings('computerUse.enabled')
         ? getComputerUseHelper()
         : undefined;
 
-    const conversation = await conversations().openForThread(input.threadId, workspaceRoot);
+    const conversation = await conversationStore().openForThread(input.threadId, workspaceRoot);
     const recorder = createSessionRecorder({ conversation, runId });
     this.recorder = recorder;
     const prompt = input.userMessage
       ? { id: input.userMessage.id, message: splitUserMessage(input.userMessage) }
       : undefined;
     await recorder.begin(prompt);
-    touchThread(db, input.threadId, { markRead: prompt !== undefined });
+    threadStore().touch(input.threadId, { markRead: prompt !== undefined });
     this.openedAt = (await conversation.runStartedAt(runId)) ?? this.openedAt;
     this.opts.emit({
       type: 'notice',
@@ -195,12 +191,12 @@ class RunExecution {
 
   /** A title may finish after the run; save it but never reopen its stream. */
   private startTitle(history: Message[]): void {
-    const { db, input, model } = this.opts;
+    const { input, model } = this.opts;
     generateThreadTitle({
       messages: history,
       model,
       onTitle: (title) => {
-        setThreadTitle(db, input.threadId, title);
+        threadStore().setTitle(input.threadId, title);
         if (!this.finished) {
           this.opts.emit({ type: 'notice', name: 'title', payload: { data: { title } } });
         }
@@ -269,7 +265,7 @@ class RunExecution {
     prepared: Awaited<ReturnType<RunExecution['prepare']>>,
     history: Message[],
   ): Promise<Message[]> {
-    const { db, input, model, signal } = this.opts;
+    const { input, model, signal } = this.opts;
     signal.throwIfAborted();
     return compactForTurn({
       messages: history,
@@ -277,7 +273,7 @@ class RunExecution {
       contextWindow: model.contextWindow,
       preservers,
       emit: (phase) => prepared.ctx.notice('compaction', { phase }),
-      persist: (fold) => compactThread(db, input.threadId, fold),
+      persist: (fold) => compactThread(input.threadId, fold),
     });
   }
 

@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
-import { projects, threads } from '@main/db/schema';
-import { and, eq, isNull } from 'drizzle-orm';
+import { threadStore } from '@main/conversation/store/threads';
+import { projects } from '@main/db/schema';
+import { eq, isNull } from 'drizzle-orm';
 import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
@@ -63,10 +64,7 @@ export const projectsRouter = router({
     const now = new Date();
     ctx.db.transaction((tx) => {
       tx.update(projects).set({ archivedAt: now }).where(eq(projects.id, input.id)).run();
-      tx.update(threads)
-        .set({ archivedAt: now })
-        .where(and(eq(threads.projectId, input.id), isNull(threads.archivedAt)))
-        .run();
+      threadStore().archiveUnderProject(input.id, now, tx);
     });
   }),
 
@@ -77,7 +75,7 @@ export const projectsRouter = router({
    */
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     ctx.db.transaction((tx) => {
-      tx.delete(threads).where(eq(threads.projectId, input.id)).run();
+      threadStore().removeUnderProject(input.id, tx);
       tx.delete(projects).where(eq(projects.id, input.id)).run();
     });
   }),
