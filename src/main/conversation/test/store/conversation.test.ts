@@ -12,7 +12,7 @@ import type { InteractionRequest } from '@shared/interactions';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 
-import { SessionStore, ThreadSession } from '../../store/session';
+import { Conversation, ConversationStore } from '../../store/conversation';
 import { sessionSqlite } from '../../store/sqlite-driver';
 import { openThreadStore } from '../../store/threads';
 
@@ -49,13 +49,13 @@ function fixture() {
   const addThread = (id: string) => db.insert(schema.threads).values({ id }).run();
   // The session store reads and writes thread rows through the row store now.
   openThreadStore(db);
-  return { db, raw, repository, store: new SessionStore(repository), addThread };
+  return { db, raw, repository, store: new ConversationStore(repository), addThread };
 }
 
 async function thread() {
   const f = fixture();
   const session = await f.repository.create({ cwd: '/tmp/work' });
-  return { ...f, conversation: new ThreadSession(session) };
+  return { ...f, conversation: new Conversation(session) };
 }
 
 const user = (text: string): AgentMessage => ({
@@ -220,7 +220,7 @@ test('opening a conversation closes what the process before it left open', async
   // The process dies here: the call never got its result, and nothing closed
   // the run. Until it is repaired the card reads as still running.
 
-  const nextProcess = new SessionStore(repository);
+  const nextProcess = new ConversationStore(repository);
   const reopened = await nextProcess.forThread('t1');
 
   expect(await reopened?.openRuns()).toEqual([]);

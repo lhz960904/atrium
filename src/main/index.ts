@@ -17,7 +17,7 @@ import { Runner } from './agent/runtime/runner';
 import { refreshSkills } from './agent/skills/registry';
 import { startHttpServer } from './api/http';
 import { appRouter } from './api/trpc/router';
-import { closeSessionStore } from './conversation/store/repo';
+import { closeSessionRepository } from './conversation/store/repo';
 import { closeDb, openDb } from './db';
 import { disposeComputerUseHelper } from './platform/computer-use';
 import { registerComputerUseDrag } from './platform/computer-use/drag';
@@ -331,13 +331,13 @@ async function shutdown(): Promise<void> {
   await attempt('mcp', () => mcpManager.dispose());
   await attempt('updater', () => updaterManager.dispose());
   await attempt('computer-use', () => disposeComputerUseHelper());
-  await attempt('session-store', () => closeSessionStore());
+  await attempt('session-store', () => closeSessionRepository());
   await attempt('db', () => closeDb());
 }
 
 /** The old best-effort teardown, for the one path that must not be held up. */
 function disposeImmediately(): void {
-  void closeSessionStore().catch(() => {});
+  void closeSessionRepository().catch(() => {});
   void runner?.dispose();
   scheduledManager.dispose();
   void mcpManager.dispose();

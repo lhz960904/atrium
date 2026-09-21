@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { conversations } from '@main/conversation/store/session';
+import { conversations } from '@main/conversation/store/conversation';
 import { compactThread } from '@main/conversation/threads';
 import type { Db } from '@main/db';
 import { createLogger } from '@main/utils/log';

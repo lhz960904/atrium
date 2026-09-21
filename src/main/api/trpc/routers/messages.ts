@@ -1,4 +1,4 @@
-import { conversations } from '@main/conversation/store/session';
+import { conversations } from '@main/conversation/store/conversation';
 import { rewindThread } from '@main/conversation/threads';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';

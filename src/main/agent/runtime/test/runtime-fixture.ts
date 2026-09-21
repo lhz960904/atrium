@@ -32,7 +32,7 @@ mock.module('electron', () => ({
 }));
 
 const settings = await import('@main/settings/conf');
-const sessions = await import('@main/conversation/store/session');
+const sessions = await import('@main/conversation/store/conversation');
 const threadRows = await import('@main/conversation/store/threads');
 const context = await import('../../context/injectors');
 const { piModels } = await import('../../providers/registry');

@@ -8,7 +8,7 @@ import { createLogger } from '@main/utils/log';
 import type { InteractionOutcome, InteractionRequest, RunStopReason } from '@shared/interactions';
 
 import { recoverInterruptedRun } from './recovery';
-import type { ThreadSession } from './store/session';
+import type { Conversation } from './store/conversation';
 
 const log = createLogger('session');
 
@@ -67,7 +67,7 @@ const contextSizeOf = (usage: AssistantMessage['usage']): number =>
   usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
 
 export function createSessionRecorder(opts: {
-  conversation: ThreadSession;
+  conversation: Conversation;
   /** The run's id, which is also its operation record's id. */
   runId: string;
 }): SessionRecorder {

@@ -56,7 +56,7 @@ function durable<T>(value: T): T {
 }
 
 /** A single thread's conversation, and every way this app writes to one. */
-export class ThreadSession {
+export class Conversation {
   constructor(private readonly session: Session<SqliteSessionMetadata>) {}
 
   metadata(): Promise<SqliteSessionMetadata> {
@@ -269,11 +269,11 @@ export class ThreadSession {
 /**
  * The app's conversations, addressed by thread.
  *
- * A thread row owns what the product sorts, pins and archives by; the session
- * owns the conversation. They are joined by id here and nowhere else, which is
- * what leaves either free to change shape.
+ * A thread row owns what the product sorts, pins and archives by; a
+ * conversation owns the messages. They are joined by id here and nowhere else,
+ * which is what leaves either free to change shape.
  */
-export class SessionStore {
+export class ConversationStore {
   /**
    * The repair each session has already had, by session id.
    *
@@ -287,7 +287,7 @@ export class SessionStore {
   constructor(private readonly repository: SqliteSessionRepository) {}
 
   /** A thread's conversation, or undefined while it has never run. */
-  async forThread(threadId: string): Promise<ThreadSession | undefined> {
+  async forThread(threadId: string): Promise<Conversation | undefined> {
     const sessionId = threadStore().sessionId(threadId);
     if (!sessionId) return undefined;
     const metadata = await this.metadataOf(sessionId);
@@ -302,7 +302,7 @@ export class SessionStore {
    * turn rather than with the thread keeps a thread nobody wrote to free, and
    * means the workspace it records is the one the turn actually ran in.
    */
-  async openForThread(threadId: string, workspaceRoot: string): Promise<ThreadSession> {
+  async openForThread(threadId: string, workspaceRoot: string): Promise<Conversation> {
     const existing = await this.forThread(threadId);
     if (existing) return existing;
 
@@ -312,7 +312,7 @@ export class SessionStore {
     // A session created here has nothing to repair, and saying so is what keeps
     // a later read from treating the run about to open as something to close.
     this.repairs.set(id, Promise.resolve());
-    return new ThreadSession(session);
+    return new Conversation(session);
   }
 
   /**
@@ -326,8 +326,8 @@ export class SessionStore {
   private async repaired(
     sessionId: string,
     session: Session<SqliteSessionMetadata>,
-  ): Promise<ThreadSession> {
-    const conversation = new ThreadSession(session);
+  ): Promise<Conversation> {
+    const conversation = new Conversation(session);
     let repair = this.repairs.get(sessionId);
     if (!repair) {
       repair = (async () => {
@@ -373,11 +373,11 @@ export class SessionStore {
   }
 }
 
-let instance: SessionStore | undefined;
+let instance: ConversationStore | undefined;
 
 /** Install the process's conversations, over the store it opened at boot. */
 export function openConversations(repository: SqliteSessionRepository): void {
-  instance = new SessionStore(repository);
+  instance = new ConversationStore(repository);
 }
 
 /** Forget them again, so a reopened database is never read through the old one. */
@@ -392,7 +392,7 @@ export function closeConversations(): void {
  * sessions it has already repaired, say — is only worth knowing if it outlives
  * the call that learned it.
  */
-export function conversations(): SessionStore {
+export function conversations(): ConversationStore {
   if (!instance) throw new Error('conversations not initialized — call openDb() first');
   return instance;
 }

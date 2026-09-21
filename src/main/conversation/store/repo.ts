@@ -12,14 +12,14 @@ let repository: SqliteSessionRepository | undefined;
 let ready: Promise<void> | undefined;
 
 /**
- * The session store: one repository over the app's own database connection.
+ * pi's session repository, over the app's own database connection.
  *
- * A thread's conversation lives here as pi entries and records, while the
- * thread row keeps what the product needs to sort, pin, archive and mark it
- * unread. The two halves address each other by id and are never joined in one
- * query, which is what lets the session store keep its own shape.
+ * This is the engine's storage, not ours: conversations live in it as pi
+ * entries and records. What the product sorts, pins and archives by lives in
+ * the thread rows instead, and the two are never joined in one query — which
+ * is what leaves each free to change shape, pi's half most of all.
  */
-export function openSessionStore(db: Database.Database, databasePath: string): void {
+export function openSessionRepository(db: Database.Database, databasePath: string): void {
   if (repository) return;
   // The default 30s lease is deliberate. Opening a session takes a writer lease
   // that only a later open past its expiry may steal, so the TTL is also how
@@ -51,13 +51,13 @@ export function openSessionStore(db: Database.Database, databasePath: string): v
   void ready.catch(() => {});
 }
 
-export function sessionStore(): SqliteSessionRepository {
-  if (!repository) throw new Error('session store not initialized — call openSessionStore() first');
+export function sessionRepository(): SqliteSessionRepository {
+  if (!repository) throw new Error('session repository not initialized — call openDb() first');
   return repository;
 }
 
 /** Release every open session's writer lease. The connection is not ours to close. */
-export async function closeSessionStore(): Promise<void> {
+export async function closeSessionRepository(): Promise<void> {
   await repository?.close();
   repository = undefined;
   ready = undefined;

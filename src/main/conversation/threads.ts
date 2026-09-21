@@ -1,6 +1,6 @@
 import type { Fold } from '@main/agent/context/compaction';
 
-import { conversations } from './store/session';
+import { conversations } from './store/conversation';
 import { threadStore } from './store/threads';
 
 /**

@@ -10,7 +10,7 @@ afterEach(cleanupRuntime);
 
 const { Runner } = await import('../runner');
 const { LocalSandbox } = await import('../../sandbox');
-const { conversations } = await import('@main/conversation/store/session');
+const { conversations } = await import('@main/conversation/store/conversation');
 
 /**
  * The requests a run asks, in order, awaited on the event rather than on time.

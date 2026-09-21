@@ -2,7 +2,7 @@ import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import { getAgentMessages } from '@main/conversation/project';
 import { createSessionRecorder, type SessionRecorder } from '@main/conversation/session-recorder';
-import { conversations } from '@main/conversation/store/session';
+import { conversations } from '@main/conversation/store/conversation';
 import { threadStore } from '@main/conversation/store/threads';
 import { compactThread } from '@main/conversation/threads';
 import { generateThreadTitle } from '@main/conversation/title';

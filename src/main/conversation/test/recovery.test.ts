@@ -9,7 +9,7 @@ import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqli
 import type { InteractionRequest } from '@shared/interactions';
 import { INTERACTION_ENTRY } from '../project';
 import { recoverInterruptedRun } from '../recovery';
-import { ThreadSession } from '../store/session';
+import { Conversation } from '../store/conversation';
 import { sessionSqlite } from '../store/sqlite-driver';
 
 /**
@@ -111,7 +111,7 @@ test('a call that never returned is closed as unknown, and the run is closed', a
     await s.appendMessage(calling('c1'));
   });
 
-  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'app_shutdown');
+  await recoverInterruptedRun(new Conversation(s), 'r1', 'app_shutdown');
 
   const { entries, records } = await read(s);
   const [sealed] = resultsFor(entries, 'c1');
@@ -131,7 +131,7 @@ test('a repair lands inside the run, before the record that closes it', async ()
     await s.appendMessage(calling('c1'));
   });
 
-  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'interrupted');
+  await recoverInterruptedRun(new Conversation(s), 'r1', 'interrupted');
 
   const { entries, records } = await read(s);
   const repaired = entries.find(
@@ -152,7 +152,7 @@ test('a real result is kept and never joined by a second one', async () => {
     await s.appendMessage(result('c1', 'the real output'));
   });
 
-  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'interrupted');
+  await recoverInterruptedRun(new Conversation(s), 'r1', 'interrupted');
 
   const { entries } = await read(s);
   const kept = resultsFor(entries, 'c1');
@@ -168,10 +168,10 @@ test('recovering twice writes nothing the first pass did not', async () => {
     await s.appendMessage(calling('c1'));
   });
 
-  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'interrupted');
+  await recoverInterruptedRun(new Conversation(s), 'r1', 'interrupted');
   const first = await read(s);
   // A second boot finds the same run: the ids are stable, so this must not throw.
-  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'interrupted');
+  await recoverInterruptedRun(new Conversation(s), 'r1', 'interrupted');
   const second = await read(s);
 
   expect(second.entries).toHaveLength(first.entries.length);
@@ -195,7 +195,7 @@ test('a decision nobody answered is recorded as interrupted, and an answered one
     });
   });
 
-  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'user_cancelled');
+  await recoverInterruptedRun(new Conversation(s), 'r1', 'user_cancelled');
 
   const { entries } = await read(s);
   const settlements = entries.filter(
@@ -237,7 +237,7 @@ test('a run that already ended is left alone', async () => {
   });
   const before = await read(s);
 
-  await recoverInterruptedRun(new ThreadSession(s), 'r1', 'interrupted');
+  await recoverInterruptedRun(new Conversation(s), 'r1', 'interrupted');
 
   const after = await read(s);
   expect(after.entries).toHaveLength(before.entries.length);

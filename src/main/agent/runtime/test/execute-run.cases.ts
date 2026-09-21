@@ -8,7 +8,7 @@ import { cleanupRuntime, deferred, runtimeFixture } from './runtime-fixture';
 afterEach(cleanupRuntime);
 
 const { executeRun } = await import('../execute-run');
-const { conversations, ThreadSession } = await import('@main/conversation/store/session');
+const { conversations, Conversation } = await import('@main/conversation/store/conversation');
 const { INTERACTION_ENTRY } = await import('@main/conversation/project');
 const { LocalSandbox } = await import('../../sandbox');
 const computer = await import('@main/platform/computer-use');
@@ -44,9 +44,9 @@ async function run(
     },
     ...overrides,
   });
-  const session = await conversations().forThread('t1');
-  const records = (await session?.records()) ?? [];
-  return { events, result, session, records };
+  const conversation = await conversations().forThread('t1');
+  const records = (await conversation?.records()) ?? [];
+  return { events, result, conversation, records };
 }
 
 const question = () =>
@@ -105,7 +105,7 @@ test('records usage once using the model identity', async () => {
   f.faux.setResponses([response]);
   const { events, records } = await run(f);
   const recorded = records.find((record) => record.type === 'usage');
-  if (recorded?.type !== 'usage') throw new Error('Missing session usage');
+  if (recorded?.type !== 'usage') throw new Error('Missing usage record');
   // Faux derives tokens from the actual request, including the assembled tools.
   expect(recorded.usage.totalTokens).toBeGreaterThan(0);
   expect(f.raw.query('SELECT * FROM usage').all()).toMatchObject([
@@ -147,22 +147,22 @@ test('a preparation failure closes the started recording as failed', async () =>
 test('context loading failure also closes the recording', async () => {
   const f = await runtimeFixture();
   f.blocks.mockRejectedValue(new Error('context unavailable'));
-  const { result, session } = await run(f);
+  const { result, conversation } = await run(f);
   expect(result).toMatchObject({ status: 'failed', error: 'context unavailable' });
-  expect(await session?.openRuns()).toEqual([]);
+  expect(await conversation?.openRuns()).toEqual([]);
 });
 
 test('a prompt write failure closes the operation that begin already opened', async () => {
   const f = await runtimeFixture();
-  spyOn(ThreadSession.prototype, 'appendPrompt').mockRejectedValueOnce(
+  spyOn(Conversation.prototype, 'appendPrompt').mockRejectedValueOnce(
     new Error('prompt write failed'),
   );
-  const { result, records, session } = await run(f);
+  const { result, records, conversation } = await run(f);
   expect(result).toMatchObject({ status: 'failed', error: 'prompt write failed' });
   expect(records.find((record) => record.type === 'operation_finished')).toMatchObject({
     outcome: 'failed',
   });
-  expect(await session?.openRuns()).toEqual([]);
+  expect(await conversation?.openRuns()).toEqual([]);
 });
 
 test('a provider error is a failed result, without inventing a stored assistant id', async () => {
@@ -180,13 +180,13 @@ test('a provider error is a failed result, without inventing a stored assistant 
 test('an answered clarification is the single real result of one operation', async () => {
   const f = await runtimeFixture();
   f.faux.setResponses([question(), fauxAssistantMessage('Understood')]);
-  const { result, records, session, events } = await run(f, {
+  const { result, records, conversation, events } = await run(f, {
     onEvent: decide({ kind: 'answered', answers: ['A'] }),
   });
   expect(result).toMatchObject({ status: 'completed', messageId: 'r1' });
   expect(records.filter((record) => record.type === 'operation_started')).toHaveLength(1);
   expect(records.filter((record) => record.type === 'operation_finished')).toHaveLength(1);
-  const entries = (await session?.entries()) ?? [];
+  const entries = (await conversation?.entries()) ?? [];
   const results = entries.filter(
     (entry) => entry.type === 'message' && entry.message.role === 'toolResult',
   );
@@ -211,7 +211,7 @@ test('default permissions ask before a boundary crossing and never run it unansw
     exitCode: 0,
   });
   f.faux.setResponses([bash()]);
-  const { result, events, records, session } = await run(f, {
+  const { result, events, records, conversation } = await run(f, {
     onEvent: (event, pending) => {
       if (event.type === 'interaction_requested') pending.cancel('user_cancelled');
     },
@@ -227,7 +227,7 @@ test('default permissions ask before a boundary crossing and never run it unansw
   expect(records.find((record) => record.type === 'operation_finished')).toMatchObject({
     outcome: 'aborted',
   });
-  expect(await session?.openRuns()).toEqual([]);
+  expect(await conversation?.openRuns()).toEqual([]);
   expect(events.at(-1)).toEqual({
     type: 'run_finished',
     status: 'aborted',
@@ -243,7 +243,7 @@ test('a decision that cannot be recorded stops the run instead of approving it',
   });
   // Only the settlement fails: the request itself has to land, or the run would
   // stop before the decision it is meant to be unable to record.
-  spyOn(ThreadSession.prototype, 'recordInteractionResolved').mockRejectedValue(
+  spyOn(Conversation.prototype, 'recordInteractionResolved').mockRejectedValue(
     new Error('interaction write failed'),
   );
   f.faux.setResponses([bash(), fauxAssistantMessage('should never be asked')]);
@@ -303,11 +303,11 @@ test('abort during preparation closes the run and never starts pi', async () => 
     abort.abort();
     return [];
   });
-  const { result, session, events } = await run(f, { abort });
+  const { result, conversation, events } = await run(f, { abort });
   expect(result.status).toBe('aborted');
   expect(result.error).toBeUndefined();
   expect(f.faux.state.callCount).toBe(0);
-  expect(await session?.openRuns()).toEqual([]);
+  expect(await conversation?.openRuns()).toEqual([]);
   // Cancelled before a reason was set, so the run only knows it was interrupted.
   expect(events.at(-1)).toEqual({ type: 'run_finished', status: 'aborted', reason: 'interrupted' });
 });
@@ -330,14 +330,14 @@ test('abort during a tool reaches the sandbox and closes the operation after its
   });
   await entered.promise;
   abort.abort();
-  const { result, session, events, records } = await running;
+  const { result, conversation, events, records } = await running;
   expect(result.status).toBe('aborted');
   expect(result.error).toBeUndefined();
-  expect(await session?.openRuns()).toEqual([]);
+  expect(await conversation?.openRuns()).toEqual([]);
   expect(records.find((record) => record.type === 'operation_finished')).toMatchObject({
     outcome: 'aborted',
   });
-  const entries = await session?.entries();
+  const entries = await conversation?.entries();
   expect(
     entries?.some((entry) => entry.type === 'message' && entry.message.role === 'toolResult'),
   ).toBe(true);
@@ -346,23 +346,23 @@ test('abort during a tool reaches the sandbox and closes the operation after its
 
 test('a recording close failure is reported but does not prevent the final event', async () => {
   const f = await runtimeFixture();
-  spyOn(ThreadSession.prototype, 'finishRun').mockRejectedValue(new Error('close write failed'));
-  const { result, events, session } = await run(f);
+  spyOn(Conversation.prototype, 'finishRun').mockRejectedValue(new Error('close write failed'));
+  const { result, events, conversation } = await run(f);
   expect(result).toMatchObject({ status: 'failed', error: 'close write failed' });
   // The loop finished; only the app's own settlement failed.
   expect(events.filter((event) => event.type === 'agent_end')).toHaveLength(1);
   expect(events.at(-1)).toMatchObject({ type: 'run_finished', status: 'failed' });
   // The database could not record completion; leave evidence for recovery.
-  expect(await session?.openRuns()).toHaveLength(1);
+  expect(await conversation?.openRuns()).toHaveLength(1);
 });
 
-test('an already-aborted execution opens no session', async () => {
+test('an already-aborted execution opens no conversation', async () => {
   const f = await runtimeFixture();
   const abort = new AbortController();
   abort.abort();
-  const { result, session } = await run(f, { abort });
+  const { result, conversation } = await run(f, { abort });
   expect(result.status).toBe('aborted');
-  expect(session).toBeUndefined();
+  expect(conversation).toBeUndefined();
 });
 
 test('bookkeeping failure still ends the recording and stream', async () => {
@@ -396,10 +396,10 @@ test.skipIf(process.platform !== 'darwin')(
       hideOverlay,
     } as unknown as import('@main/platform/computer-use').ComputerUseHelper);
     f.blocks.mockRejectedValue(new Error('context unavailable'));
-    const { result, session } = await run(f);
+    const { result, conversation } = await run(f);
     expect(result).toMatchObject({ status: 'failed', error: 'context unavailable' });
     expect(hideOverlay).toHaveBeenCalledTimes(1);
-    expect(await session?.openRuns()).toEqual([]);
+    expect(await conversation?.openRuns()).toEqual([]);
   },
 );
 

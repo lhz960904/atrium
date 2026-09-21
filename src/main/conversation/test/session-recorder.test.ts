@@ -15,7 +15,7 @@ import type { InteractionRequest } from '@shared/interactions';
 
 import { getAgentMessages, getUIMessages, INTERACTION_ENTRY } from '../project';
 import { createSessionRecorder } from '../session-recorder';
-import { ThreadSession } from '../store/session';
+import { Conversation } from '../store/conversation';
 import { sessionSqlite } from '../store/sqlite-driver';
 
 /**
@@ -39,7 +39,7 @@ async function session() {
     databasePath,
   });
   const created = await repo.create({ cwd: '/tmp/work' });
-  return { repo, session: created, conversation: new ThreadSession(created) };
+  return { repo, session: created, conversation: new Conversation(created) };
 }
 
 const usage = (input: number, output: number) => ({
