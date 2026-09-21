@@ -69,9 +69,9 @@ export const projectsRouter = router({
   }),
 
   /**
-   * Permanently delete a project and every thread under it (messages and
-   * artifacts cascade from the thread rows). project_id carries no FK, so the
-   * thread deletion is done explicitly here.
+   * Delete a project and every thread filed under it. The project row does go,
+   * but its threads are only marked — so the conversations they name, and what
+   * those cost, stay. project_id carries no FK, so the fan-out is explicit.
    */
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     ctx.db.transaction((tx) => {

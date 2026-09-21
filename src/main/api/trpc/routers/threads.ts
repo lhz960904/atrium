@@ -35,12 +35,8 @@ export const threadsRouter = router({
     )
     .mutation(({ input }) => ({ id: threadStore().create(input ?? {}) })),
 
-  delete: publicProcedure.input(byId).mutation(async ({ input }) => {
-    // The conversation goes first: the thread row is what names it, so dropping
-    // that first would strand the session in the store.
-    await conversationStore().deleteForThread(input.id);
-    threadStore().remove(input.id);
-  }),
+  /** The conversation is kept — see ThreadStore.remove. */
+  delete: publicProcedure.input(byId).mutation(({ input }) => threadStore().remove(input.id)),
 
   markRead: publicProcedure.input(byId).mutation(({ input }) => threadStore().markRead(input.id)),
 

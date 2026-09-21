@@ -31,7 +31,7 @@ function makeDb(): Db {
     model_provider_id text, model_id text,
     created_at integer DEFAULT (unixepoch()*1000) NOT NULL,
     updated_at integer DEFAULT (unixepoch()*1000) NOT NULL,
-    last_read_at integer, archived_at integer, pinned integer DEFAULT false NOT NULL,
+    last_read_at integer, archived_at integer, deleted_at integer, pinned integer DEFAULT false NOT NULL,
     session_id text)`);
   raw.run(`CREATE TABLE scheduled_tasks (
     id text PRIMARY KEY NOT NULL, title text NOT NULL, prompt text NOT NULL, thread_id text,

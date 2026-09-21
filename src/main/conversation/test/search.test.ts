@@ -24,7 +24,7 @@ function fixture() {
       id text PRIMARY KEY, title text, project_id text, metadata text,
       model_provider_id text, model_id text, session_id text,
       created_at integer DEFAULT 0, updated_at integer DEFAULT 0,
-      last_read_at integer, archived_at integer, pinned integer DEFAULT 0);
+      last_read_at integer, archived_at integer, deleted_at integer, pinned integer DEFAULT 0);
     CREATE VIRTUAL TABLE chat_fts USING fts5(
       text_indexed, text_raw UNINDEXED, kind UNINDEXED, thread_id UNINDEXED,
       message_id UNINDEXED, created_at UNINDEXED, tokenize = 'unicode61');
@@ -50,11 +50,19 @@ function fixture() {
       title,
       updatedAt = 0,
       archivedAt = null,
-    }: { title?: string; updatedAt?: number; archivedAt?: number | null } = {},
+      deletedAt = null,
+    }: {
+      title?: string;
+      updatedAt?: number;
+      archivedAt?: number | null;
+      deletedAt?: number | null;
+    } = {},
   ) => {
     raw
-      .query(`INSERT INTO threads(id, title, updated_at, archived_at) VALUES (?, ?, ?, ?)`)
-      .run(id, title ?? null, updatedAt, archivedAt);
+      .query(
+        `INSERT INTO threads(id, title, updated_at, archived_at, deleted_at) VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(id, title ?? null, updatedAt, archivedAt, deletedAt);
     if (title) index('title', id, null, title);
   };
 
@@ -128,4 +136,22 @@ test('an empty query lists the scope: the recent few active, all archived', () =
 
   const archived = searchChats(f.db, '', 'archived');
   expect(archived.hits.map((h) => h.threadId)).toEqual(['gone-2', 'gone-1']);
+});
+
+test('a deleted thread is unfindable, though its text is still indexed', () => {
+  const f = fixture();
+  f.thread('live', { title: 'quarterly plan' });
+  f.message('live', 'm1', 'the quarterly plan');
+  f.thread('gone', { title: 'quarterly plan', deletedAt: 9 });
+  f.message('gone', 'm2', 'the quarterly plan');
+  f.thread('archived-and-gone', { archivedAt: 5, deletedAt: 9 });
+  f.message('archived-and-gone', 'm3', 'the quarterly plan');
+
+  // Deleting never prunes the index — the conversation is still there — so the
+  // queries have to exclude it themselves, in both scopes and in the empty-query
+  // listing each scope opens with.
+  expect(searchChats(f.db, 'quarterly', 'active').hits.map((h) => h.threadId)).toEqual(['live']);
+  expect(searchChats(f.db, 'quarterly', 'archived').hits).toEqual([]);
+  expect(searchChats(f.db, '', 'active').hits.map((h) => h.threadId)).toEqual(['live']);
+  expect(searchChats(f.db, '', 'archived').hits).toEqual([]);
 });

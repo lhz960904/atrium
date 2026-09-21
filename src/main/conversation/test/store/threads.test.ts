@@ -18,7 +18,7 @@ function store(): { store: ThreadStore; db: Db } {
     id text PRIMARY KEY NOT NULL, title text, project_id text, metadata text,
     model_provider_id text, model_id text,
     created_at integer DEFAULT 0 NOT NULL, updated_at integer DEFAULT 0 NOT NULL,
-    last_read_at integer, archived_at integer, pinned integer DEFAULT false NOT NULL,
+    last_read_at integer, archived_at integer, deleted_at integer, pinned integer DEFAULT false NOT NULL,
     session_id text)`);
   raw.run(`CREATE TABLE projects (
     id text PRIMARY KEY NOT NULL, path text NOT NULL, name text,
@@ -85,4 +85,49 @@ test('a thread that is gone reads as archived, so a task rotates off it', () => 
   // A scheduled task bound to a deleted thread must start a fresh one rather
   // than fail against a row that is not there.
   expect(threads.isArchived(id)).toBe(true);
+});
+
+test('a deleted thread is gone from every read, but its row and session are not', () => {
+  const { store: threads, db } = store();
+  const id = threads.create({ title: 'spent money here' });
+  threads.bindSession(id, 's1');
+
+  threads.remove(id);
+
+  expect(threads.get(id)).toBeUndefined();
+  expect(threads.list()).toEqual([]);
+  expect(threads.sessionId(id)).toBeUndefined();
+  // The row survives, still naming the session the spend was recorded against —
+  // that is the whole reason deleting is a mark.
+  const [row] = db.select().from(schema.threads).all();
+  expect(row).toMatchObject({ id, sessionId: 's1' });
+  expect(row?.deletedAt).not.toBeNull();
+});
+
+test('a deleted thread reads as archived, and unarchiving cannot bring it back', () => {
+  const { store: threads } = store();
+  const id = threads.create();
+  threads.remove(id);
+
+  // A scheduled task asks this before appending, and must rotate to a new
+  // thread rather than write into one the user deleted.
+  expect(threads.isArchived(id)).toBe(true);
+  threads.unarchive(id);
+  expect(threads.get(id)).toBeUndefined();
+});
+
+test('deleting a project deletes its threads without stranding their sessions', () => {
+  const { store: threads, db } = store();
+  db.insert(schema.projects).values({ id: 'p1', path: '/tmp/p1', name: 'p1' }).run();
+  const kept = threads.create({ title: 'elsewhere' });
+  const filed = threads.create({ projectId: 'p1' });
+  threads.bindSession(filed, 's1');
+
+  threads.removeUnderProject('p1');
+
+  expect(threads.list().map((t) => t.id)).toEqual([kept]);
+  // The session is still referenced by a row, so nothing is orphaned in the
+  // store — which a hard delete of the thread row did leave behind.
+  const rows = db.select().from(schema.threads).all();
+  expect(rows.find((t) => t.id === filed)).toMatchObject({ sessionId: 's1' });
 });

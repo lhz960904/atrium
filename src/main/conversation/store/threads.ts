@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Db } from '@main/db';
 import { projects, threads } from '@main/db/schema';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, type SQL } from 'drizzle-orm';
 
 /**
  * The thread rows, and every rule about them.
@@ -16,6 +16,11 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
  * across four modules, which meant rules like "unarchiving a thread revives the
  * project it is filed under" existed only inside an HTTP handler and could not
  * be reused or tested.
+ *
+ * Deleting is a mark, never a DELETE. The row and the session it names carry
+ * what the conversation cost, and a bill has to outlive the chat it was run
+ * up on — so every read here filters the deleted out instead, and nothing
+ * above this file has to remember that they exist.
  */
 
 export type Thread = typeof threads.$inferSelect;
@@ -33,18 +38,27 @@ type Executor = Pick<Db, 'select' | 'insert' | 'update' | 'delete'>;
 export class ThreadStore {
   constructor(private readonly db: Db) {}
 
+  /** A thread the product can still see. Every read is scoped by this. */
+  private alive(...more: (SQL | undefined)[]): SQL | undefined {
+    return and(isNull(threads.deletedAt), ...more);
+  }
+
   /** Active threads, most recently updated first — the sidebar's list. */
   list(): Thread[] {
     return this.db
       .select()
       .from(threads)
-      .where(isNull(threads.archivedAt))
+      .where(this.alive(isNull(threads.archivedAt)))
       .orderBy(desc(threads.updatedAt))
       .all();
   }
 
   get(id: string): Thread | undefined {
-    return this.db.select().from(threads).where(eq(threads.id, id)).get();
+    return this.db
+      .select()
+      .from(threads)
+      .where(this.alive(eq(threads.id, id)))
+      .get();
   }
 
   /**
@@ -56,7 +70,7 @@ export class ThreadStore {
     const row = this.db
       .select({ projectId: threads.projectId })
       .from(threads)
-      .where(eq(threads.id, id))
+      .where(this.alive(eq(threads.id, id)))
       .get();
     if (!row?.projectId) return fallback;
     const project = this.db
@@ -154,7 +168,7 @@ export class ThreadStore {
     const row = this.db
       .select({ sessionId: threads.sessionId })
       .from(threads)
-      .where(eq(threads.id, id))
+      .where(this.alive(eq(threads.id, id)))
       .get();
     return row?.sessionId ?? undefined;
   }
@@ -176,9 +190,13 @@ export class ThreadStore {
     const row = this.db
       .select({ projectId: threads.projectId })
       .from(threads)
-      .where(eq(threads.id, id))
+      .where(this.alive(eq(threads.id, id)))
       .get();
-    this.db.update(threads).set({ archivedAt: null }).where(eq(threads.id, id)).run();
+    this.db
+      .update(threads)
+      .set({ archivedAt: null })
+      .where(this.alive(eq(threads.id, id)))
+      .run();
     if (row?.projectId) {
       this.db
         .update(projects)
@@ -193,7 +211,7 @@ export class ThreadStore {
     const row = this.db
       .select({ archivedAt: threads.archivedAt })
       .from(threads)
-      .where(eq(threads.id, id))
+      .where(this.alive(eq(threads.id, id)))
       .get();
     return row === undefined || row.archivedAt != null;
   }
@@ -202,9 +220,17 @@ export class ThreadStore {
     this.db.update(threads).set({ pinned }).where(eq(threads.id, id)).run();
   }
 
-  /** Drop the row. Its conversation is the caller's to delete first. */
+  /**
+   * Delete a thread, as far as anyone above here can tell. The row and its
+   * session stay so the usage they account for survives; nothing reads them
+   * again, because every read in this file is scoped to the living.
+   */
   remove(id: string): void {
-    this.db.delete(threads).where(eq(threads.id, id)).run();
+    this.db
+      .update(threads)
+      .set({ deletedAt: new Date() })
+      .where(this.alive(eq(threads.id, id)))
+      .run();
   }
 
   /**
@@ -222,7 +248,11 @@ export class ThreadStore {
 
   /** Delete every thread filed under a project, with the project itself. */
   removeUnderProject(projectId: string, exec: Executor = this.db): void {
-    exec.delete(threads).where(eq(threads.projectId, projectId)).run();
+    exec
+      .update(threads)
+      .set({ deletedAt: new Date() })
+      .where(and(eq(threads.projectId, projectId), isNull(threads.deletedAt)))
+      .run();
   }
 }
 
