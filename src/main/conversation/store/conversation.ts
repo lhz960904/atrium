@@ -29,6 +29,12 @@ export const RUN_STOP_ENTRY = 'atrium.run_stop';
 export type RunStopEntryData = { runId: string; reason: RunStopReason };
 
 /**
+ * A model call Atrium makes beside the conversation. Each spends real tokens
+ * and none of them produces an entry, so the ledger would miss them entirely.
+ */
+export type SideCallKind = 'title' | 'summary' | 'review' | 'subagent';
+
+/**
  * The one place that knows how a conversation is stored.
  *
  * Every caller above this line speaks in intents — the run started, this turn
@@ -185,6 +191,38 @@ export class Conversation {
       // A turn still streaming has no stop reason the record's enum admits.
       stopReason: entry.stopReason === 'pending' ? 'stop' : entry.stopReason,
       usage: durable(entry.usage),
+    });
+  }
+
+  /**
+   * Record what a call made beside the conversation spent.
+   *
+   * `adjustment` is the one cause whose `runId` is optional, which is why all
+   * of these use it: a title can land after its run has closed, and by pi's own
+   * rules (`validateRecordLog`) a record that *declares* a runId outside its
+   * operation's lifetime makes the log corrupt. Nothing we call runs that check
+   * today — which is exactly why the log has to be kept valid deliberately. The
+   * run rides in `details` instead, where it is data rather than a claim.
+   */
+  async recordSideUsage(call: {
+    kind: SideCallKind;
+    usage: AssistantMessage['usage'];
+    providerId?: string;
+    modelId?: string;
+    runId?: string;
+  }): Promise<void> {
+    await this.session.appendRecord({
+      id: randomUUID(),
+      lane: LANE,
+      type: 'usage',
+      cause: 'adjustment',
+      usage: durable(call.usage),
+      details: durable({
+        kind: call.kind,
+        ...(call.providerId ? { providerId: call.providerId } : {}),
+        ...(call.modelId ? { modelId: call.modelId } : {}),
+        ...(call.runId ? { runId: call.runId } : {}),
+      }),
     });
   }
 

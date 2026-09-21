@@ -1,8 +1,7 @@
 import type { AtriumUIMessage } from '@shared/chat';
-import { costBreakdownUsd } from '@shared/cost';
 import type { RouterOutputs } from './trpc';
 
-/** `providerId/modelId` → { maxContextTokens, pricing } from models.info. */
+/** `providerId/modelId` → { maxContextTokens } from models.info. */
 export type ModelInfoMap = RouterOutputs['models']['info'];
 
 export type UsageAggregate = {
@@ -51,48 +50,30 @@ export function sessionModels(messages: AtriumUIMessage[]): SessionModel[] {
 }
 
 /**
- * Sum tokens and cost across a thread's assistant turns. Each turn is priced
- * with its own model's rates (a thread may switch models). Cost follows the AI
- * SDK split: inputTokens is inclusive of cache, so the non-cached remainder is
- * billed at the input rate and the cache read/write tiers are billed separately.
+ * Sum tokens and cost across a thread's assistant turns.
+ *
+ * Every figure here was reported by the provider and carried down on the turn;
+ * nothing is repriced from rates. A turn whose model had no pricing reports a
+ * zero cost, and `costComplete` goes false so the readout stays silent rather
+ * than claiming the thread was free.
  */
-export function aggregateUsage(
-  messages: AtriumUIMessage[],
-  info: ModelInfoMap | undefined,
-): UsageAggregate {
+export function aggregateUsage(messages: AtriumUIMessage[]): UsageAggregate {
   const acc: UsageAggregate = { ...ZERO };
   for (const m of messages) {
     const md = m.metadata;
     if (!md || md.totalTokens == null) continue;
-    const inputTokens = md.inputTokens ?? 0;
-    const outputTokens = md.outputTokens ?? 0;
-    const cacheRead = md.cacheReadTokens ?? 0;
-    const cacheCreation = md.cacheCreationTokens ?? 0;
-    acc.inputTokens += inputTokens;
-    acc.outputTokens += outputTokens;
-    acc.cacheReadTokens += cacheRead;
-    acc.cacheCreationTokens += cacheCreation;
+    acc.inputTokens += md.inputTokens ?? 0;
+    acc.outputTokens += md.outputTokens ?? 0;
+    acc.cacheReadTokens += md.cacheReadTokens ?? 0;
+    acc.cacheCreationTokens += md.cacheCreationTokens ?? 0;
     acc.totalTokens += md.totalTokens;
-    const pricing =
-      md.providerId && md.modelId
-        ? info?.[modelKey(md.providerId, md.modelId)]?.pricing
-        : undefined;
-    if (pricing) {
-      const c = costBreakdownUsd(
-        {
-          inputTokens,
-          outputTokens,
-          cacheReadTokens: cacheRead,
-          cacheCreationTokens: cacheCreation,
-        },
-        pricing,
-      );
-      acc.inputCost += c.input;
-      acc.outputCost += c.output;
-      acc.cacheCost += c.cache;
-    } else {
+    if (!md.cost) {
       acc.costComplete = false;
+      continue;
     }
+    acc.inputCost += md.cost.input;
+    acc.outputCost += md.cost.output;
+    acc.cacheCost += md.cost.cache;
   }
   acc.totalCost = acc.inputCost + acc.outputCost + acc.cacheCost;
   return acc;

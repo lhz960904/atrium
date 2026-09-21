@@ -1,4 +1,4 @@
-import type { Api, Model } from '@earendil-works/pi-ai';
+import type { Api, Model, Usage } from '@earendil-works/pi-ai';
 import { complete } from '../runtime/complete';
 
 /** allow = auto-approve; deny = fall back to a user prompt. There is no third
@@ -41,6 +41,9 @@ export type ReviewArgs = {
   abortSignal?: AbortSignal;
 };
 
+/** A verdict, plus what it cost — absent when the review never got an answer. */
+export type Review = { verdict: ReviewVerdict; usage?: Usage };
+
 /**
  * Ask the reviewer model whether a flagged operation is safe to auto-approve.
  * Only an explicit ALLOW passes; uncertainty, a DENY, a timeout, an
@@ -48,7 +51,7 @@ export type ReviewArgs = {
  * caller falls back to a user prompt. The gate never widens access on its own —
  * it can only spare the user a prompt it was already going to show.
  */
-export async function reviewBoundaryCrossing(args: ReviewArgs): Promise<ReviewVerdict> {
+export async function reviewBoundaryCrossing(args: ReviewArgs): Promise<Review> {
   const timeout = AbortSignal.timeout(REVIEW_TIMEOUT_MS);
   const signal = args.abortSignal ? AbortSignal.any([args.abortSignal, timeout]) : timeout;
   try {
@@ -56,16 +59,16 @@ export async function reviewBoundaryCrossing(args: ReviewArgs): Promise<ReviewVe
     // No maxOutputTokens cap: a reasoning model spends tokens thinking before it
     // answers, and a tight cap would truncate it to empty (→ a false deny). The
     // 6s timeout bounds latency instead; the prompt keeps the answer terse.
-    const text = await complete({
+    const { text, usage } = await complete({
       model: args.model,
       system: SYSTEM,
       prompt: `${lead}\n\n${args.subject}\n\nALLOW or DENY?`,
       signal,
     });
-    return parseVerdict(text);
+    return { verdict: parseVerdict(text), usage };
   } catch {
     // Timed out, model unreachable, generation failed — treat as "ask the user".
-    return 'deny';
+    return { verdict: 'deny' };
   }
 }
 

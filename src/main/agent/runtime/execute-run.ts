@@ -2,7 +2,7 @@ import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import { getAgentMessages } from '@main/conversation/project';
 import { createSessionRecorder, type SessionRecorder } from '@main/conversation/session-recorder';
-import { conversationStore } from '@main/conversation/store/conversation';
+import { type Conversation, conversationStore } from '@main/conversation/store/conversation';
 import { threadStore } from '@main/conversation/store/threads';
 import { compactThread } from '@main/conversation/threads';
 import { generateThreadTitle } from '@main/conversation/title';
@@ -27,7 +27,7 @@ import { recordTurn } from '../memory/state';
 import { approvalGate } from '../permissions';
 import { readSoul } from '../profile/paths';
 import { buildSystemPrompt } from '../prompts';
-import { modelRates, resolvePiModel, supportsImageToolResults } from '../providers/models';
+import { resolvePiModel, supportsImageToolResults } from '../providers/models';
 import { piStreamFn } from '../providers/registry';
 import { type BackgroundShells, LocalSandbox } from '../sandbox';
 import { getSkills } from '../skills/registry';
@@ -40,7 +40,7 @@ import { loopDetection } from '../tools/loop-detection';
 import { createAgentLoop } from './agent-loop';
 import { composeHooks } from './hook-compose';
 import { type PendingInteractions, stopReasonOf } from './pending-interactions';
-import type { RunContext } from './run-context';
+import type { RunContext, SideCall } from './run-context';
 import { convertAgentSessionEvent } from './stream/convert';
 
 const log = createLogger('agent');
@@ -85,6 +85,7 @@ export async function executeRun(opts: ExecuteRunOptions): Promise<RunResult> {
 /** What a run assembles as it goes, so each step can be read on its own. */
 class RunExecution {
   private recorder: SessionRecorder | undefined;
+  private conversation: Conversation | undefined;
   private workspaceRoot: string | undefined;
   private computerUse: ComputerUseHelper | undefined;
   private openedAt = Date.now();
@@ -175,6 +176,7 @@ class RunExecution {
     const conversation = await conversationStore().openForThread(input.threadId, workspaceRoot);
     const recorder = createSessionRecorder({ conversation, runId });
     this.recorder = recorder;
+    this.conversation = conversation;
     const prompt = input.userMessage
       ? { id: input.userMessage.id, message: splitUserMessage(input.userMessage) }
       : undefined;
@@ -189,13 +191,35 @@ class RunExecution {
     return { conversation, recorder, workspaceRoot };
   }
 
+  /**
+   * What a model call beside the conversation spent, on the conversation's own
+   * account. These produce no message, so nothing else would ever see them.
+   *
+   * The run rides as data rather than as the record's own runId: a title can
+   * land after the run is closed, which by pi's rules would make the log
+   * corrupt if the record claimed to belong to that run.
+   */
+  private readonly spend = (call: SideCall): void => {
+    const { model, runId } = this.opts;
+    void this.conversation
+      ?.recordSideUsage({
+        kind: call.kind,
+        usage: call.usage,
+        providerId: call.providerId ?? model.provider,
+        modelId: call.modelId ?? model.id,
+        runId,
+      })
+      .catch((error) => log.info(`side usage not recorded: ${error}`));
+  };
+
   /** A title may finish after the run; save it but never reopen its stream. */
   private startTitle(history: Message[]): void {
     const { input, model } = this.opts;
     generateThreadTitle({
       messages: history,
       model,
-      onTitle: (title) => {
+      onTitle: (title, usage) => {
+        this.spend({ kind: 'title', usage });
         threadStore().setTitle(input.threadId, title);
         if (!this.finished) {
           this.opts.emit({ type: 'notice', name: 'title', payload: { data: { title } } });
@@ -224,6 +248,7 @@ class RunExecution {
       providerId: model.provider,
       modelId: model.id,
       notice: (name, data) => this.opts.emit({ type: 'notice', name, payload: { data } }),
+      spend: this.spend,
       scratch: new Map(),
     };
     const gate = approvalGate({
@@ -233,6 +258,7 @@ class RunExecution {
       workspaceRoot,
       abortSignal: signal,
       onReviewed: ({ toolCallId, subject }) => ctx.notice('autoReview', { toolCallId, subject }),
+      onUsage: (usage) => this.spend({ kind: 'review', usage }),
     });
     const interactions = toolInteractions({
       gate,
@@ -258,7 +284,8 @@ class RunExecution {
       }),
     });
     const blocks = await loadContextBlocks({ skills, workspaceRoot });
-    return { ctx, tools, blocks, interactions, summarize: createSummarizer(model) };
+    const summarize = createSummarizer(model, (usage) => this.spend({ kind: 'summary', usage }));
+    return { ctx, tools, blocks, interactions, summarize };
   }
 
   private async foldForTurn(
@@ -354,6 +381,7 @@ class RunExecution {
       cacheReadTokens: totals.cacheRead,
       cacheCreationTokens: totals.cacheWrite,
       totalTokens: totals.total,
+      costUsd: totals.costUsd,
     };
     this.opts.emit({
       type: 'notice',
@@ -361,11 +389,7 @@ class RunExecution {
       payload: { createdAt: this.openedAt, durationMs: Date.now() - this.openedAt },
     });
     if (this.recorder.wrote) {
-      recordUsage(
-        db,
-        { ...usage, threadId: input.threadId, messageId: runId, kind: 'chat' },
-        modelRates(model),
-      );
+      recordUsage(db, { ...usage, threadId: input.threadId, messageId: runId, kind: 'chat' });
     }
   }
 }

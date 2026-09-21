@@ -1,4 +1,4 @@
-import type { Api, Model } from '@earendil-works/pi-ai';
+import type { Api, Model, Usage } from '@earendil-works/pi-ai';
 import { createLogger } from '@main/utils/log';
 import type { PermissionMode } from '@shared/permissions';
 import type { CrossingCode } from '@shared/permissions/analyze';
@@ -83,6 +83,8 @@ export type ApprovalContext = {
   /** Marks a crossing the reviewer waved through, so the trace shows it was
    *  reviewed rather than slipped through ungated. */
   onReviewed?: (call: { toolCallId: string; subject: string }) => void;
+  /** What a review cost; the gate itself spends nothing when it never asks. */
+  onUsage?: (usage: Usage) => void;
 };
 
 /**
@@ -112,9 +114,10 @@ export function approvalGate(ctx: ApprovalContext) {
       subject,
       risk: RISK[verdict.crossing.code],
       abortSignal: ctx.abortSignal,
-    }).then((review) => {
-      log.info(`${toolName} crossing → reviewer ${review}: ${subject}`);
-      if (review === 'deny') return true;
+    }).then(({ verdict, usage }) => {
+      log.info(`${toolName} crossing → reviewer ${verdict}: ${subject}`);
+      if (usage) ctx.onUsage?.(usage);
+      if (verdict === 'deny') return true;
       if (toolCallId) ctx.onReviewed?.({ toolCallId, subject });
       return false;
     });

@@ -2,7 +2,6 @@ import type { AgentMessage as Message, StreamFn } from '@earendil-works/pi-agent
 import type { Api, AssistantMessage, Model, TextContent, Usage } from '@earendil-works/pi-ai';
 import { recordUsage } from '@main/db/usage';
 import { createLogger } from '@main/utils/log';
-import type { TokenRates } from '@shared/cost';
 import type { ToolName } from '@shared/tools';
 import { contextCompaction } from '../context/compaction';
 import { createSummarizer } from '../context/summarize';
@@ -38,8 +37,6 @@ export type RunSubagentOptions = {
   prompt: string;
   /** Correlates the child's bubbled-up activity with its UI block. */
   subagentId: string;
-  /** Pricing lookup for the usage ledger; omitted in tests (skips recording). */
-  pricingOf?: (providerId: string, modelId: string) => TokenRates;
   abortSignal?: AbortSignal;
 };
 
@@ -167,23 +164,23 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   }
 
   // Subagent calls are separate model calls, invisible to the parent turn's
-  // usage — record them on their own so the ledger isn't an undercount.
-  if (opts.pricingOf && providerId && modelId) {
-    recordUsage(
-      parent.db,
-      {
-        threadId: parent.threadId,
-        kind: 'subagent',
-        providerId,
-        modelId,
-        inputTokens: usage.input,
-        outputTokens: usage.output,
-        cacheReadTokens: usage.cacheRead,
-        cacheCreationTokens: usage.cacheWrite,
-        totalTokens: usage.totalTokens,
-      },
-      opts.pricingOf(providerId, modelId),
-    );
+  // usage — record them on their own so the ledger isn't an undercount. They
+  // go to both ledgers: the session is the conversation's own account of what
+  // it spent, the table is what survives the conversation being deleted.
+  parent.spend?.({ kind: 'subagent', usage, providerId, modelId });
+  if (providerId && modelId) {
+    recordUsage(parent.db, {
+      threadId: parent.threadId,
+      kind: 'subagent',
+      providerId,
+      modelId,
+      inputTokens: usage.input,
+      outputTokens: usage.output,
+      cacheReadTokens: usage.cacheRead,
+      cacheCreationTokens: usage.cacheWrite,
+      totalTokens: usage.totalTokens,
+      costUsd: usage.cost.total,
+    });
   }
 
   return { text: lastText || '(subagent finished without a text response)', usage };

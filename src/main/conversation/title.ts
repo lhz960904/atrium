@@ -1,5 +1,5 @@
 import type { AgentMessage as Message } from '@earendil-works/pi-agent-core';
-import type { Api, Model, TextContent, UserMessage } from '@earendil-works/pi-ai';
+import type { Api, Model, TextContent, Usage, UserMessage } from '@earendil-works/pi-ai';
 
 import { complete } from '../agent/runtime/complete';
 
@@ -36,7 +36,7 @@ export function cleanTitle(raw: string): string {
 export function generateThreadTitle(opts: {
   messages: Message[];
   model: Model<Api>;
-  onTitle: (title: string) => void;
+  onTitle: (title: string, usage: Usage) => void;
 }): void {
   // First turn only: no assistant message exists in the history yet.
   if (opts.messages.some((m) => m.role === 'assistant')) return;
@@ -45,10 +45,13 @@ export function generateThreadTitle(opts: {
 
   void (async () => {
     try {
-      const title = cleanTitle(
-        await complete({ model: opts.model, system: TITLE_SYSTEM, prompt: seed.slice(0, 2000) }),
-      );
-      if (title) opts.onTitle(title);
+      const { text, usage } = await complete({
+        model: opts.model,
+        system: TITLE_SYSTEM,
+        prompt: seed.slice(0, 2000),
+      });
+      const title = cleanTitle(text);
+      if (title) opts.onTitle(title, usage);
     } catch {
       // Best-effort: keep the creation-time fallback title on any failure.
     }

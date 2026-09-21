@@ -14,14 +14,14 @@ export type AtriumMessageMetadata = {
   createdAt?: number;
   durationMs?: number;
   /** The model that produced this turn — fixed within a turn, but can change
-   *  between turns when the user switches. Keys per-message cost + the context
-   *  window denominator; a turn's tokens are all priced at this model's rates. */
+   *  between turns when the user switches. Names the context window's
+   *  denominator, and which model a turn's usage should be attributed to. */
   providerId?: string;
   modelId?: string;
   totalTokens?: number;
-  /** Turn-total input tokens (inclusive of cache read + write), from totalUsage. */
+  /** Turn-total input tokens, not counting the cached ones below. */
   inputTokens?: number;
-  /** Turn-total output tokens, from totalUsage. */
+  /** Turn-total output tokens. */
   outputTokens?: number;
   /** Cached input tokens read this turn (the 0.1× cheap ones) — cache-hit signal. */
   cacheReadTokens?: number;
@@ -29,6 +29,9 @@ export type AtriumMessageMetadata = {
   cacheCreationTokens?: number;
   /** Prompt tokens at turn end (last step input+output) — compaction's counting base. */
   contextTokens?: number;
+  /** What the turn cost in USD, as the provider priced it — never recomputed
+   *  here from rates, which is how a displayed figure and a billed one drift. */
+  cost?: { input: number; output: number; cache: number; total: number };
   /** Marks a fold's divider, which is shown in place of the messages it covers. */
   kind?: 'compaction';
 };

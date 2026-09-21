@@ -52,7 +52,7 @@ export function TokenCounter({
     { models },
     { enabled: models.length > 0, staleTime: 5 * 60_000 },
   );
-  const agg = aggregateUsage(messages, info.data);
+  const agg = aggregateUsage(messages);
   const occ = contextOccupancy(messages, info.data);
   if (agg.totalTokens === 0) return null;
 

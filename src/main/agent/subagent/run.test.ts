@@ -7,7 +7,7 @@ import {
   type Model,
 } from '@earendil-works/pi-ai';
 import type { Db } from '@main/db';
-import type { RunContext } from '../runtime/run-context';
+import type { RunContext, SideCall } from '../runtime/run-context';
 import type { Sandbox } from '../sandbox/types';
 import type { AtriumTool } from '../tools';
 import type { SubagentDef } from './defs';
@@ -72,10 +72,13 @@ const echoTool = {
   }),
 } as unknown as AtriumTool;
 
+/** A db that does nothing but accept the ledger's insert. */
+const inertDb = () => ({ insert: () => ({ values: () => ({ run: () => {} }) }) }) as unknown as Db;
+
 function parentCtx(over: Partial<RunContext> = {}): RunContext {
   return {
     threadId: 't1',
-    db: {} as Db,
+    db: inertDb(),
     sandbox: {} as Sandbox,
     workspaceRoot: '/ws',
     system: 'PARENT SYSTEM PROMPT',
@@ -186,7 +189,6 @@ test('records its own usage under the inherited model (kind=subagent)', async ()
     agent: def,
     prompt: 'do the task',
     subagentId: 's1',
-    pricingOf: () => ({ input: 0.001, output: 0.002, cacheRead: 0, cacheCreation: 0 }),
   });
 
   expect(row?.kind).toBe('subagent');
@@ -195,24 +197,20 @@ test('records its own usage under the inherited model (kind=subagent)', async ()
   expect(row?.inputTokens).toBe(1);
   expect(row?.outputTokens).toBe(1);
   expect(row?.totalTokens).toBe(2);
-  // 1 input * 0.001 + 1 output * 0.002 = 0.003 USD → 3000 micros.
+  // The provider's own figure (usage.cost.total = 0.003 USD), stored as micros
+  // rather than recomputed from rates.
   expect(row?.costUsdMicros).toBe(3000);
 });
 
-test('skips recording when no pricing is injected', async () => {
-  let inserted = false;
-  const captureDb = {
-    insert: () => ({
-      values: () => ({
-        run: () => {
-          inserted = true;
-        },
-      }),
-    }),
-  } as unknown as Db;
+test("a subagent's spend reaches the conversation as well as the ledger", async () => {
+  const spent: SideCall[] = [];
 
   await runSubagent({
-    parent: parentCtx({ db: captureDb, providerId: 'anthropic', modelId: 'claude-x' }),
+    parent: parentCtx({
+      spend: (call) => spent.push(call),
+      providerId: 'anthropic',
+      modelId: 'claude-x',
+    }),
     engine: engineWith(scripted([reply([{ type: 'text', text: 'ANSWER' }], 'stop')])),
     tools: [],
     agent: def,
@@ -220,5 +218,13 @@ test('skips recording when no pricing is injected', async () => {
     subagentId: 's1',
   });
 
-  expect(inserted).toBe(false);
+  // Two ledgers, one call: the session is the conversation's own account, the
+  // table is what a cross-thread report reads.
+  expect(spent).toHaveLength(1);
+  expect(spent[0]).toMatchObject({
+    kind: 'subagent',
+    usage: { totalTokens: 2 },
+    providerId: 'anthropic',
+    modelId: 'claude-x',
+  });
 });

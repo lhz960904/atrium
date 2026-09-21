@@ -32,6 +32,8 @@ export type RunTotals = {
   cacheRead: number;
   cacheWrite: number;
   total: number;
+  /** USD, summed from what each turn reported — never recomputed from rates. */
+  costUsd: number;
 };
 
 export type RunOutcome = 'completed' | 'aborted' | 'failed';
@@ -72,7 +74,14 @@ export function createSessionRecorder(opts: {
   runId: string;
 }): SessionRecorder {
   const { conversation, runId } = opts;
-  const totals: RunTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
+  const totals: RunTotals = {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    total: 0,
+    costUsd: 0,
+  };
   let contextTokens: number | undefined;
   let failure: string | undefined;
   let wrote = false;
@@ -115,6 +124,7 @@ export function createSessionRecorder(opts: {
         totals.cacheRead += usage.cacheRead;
         totals.cacheWrite += usage.cacheWrite;
         totals.total += usage.totalTokens;
+        totals.costUsd += usage.cost.total;
         contextTokens = contextSizeOf(usage);
         // A turn that produced nothing (the provider errored before its first
         // block) is not kept: an empty content list is rejected outright when
