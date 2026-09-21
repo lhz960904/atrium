@@ -33,6 +33,7 @@ mock.module('electron', () => ({
 
 const settings = await import('@main/settings/conf');
 const sessions = await import('@main/conversation/store/session');
+const threadRows = await import('@main/conversation/store/threads');
 const context = await import('../../context/injectors');
 const { piModels } = await import('../../providers/registry');
 const { BackgroundShells } = await import('../../sandbox');
@@ -82,7 +83,8 @@ export async function runtimeFixture() {
   // A module singleton outlives mock.restore(), so it is installed and cleared
   // explicitly rather than spied — otherwise one fixture's store leaks into the
   // next test.
-  sessions.openConversations(db, repo);
+  threadRows.openThreadStore(db);
+  sessions.openConversations(repo);
   const config: Record<string, unknown> = {
     'computerUse.enabled': false,
     'general.autoGenerateTitle': false,
@@ -99,6 +101,7 @@ export async function runtimeFixture() {
   const bgShells = new BackgroundShells();
   disposers.push(async () => {
     sessions.closeConversations();
+    threadRows.closeThreadStore();
     bgShells.killAll();
     piModels.deleteProvider(model.provider);
     await repo.close();

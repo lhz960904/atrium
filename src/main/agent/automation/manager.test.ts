@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, expect, test } from 'bun:test';
 import type { Runner } from '@main/agent/runtime/runner';
+import { openThreadStore } from '@main/conversation/store/threads';
 import type { Db } from '@main/db';
 import type { ScheduledTask } from '@main/db/schema';
 import * as schema from '@main/db/schema';
@@ -45,7 +46,10 @@ function makeDb(): Db {
     task_id text NOT NULL REFERENCES scheduled_tasks(id) ON DELETE cascade,
     message_id text, status text NOT NULL, error text,
     started_at integer DEFAULT (unixepoch()*1000) NOT NULL, finished_at integer)`);
-  return drizzle(raw, { schema, casing: 'snake_case' }) as unknown as Db;
+  const db = drizzle(raw, { schema, casing: 'snake_case' }) as unknown as Db;
+  // The manager reaches thread rows through their store, so it has to exist.
+  openThreadStore(db);
+  return db;
 }
 
 const START = 1_700_000_000_000;

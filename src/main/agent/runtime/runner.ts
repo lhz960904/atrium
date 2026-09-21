@@ -175,7 +175,7 @@ export class Runner {
       keepRecentTokens: 0,
     });
     if (!folded) return false;
-    await compactThread(this.db, threadId, folded);
+    await compactThread(threadId, folded);
     return true;
   }
 

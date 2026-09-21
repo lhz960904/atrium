@@ -21,7 +21,7 @@ export const messagesRouter = router({
    */
   rewind: publicProcedure
     .input(z.object({ threadId: z.string(), messageId: z.string() }))
-    .mutation(async ({ ctx, input }) => ({
-      rewound: await rewindThread(ctx.db, input.threadId, input.messageId),
+    .mutation(async ({ input }) => ({
+      rewound: await rewindThread(input.threadId, input.messageId),
     })),
 });

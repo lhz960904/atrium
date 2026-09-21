@@ -12,11 +12,8 @@ import type {
   SqliteSessionRepository,
 } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { Fold } from '@main/agent/context/compaction';
-import type { Db } from '@main/db';
-import { threads } from '@main/db/schema';
 import type { AtriumUIMessage } from '@shared/chat';
 import type { InteractionOutcome, InteractionRequest, RunStopReason } from '@shared/interactions';
-import { eq } from 'drizzle-orm';
 import {
   getAgentMessages,
   getUIMessages,
@@ -24,6 +21,7 @@ import {
   type InteractionEntryData,
 } from '../project';
 import { recoverInterruptedRun } from '../recovery';
+import { threadStore } from './threads';
 
 /** A run's stop reason, kept so a later boot can still name it. */
 export const RUN_STOP_ENTRY = 'atrium.run_stop';
@@ -286,14 +284,11 @@ export class SessionStore {
    */
   private readonly repairs = new Map<string, Promise<void>>();
 
-  constructor(
-    private readonly db: Db,
-    private readonly repository: SqliteSessionRepository,
-  ) {}
+  constructor(private readonly repository: SqliteSessionRepository) {}
 
   /** A thread's conversation, or undefined while it has never run. */
   async forThread(threadId: string): Promise<ThreadSession | undefined> {
-    const sessionId = this.sessionIdOf(threadId);
+    const sessionId = threadStore().sessionId(threadId);
     if (!sessionId) return undefined;
     const metadata = await this.metadataOf(sessionId);
     // The row can outlive the session it names — a store rebuilt from scratch,
@@ -313,7 +308,7 @@ export class SessionStore {
 
     const session = await this.repository.create({ cwd: workspaceRoot });
     const { id } = await session.getMetadata();
-    this.db.update(threads).set({ sessionId: id }).where(eq(threads.id, threadId)).run();
+    threadStore().bindSession(threadId, id);
     // A session created here has nothing to repair, and saying so is what keeps
     // a later read from treating the run about to open as something to close.
     this.repairs.set(id, Promise.resolve());
@@ -366,19 +361,10 @@ export class SessionStore {
 
   /** Drop a thread's conversation. The thread row is the caller's to remove. */
   async deleteForThread(threadId: string): Promise<void> {
-    const sessionId = this.sessionIdOf(threadId);
+    const sessionId = threadStore().sessionId(threadId);
     if (!sessionId) return;
     const metadata = await this.metadataOf(sessionId);
     if (metadata) await this.repository.delete(metadata);
-  }
-
-  private sessionIdOf(threadId: string): string | undefined {
-    const row = this.db
-      .select({ sessionId: threads.sessionId })
-      .from(threads)
-      .where(eq(threads.id, threadId))
-      .get();
-    return row?.sessionId ?? undefined;
   }
 
   private async metadataOf(sessionId: string): Promise<SqliteSessionMetadata | undefined> {
@@ -390,8 +376,8 @@ export class SessionStore {
 let instance: SessionStore | undefined;
 
 /** Install the process's conversations, over the store it opened at boot. */
-export function openConversations(db: Db, repository: SqliteSessionRepository): void {
-  instance = new SessionStore(db, repository);
+export function openConversations(repository: SqliteSessionRepository): void {
+  instance = new SessionStore(repository);
 }
 
 /** Forget them again, so a reopened database is never read through the old one. */

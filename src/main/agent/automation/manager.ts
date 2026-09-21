@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { threadStore } from '@main/conversation/store/threads';
 import type { Db } from '@main/db';
 import type { ScheduledTask, ScheduledTaskRun } from '@main/db/schema';
-import { scheduledTaskRuns, scheduledTasks, threads } from '@main/db/schema';
+import { scheduledTaskRuns, scheduledTasks } from '@main/db/schema';
 import { createLogger } from '@main/utils/log';
 import type { PermissionMode } from '@shared/permissions';
 import type { SelectedModel } from '@shared/settings';
@@ -344,23 +345,9 @@ export class ScheduledTaskManager {
    *  from the archive. */
   private ensureThread(task: ScheduledTask): ScheduledTask {
     if (task.threadId) {
-      const bound = this.db
-        .select({ archivedAt: threads.archivedAt })
-        .from(threads)
-        .where(eq(threads.id, task.threadId))
-        .get();
-      if (bound && bound.archivedAt == null) return task;
+      if (!threadStore().isArchived(task.threadId)) return task;
     }
-    const threadId = randomUUID();
-    this.db
-      .insert(threads)
-      .values({
-        id: threadId,
-        title: task.title,
-        projectId: task.projectId ?? null,
-        metadata: { scheduledTaskId: task.id },
-      })
-      .run();
+    const threadId = threadStore().createForTask(task);
     this.db
       .update(scheduledTasks)
       .set({ threadId, updatedAt: new Date(this.nowMs()) })
