@@ -8,7 +8,6 @@ import { compactThread } from '@main/conversation/threads';
 import { generateThreadTitle } from '@main/conversation/title';
 import { splitUserMessage } from '@main/conversation/ui-messages';
 import type { Db } from '@main/db';
-import { recordUsage } from '@main/db/usage';
 import { type ComputerUseHelper, getComputerUseHelper } from '@main/platform/computer-use';
 import { getSettings } from '@main/settings/conf';
 import { createLogger } from '@main/utils/log';
@@ -351,7 +350,7 @@ class RunExecution {
    */
   private async close(outcome: RunResult['status']): Promise<void> {
     const { input, pending, signal } = this.opts;
-    await this.attempt(() => this.reportUsage());
+    await this.attempt(() => this.reportTiming());
     await this.attempt(() => this.computerUse?.hideOverlay());
     // The recorder repairs what an interrupted run left behind, so it needs the
     // reason the run actually stopped for.
@@ -365,32 +364,16 @@ class RunExecution {
   }
 
   /**
-   * What the reader cannot work out for itself. Token counts and the model ride
-   * on every turn it already receives, so only the run's own timing is sent;
-   * the ledger below is a separate concern from what the message displays.
+   * What the reader cannot work out for itself. Token counts, the model and
+   * what the turn cost all ride on the turn it already receives, so only the
+   * run's own timing is sent.
    */
-  private reportUsage(): void {
-    const { db, input, model, runId } = this.opts;
-    if (!this.recorder) return;
-    const totals = this.recorder.totals;
-    const usage = {
-      providerId: model.provider,
-      modelId: model.id,
-      inputTokens: totals.input,
-      outputTokens: totals.output,
-      cacheReadTokens: totals.cacheRead,
-      cacheCreationTokens: totals.cacheWrite,
-      totalTokens: totals.total,
-      costUsd: totals.costUsd,
-    };
+  private reportTiming(): void {
     this.opts.emit({
       type: 'notice',
       name: 'message-metadata',
       payload: { createdAt: this.openedAt, durationMs: Date.now() - this.openedAt },
     });
-    if (this.recorder.wrote) {
-      recordUsage(db, { ...usage, threadId: input.threadId, messageId: runId, kind: 'chat' });
-    }
   }
 }
 

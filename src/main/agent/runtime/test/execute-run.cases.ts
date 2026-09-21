@@ -107,26 +107,26 @@ test('owns begin, message persistence and end; the wire carries deltas and a fin
   for (const event of updates) expect(event.assistantMessageEvent).not.toHaveProperty('partial');
 });
 
-test('records usage once using the model identity', async () => {
+test('the turn is where its usage is recorded, and the only place', async () => {
   const f = await runtimeFixture();
   const response = fauxAssistantMessage('done');
   response.usage = { ...response.usage, input: 3, output: 2, totalTokens: 5 };
   f.faux.setResponses([response]);
   const { events, records } = await run(f);
-  const recorded = records.find((record) => record.type === 'usage');
-  if (recorded?.type !== 'usage') throw new Error('Missing usage record');
+  const recorded = records.filter((record) => record.type === 'usage');
+  if (recorded[0]?.type !== 'usage') throw new Error('Missing usage record');
+  // One per turn, naming the entry it belongs to — which is how a report reads
+  // the model off the turn instead of being told it a second time.
+  expect(recorded).toHaveLength(1);
+  expect(recorded[0]).toMatchObject({ cause: 'assistant', runId: 'r1' });
   // Faux derives tokens from the actual request, including the assembled tools.
-  expect(recorded.usage.totalTokens).toBeGreaterThan(0);
-  expect(f.raw.query('SELECT * FROM usage').all()).toMatchObject([
-    {
-      message_id: 'r1',
-      provider_id: f.model.provider,
-      model_id: f.model.id,
-      input_tokens: recorded.usage.input,
-      output_tokens: recorded.usage.output,
-      total_tokens: recorded.usage.totalTokens,
-    },
-  ]);
+  expect(recorded[0].usage.totalTokens).toBeGreaterThan(0);
+  const entries = (await conversationStore().forThread('t1'))?.entries();
+  const turn = (await entries)?.find((e) => e.id === (recorded[0] as { entryId: string }).entryId);
+  expect(turn?.type === 'message' && turn.message).toMatchObject({
+    provider: f.model.provider,
+    model: f.model.id,
+  });
   // Token counts ride on the turns themselves; the notice carries only what a
   // reader cannot work out from them.
   expect(
@@ -374,10 +374,14 @@ test('an already-aborted execution opens no conversation', async () => {
   expect(conversation).toBeUndefined();
 });
 
-test('bookkeeping failure still ends the recording and stream', async () => {
+test('a usage record that cannot be written fails the run, and still closes it', async () => {
   const f = await runtimeFixture();
+  // The store's own tables are created when a conversation is first opened, so
+  // the trigger cannot be installed until after that.
+  await conversationStore().openForThread('t1', f.dir);
   f.raw.exec(
-    "CREATE TRIGGER fail_usage BEFORE INSERT ON usage BEGIN SELECT RAISE(FAIL, 'usage write failed'); END",
+    `CREATE TRIGGER fail_usage BEFORE INSERT ON records WHEN new.type = 'usage'
+     BEGIN SELECT RAISE(FAIL, 'usage write failed'); END`,
   );
   const response = fauxAssistantMessage('done');
   response.usage = { ...response.usage, input: 1, totalTokens: 1 };
@@ -385,11 +389,18 @@ test('bookkeeping failure still ends the recording and stream', async () => {
   const { result, records, events } = await run(f);
   expect(result.status).toBe('failed');
   expect(result.error).toContain('usage write failed');
-  // The ledger failed, not the turn: the conversation is still recorded as one
-  // that finished, while the caller is told the run had a problem.
+  // What a turn spent is part of the conversation, not a ledger beside it, so a
+  // run that could not record it is a run that failed — calling it completed
+  // would claim a journal we do not have.
   expect(records.find((r) => r.type === 'operation_finished')).toMatchObject({
-    outcome: 'completed',
+    outcome: 'failed',
   });
+  // Closed all the same: an operation left open would block the next run.
+  expect(
+    await conversationStore()
+      .forThread('t1')
+      .then((c) => c?.openRuns()),
+  ).toEqual([]);
   expect(events.at(-1)).toMatchObject({ type: 'run_finished', status: 'failed' });
 });
 
