@@ -1,78 +1,16 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
-import type { TokenRates } from '@shared/cost';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import type { Db } from '.';
 import * as schema from './schema';
 import {
-  costMicros,
   type RatesResolver,
+  recordUsage,
   type UsageKind,
   usageDaily,
   usageDailyByModel,
   usageSummary,
 } from './usage';
-
-// claude-opus-4-5 rates (per token) from the litellm snapshot.
-const OPUS: TokenRates = {
-  input: 0.000005,
-  output: 0.000025,
-  cacheRead: 0.0000005,
-  cacheCreation: 0.00000625,
-};
-
-test('costMicros: plain input + output, no cache', () => {
-  // 1000*5e-6 + 500*25e-6 = 0.005 + 0.0125 = 0.0175 USD
-  expect(
-    costMicros(
-      { inputTokens: 1000, outputTokens: 500, cacheReadTokens: 0, cacheCreationTokens: 0 },
-      OPUS,
-    ),
-  ).toBe(17_500);
-});
-
-test('costMicros: cache read billed at the cheap tier, input is inclusive', () => {
-  // inputTokens(1000) includes 800 cache reads → 200 noCache.
-  // 200*5e-6 + 800*5e-7 + 500*25e-6 = 0.001 + 0.0004 + 0.0125 = 0.0139 USD
-  expect(
-    costMicros(
-      { inputTokens: 1000, outputTokens: 500, cacheReadTokens: 800, cacheCreationTokens: 0 },
-      OPUS,
-    ),
-  ).toBe(13_900);
-});
-
-test('costMicros: cache creation billed at the dear tier', () => {
-  // 600 noCache + 400 cache-creation, no output.
-  // 600*5e-6 + 400*6.25e-6 = 0.003 + 0.0025 = 0.0055 USD
-  expect(
-    costMicros(
-      { inputTokens: 1000, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 400 },
-      OPUS,
-    ),
-  ).toBe(5_500);
-});
-
-test('costMicros: unknown model (zero pricing) costs nothing', () => {
-  const free: TokenRates = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
-  expect(
-    costMicros(
-      { inputTokens: 9999, outputTokens: 9999, cacheReadTokens: 1, cacheCreationTokens: 1 },
-      free,
-    ),
-  ).toBe(0);
-});
-
-test('costMicros: cache tokens never push noCache below zero', () => {
-  // cacheRead+creation exceeds inputTokens → noCache clamps to 0, only cache billed.
-  // 0*input + 700*5e-7 + 400*6.25e-6 = 0.00035 + 0.0025 = 0.00285 USD
-  expect(
-    costMicros(
-      { inputTokens: 1000, outputTokens: 0, cacheReadTokens: 700, cacheCreationTokens: 400 },
-      OPUS,
-    ),
-  ).toBe(2_850);
-});
 
 /**
  * Reading the ledger back. Against a real table, because what these pin is the
@@ -192,4 +130,37 @@ test('usageDailyByModel: models are ordered by total cost, dearest first', () =>
   // The chart's bar order and legend read straight off this.
   expect(models).toEqual(['dear', 'cheap']);
   expect(rows).toHaveLength(3);
+});
+
+test('recordUsage stores the price it was given, never one it worked out', () => {
+  const { db } = ledger();
+  // Sub-cent calls are the common case, so the figure has to survive the trip
+  // to integer micro-USD without being rounded into nothing.
+  recordUsage(db, {
+    threadId: 't1',
+    providerId: 'anthropic',
+    modelId: 'claude-x',
+    kind: 'chat',
+    inputTokens: 40,
+    outputTokens: 9,
+    cacheReadTokens: 9_000,
+    totalTokens: 9_049,
+    costUsd: 0.0123456,
+  });
+
+  const summary = usageSummary(db, 'all', noRates);
+  expect(summary.totalCostUsd).toBeCloseTo(0.012346, 6);
+  expect(summary.totalTokens).toBe(9_049);
+});
+
+test('a call that moved no tokens is not written at all', () => {
+  const { db } = ledger();
+  recordUsage(db, {
+    threadId: 't1',
+    providerId: 'anthropic',
+    modelId: 'claude-x',
+    kind: 'chat',
+    costUsd: 0,
+  });
+  expect(usageSummary(db, 'all', noRates).calls).toBe(0);
 });

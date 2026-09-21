@@ -27,7 +27,7 @@ import { recordTurn } from '../memory/state';
 import { approvalGate } from '../permissions';
 import { readSoul } from '../profile/paths';
 import { buildSystemPrompt } from '../prompts';
-import { modelRates, resolvePiModel, supportsImageToolResults } from '../providers/models';
+import { resolvePiModel, supportsImageToolResults } from '../providers/models';
 import { piStreamFn } from '../providers/registry';
 import { type BackgroundShells, LocalSandbox } from '../sandbox';
 import { getSkills } from '../skills/registry';
@@ -381,6 +381,7 @@ class RunExecution {
       cacheReadTokens: totals.cacheRead,
       cacheCreationTokens: totals.cacheWrite,
       totalTokens: totals.total,
+      costUsd: totals.costUsd,
     };
     this.opts.emit({
       type: 'notice',
@@ -388,11 +389,7 @@ class RunExecution {
       payload: { createdAt: this.openedAt, durationMs: Date.now() - this.openedAt },
     });
     if (this.recorder.wrote) {
-      recordUsage(
-        db,
-        { ...usage, threadId: input.threadId, messageId: runId, kind: 'chat' },
-        modelRates(model),
-      );
+      recordUsage(db, { ...usage, threadId: input.threadId, messageId: runId, kind: 'chat' });
     }
   }
 }

@@ -253,6 +253,18 @@ export class RunAssembler {
     this.metadata.cacheReadTokens = add('cacheReadTokens', usage.cacheRead);
     this.metadata.cacheCreationTokens = add('cacheCreationTokens', usage.cacheWrite);
     this.metadata.totalTokens = add('totalTokens', usage.totalTokens);
+    const cost = (this.metadata.cost ?? { input: 0, output: 0, cache: 0, total: 0 }) as {
+      input: number;
+      output: number;
+      cache: number;
+      total: number;
+    };
+    this.metadata.cost = {
+      input: cost.input + usage.cost.input,
+      output: cost.output + usage.cost.output,
+      cache: cost.cache + usage.cost.cacheRead + usage.cost.cacheWrite,
+      total: cost.total + usage.cost.total,
+    };
     // The prompt at the end of the latest turn, which is compaction's base.
     this.metadata.contextTokens =
       usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;

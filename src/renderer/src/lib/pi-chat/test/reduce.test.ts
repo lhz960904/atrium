@@ -373,6 +373,39 @@ describe('run envelope', () => {
     });
   });
 
+  test('cost is summed from what each turn reported, split the way the readout shows it', () => {
+    const turn = (input: number, cacheRead: number, cacheWrite: number, output: number) => ({
+      ...assistant([]),
+      usage: {
+        ...usage(),
+        totalTokens: 1,
+        cost: {
+          input,
+          output,
+          cacheRead,
+          cacheWrite,
+          total: input + output + cacheRead + cacheWrite,
+        },
+      },
+    });
+    const assembler = new RunAssembler();
+    for (const event of [
+      ...open(),
+      { type: 'message_end', message: turn(0.01, 0.002, 0.003, 0.1) },
+      { type: 'message_start', message: assistant([]) },
+      { type: 'message_end', message: turn(0.02, 0.004, 0.001, 0.2) },
+    ] as AgentSessionEvent[]) {
+      assembler.apply(event);
+    }
+    // Cache read and write are one line in the readout, and the figures are the
+    // provider's own — the same ones `usageOf` reads back from the records.
+    const cost = assembler.snapshot().message?.metadata?.cost;
+    expect(cost?.input).toBeCloseTo(0.03, 10);
+    expect(cost?.output).toBeCloseTo(0.3, 10);
+    expect(cost?.cache).toBeCloseTo(0.01, 10);
+    expect(cost?.total).toBeCloseTo(0.34, 10);
+  });
+
   test('the loop ending is not the run ending', () => {
     const assembler = new RunAssembler();
     for (const event of [...open(), { type: 'agent_end' } as AgentSessionEvent]) {

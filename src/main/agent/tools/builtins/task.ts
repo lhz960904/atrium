@@ -1,4 +1,3 @@
-import type { TokenRates } from '@shared/cost';
 import type { RunContext } from '../../runtime/run-context';
 import { filterToolsForSubagent, resolveSubagentDef } from '../../subagent/defs';
 import { runSubagent, type SubagentEngine } from '../../subagent/run';
@@ -8,8 +7,6 @@ import { defineTool, Type, textResult } from '../define';
 const DEFAULT_SUBAGENT = 'general-purpose';
 
 export type TaskToolDeps = {
-  /** Pricing lookup, forwarded so the subagent records its own usage. */
-  pricingOf?: (providerId: string, modelId: string) => TokenRates;
   /** All delegatable subagents (built-in + custom), advertised in the description. */
   subagents: Array<{ name: string; description: string }>;
   /** The parent turn's context — the child reuses its sandbox / db / stream. */
@@ -71,7 +68,6 @@ ${list}`,
         // Key the subagent's bubbled-up activity by the tool call id so the
         // frontend can correlate it with this task part's card.
         subagentId: toolCallId,
-        pricingOf: deps.pricingOf,
         abortSignal: signal,
       });
       // The nested loop's own spend rides on the result, where the engine

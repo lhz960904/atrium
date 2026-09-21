@@ -1,4 +1,3 @@
-import { ratesFor } from '../providers/models';
 import { listSubagentDefs } from '../subagent/defs';
 import { askClarificationTool } from './builtins/ask-clarification';
 import { bashTool } from './builtins/bash';
@@ -76,7 +75,6 @@ export function getTools(ctx: ToolCtx): AtriumTool[] {
     webFetchTool(),
     webSearchTool(),
     taskTool({
-      pricingOf: (providerId, modelId) => ratesFor(ctx.run.db, providerId, modelId),
       subagents: listSubagentDefs(ctx.run.db),
       run: ctx.run,
       engine: ctx.engine,

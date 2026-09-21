@@ -6,7 +6,7 @@ import {
   type MessageEntry,
   type OperationFinishedRecord,
 } from '@earendil-works/pi-agent-core';
-import type { AtriumUIMessage } from '@shared/chat';
+import type { AtriumMessageMetadata, AtriumUIMessage } from '@shared/chat';
 import type { InteractionOutcome, InteractionRequest } from '@shared/interactions';
 import type {
   AssistantMessage,
@@ -85,9 +85,18 @@ function runsOf(records: LaneRecord[]): Run[] {
   return runs;
 }
 
-/** What the run cost, summed from the usage its records recorded. */
-function usageOf(records: LaneRecord[], runId: string): Record<string, number> {
+/**
+ * What the run spent, summed from the usage its records recorded. The cost is
+ * the provider's own figure, carried on every usage record — a reader must
+ * never reprice tokens, or what it shows stops matching what was billed.
+ *
+ * Only records naming this run count, which leaves out the calls made beside
+ * it (a title, a summary): those spent on the thread's behalf, not on this
+ * turn's, and the usage page is where a thread's whole bill is read.
+ */
+function usageOf(records: LaneRecord[], runId: string): Partial<AtriumMessageMetadata> {
   const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
+  const cost = { input: 0, output: 0, cache: 0, total: 0 };
   let contextTokens: number | undefined;
   for (const record of records) {
     if (record.type !== 'usage' || record.runId !== runId) continue;
@@ -97,6 +106,10 @@ function usageOf(records: LaneRecord[], runId: string): Record<string, number> {
     totals.cacheRead += usage.cacheRead;
     totals.cacheWrite += usage.cacheWrite;
     totals.total += usage.totalTokens;
+    cost.input += usage.cost.input;
+    cost.output += usage.cost.output;
+    cost.cache += usage.cost.cacheRead + usage.cost.cacheWrite;
+    cost.total += usage.cost.total;
     // The prompt at the end of the latest turn, which is compaction's base.
     if (record.cause === 'assistant') {
       contextTokens =
@@ -109,6 +122,7 @@ function usageOf(records: LaneRecord[], runId: string): Record<string, number> {
     cacheReadTokens: totals.cacheRead,
     cacheCreationTokens: totals.cacheWrite,
     totalTokens: totals.total,
+    cost,
     ...(contextTokens === undefined ? {} : { contextTokens }),
   };
 }

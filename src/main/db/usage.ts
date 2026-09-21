@@ -1,15 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { costUsd, type TokenCounts, type TokenRates } from '../../shared/cost';
+import type { TokenRates } from '../../shared/cost';
 import type { Db } from '.';
 import { usage } from './schema';
 
 export type UsageKind = 'chat' | 'subagent' | 'title' | 'summary' | 'review';
-
-/** Micro-USD (1e-6 dollar) cost of one call — integer for ledger storage. */
-export function costMicros(t: TokenCounts, pricing: TokenRates): number {
-  return Math.round(costUsd(t, pricing) * 1_000_000);
-}
 
 export type RecordUsageInput = {
   threadId: string;
@@ -22,15 +17,18 @@ export type RecordUsageInput = {
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
   totalTokens?: number;
+  /** What the provider charged for this call, in USD. */
+  costUsd: number;
 };
 
 /**
- * Append one LLM call to the usage ledger. Rates are passed in (the caller
- * resolves the model) so this module doesn't reach into the provider layer and
- * stays unit-testable. No-token calls are skipped.
+ * Append one LLM call to the usage ledger. The cost comes in already priced —
+ * the provider returned it and pi carries it on the message — so nothing here
+ * multiplies tokens by rates, which is the only way this figure could disagree
+ * with the one the conversation shows. No-token calls are skipped.
  */
-export function recordUsage(db: Db, input: RecordUsageInput, pricing: TokenRates): void {
-  const tokens: TokenCounts = {
+export function recordUsage(db: Db, input: RecordUsageInput): void {
+  const tokens = {
     inputTokens: input.inputTokens ?? 0,
     outputTokens: input.outputTokens ?? 0,
     cacheReadTokens: input.cacheReadTokens ?? 0,
@@ -48,7 +46,7 @@ export function recordUsage(db: Db, input: RecordUsageInput, pricing: TokenRates
       kind: input.kind,
       ...tokens,
       totalTokens,
-      costUsdMicros: costMicros(tokens, pricing),
+      costUsdMicros: Math.round(input.costUsd * 1_000_000),
     })
     .run();
 }

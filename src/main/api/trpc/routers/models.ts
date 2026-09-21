@@ -1,12 +1,11 @@
-import { modelRates, resolvePiModel } from '@main/agent/providers/models';
-import type { TokenRates } from '@shared/cost';
+import { resolvePiModel } from '@main/agent/providers/models';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
 
 /**
- * Per-model context window + token rates for the renderer's token counter.
- * Cost is computed client-side from each message's stored token breakdown, so
- * the renderer asks about every model a thread actually used.
+ * Per-model context window for the renderer's token counter. Rates are not
+ * reported: what a turn cost rides on the turn itself, priced by the provider,
+ * and a second figure derived here could only disagree with it.
  *
  * Keyed by provider *and* model: the same model id served by two providers is
  * two different products, with its own window and its own price. Answers come
@@ -21,17 +20,14 @@ export const modelsRouter = router({
       }),
     )
     .query(({ ctx, input }) => {
-      const out: Record<string, { maxContextTokens: number; pricing: TokenRates }> = {};
+      const out: Record<string, { maxContextTokens: number }> = {};
       for (const { providerId, modelId } of input.models) {
         try {
           const model = resolvePiModel(ctx.db, providerId, modelId);
-          out[`${providerId}/${modelId}`] = {
-            maxContextTokens: model.contextWindow,
-            pricing: modelRates(model),
-          };
+          out[`${providerId}/${modelId}`] = { maxContextTokens: model.contextWindow };
         } catch {
-          // An unknown provider or a model that can't be resolved has no
-          // window and no price to report; the counter degrades to tokens only.
+          // An unknown provider or a model that can't be resolved has no window
+          // to report; the gauge degrades to a token count with no denominator.
         }
       }
       return out;

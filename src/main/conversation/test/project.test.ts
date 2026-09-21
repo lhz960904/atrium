@@ -494,3 +494,39 @@ test('an unanswered call is reported as open', async () => {
   expect(openToolCalls(entries).map((c) => c.id)).toEqual(['c2']);
   await repo.close();
 });
+
+test("a turn's cost is the provider's own figure, summed across its attempts", async () => {
+  const { repo, session: s } = await session();
+  const priced = (input: number, cacheRead: number, cost: number) => ({
+    ...usage(input, 0),
+    cacheRead,
+    totalTokens: input + cacheRead,
+    cost: { input: cost / 2, output: 0, cacheRead: cost / 4, cacheWrite: cost / 4, total: cost },
+  });
+
+  await run(s, 'r1', async (s) => {
+    await s.appendMessage(user('hi'));
+    const entryId = await s.appendMessage(assistant([{ type: 'text', text: 'yo' }]));
+    for (const [n, u] of [priced(40, 9_000, 0.01), priced(60, 0, 0.02)].entries()) {
+      await s.appendRecord({
+        id: `u${n}`,
+        lane: 'main',
+        type: 'usage',
+        cause: 'assistant',
+        runId: 'r1',
+        entryId,
+        attempt: n + 1,
+        stopReason: 'stop',
+        usage: u,
+      });
+    }
+  });
+
+  const { entries, records } = await read(s);
+  const [, reply] = getUIMessages(entries, records);
+  // Mostly cache reads, and the figure still comes from the records rather than
+  // from multiplying those tokens by anything.
+  expect(reply.metadata?.cost?.total).toBeCloseTo(0.03, 10);
+  expect(reply.metadata?.cost).toMatchObject({ input: 0.015, cache: 0.015 });
+  await repo.close();
+});
