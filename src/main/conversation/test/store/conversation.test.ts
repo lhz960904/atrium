@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
+import type { Usage } from '@earendil-works/pi-ai';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { Db } from '@main/db';
 import * as schema from '@main/db/schema';
@@ -251,5 +252,54 @@ test('a thread row naming a session the store lost reads as no conversation', as
   db.update(schema.threads).set({ sessionId: 'gone' }).where(eq(schema.threads.id, 't1')).run();
 
   expect(await store.forThread('t1')).toBeUndefined();
+  await repository.close();
+});
+
+const sideUsage = (): Usage => ({
+  input: 120,
+  output: 30,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 150,
+  cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 },
+});
+
+test('a side call is recorded against the conversation, model and all', async () => {
+  const { conversation, repository } = await thread();
+  await conversation.startRun('r1');
+  await conversation.recordSideUsage({
+    kind: 'subagent',
+    usage: sideUsage(),
+    providerId: 'anthropic',
+    modelId: 'claude-x',
+    runId: 'r1',
+  });
+
+  const [record] = (await conversation.records()).filter((r) => r.type === 'usage');
+  expect(record).toMatchObject({ type: 'usage', cause: 'adjustment' });
+  expect(record?.type === 'usage' && record.usage.totalTokens).toBe(150);
+  // The run is data on the record, never the record's own runId — see
+  // recordSideUsage for why claiming it would make the log invalid.
+  expect(record && 'runId' in record ? record.runId : undefined).toBeUndefined();
+  expect(record?.type === 'usage' && record.cause === 'adjustment' && record.details).toEqual({
+    kind: 'subagent',
+    providerId: 'anthropic',
+    modelId: 'claude-x',
+    runId: 'r1',
+  });
+  await repository.close();
+});
+
+test('a title that lands after its run still records, and closes nothing', async () => {
+  const { conversation, repository } = await thread();
+  await conversation.startRun('r1');
+  await conversation.finishRun('r1', 'completed');
+
+  // Title generation is fire-and-forget and routinely outlives the run.
+  await conversation.recordSideUsage({ kind: 'title', usage: sideUsage(), runId: 'r1' });
+
+  expect(await conversation.openRuns()).toEqual([]);
+  const kinds = (await conversation.records()).map((r) => r.type);
+  expect(kinds).toEqual(['operation_started', 'operation_finished', 'usage']);
   await repository.close();
 });

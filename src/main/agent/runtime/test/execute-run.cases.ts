@@ -415,3 +415,33 @@ test('a late title is saved without emitting after the run finished', async () =
   expect(events).toHaveLength(count);
   expect(events.at(-1)?.type).toBe('run_finished');
 });
+
+test('a late title records what it spent against the closed run', async () => {
+  const f = await runtimeFixture();
+  f.config['general.autoGenerateTitle'] = true;
+  const ready = deferred<Parameters<typeof title.generateThreadTitle>[0]>();
+  spyOn(title, 'generateThreadTitle').mockImplementation((opts) => ready.resolve(opts));
+  const { conversation } = await run(f);
+
+  (await ready.promise).onUsage?.({
+    input: 40,
+    output: 6,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 46,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.0001 },
+  });
+  // The write is fire-and-forget, so wait for it rather than for the call.
+  await Promise.resolve();
+
+  const side = (await conversation?.records())?.filter(
+    (record) => record.type === 'usage' && record.cause === 'adjustment',
+  );
+  expect(side).toHaveLength(1);
+  expect(side?.[0]).toMatchObject({
+    usage: { totalTokens: 46 },
+    details: { kind: 'title', providerId: f.model.provider, modelId: f.model.id, runId: 'r1' },
+  });
+  // The run was already closed when this landed; it must not reopen it.
+  expect(await conversation?.openRuns()).toEqual([]);
+});

@@ -1,4 +1,4 @@
-import type { Api, Model } from '@earendil-works/pi-ai';
+import type { Api, Model, Usage } from '@earendil-works/pi-ai';
 import { complete } from '../runtime/complete';
 
 /**
@@ -30,7 +30,7 @@ export const summaryPrompt = (transcript: string): string =>
 
 export type Summarize = (transcript: string, signal?: AbortSignal) => Promise<string>;
 
-export function createSummarizer(model: Model<Api>): Summarize {
+export function createSummarizer(model: Model<Api>, onUsage?: (usage: Usage) => void): Summarize {
   return (transcript, signal) =>
-    complete({ model, system: SUMMARY_SYSTEM, prompt: summaryPrompt(transcript), signal });
+    complete({ model, system: SUMMARY_SYSTEM, prompt: summaryPrompt(transcript), signal, onUsage });
 }

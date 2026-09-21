@@ -7,7 +7,7 @@ import {
   type Model,
 } from '@earendil-works/pi-ai';
 import type { Db } from '@main/db';
-import type { RunContext } from '../runtime/run-context';
+import type { RunContext, SideCall } from '../runtime/run-context';
 import type { Sandbox } from '../sandbox/types';
 import type { AtriumTool } from '../tools';
 import type { SubagentDef } from './defs';
@@ -221,4 +221,31 @@ test('skips recording when no pricing is injected', async () => {
   });
 
   expect(inserted).toBe(false);
+});
+
+test("a subagent's spend reaches the conversation even with no pricing to bill it", async () => {
+  const spent: SideCall[] = [];
+
+  await runSubagent({
+    parent: parentCtx({
+      spend: (call) => spent.push(call),
+      providerId: 'anthropic',
+      modelId: 'claude-x',
+    }),
+    engine: engineWith(scripted([reply([{ type: 'text', text: 'ANSWER' }], 'stop')])),
+    tools: [],
+    agent: def,
+    prompt: 'do the task',
+    subagentId: 's1',
+  });
+
+  // The session record needs no rates — only the usage table does — so a
+  // missing pricing lookup must not silently drop the spend as well.
+  expect(spent).toHaveLength(1);
+  expect(spent[0]).toMatchObject({
+    kind: 'subagent',
+    usage: { totalTokens: 2 },
+    providerId: 'anthropic',
+    modelId: 'claude-x',
+  });
 });

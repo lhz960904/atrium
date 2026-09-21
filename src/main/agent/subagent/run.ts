@@ -167,7 +167,10 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
   }
 
   // Subagent calls are separate model calls, invisible to the parent turn's
-  // usage — record them on their own so the ledger isn't an undercount.
+  // usage — record them on their own so the ledger isn't an undercount. They
+  // go to both ledgers: the session is the conversation's own account of what
+  // it spent, the table is what survives the conversation being deleted.
+  parent.spend?.({ kind: 'subagent', usage, providerId, modelId });
   if (opts.pricingOf && providerId && modelId) {
     recordUsage(
       parent.db,

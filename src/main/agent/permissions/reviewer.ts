@@ -1,4 +1,4 @@
-import type { Api, Model } from '@earendil-works/pi-ai';
+import type { Api, Model, Usage } from '@earendil-works/pi-ai';
 import { complete } from '../runtime/complete';
 
 /** allow = auto-approve; deny = fall back to a user prompt. There is no third
@@ -39,6 +39,8 @@ export type ReviewArgs = {
   risk?: string;
   /** The turn's abort signal; the review is also bounded by its own timeout. */
   abortSignal?: AbortSignal;
+  /** What the verdict cost. A review that times out or denies still spent. */
+  onUsage?: (usage: Usage) => void;
 };
 
 /**
@@ -61,6 +63,7 @@ export async function reviewBoundaryCrossing(args: ReviewArgs): Promise<ReviewVe
       system: SYSTEM,
       prompt: `${lead}\n\n${args.subject}\n\nALLOW or DENY?`,
       signal,
+      onUsage: args.onUsage,
     });
     return parseVerdict(text);
   } catch {

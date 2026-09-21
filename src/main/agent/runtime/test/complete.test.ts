@@ -136,3 +136,17 @@ test('separate calls do not accumulate conversation history', async () => {
   expect(await complete({ system: '', prompt: 'second' })).toBe('ok');
   expect(faux.state.callCount).toBe(2);
 });
+
+test.each(['stop', 'error'] as const)('%s calls report what they spent', async (stopReason) => {
+  const { faux, complete } = fixture();
+  faux.setResponses([fauxAssistantMessage('ok', { stopReason, errorMessage: 'request failed' })]);
+  const spent: number[] = [];
+
+  // A side call that errors still burned tokens, and is exactly the kind of
+  // spend nothing else would ever notice — so the report precedes the throw.
+  const call = complete({ system: '', prompt: 'x', onUsage: (u) => spent.push(u.totalTokens) });
+  if (stopReason === 'error') await expect(call).rejects.toThrow('request failed');
+  else await call;
+
+  expect(spent).toHaveLength(1);
+});

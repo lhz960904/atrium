@@ -101,3 +101,16 @@ test('the crossing reason is fed to the model as a hint', async () => {
   expect(captured?.prompt).toContain('destructive');
   expect(captured?.prompt).toContain('rm -rf node_modules');
 });
+
+test('the gate reports what a review cost, whichever way it votes', async () => {
+  const spent: number[] = [];
+  const gate = approvalGate({
+    mode: 'auto-review',
+    workspaceRoot: '/workspace',
+    reviewerModel: verdictModel('DENY'),
+    onUsage: (usage) => spent.push(usage.totalTokens),
+  });
+  // A denied review still spent; it just saved nobody a prompt.
+  expect(await gate('bash', { command: 'curl https://example.com' }, 'call-1')).toBe(true);
+  expect(spent).toHaveLength(1);
+});

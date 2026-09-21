@@ -1,5 +1,6 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import type { StreamFn } from '@earendil-works/pi-agent-core';
+import type { Usage } from '@earendil-works/pi-ai';
 import {
   type AssistantMessage,
   type Context,
@@ -61,11 +62,11 @@ function answering(
   };
 }
 
-const summarizerWith = (streamFn: StreamFn) => {
+const summarizerWith = (streamFn: StreamFn, onUsage?: (usage: Usage) => void) => {
   spyOn(piModels, 'completeSimple').mockImplementation(async (model, context, options) =>
     (await streamFn(model, context, options)).result(),
   );
-  return createSummarizer(MODEL);
+  return createSummarizer(MODEL, onUsage);
 };
 
 test('sends the transcript as one prompt and returns the trimmed text', async () => {
@@ -112,4 +113,13 @@ test('a failed stream throws so the caller can proceed uncompacted', async () =>
 test('an aborted stream throws too', async () => {
   const summarize = summarizerWith(answering(reply({ stopReason: 'aborted' })));
   await expect(summarize('x')).rejects.toThrow('aborted');
+});
+
+test('a summary reports what compacting cost', async () => {
+  const spent: number[] = [];
+  // Compaction is the one model call the user never asked for, so it is the
+  // easiest spend to lose track of.
+  const summarize = summarizerWith(answering(reply()), (usage) => spent.push(usage.totalTokens));
+  await summarize('## user\nhello');
+  expect(spent).toHaveLength(1);
 });
