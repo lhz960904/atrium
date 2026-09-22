@@ -1,17 +1,12 @@
-import { randomUUID } from 'node:crypto';
-import { basename } from 'node:path';
-import { threadStore } from '@main/conversation/store/threads';
-import { projects } from '@main/db/schema';
-import { eq, isNull } from 'drizzle-orm';
+import { projectStore } from '@main/conversation/store/projects';
 import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
 
+const byId = z.object({ id: z.string() });
+
 export const projectsRouter = router({
-  /** Active (non-archived) projects; the sidebar sorts them by recency client-side. */
-  list: publicProcedure.query(({ ctx }) =>
-    ctx.db.select().from(projects).where(isNull(projects.archivedAt)).all(),
-  ),
+  list: publicProcedure.query(() => projectStore().list()),
 
   /** Native folder picker. Returns the chosen absolute path, or null if cancelled. */
   pickDirectory: publicProcedure.mutation(async () => {
@@ -21,62 +16,19 @@ export const projectsRouter = router({
     return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0];
   }),
 
-  /**
-   * Add a directory as a project. Path is unique: re-adding an existing one
-   * returns it (reviving it if it was archived) instead of erroring.
-   */
-  add: publicProcedure.input(z.object({ path: z.string().min(1) })).mutation(({ ctx, input }) => {
-    const existing = ctx.db.select().from(projects).where(eq(projects.path, input.path)).get();
-    if (existing) {
-      if (existing.archivedAt) {
-        ctx.db.update(projects).set({ archivedAt: null }).where(eq(projects.id, existing.id)).run();
-      }
-      return { id: existing.id };
-    }
-    const id = randomUUID();
-    ctx.db
-      .insert(projects)
-      .values({ id, path: input.path, name: basename(input.path) })
-      .run();
-    return { id };
-  }),
+  add: publicProcedure
+    .input(z.object({ path: z.string().min(1) }))
+    .mutation(({ input }) => ({ id: projectStore().add(input.path) })),
 
   rename: publicProcedure
-    .input(z.object({ id: z.string(), name: z.string().min(1) }))
-    .mutation(({ ctx, input }) => {
-      ctx.db.update(projects).set({ name: input.name }).where(eq(projects.id, input.id)).run();
-    }),
+    .input(byId.extend({ name: z.string().min(1) }))
+    .mutation(({ input }) => projectStore().rename(input.id, input.name)),
 
-  pin: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    ctx.db.update(projects).set({ pinned: true }).where(eq(projects.id, input.id)).run();
-  }),
+  pin: publicProcedure.input(byId).mutation(({ input }) => projectStore().pin(input.id, true)),
 
-  unpin: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    ctx.db.update(projects).set({ pinned: false }).where(eq(projects.id, input.id)).run();
-  }),
+  unpin: publicProcedure.input(byId).mutation(({ input }) => projectStore().pin(input.id, false)),
 
-  /**
-   * Archive a project together with its still-active threads, dropping the whole
-   * group from the sidebar. To restore, re-add the folder (add revives the
-   * project); its threads stay archived but become restorable under it again.
-   */
-  archive: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    const now = new Date();
-    ctx.db.transaction((tx) => {
-      tx.update(projects).set({ archivedAt: now }).where(eq(projects.id, input.id)).run();
-      threadStore().archiveUnderProject(input.id, now, tx);
-    });
-  }),
+  archive: publicProcedure.input(byId).mutation(({ input }) => projectStore().archive(input.id)),
 
-  /**
-   * Delete a project and every thread filed under it. The project row does go,
-   * but its threads are only marked — so the conversations they name, and what
-   * those cost, stay. project_id carries no FK, so the fan-out is explicit.
-   */
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    ctx.db.transaction((tx) => {
-      threadStore().removeUnderProject(input.id, tx);
-      tx.delete(projects).where(eq(projects.id, input.id)).run();
-    });
-  }),
+  delete: publicProcedure.input(byId).mutation(({ input }) => projectStore().remove(input.id)),
 });
