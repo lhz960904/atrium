@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -15,7 +14,6 @@ import { firstEnabledModel, resolvePiModel } from './agent/providers/models';
 import { piStreamFn, refreshProviders, useCredentialStore } from './agent/providers/registry';
 import { Runner } from './agent/runtime/runner';
 import { refreshSkills } from './agent/skills/registry';
-import { startHttpServer } from './api/http';
 import { appRouter } from './api/trpc/router';
 import { closeSessionRepository } from './conversation/store/repo';
 import { closeDb, openDb } from './db';
@@ -170,11 +168,6 @@ app.whenReady().then(async () => {
   const runs = new Runner({ db, defaultProjectRoot });
   runner = runs;
 
-  // Bring the chat server up first — it's a fast port bind — so the IPC handler
-  // attaches before the window paints and the renderer's first tRPC calls never
-  // race a missing handler.
-  const chatEndpoint = await startHttpServer({ token: randomUUID(), runner: runs });
-
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
   });
@@ -186,7 +179,7 @@ app.whenReady().then(async () => {
   createIPCHandler({
     router: appRouter,
     windows: [win],
-    createContext: async () => ({ db, chatEndpoint, credentials, runner: runs }),
+    createContext: async () => ({ db, credentials, runner: runs }),
   });
   registerComputerUseDrag();
   registerDragOverlay(() => mainWindow ?? undefined);
@@ -257,7 +250,7 @@ app.whenReady().then(async () => {
     createIPCHandler({
       router: appRouter,
       windows: [next],
-      createContext: async () => ({ db, chatEndpoint, credentials, runner: runs }),
+      createContext: async () => ({ db, credentials, runner: runs }),
     });
   };
 

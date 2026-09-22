@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { AtriumUIMessage } from '@shared/chat';
-import type { InteractionRequest } from '@shared/interactions';
+import type { DecideInteraction, InteractionRequest } from '@shared/interactions';
 import type { AgentSessionEvent, AssistantMessage, Content } from '@shared/protocol';
 import { getPendingApprovals } from '../../approvals';
 import { PiChat } from '../store';
+import type { ChatTransport, StreamHandlers } from '../transport';
 
 const usage = () => ({
   input: 0,
@@ -25,11 +26,6 @@ const assistant = (content: Content[]): AssistantMessage => ({
   timestamp: 0,
 });
 
-/** The wire as the server writes it: one envelope per line of SSE. */
-function sseBody(events: AgentSessionEvent[]): string {
-  return events.map((event, seq) => `data: ${JSON.stringify({ seq, event })}\n\n`).join('');
-}
-
 const open = (runId: string): AgentSessionEvent[] => [
   { type: 'run_started', runId },
   { type: 'agent_start' },
@@ -42,8 +38,7 @@ const close = (content: Content[]): AgentSessionEvent[] => [
   { type: 'run_finished', status: 'completed' },
 ];
 
-const sayText = (messageId: string, value: string): AgentSessionEvent[] => [
-  ...open(messageId),
+const text = (value: string): AgentSessionEvent[] => [
   {
     type: 'message_update',
     assistantMessageEvent: { type: 'text_start', contentIndex: 0 },
@@ -52,34 +47,96 @@ const sayText = (messageId: string, value: string): AgentSessionEvent[] => [
     type: 'message_update',
     assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: value },
   } as AgentSessionEvent,
-  {
-    type: 'message_update',
-    assistantMessageEvent: { type: 'text_end', contentIndex: 0, content: value },
-  } as AgentSessionEvent,
-  ...close([{ type: 'text', text: value }]),
 ];
 
-type Call = { url: string; init?: RequestInit };
+/**
+ * A transport the test drives by hand.
+ *
+ * The store is written against the port, not a protocol, so a test never has to
+ * frame a response — it attaches like the main process would and pushes the
+ * envelopes it wants seen. `liveRun` is what a rejoin finds: false means the
+ * thread has no run to join, which the main process answers by completing at
+ * once rather than by replaying a finished log.
+ */
+function fakeTransport() {
+  const sent: { threadId: string; message: AtriumUIMessage }[] = [];
+  const decided: DecideInteraction[] = [];
+  const aborted: string[] = [];
+  const rejoins: number[] = [];
+  const fail: { send?: Error; decide?: Error; abort?: Error } = {};
+  let attached: StreamHandlers | null = null;
+  let detaches = 0;
+  let liveRun = false;
+  let seq = 0;
 
-function makeChat(
-  handler: (url: string, init?: RequestInit) => Response,
-  seedMessages: AtriumUIMessage[] = [],
-) {
-  const calls: Call[] = [];
+  const listen = (handlers: StreamHandlers) => {
+    attached = handlers;
+    return () => {
+      detaches += 1;
+      if (attached === handlers) attached = null;
+    };
+  };
+
+  const transport: ChatTransport = {
+    send: async (input) => {
+      sent.push({ threadId: input.threadId, message: input.message });
+      if (fail.send) throw fail.send;
+      liveRun = true;
+    },
+    decide: async (input) => {
+      decided.push(input.interaction);
+      if (fail.decide) throw fail.decide;
+    },
+    abort: async (threadId) => {
+      aborted.push(threadId);
+      if (fail.abort) throw fail.abort;
+    },
+    events: (_input, handlers) => listen(handlers),
+    rejoin: (input, handlers) => {
+      rejoins.push(input.from);
+      if (!liveRun) {
+        queueMicrotask(() => handlers.onComplete());
+        return () => {};
+      }
+      return listen(handlers);
+    },
+  };
+
+  return {
+    transport,
+    sent,
+    decided,
+    aborted,
+    rejoins,
+    fail,
+    get detaches() {
+      return detaches;
+    },
+    get attached() {
+      return attached !== null;
+    },
+    setLiveRun: (value: boolean) => {
+      liveRun = value;
+    },
+    push(...events: AgentSessionEvent[]) {
+      for (const event of events) attached?.onData({ seq: seq++, event });
+    },
+    end: () => attached?.onComplete(),
+    breaks: (error: unknown) => attached?.onError(error),
+  };
+}
+
+function makeChat(seedMessages: AtriumUIMessage[] = []) {
   const notices: { name: string; payload: unknown }[] = [];
+  const t = fakeTransport();
   const chat = new PiChat({
     threadId: 't1',
-    baseUrl: 'http://test',
-    token: 'tok',
     messages: seedMessages,
+    transport: t.transport,
     getExtras: () => ({ threadId: 't1', providerId: 'deepseek', modelId: 'chat' }),
     onNotice: (name, payload) => notices.push({ name, payload }),
-    fetchFn: ((url: RequestInfo | URL, init?: RequestInit) => {
-      calls.push({ url: String(url), init });
-      return Promise.resolve(handler(String(url), init));
-    }) as typeof fetch,
   });
-  return { chat, calls, notices };
+  return { chat, notices, t };
 }
 
 async function untilIdle(chat: PiChat, timeoutMs = 2000): Promise<void> {
@@ -90,29 +147,6 @@ async function untilIdle(chat: PiChat, timeoutMs = 2000): Promise<void> {
   }
 }
 
-/** A run's SSE body the test keeps open and feeds by hand. */
-function liveStream() {
-  const encoder = new TextEncoder();
-  let controller!: ReadableStreamDefaultController<Uint8Array>;
-  let seq = 0;
-  const body = new ReadableStream<Uint8Array>({
-    start(c) {
-      controller = c;
-    },
-  });
-  return {
-    body,
-    push(...events: AgentSessionEvent[]) {
-      for (const event of events) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ seq: seq++, event })}\n\n`));
-      }
-    },
-    close: () => controller.close(),
-    /** A socket that dies, which is what a dropped connection actually does. */
-    fail: () => controller.error(new Error('network error')),
-  };
-}
-
 async function until(check: () => boolean, timeoutMs = 2000): Promise<void> {
   const startedAt = Date.now();
   while (!check()) {
@@ -121,7 +155,11 @@ async function until(check: () => boolean, timeoutMs = 2000): Promise<void> {
   }
 }
 
-const bodyOf = (call: Call) => JSON.parse(String(call.init?.body));
+/** Send, then wait for the store to attach to the run's log. */
+async function sending(chat: PiChat, t: ReturnType<typeof fakeTransport>, prompt = 'x') {
+  chat.sendMessage({ text: prompt });
+  await until(() => t.attached);
+}
 
 const partOf = (chat: PiChat, toolCallId: string) =>
   chat
@@ -150,54 +188,46 @@ const questionRequest: InteractionRequest = {
   createdAt: 1,
 };
 
-/** A chat whose send stays open on `stream`; decisions and stops answer with `answer`. */
-function liveChat(
-  stream: ReturnType<typeof liveStream>,
-  answer = () => Response.json({ status: 'accepted' }, { status: 202 }),
-) {
-  return makeChat((url) => (url.endsWith('/api/chat') ? new Response(stream.body) : answer()));
-}
-
-const textRun = sayText('a1', '回答');
-
 describe('sending', () => {
-  test('a send posts on the pi track and folds the run into history', async () => {
-    const { chat, calls } = makeChat(() => new Response(sseBody(textRun)));
-    chat.sendMessage({ text: '你好' });
+  test('a send starts a run and folds it into history', async () => {
+    const { chat, t } = makeChat();
+    await sending(chat, t, '你好');
+    t.push(...open('a1'), ...text('回答'), ...close([{ type: 'text', text: '回答' }]));
+    t.end();
     await untilIdle(chat);
+
     const snap = chat.getSnapshot();
-    expect(calls[0].url).toBe('http://test/api/chat');
-    const body = JSON.parse(String(calls[0].init?.body));
-    expect(body).toMatchObject({ threadId: 't1', providerId: 'deepseek' });
-    expect(body.message.role).toBe('user');
+    expect(t.sent).toHaveLength(1);
+    expect(t.sent[0]).toMatchObject({ threadId: 't1' });
+    expect(t.sent[0].message.role).toBe('user');
     expect(snap.status).toBe('ready');
     expect(snap.messages).toHaveLength(2);
     expect(snap.messages[1]).toMatchObject({ id: 'a1', role: 'assistant' });
-    expect(snap.messages[1].parts).toContainEqual({ type: 'text', text: '回答', state: 'done' });
   });
 
-  test('a failed request surfaces as error status', async () => {
-    const { chat } = makeChat(() => new Response('boom', { status: 500 }));
+  test('a send the main process refuses surfaces as error status', async () => {
+    const { chat, t } = makeChat();
+    t.fail.send = new Error('Thread t1 is already running');
     chat.sendMessage({ text: 'x' });
     await untilIdle(chat);
     const snap = chat.getSnapshot();
     expect(snap.status).toBe('error');
-    expect(snap.error?.message).toContain('500');
+    expect(snap.error?.message).toContain('already running');
+    // Nothing was watched, because there was no run to watch.
+    expect(t.attached).toBe(false);
   });
 
   test('notices route out while the message stays clean', async () => {
-    const { chat, notices } = makeChat(
-      () =>
-        new Response(
-          sseBody([
-            ...open('a1'),
-            { type: 'notice', name: 'title', payload: { data: { title: '新标题' } } },
-            ...close([]),
-          ]),
-        ),
+    const { chat, notices, t } = makeChat();
+    await sending(chat, t);
+    t.push(
+      ...open('a1'),
+      { type: 'notice', name: 'title', payload: { data: { title: '新标题' } } },
+      ...close([]),
     );
-    chat.sendMessage({ text: 'x' });
+    t.end();
     await untilIdle(chat);
+
     expect(notices.some((n) => n.name === 'title')).toBe(true);
     const parts = chat.getSnapshot().messages[1].parts;
     expect(parts.some((p) => (p.type as string).startsWith('data-'))).toBe(false);
@@ -206,26 +236,22 @@ describe('sending', () => {
 
 describe('interactions', () => {
   test('approving while the run streams sends one decision and keeps the same run', async () => {
-    const stream = liveStream();
-    const { chat, calls } = liveChat(stream);
-    chat.sendMessage({ text: 'list files' });
-    stream.push(...open('a1'), { type: 'interaction_requested', request: bashRequest });
+    const { chat, t } = makeChat();
+    await sending(chat, t, 'list files');
+    t.push(...open('a1'), { type: 'interaction_requested', request: bashRequest });
     await until(() => getPendingApprovals(chat.getSnapshot().messages).length === 1);
     expect(chat.isBusy).toBe(true);
 
     await chat.addToolApprovalResponse({ id: bashRequest.id, approved: true });
-    expect(calls.filter((call) => call.url.endsWith('/api/chat'))).toHaveLength(1);
-    const decisions = calls.filter((call) => call.url.endsWith('/decisions'));
-    expect(decisions.map((call) => call.url)).toEqual(['http://test/api/chat/t1/decisions']);
-    expect(bodyOf(decisions[0])).toEqual({
-      runId: 'a1',
-      interactionId: bashRequest.id,
-      decision: { kind: 'approved' },
-    });
-    expect(calls.some((call) => call.url.endsWith('/resume'))).toBe(false);
+    expect(t.sent).toHaveLength(1);
+    expect(t.decided).toEqual([
+      { runId: 'a1', interactionId: bashRequest.id, decision: { kind: 'approved' } },
+    ]);
+    // A decision wakes the call; it neither starts a run nor re-attaches to one.
+    expect(t.rejoins).toEqual([]);
     expect(chat.isBusy).toBe(true);
 
-    stream.push(
+    t.push(
       { type: 'interaction_resolved', request: bashRequest, outcome: { kind: 'approved' } },
       {
         type: 'tool_execution_end',
@@ -236,7 +262,7 @@ describe('interactions', () => {
       },
       ...close([]),
     );
-    stream.close();
+    t.end();
     await untilIdle(chat);
     expect(partOf(chat, 'b1')).toMatchObject({
       state: 'output-available',
@@ -245,55 +271,56 @@ describe('interactions', () => {
   });
 
   test('an answer goes back as the answer text for the waiting question', async () => {
-    const stream = liveStream();
-    const { chat, calls } = liveChat(stream);
-    chat.sendMessage({ text: 'ask me' });
-    stream.push(...open('a1'), { type: 'interaction_requested', request: questionRequest });
+    const { chat, t } = makeChat();
+    await sending(chat, t, 'ask me');
+    t.push(...open('a1'), { type: 'interaction_requested', request: questionRequest });
     await until(() => partOf(chat, 'c1') !== undefined);
+
     await chat.addToolOutput({
       tool: 'ask_clarification',
       toolCallId: 'c1',
       output: { answers: [{ question: 'Which?', answer: 'A' }] },
     });
-    const [decision] = calls.filter((call) => call.url.endsWith('/decisions'));
-    expect(bodyOf(decision)).toEqual({
-      runId: 'a1',
-      interactionId: questionRequest.id,
-      decision: { kind: 'answered', answers: ['A'] },
-    });
-    stream.close();
+    expect(t.decided).toEqual([
+      {
+        runId: 'a1',
+        interactionId: questionRequest.id,
+        decision: { kind: 'answered', answers: ['A'] },
+      },
+    ]);
+    t.end();
     await untilIdle(chat);
   });
 
   test('dismissing a question sends a cancellation, not an empty answer', async () => {
-    const stream = liveStream();
-    const { chat, calls } = liveChat(stream);
-    chat.sendMessage({ text: 'ask me' });
-    stream.push(...open('a1'), { type: 'interaction_requested', request: questionRequest });
+    const { chat, t } = makeChat();
+    await sending(chat, t, 'ask me');
+    t.push(...open('a1'), { type: 'interaction_requested', request: questionRequest });
     await until(() => partOf(chat, 'c1') !== undefined);
+
     await chat.addToolOutput({
       tool: 'ask_clarification',
       toolCallId: 'c1',
       output: { answers: [], cancelled: true },
     });
-    const [decision] = calls.filter((call) => call.url.endsWith('/decisions'));
-    expect(bodyOf(decision).decision).toEqual({ kind: 'cancelled' });
-    stream.close();
+    expect(t.decided[0].decision).toEqual({ kind: 'cancelled' });
+    t.end();
     await untilIdle(chat);
   });
 
-  test('a decision the server refuses leaves the request open to try again', async () => {
-    const stream = liveStream();
-    const { chat } = liveChat(stream, () => Response.json({ error: 'conflict' }, { status: 409 }));
-    chat.sendMessage({ text: 'list files' });
-    stream.push(...open('a1'), { type: 'interaction_requested', request: bashRequest });
+  test('a decision the main process refuses leaves the request open to try again', async () => {
+    const { chat, t } = makeChat();
+    t.fail.decide = new Error('The interaction is no longer active.');
+    await sending(chat, t, 'list files');
+    t.push(...open('a1'), { type: 'interaction_requested', request: bashRequest });
     await until(() => getPendingApprovals(chat.getSnapshot().messages).length === 1);
+
     await expect(
       chat.addToolApprovalResponse({ id: bashRequest.id, approved: true }),
-    ).rejects.toThrow('409');
+    ).rejects.toThrow('no longer active');
     expect(getPendingApprovals(chat.getSnapshot().messages)).toHaveLength(1);
     expect(chat.isBusy).toBe(true);
-    stream.close();
+    t.end();
     await untilIdle(chat);
   });
 
@@ -313,25 +340,25 @@ describe('interactions', () => {
       ],
       metadata: { createdAt: 1 },
     };
-    const { chat, calls } = makeChat(() => new Response(null, { status: 500 }), [paused]);
+    const { chat, t } = makeChat([paused]);
     await expect(chat.addToolApprovalResponse({ id: 'ap1', approved: true })).rejects.toThrow(
       'no longer',
     );
-    expect(calls).toHaveLength(0);
+    expect(t.decided).toEqual([]);
   });
 });
 
 describe('lifecycle', () => {
   test('resume with nothing running settles back to ready', async () => {
-    const { chat, calls } = makeChat(() => new Response(null, { status: 204 }));
+    const { chat, t } = makeChat();
     chat.resume();
     await untilIdle(chat);
-    expect(calls[0].url).toContain('/api/chat/t1/pi-events?from=-1');
+    expect(t.rejoins).toEqual([-1]);
     expect(chat.getSnapshot().status).toBe('ready');
     expect(chat.getSnapshot().error).toBeUndefined();
   });
 
-  test('reconnecting to a run that is gone expires what it was waiting on', async () => {
+  test('rejoining a run that is gone expires what it was waiting on', async () => {
     const stale: AtriumUIMessage = {
       id: 'a1',
       role: 'assistant',
@@ -361,7 +388,7 @@ describe('lifecycle', () => {
       ],
       metadata: { createdAt: 1 },
     };
-    const { chat, calls } = makeChat(() => new Response(null, { status: 204 }), [stale]);
+    const { chat, t } = makeChat([stale]);
     chat.resume();
     await untilIdle(chat);
 
@@ -380,228 +407,113 @@ describe('lifecycle', () => {
       output: { stdout: 'ok' },
     });
     expect(parts).toContainEqual({ type: 'text', text: 'Before the crash' });
-    expect(calls.map((call) => call.url)).toEqual(['http://test/api/chat/t1/pi-events?from=-1']);
+    expect(t.rejoins).toEqual([-1]);
     expect(chat.getSnapshot().status).toBe('ready');
   });
 
-  test('stop asks the server to abort and settles once the run ends', async () => {
-    const stream = liveStream();
-    const { chat, calls } = liveChat(stream, () => Response.json({ aborted: true }));
-    chat.sendMessage({ text: 'x' });
-    stream.push(
-      ...open('a1'),
-      {
-        type: 'message_update',
-        assistantMessageEvent: { type: 'text_start', contentIndex: 0 },
-      } as AgentSessionEvent,
-      {
-        type: 'message_update',
-        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '写到一半' },
-      } as AgentSessionEvent,
-    );
+  test('a run still in flight is rejoined and its card stays decidable', async () => {
+    const { chat, t } = makeChat();
+    t.setLiveRun(true);
+    chat.resume();
+    await until(() => t.attached);
+    t.push(...open('a1'), { type: 'interaction_requested', request: bashRequest });
+    await until(() => getPendingApprovals(chat.getSnapshot().messages).length === 1);
+
+    await chat.addToolApprovalResponse({ id: bashRequest.id, approved: true });
+    expect(t.decided).toHaveLength(1);
+    t.push(...close([]));
+    t.end();
+    await untilIdle(chat);
+    expect(chat.getSnapshot().status).toBe('ready');
+  });
+
+  test('stop asks the main process to abort and settles once the run ends', async () => {
+    const { chat, t } = makeChat();
+    await sending(chat, t);
+    t.push(...open('a1'), ...text('写到一半'));
     await until(() => chat.getSnapshot().messages.length === 2);
+
     const stopping = chat.stop();
-    await until(() => calls.some((call) => call.url === 'http://test/api/chat/t1/abort'));
+    await until(() => t.aborted.length === 1);
+    expect(t.aborted).toEqual(['t1']);
     expect(chat.isBusy).toBe(true);
-    stream.push(
+
+    t.push(
       { type: 'agent_end' },
       { type: 'run_finished', status: 'aborted', reason: 'user_cancelled' },
     );
-    stream.close();
+    t.end();
     await stopping;
     const snap = chat.getSnapshot();
     expect(snap.status).toBe('ready');
     expect(snap.messages[1].parts.at(-1)).toMatchObject({ type: 'text', text: '写到一半' });
   });
 
-  test('a stop the server does not accept leaves the run going', async () => {
-    const stream = liveStream();
-    const { chat } = liveChat(stream, () => new Response('boom', { status: 500 }));
-    chat.sendMessage({ text: 'x' });
-    stream.push(...open('a1'));
+  test('a stop the main process does not accept leaves the run going', async () => {
+    const { chat, t } = makeChat();
+    t.fail.abort = new Error('abort failed');
+    await sending(chat, t);
+    t.push(...open('a1'));
     await until(() => chat.getSnapshot().messages.length === 2);
-    await expect(chat.stop()).rejects.toThrow('500');
+
+    await expect(chat.stop()).rejects.toThrow('abort failed');
     expect(chat.isBusy).toBe(true);
-    stream.close();
+    t.end();
     await untilIdle(chat);
   });
 
-  test('a stream that ends before the run finishes is not reported as success', async () => {
-    const stream = liveStream();
-    const { chat } = liveChat(stream);
-    chat.sendMessage({ text: 'x' });
-    stream.push(
-      ...open('a1'),
-      {
-        type: 'message_update',
-        assistantMessageEvent: { type: 'text_start', contentIndex: 0 },
-      } as AgentSessionEvent,
-      {
-        type: 'message_update',
-        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '半句' },
-      } as AgentSessionEvent,
-    );
+  test('a log that ends before the run finishes is not reported as success', async () => {
+    const { chat, t } = makeChat();
+    await sending(chat, t);
+    t.push(...open('a1'), ...text('半句'));
     await until(() => chat.getSnapshot().messages.length === 2);
-    // The connection dropped: the run may still be going, so this is not a finish.
-    stream.close();
+
+    // The log closed without the run saying it finished: the turn went away
+    // mid-flight, so what arrived is kept but nothing claims it completed.
+    t.end();
     await untilIdle(chat);
     const snap = chat.getSnapshot();
     expect(snap.status).toBe('error');
     expect(snap.messages[1].parts.at(-1)).toMatchObject({ type: 'text', text: '半句' });
   });
 
-  test('a dropped stream rejoins the run and its card stays decidable', async () => {
-    const first = liveStream();
-    const second = liveStream();
-    let rejoins = 0;
-    const { chat, calls } = makeChat((url) => {
-      if (url.endsWith('/api/chat')) return new Response(first.body);
-      if (url.includes('/pi-events')) {
-        rejoins += 1;
-        return new Response(second.body);
-      }
-      return Response.json({ status: 'accepted' }, { status: 202 });
-    });
-    chat.sendMessage({ text: 'list files' });
-    first.push(...open('a1'), { type: 'interaction_requested', request: bashRequest });
-    await until(() => getPendingApprovals(chat.getSnapshot().messages).length === 1);
+  test('a broken stream is a failure, and detaches', async () => {
+    const { chat, t } = makeChat();
+    await sending(chat, t);
+    t.push(...open('a1'));
+    await until(() => chat.getSnapshot().messages.length === 2);
 
-    // The socket dies while the run itself is still going on the other side.
-    first.close();
-    await until(() => rejoins === 1);
-    second.push(
-      ...open('a1'),
-      { type: 'interaction_requested', request: bashRequest },
-      {
-        type: 'message_update',
-        assistantMessageEvent: { type: 'text_start', contentIndex: 0 },
-      } as AgentSessionEvent,
-      {
-        type: 'message_update',
-        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '重连后' },
-      } as AgentSessionEvent,
-    );
-    await until(() => JSON.stringify(chat.getSnapshot().messages).includes('重连后'));
-    expect(chat.isBusy).toBe(true);
-
-    // The replay put the request back, so the card answers the run that is waiting.
-    await chat.addToolApprovalResponse({ id: bashRequest.id, approved: true });
-    expect(calls.filter((call) => call.url.endsWith('/decisions'))).toHaveLength(1);
-    second.push(
-      { type: 'interaction_resolved', request: bashRequest, outcome: { kind: 'approved' } },
-      ...close([]),
-    );
-    second.close();
+    t.breaks(new Error('ipc closed'));
     await untilIdle(chat);
-    expect(chat.getSnapshot().status).toBe('ready');
+    expect(chat.getSnapshot().status).toBe('error');
+    expect(t.attached).toBe(false);
   });
 
-  test('a stream that cannot be rejoined expires what the run was waiting on', async () => {
-    const stream = liveStream();
-    let rejoins = 0;
-    const { chat } = makeChat((url) => {
-      if (url.endsWith('/api/chat')) return new Response(stream.body);
-      rejoins += 1;
-      return new Response(null, { status: 204 });
-    });
-    chat.sendMessage({ text: 'list files' });
-    stream.push(...open('a1'), { type: 'interaction_requested', request: bashRequest });
-    await until(() => getPendingApprovals(chat.getSnapshot().messages).length === 1);
-
-    stream.close();
+  test('a second send supersedes the first watch by detaching it, never by aborting', async () => {
+    const { chat, t } = makeChat();
+    await sending(chat, t);
+    t.push(...open('a1'), ...close([]));
+    t.end();
     await untilIdle(chat);
-    // The run is gone: the card says so instead of looking answerable.
-    expect(rejoins).toBe(1);
-    expect(getPendingApprovals(chat.getSnapshot().messages)).toEqual([]);
-    expect(partOf(chat, 'b1')).toMatchObject({ state: 'output-error' });
-    await expect(
-      chat.addToolApprovalResponse({ id: bashRequest.id, approved: true }),
-    ).rejects.toThrow('no longer');
-  });
+    const detachedOnce = t.detaches;
 
-  test('a stream that dies mid-read is rejoined, not reported as a failure', async () => {
-    const first = liveStream();
-    const second = liveStream();
-    let rejoins = 0;
-    const { chat, calls } = makeChat((url) => {
-      if (url.endsWith('/api/chat')) return new Response(first.body);
-      if (url.includes('/pi-events')) {
-        rejoins += 1;
-        return new Response(second.body);
-      }
-      return Response.json({ status: 'accepted' }, { status: 202 });
-    });
-    chat.sendMessage({ text: 'list files' });
-    first.push(...open('a1'), { type: 'interaction_requested', request: bashRequest });
-    await until(() => getPendingApprovals(chat.getSnapshot().messages).length === 1);
-
-    // A dying socket errors the body rather than ending it.
-    first.fail();
-    await until(() => rejoins === 1);
-    second.push(
-      ...open('a1'),
-      { type: 'interaction_requested', request: bashRequest },
-      {
-        type: 'message_update',
-        assistantMessageEvent: { type: 'text_start', contentIndex: 0 },
-      } as AgentSessionEvent,
-      {
-        type: 'message_update',
-        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '重连后' },
-      } as AgentSessionEvent,
-    );
-    await until(() => JSON.stringify(chat.getSnapshot().messages).includes('重连后'));
-    expect(chat.isBusy).toBe(true);
-
-    await chat.addToolApprovalResponse({ id: bashRequest.id, approved: true });
-    expect(calls.filter((call) => call.url.endsWith('/decisions'))).toHaveLength(1);
-    second.push(
-      { type: 'interaction_resolved', request: bashRequest, outcome: { kind: 'approved' } },
-      ...close([]),
-    );
-    second.close();
+    await sending(chat, t, 'again');
+    t.push(...open('a2'), ...close([]));
+    t.end();
     await untilIdle(chat);
-    expect(chat.getSnapshot().status).toBe('ready');
-  });
 
-  test('a run that stays out of reach keeps what arrived and expires its card', async () => {
-    const stream = liveStream();
-    let rejoins = 0;
-    const { chat } = makeChat((url) => {
-      if (url.endsWith('/api/chat')) return new Response(stream.body);
-      rejoins += 1;
-      throw new Error('network error');
-    });
-    chat.sendMessage({ text: 'list files' });
-    stream.push(
-      ...open('a1'),
-      {
-        type: 'message_update',
-        assistantMessageEvent: { type: 'text_start', contentIndex: 0 },
-      } as AgentSessionEvent,
-      {
-        type: 'message_update',
-        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: '半句' },
-      } as AgentSessionEvent,
-      { type: 'interaction_requested', request: bashRequest },
-    );
-    await until(() => getPendingApprovals(chat.getSnapshot().messages).length === 1);
-
-    stream.fail();
-    await untilIdle(chat);
-    expect(rejoins).toBe(3);
-    const snap = chat.getSnapshot();
-    expect(snap.status).toBe('error');
-    // What arrived survives the drop; only the card it was waiting on is closed.
-    expect(JSON.stringify(snap.messages)).toContain('半句');
-    expect(getPendingApprovals(snap.messages)).toEqual([]);
-    expect(partOf(chat, 'b1')).toMatchObject({ state: 'output-error' });
+    // Detaching is how a watch ends; stopping a turn is only ever `stop`.
+    expect(t.detaches).toBeGreaterThan(detachedOnce);
+    expect(t.aborted).toEqual([]);
   });
 
   test('setMessages materializes and replaces the list', async () => {
-    const { chat } = makeChat(() => new Response(sseBody(textRun)));
-    chat.sendMessage({ text: 'x' });
+    const { chat, t } = makeChat();
+    await sending(chat, t);
+    t.push(...open('a1'), ...close([{ type: 'text', text: 'ok' }]));
+    t.end();
     await untilIdle(chat);
+
     chat.setMessages((prev) => prev.slice(0, 1));
     expect(chat.getSnapshot().messages).toHaveLength(1);
     chat.setMessages([]);
