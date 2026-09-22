@@ -8,6 +8,7 @@ import { useSubagentStore } from '../../state/subagent-store';
 import { queryClient } from '../query-client';
 import { trpc } from '../trpc';
 import { PiChat } from './store';
+import { ipcChatTransport } from './transport';
 
 /**
  * Persistent per-thread PiChat instances, same lifecycle contract the old
@@ -64,7 +65,7 @@ function routeNotice(threadId: string, name: string, payload: unknown): void {
 
 export function getThreadChat(
   threadId: string,
-  seed: { messages: AtriumUIMessage[]; baseUrl: string; token: string },
+  seed: { messages: AtriumUIMessage[] },
 ): { chat: PiChat; isNew: boolean } {
   const existing = chats.get(threadId);
   if (existing) {
@@ -76,9 +77,8 @@ export function getThreadChat(
 
   const chat = new PiChat({
     threadId,
-    baseUrl: seed.baseUrl,
-    token: seed.token,
     messages: seed.messages,
+    transport: ipcChatTransport,
     // Read this thread's own model per send, so a switch in one thread never
     // leaks into another's turn or resume.
     getExtras: () => {

@@ -10,7 +10,6 @@ import type { SlashCommand } from './composer/slash-menu';
 type CompactDeps = {
   threadId: string;
   model: SelectedModel | null;
-  endpoint: { baseUrl: string; token: string };
   setMessages: (messages: AtriumUIMessage[]) => void;
 };
 
@@ -20,14 +19,10 @@ type CompactDeps = {
  * store while it runs, then reload the persisted messages so the divider
  * appears. A fresh read is forced past the global staleTime cache.
  */
-export function useCompactCommand({
-  threadId,
-  model,
-  endpoint,
-  setMessages,
-}: CompactDeps): SlashCommand {
+export function useCompactCommand({ threadId, model, setMessages }: CompactDeps): SlashCommand {
   const { t } = useTranslation();
   const utils = trpc.useUtils();
+  const compact = trpc.chat.compact.useMutation();
   // Stable across a streaming turn — a fresh object here makes the composer's
   // `commands` array change every chunk, defeating its (and the pickers') memo.
   return useMemo<SlashCommand>(
@@ -40,10 +35,10 @@ export function useCompactCommand({
         void (async () => {
           useCompactionStore.getState().setActive(threadId, true);
           try {
-            await fetch(`${endpoint.baseUrl}/api/chat/${threadId}/compact`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-atrium-token': endpoint.token },
-              body: JSON.stringify({ providerId: model.providerId, modelId: model.modelId }),
+            await compact.mutateAsync({
+              threadId,
+              providerId: model.providerId,
+              modelId: model.modelId,
             });
             const fresh = await utils.threads.get.fetch({ id: threadId }, { staleTime: 0 });
             if (fresh) {
@@ -62,6 +57,6 @@ export function useCompactCommand({
         })();
       },
     }),
-    [t, threadId, model, endpoint, setMessages, utils],
+    [t, threadId, model, setMessages, utils, compact],
   );
 }

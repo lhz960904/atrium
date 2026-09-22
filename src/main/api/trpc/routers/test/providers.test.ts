@@ -64,7 +64,7 @@ function storeWith(saved = new Map<string, Credential>()): CredentialStore {
 }
 
 const caller = (db: Db, credentials: CredentialStore = storeWith()) =>
-  providersRouter.createCaller({ db, chatEndpoint: {} as never, credentials, runner: {} as never });
+  providersRouter.createCaller({ db, credentials, runner: {} as never });
 
 test('a built-in provider takes no added models', async () => {
   const { db, writes } = rowWith({ enabledModels: ['deepseek-v4-flash'] });

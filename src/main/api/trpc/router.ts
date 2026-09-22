@@ -1,5 +1,6 @@
 import { app } from 'electron';
 import { browserRouter } from './routers/browser';
+import { chatRouter } from './routers/chat';
 import { computerRouter } from './routers/computer';
 import { mcpRouter } from './routers/mcp';
 import { memoryRouter } from './routers/memory';
@@ -34,6 +35,7 @@ export const appRouter = router({
     electron: process.versions.electron,
     node: process.versions.node,
   })),
+  chat: chatRouter,
   threads: threadsRouter,
   messages: messagesRouter,
   models: modelsRouter,

@@ -2,20 +2,23 @@ import type { AtriumUIMessage } from '@shared/chat';
 import type { ClarifyResult } from '@shared/chat-types';
 import type { InteractionDecision, InteractionRequest } from '@shared/interactions';
 import type { PermissionMode } from '@shared/permissions';
-import type { EventEnvelope } from '@shared/protocol';
 import { type ChatStatus, generateId } from '@shared/ui-message';
 import { RunAssembler } from './reduce';
+import type { ChatTransport, StreamHandlers } from './transport';
 
 /**
- * The chat data plane over the pi event track, replacing useChat + its
- * transport: a send POSTs /api/chat and the response is the run's pi event
- * SSE; reconnects replay the envelope log from seq 0. Messages are assembled
- * by RunAssembler in the part shape the components already consume.
+ * The chat data plane over the pi event track: a send starts a run and the
+ * run's event log is watched from its first event; reopening a thread rejoins
+ * one still in flight. Messages are assembled by RunAssembler in the part shape
+ * the components already consume.
  *
  * A run that asks the user something keeps streaming while it waits. The
- * decision goes out as its own short request to that run; what follows — the
- * tool running, the reply continuing — arrives on the same stream, so nothing
- * here marks a call done on the user's say-so.
+ * decision goes out on its own, to that run; what follows — the tool running,
+ * the reply continuing — arrives on the same stream, so nothing here marks a
+ * call done on the user's say-so.
+ *
+ * Detaching from a log never stops the run behind it. Closing a tab, switching
+ * threads and being evicted from the cache all detach; only `stop` ends a turn.
  */
 
 export type PiChatSnapshot = {
@@ -33,14 +36,11 @@ type SendExtras = {
 
 export type PiChatInit = {
   threadId: string;
-  baseUrl: string;
-  token: string;
   messages: AtriumUIMessage[];
+  transport: ChatTransport;
   getExtras: () => SendExtras;
   /** Side-effect notices (title, compaction, subagent…) routed outside the message. */
   onNotice: (name: string, payload: unknown) => void;
-  /** Injection point for tests. */
-  fetchFn?: typeof fetch;
 };
 
 type Part = AtriumUIMessage['parts'][number];
@@ -48,9 +48,6 @@ type Part = AtriumUIMessage['parts'][number];
 const NOTIFY_THROTTLE_MS = 50;
 
 const EXPIRED_TEXT = 'The run ended before this was decided.';
-
-/** Rejoins attempted before a dropped stream is treated as a lost run. */
-const RECONNECT_ATTEMPTS = 3;
 
 /** States a card is in only while a run is there to answer it. */
 const WAITING_STATES = new Set(['approval-requested', 'input-available', 'input-streaming']);
@@ -91,12 +88,10 @@ export class PiChat {
   private streaming: Promise<void> | null = null;
   /** Requests with a decision on its way, so a second click can't send another. */
   private submitting = new Set<string>();
-  private readonly fetchFn: typeof fetch;
 
   constructor(private readonly init: PiChatInit) {
     this.threadId = init.threadId;
     this.history = init.messages;
-    this.fetchFn = init.fetchFn ?? fetch.bind(globalThis);
     this.snap = { messages: [...this.history], status: 'ready' };
   }
 
@@ -126,25 +121,26 @@ export class PiChat {
       metadata: { createdAt: Date.now() },
     };
     this.history = [...this.history, message];
-    this.streaming = this.post({ path: '/api/chat', body: { message } });
+    this.streaming = this.startRun(message);
   };
 
-  /** Reconnect to a still-running stream; a 204 means nothing to rejoin. */
+  /** Rejoin a run still in flight. Delivering nothing means there was none. */
   resume = (): void => {
     if (this.isBusy) return;
     const abort = this.begin('streaming');
     this.streaming = (async () => {
       try {
-        const res = await this.fetchFn(this.eventsUrl(), {
-          headers: { 'x-atrium-token': this.init.token },
-          signal: abort.signal,
-        });
-        if (res.status === 204 || !res.body) {
+        const finished = await this.watch(
+          (handlers) => this.init.transport.rejoin({ threadId: this.threadId, from: -1 }, handlers),
+          abort,
+        );
+        if (abort.signal.aborted) return;
+        if (this.lastSeq === -1) {
           this.history = expireInactiveInteractions(this.history);
           this.settle();
           return;
         }
-        await this.attach(res.body, abort);
+        this.finalizeRun(finished);
       } catch (err) {
         if (!abort.signal.aborted) this.failWith(err);
       }
@@ -158,11 +154,7 @@ export class PiChat {
    */
   stop = async (): Promise<void> => {
     if (!this.isBusy) return;
-    const res = await this.fetchFn(`${this.init.baseUrl}/api/chat/${this.threadId}/abort`, {
-      method: 'POST',
-      headers: { 'x-atrium-token': this.init.token },
-    });
-    if (!res.ok) throw new Error(`Stopping the run failed (${res.status}).`);
+    await this.init.transport.abort(this.threadId);
     await this.streaming;
   };
 
@@ -207,84 +199,80 @@ export class PiChat {
     if (this.submitting.has(request.id)) return;
     this.submitting.add(request.id);
     try {
-      const res = await this.fetchFn(`${this.init.baseUrl}/api/chat/${this.threadId}/decisions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-atrium-token': this.init.token },
-        body: JSON.stringify({ runId: request.runId, interactionId: request.id, decision }),
+      await this.init.transport.decide({
+        threadId: this.threadId,
+        interaction: { runId: request.runId, interactionId: request.id, decision },
       });
-      if (!res.ok) throw new Error(`The decision was not accepted (${res.status}).`);
     } finally {
       this.submitting.delete(request.id);
     }
   }
 
-  private async post(input: { path: string; body: Record<string, unknown> }): Promise<void> {
+  /**
+   * Start a turn, then watch its log from the first event.
+   *
+   * The log exists by the time `send` resolves, and outlives its run, so a turn
+   * that finishes before the watch attaches is still replayed in full — which
+   * is why starting and watching can be two calls rather than one response.
+   */
+  private async startRun(message: AtriumUIMessage): Promise<void> {
     const abort = this.begin('submitted');
     try {
-      const res = await this.fetchFn(`${this.init.baseUrl}${input.path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-atrium-token': this.init.token },
-        body: JSON.stringify({ ...this.init.getExtras(), ...input.body }),
-        signal: abort.signal,
-      });
-      if (!res.ok || !res.body) {
-        throw new Error(`chat request failed (${res.status}) ${await res.text().catch(() => '')}`);
-      }
-      await this.attach(res.body, abort);
+      await this.init.transport.send({ ...this.init.getExtras(), message });
+      if (abort.signal.aborted) return;
+      const finished = await this.watch(
+        (handlers) => this.init.transport.events({ threadId: this.threadId, from: -1 }, handlers),
+        abort,
+      );
+      if (abort.signal.aborted) return;
+      this.finalizeRun(finished);
     } catch (err) {
       if (!abort.signal.aborted) this.failWith(err);
     }
   }
 
-  private eventsUrl(): string {
-    return `${this.init.baseUrl}/api/chat/${this.threadId}/pi-events?from=-1`;
-  }
-
   /**
-   * Read a run's stream to its end, rejoining when it drops early: the
-   * connection can die — a sleep long enough to lose the socket, a network
-   * blip — while the run itself is still going on the other side. A dying
-   * connection errors far more often than it ends cleanly, so both count as a
-   * drop and only the caller's own abort stops the attempts. The server
-   * replays from the start of the log, so each rejoin resets the seq floor and
-   * rebuilds the message rather than continuing from a half-read one.
+   * Fold a log's envelopes into the run being assembled, until it ends.
+   *
+   * Resolves with whether the run said it finished. A log that ends without
+   * saying so is a run that went away mid-turn, which the caller treats as a
+   * lost run rather than a completed one. Detaching on abort is what keeps a
+   * superseded watch from writing into the next one's assembler; the run it was
+   * reading carries on regardless.
    */
-  private async attach(body: ReadableStream<Uint8Array>, abort: AbortController): Promise<void> {
-    let finished = await this.read(body);
-    for (let attempt = 0; !finished && attempt < RECONNECT_ATTEMPTS; attempt++) {
-      if (abort.signal.aborted) return;
-      const rejoined = await this.rejoin(abort.signal);
-      if (rejoined === 'gone') break;
-      if (rejoined === 'unreachable') continue;
-      this.lastSeq = -1;
-      finished = await this.read(rejoined);
-    }
-    if (abort.signal.aborted) return;
-    this.finalizeRun(finished);
-  }
-
-  /** A stream that dies mid-read is a drop, not a failure: it reads as unfinished. */
-  private async read(body: ReadableStream<Uint8Array>): Promise<boolean> {
-    try {
-      return await this.consume(body);
-    } catch {
-      return false;
-    }
-  }
-
-  /** The run's stream again, or why there isn't one: ended, or still out of reach. */
-  private async rejoin(
-    signal: AbortSignal,
-  ): Promise<ReadableStream<Uint8Array> | 'gone' | 'unreachable'> {
-    try {
-      const res = await this.fetchFn(this.eventsUrl(), {
-        headers: { 'x-atrium-token': this.init.token },
-        signal,
+  private watch(
+    open: (handlers: StreamHandlers) => () => void,
+    abort: AbortController,
+  ): Promise<boolean> {
+    let assembling = false;
+    let finished = false;
+    return new Promise<boolean>((resolve, reject) => {
+      let detach = (): void => {};
+      const settle = (done: () => void) => {
+        detach();
+        done();
+      };
+      detach = open({
+        onData: (envelope) => {
+          if (envelope.seq <= this.lastSeq) return;
+          this.lastSeq = envelope.seq;
+          if (!assembling) {
+            assembling = true;
+            this.run = new RunAssembler();
+          }
+          if (this.status !== 'streaming') this.status = 'streaming';
+          this.run?.apply(envelope.event);
+          if (envelope.event.type === 'run_finished') finished = true;
+          if (envelope.event.type === 'notice') {
+            this.init.onNotice(envelope.event.name, envelope.event.payload);
+          }
+          this.notify();
+        },
+        onError: (error) => settle(() => reject(error)),
+        onComplete: () => settle(() => resolve(finished)),
       });
-      return res.status === 204 || !res.body ? 'gone' : res.body;
-    } catch {
-      return 'unreachable';
-    }
+      abort.signal.addEventListener('abort', () => settle(() => resolve(finished)), { once: true });
+    });
   }
 
   private begin(status: ChatStatus): AbortController {
@@ -296,46 +284,6 @@ export class PiChat {
     this.status = status;
     this.notify(true);
     return abort;
-  }
-
-  /**
-   * Reads the run's stream; false when it ended before the run said it had.
-   * The assembler is replaced by the first envelope that actually arrives, so a
-   * rejoin that delivers nothing keeps what the dropped stream had built.
-   */
-  private async consume(body: ReadableStream<Uint8Array>): Promise<boolean> {
-    let assembling = false;
-    let finished = false;
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let end = buffer.indexOf('\n\n');
-      while (end !== -1) {
-        const frame = buffer.slice(0, end);
-        buffer = buffer.slice(end + 2);
-        end = buffer.indexOf('\n\n');
-        if (!frame.startsWith('data: ')) continue;
-        const envelope = JSON.parse(frame.slice('data: '.length)) as EventEnvelope;
-        if (envelope.seq <= this.lastSeq) continue;
-        this.lastSeq = envelope.seq;
-        if (!assembling) {
-          assembling = true;
-          this.run = new RunAssembler();
-        }
-        if (this.status !== 'streaming') this.status = 'streaming';
-        this.run?.apply(envelope.event);
-        if (envelope.event.type === 'run_finished') finished = true;
-        if (envelope.event.type === 'notice') {
-          this.init.onNotice(envelope.event.name, envelope.event.payload);
-        }
-        this.notify();
-      }
-    }
-    return finished;
   }
 
   /**

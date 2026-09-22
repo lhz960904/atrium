@@ -211,7 +211,6 @@ export const en: typeof zh = {
   },
   chat: {
     notFound: "This chat doesn't exist",
-    serviceNotReady: 'Chat service not ready',
     more: 'More',
     rename: 'Rename',
     archive: 'Archive',

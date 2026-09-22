@@ -41,17 +41,13 @@ function ChatView(): React.JSX.Element {
   const { t } = useTranslation();
   const { threadId } = Route.useParams();
   const thread = trpc.threads.get.useQuery({ id: threadId });
-  const endpoint = trpc.system.chatEndpoint.useQuery();
   const { selected } = useChatModel(threadId);
 
-  if (thread.isLoading || endpoint.isLoading) {
+  if (thread.isLoading) {
     return <Centered>{t('common.loading')}</Centered>;
   }
   if (!thread.data) {
     return <Centered>{t('chat.notFound')}</Centered>;
-  }
-  if (!endpoint.data) {
-    return <Centered>{t('chat.serviceNotReady')}</Centered>;
   }
 
   const initialMessages: AtriumUIMessage[] = thread.data.messages.map((m) => ({
@@ -69,7 +65,6 @@ function ChatView(): React.JSX.Element {
       title={thread.data.title ?? t('common.untitledChat')}
       initialMessages={initialMessages}
       model={selected}
-      endpoint={endpoint.data}
     />
   );
 }
@@ -80,14 +75,12 @@ function ChatRunner({
   title,
   initialMessages,
   model,
-  endpoint,
 }: {
   threadId: string;
   projectId: string | null;
   title: string;
   initialMessages: AtriumUIMessage[];
   model: SelectedModel | null;
-  endpoint: { baseUrl: string; token: string };
 }): React.JSX.Element {
   // The chat persists across thread switches (see pi-chat/chats). Resolve it once
   // per mount via a ref guard — not useMemo, whose factory StrictMode may
@@ -96,11 +89,7 @@ function ChatRunner({
   // keyed on threadId, so each thread gets its own fresh ref.
   const resolved = useRef<{ chat: PiChat; resume: boolean } | null>(null);
   if (resolved.current === null) {
-    const { chat, isNew } = getThreadChat(threadId, {
-      messages: initialMessages,
-      baseUrl: endpoint.baseUrl,
-      token: endpoint.token,
-    });
+    const { chat, isNew } = getThreadChat(threadId, { messages: initialMessages });
     // Resume only reconnects to a PRE-EXISTING run (e.g. reload mid-stream). A
     // brand-new thread is about to auto-send its draft below; resuming there
     // would attach a second consumer to that same run and double its content.
@@ -140,7 +129,7 @@ function ChatRunner({
   );
 
   const utils = trpc.useUtils();
-  const compactCommand = useCompactCommand({ threadId, model, endpoint, setMessages });
+  const compactCommand = useCompactCommand({ threadId, model, setMessages });
   const { approvals, onApprove, onAlways, onDeny } = useApprovals({
     messages,
     addToolApprovalResponse,
