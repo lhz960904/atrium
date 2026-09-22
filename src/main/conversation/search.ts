@@ -15,6 +15,11 @@ const log = createLogger('search');
  * other silently returns nothing. Keeping the writer in one module and the
  * reader in another is how a search quietly stops working.
  *
+ * A deleted thread keeps its rows in the index — the conversation is still
+ * there — so both queries below exclude it themselves. Nothing prunes the
+ * index on delete, which is what makes the mark reversible if it ever needs
+ * to be.
+ *
  * pi ships its own full-text search over these entries and we do not use it:
  * it tokenises with trigrams, and a two-character Chinese word — most of them —
  * never matches three-character grams.
@@ -127,11 +132,13 @@ function recentChats(db: Db, scope: SearchScope): SearchHit[] {
     scope === 'archived'
       ? db.all(
           sql`SELECT id AS "threadId", title, updated_at AS "updatedAt", archived_at AS "archivedAt"
-              FROM threads WHERE archived_at IS NOT NULL ORDER BY archived_at DESC`,
+              FROM threads WHERE archived_at IS NOT NULL AND deleted_at IS NULL
+              ORDER BY archived_at DESC`,
         )
       : db.all(
           sql`SELECT id AS "threadId", title, updated_at AS "updatedAt", archived_at AS "archivedAt"
-              FROM threads WHERE archived_at IS NULL ORDER BY updated_at DESC LIMIT ${RECENT_LIMIT}`,
+              FROM threads WHERE archived_at IS NULL AND deleted_at IS NULL
+              ORDER BY updated_at DESC LIMIT ${RECENT_LIMIT}`,
         )
   ) as RecentRow[];
   return rows.map((row) => ({
@@ -174,7 +181,7 @@ export function searchChats(
                bm25(chat_fts) AS score
         FROM chat_fts
         JOIN threads t ON t.id = chat_fts.thread_id
-        WHERE chat_fts MATCH ${expr} AND ${archivedCond}
+        WHERE chat_fts MATCH ${expr} AND ${archivedCond} AND t.deleted_at IS NULL
         ORDER BY rank
         LIMIT ${SCAN_LIMIT}`,
   ) as FtsRow[];

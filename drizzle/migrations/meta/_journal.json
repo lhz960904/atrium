@@ -120,6 +120,13 @@
       "when": 1789182651666,
       "tag": "0016_parched_ikaris",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1789994738890,
+      "tag": "0017_strong_tarot",
+      "breakpoints": true
     }
   ]
 }

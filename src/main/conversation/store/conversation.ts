@@ -397,14 +397,6 @@ export class ConversationStore {
     return getAgentMessages(await conversation.entries());
   }
 
-  /** Drop a thread's conversation. The thread row is the caller's to remove. */
-  async deleteForThread(threadId: string): Promise<void> {
-    const sessionId = threadStore().sessionId(threadId);
-    if (!sessionId) return;
-    const metadata = await this.metadataOf(sessionId);
-    if (metadata) await this.repository.delete(metadata);
-  }
-
   private async metadataOf(sessionId: string): Promise<SqliteSessionMetadata | undefined> {
     const sessions = await this.repository.list();
     return sessions.find((session) => session.id === sessionId);

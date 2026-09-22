@@ -39,7 +39,7 @@ function fixture() {
       id text PRIMARY KEY, title text, project_id text, metadata text,
       model_provider_id text, model_id text, session_id text,
       created_at integer DEFAULT 0, updated_at integer DEFAULT 0,
-      last_read_at integer, archived_at integer, pinned integer DEFAULT 0);
+      last_read_at integer, archived_at integer, deleted_at integer, pinned integer DEFAULT 0);
   `);
   const db = drizzle(raw, { schema, casing: 'snake_case' }) as unknown as Db;
   const repository = new SqliteSessionRepository({

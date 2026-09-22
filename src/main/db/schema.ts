@@ -22,6 +22,11 @@ export const threads = sqliteTable('threads', {
   /** When the user archived this thread; null = active. Archived threads drop
    *  out of the sidebar list but stay openable by id and keep their messages. */
   archivedAt: integer('archived_at', { mode: 'timestamp_ms' }),
+  /** When the user deleted this thread; null = not deleted. The row and its
+   *  conversation stay: what a call cost has to outlive the chat it was spent
+   *  on, and the spend is recorded against this thread's session. Nothing above
+   *  the store ever sees a deleted thread. */
+  deletedAt: integer('deleted_at', { mode: 'timestamp_ms' }),
   /** Pinned to the top of the sidebar; the Pinned section mixes pinned threads
    *  and pinned projects. */
   pinned: integer({ mode: 'boolean' }).notNull().default(false),
