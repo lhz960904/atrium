@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import type { Db } from '@main/db';
 import { subagents } from '@main/db/schema';
-import type { ToolName } from '@shared/tools';
+import { TOOL_NAMES, type ToolName } from '@shared/tools';
 import { eq } from 'drizzle-orm';
 import type { AtriumTool } from '../tools/define';
 
@@ -134,4 +135,109 @@ export function resolveSubagentDef(name: string, db: Db): SubagentDef | undefine
     providerId: row.providerId ?? undefined,
     modelId: row.modelId ?? undefined,
   };
+}
+
+/**
+ * The settings list: built-ins first (read-only, id = name), then the rows the
+ * user or the AI defined. `builtin` is derived from where the entry came from,
+ * not stored, which is what keeps the two from ever disagreeing.
+ */
+export type SubagentView = {
+  id: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  toolAllow: string[] | null;
+  toolDeny: string[] | null;
+  providerId: string | null;
+  modelId: string | null;
+  builtin: boolean;
+};
+
+export type SubagentInput = {
+  name: string;
+  description: string;
+  systemPrompt: string;
+  toolAllow: string[] | null;
+  toolDeny: string[] | null;
+  providerId: string | null;
+  modelId: string | null;
+};
+
+/** A name a built-in already answers to, or another custom subagent has. */
+export class SubagentNameTaken extends Error {}
+
+export function listSubagents(db: Db): SubagentView[] {
+  const builtins: SubagentView[] = Object.values(BUILTIN_SUBAGENTS).map((agent) => ({
+    id: agent.name,
+    name: agent.name,
+    description: agent.description,
+    systemPrompt: agent.systemPrompt,
+    toolAllow: agent.toolAllow ?? null,
+    toolDeny: agent.toolDeny ?? null,
+    providerId: agent.providerId ?? null,
+    modelId: agent.modelId ?? null,
+    builtin: true,
+  }));
+  const custom: SubagentView[] = db
+    .select()
+    .from(subagents)
+    .all()
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      systemPrompt: row.systemPrompt,
+      toolAllow: row.toolAllow as string[] | null,
+      toolDeny: row.toolDeny as string[] | null,
+      providerId: row.providerId,
+      modelId: row.modelId,
+      builtin: false,
+    }));
+  return [...builtins, ...custom];
+}
+
+/** Tools a custom subagent may be granted — everything minus the never-allowed set. */
+export const assignableTools = (): ToolName[] =>
+  TOOL_NAMES.filter((tool) => !SUBAGENT_DENIED_TOOLS.has(tool));
+
+export function createSubagent(db: Db, input: SubagentInput): string {
+  assertNameFree(db, input.name);
+  const id = randomUUID();
+  const now = new Date();
+  db.insert(subagents)
+    .values({ id, ...input, createdAt: now, updatedAt: now })
+    .run();
+  return id;
+}
+
+export function updateSubagent(db: Db, id: string, input: SubagentInput): void {
+  assertNameFree(db, input.name, id);
+  db.update(subagents)
+    .set({ ...input, updatedAt: new Date() })
+    .where(eq(subagents.id, id))
+    .run();
+}
+
+export function removeSubagent(db: Db, id: string): void {
+  db.delete(subagents).where(eq(subagents.id, id)).run();
+}
+
+/**
+ * A name has to resolve to one definition. `resolveSubagentDef` answers with
+ * the built-in first, so a custom row sharing its name would be unreachable
+ * rather than merely confusing.
+ */
+function assertNameFree(db: Db, name: string, excludeId?: string): void {
+  if (BUILTIN_SUBAGENTS[name]) {
+    throw new SubagentNameTaken(`'${name}' is a built-in subagent name.`);
+  }
+  const existing = db
+    .select({ id: subagents.id })
+    .from(subagents)
+    .where(eq(subagents.name, name))
+    .get();
+  if (existing && existing.id !== excludeId) {
+    throw new SubagentNameTaken(`A subagent named '${name}' already exists.`);
+  }
 }

@@ -1,8 +1,22 @@
+import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
 import type { Db } from '@main/db';
+import * as schema from '@main/db/schema';
 import type { ToolName } from '@shared/tools';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
 import type { AtriumTool } from '../tools/define';
-import { BUILTIN_SUBAGENTS, filterToolsForSubagent, resolveSubagentDef } from './defs';
+import {
+  assignableTools,
+  BUILTIN_SUBAGENTS,
+  createSubagent,
+  filterToolsForSubagent,
+  listSubagents,
+  resolveSubagentDef,
+  SUBAGENT_DENIED_TOOLS,
+  type SubagentInput,
+  SubagentNameTaken,
+  updateSubagent,
+} from './defs';
 
 const ALL_TOOLS: ToolName[] = [
   'read_file',
@@ -104,4 +118,60 @@ test('a row with no pinned model leaves providerId/modelId undefined', () => {
   const def = resolveSubagentDef('plain', fakeDb(row));
   expect(def?.providerId).toBeUndefined();
   expect(def?.modelId).toBeUndefined();
+});
+
+/**
+ * Names, which the router used to guard. A name has to resolve to exactly one
+ * definition: `resolveSubagentDef` answers with the built-in first, so a custom
+ * row sharing a built-in's name would be unreachable, not merely confusing.
+ */
+
+function subagentStore(): Db {
+  const raw = new Database(':memory:');
+  raw.run(`CREATE TABLE subagents (
+    id text PRIMARY KEY NOT NULL, name text NOT NULL, description text NOT NULL,
+    system_prompt text NOT NULL, tool_allow text, tool_deny text,
+    provider_id text, model_id text,
+    created_at integer DEFAULT 0 NOT NULL, updated_at integer DEFAULT 0 NOT NULL)`);
+  return drizzle(raw, { schema, casing: 'snake_case' }) as unknown as Db;
+}
+
+const definition = (name: string): SubagentInput => ({
+  name,
+  description: 'does a thing',
+  systemPrompt: 'be useful',
+  toolAllow: null,
+  toolDeny: null,
+  providerId: null,
+  modelId: null,
+});
+
+test('a custom subagent cannot take a built-in name, or another custom one', () => {
+  const db = subagentStore();
+  const builtin = Object.keys(BUILTIN_SUBAGENTS)[0];
+
+  expect(() => createSubagent(db, definition(builtin))).toThrow(SubagentNameTaken);
+  const id = createSubagent(db, definition('reviewer'));
+  expect(() => createSubagent(db, definition('reviewer'))).toThrow(SubagentNameTaken);
+  // Keeping your own name while editing something else is not a collision.
+  expect(() =>
+    updateSubagent(db, id, { ...definition('reviewer'), description: 'x' }),
+  ).not.toThrow();
+  expect(listSubagents(db).filter((s) => !s.builtin)).toHaveLength(1);
+});
+
+test('the list is built-ins then custom, with builtin derived rather than stored', () => {
+  const db = subagentStore();
+  createSubagent(db, definition('reviewer'));
+
+  const rows = listSubagents(db);
+  expect(rows.at(-1)).toMatchObject({ name: 'reviewer', builtin: false });
+  expect(rows.filter((s) => s.builtin).length).toBe(Object.keys(BUILTIN_SUBAGENTS).length);
+  // A built-in is addressed by its name, so that is also its id.
+  expect(rows[0].id).toBe(rows[0].name);
+});
+
+test('the tools a custom subagent may be granted never include the denied set', () => {
+  for (const tool of assignableTools()) expect(SUBAGENT_DENIED_TOOLS.has(tool)).toBe(false);
+  expect(assignableTools().length).toBeGreaterThan(0);
 });
