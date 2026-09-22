@@ -1,261 +1,109 @@
 import {
-  getProviderManifest,
-  PROVIDER_MANIFEST,
-  type ProviderManifest,
-} from '@main/agent/providers/manifest';
-import {
   answerLogin,
   cancelLogin,
   logout,
   readLogin,
   startLogin,
 } from '@main/agent/providers/oauth-login';
-import { piModels, refreshProviders } from '@main/agent/providers/registry';
-import type { Db } from '@main/db';
-import { providers } from '@main/db/schema';
+import {
+  addableProviders,
+  addProvider,
+  createCustomProvider,
+  ensureProviderRow,
+  listProviders,
+  mergeProviderConfig,
+  NotADefinedProvider,
+  ProviderIdTaken,
+  removeCustomModel,
+  removeProvider,
+  setProviderEnabled,
+  updateCustomProvider,
+  upsertCustomModel,
+} from '@main/agent/providers/store';
 import {
   customModelSchema,
   customProviderIdSchema,
   customProviderSchema,
 } from '@shared/custom-model';
-import { eq } from 'drizzle-orm';
 import { shell } from 'electron';
 import { z } from 'zod';
 import { badRequest } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
-/** A user-friendly view of a provider that merges manifest + DB row. */
-type ProviderView = ProviderManifest & {
-  enabled: boolean;
-  config: Record<string, unknown> | null;
-  hasCredentials: boolean;
-  /** The catalog the engine resolves for this provider — the only source. */
-  models?: readonly { id: string }[];
-  /** Defined by the user, so it can be edited and deleted. */
-  custom?: boolean;
-  /** The endpoint the engine resolved for this provider — the only source, and
-   *  what the settings panel shows as the default. */
-  defaultBaseUrl?: string;
-};
+const byId = z.object({ id: z.string() });
 
-const configSchema = z.record(z.string(), z.unknown());
-
-/** Upsert a provider's whole config blob; the row may not exist yet. */
-function writeConfig(db: Db, id: string, config: Record<string, unknown>): void {
-  db.insert(providers)
-    .values({ id, config })
-    .onConflictDoUpdate({ target: providers.id, set: { config, updatedAt: new Date() } })
-    .run();
-}
-
-/** The models this provider has stored, as untyped rows — callers filter. */
-function storedModels(db: Db, id: string): { config: Record<string, unknown>; models: unknown[] } {
-  const row = db
-    .select({ config: providers.config })
-    .from(providers)
-    .where(eq(providers.id, id))
-    .get();
-  const config = (row?.config as Record<string, unknown> | null) ?? {};
-  return { config, models: Array.isArray(config.customModels) ? config.customModels : [] };
-}
-
-/** A defined provider's stored models. A built-in provider's catalog is the
- *  engine's alone, so asking to change one is refused. */
-function storedCustomModels(
-  db: Db,
-  id: string,
-): { config: Record<string, unknown>; models: unknown[] } {
-  const stored = storedModels(db, id);
-  if (!customProviderSchema.safeParse(stored.config.customProvider).success) {
-    throw badRequest('Only a provider you defined has models to change.');
+/** The store's refusals, in the code a client understands. */
+function attempt<T>(run: () => T): T {
+  try {
+    return run();
+  } catch (error) {
+    if (error instanceof ProviderIdTaken || error instanceof NotADefinedProvider) {
+      throw badRequest(error.message);
+    }
+    throw error;
   }
-  return stored;
 }
 
 export const providersRouter = router({
-  /**
-   * Manifest ⋈ DB config, in manifest declaration order. Never includes the
-   * raw encrypted credentials blob — callers ask for plaintext explicitly
-   * via `getCredentials` when (and only when) they need to display it.
-   */
-  /**
-   * The providers the user has added, in manifest order. Adding one is what
-   * makes it exist here — there is no separate step that turns it on, because
-   * a provider sitting in the list doing nothing is the state everyone forgets
-   * to leave.
-   */
-  list: publicProcedure.query(async ({ ctx }): Promise<ProviderView[]> => {
-    const rows = ctx.db.select().from(providers).all();
-    const keyed = new Set((await ctx.credentials.list()).map((c) => c.providerId));
-    const byId = new Map(rows.map((r) => [r.id, r]));
-    // A provider the user defined has no manifest entry, so one is made for it
-    // from what they gave: the panel treats both the same from here on.
-    const defined: ProviderView[] = rows.flatMap((row) => {
-      const parsed = customProviderSchema.safeParse(
-        (row.config as { customProvider?: unknown } | null)?.customProvider,
-      );
-      if (!parsed.success || getProviderManifest(row.id)) return [];
-      return [
-        {
-          id: row.id,
-          authMode: 'api-key' as const,
-          name: parsed.data.name,
-          defaultBaseUrl: parsed.data.baseUrl,
-          consoleUrl: '',
-          enabled: row.enabled,
-          config: (row.config as Record<string, unknown> | null) ?? null,
-          hasCredentials: keyed.has(row.id),
-          models: piModels.getModels(row.id).map((model) => ({ id: model.id })),
-          custom: true,
-        },
-      ];
-    });
-    const builtin: ProviderView[] = PROVIDER_MANIFEST.filter((m) => byId.has(m.id)).map((m) => {
-      const row = byId.get(m.id);
-      // The endpoint comes from the registry, which is the only place it is
-      // written down: the manifest describes a provider, it doesn't say how to
-      // reach one.
-      const registered = piModels.getProvider(m.id);
-      return {
-        ...m,
-        defaultBaseUrl: registered?.baseUrl,
-        models: piModels.getModels(m.id).map((model) => ({ id: model.id })),
-        enabled: row?.enabled ?? false,
-        config: (row?.config as Record<string, unknown> | null) ?? null,
-        hasCredentials: keyed.has(m.id),
-      };
-    });
-    return [...builtin, ...defined];
-  }),
+  list: publicProcedure.query(({ ctx }) => listProviders(ctx.db, ctx.credentials)),
 
-  /** The built-in providers not added yet — the choices in the add picker. */
-  available: publicProcedure.query(({ ctx }) => {
-    const taken = new Set(
-      ctx.db
-        .select({ id: providers.id })
-        .from(providers)
-        .all()
-        .map((r) => r.id),
-    );
-    return PROVIDER_MANIFEST.filter((m) => !taken.has(m.id)).map((m) => ({
-      id: m.id,
-      name: m.name,
-      authMode: m.authMode,
-    }));
-  }),
+  available: publicProcedure.query(({ ctx }) => addableProviders(ctx.db)),
 
-  /** Add a built-in provider. Adding is the whole step: it is on from here. */
-  add: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    if (!getProviderManifest(input.id)) throw badRequest(`"${input.id}" is not a known provider.`);
-    ctx.db
-      .insert(providers)
-      .values({ id: input.id, enabled: true })
-      .onConflictDoUpdate({ target: providers.id, set: { enabled: true, updatedAt: new Date() } })
-      .run();
-  }),
+  add: publicProcedure
+    .input(byId)
+    .mutation(({ ctx, input }) => attempt(() => addProvider(ctx.db, input.id))),
 
-  /** Remove a provider from the list, and with it the key it was holding. */
-  remove: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    ctx.db.delete(providers).where(eq(providers.id, input.id)).run();
-    refreshProviders(ctx.db);
-  }),
+  remove: publicProcedure
+    .input(byId)
+    .mutation(({ ctx, input }) => removeProvider(ctx.db, input.id)),
 
-  /** Define a provider Atrium doesn't ship: an endpoint, a request format, and
-   *  whatever models the user adds to it. */
   createCustomProvider: publicProcedure
     .input(z.object({ id: customProviderIdSchema, provider: customProviderSchema }))
-    .mutation(({ ctx, input }) => {
-      if (getProviderManifest(input.id)) {
-        throw badRequest(`"${input.id}" is already the id of a built-in provider.`);
-      }
-      const taken = ctx.db
-        .select({ id: providers.id })
-        .from(providers)
-        .where(eq(providers.id, input.id))
-        .get();
-      if (taken) throw badRequest(`"${input.id}" is already in use.`);
-      // Defining one is adding it, so it is on — the same rule as picking a
-      // built-in provider.
-      ctx.db
-        .insert(providers)
-        .values({ id: input.id, enabled: true, config: { customProvider: input.provider } })
-        .run();
-      refreshProviders(ctx.db);
-    }),
+    .mutation(({ ctx, input }) =>
+      attempt(() => createCustomProvider(ctx.db, input.id, input.provider)),
+    ),
 
   updateCustomProvider: publicProcedure
-    .input(z.object({ id: z.string(), provider: customProviderSchema }))
-    .mutation(({ ctx, input }) => {
-      const { config } = storedModels(ctx.db, input.id);
-      if (!config.customProvider) throw badRequest('Not a provider you defined.');
-      writeConfig(ctx.db, input.id, { ...config, customProvider: input.provider });
-      refreshProviders(ctx.db);
-    }),
+    .input(byId.extend({ provider: customProviderSchema }))
+    .mutation(({ ctx, input }) =>
+      attempt(() => updateCustomProvider(ctx.db, input.id, input.provider)),
+    ),
 
   /**
    * Subscription login. `start` kicks the flow off and opens the browser; the
    * panel then polls `loginState` until it lands, answering `submitLogin` on
    * the rare path where the vendor wants a pasted code.
    */
-  startLogin: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    ctx.db
-      .insert(providers)
-      .values({ id: input.id, enabled: true })
-      .onConflictDoUpdate({ target: providers.id, set: { enabled: true } })
-      .run();
+  startLogin: publicProcedure.input(byId).mutation(({ ctx, input }) => {
+    ensureProviderRow(ctx.db, input.id);
     return startLogin(input.id, (url) => void shell.openExternal(url));
   }),
 
-  loginState: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(({ input }) => readLogin(input.id)),
+  loginState: publicProcedure.input(byId).query(({ input }) => readLogin(input.id)),
 
   submitLogin: publicProcedure
-    .input(z.object({ id: z.string(), value: z.string() }))
+    .input(byId.extend({ value: z.string() }))
     .mutation(({ input }) => ({ ok: answerLogin(input.id, input.value) })),
 
-  cancelLogin: publicProcedure.input(z.object({ id: z.string() })).mutation(({ input }) => {
+  cancelLogin: publicProcedure.input(byId).mutation(({ input }) => {
     cancelLogin(input.id);
   }),
 
-  signOut: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ input }) => {
+  signOut: publicProcedure.input(byId).mutation(async ({ input }) => {
     await logout(input.id);
   }),
 
   setEnabled: publicProcedure
-    .input(z.object({ id: z.string(), enabled: z.boolean() }))
-    .mutation(({ ctx, input }) => {
-      ctx.db
-        .insert(providers)
-        .values({ id: input.id, enabled: input.enabled })
-        .onConflictDoUpdate({
-          target: providers.id,
-          set: { enabled: input.enabled, updatedAt: new Date() },
-        })
-        .run();
-    }),
+    .input(byId.extend({ enabled: z.boolean() }))
+    .mutation(({ ctx, input }) => setProviderEnabled(ctx.db, input.id, input.enabled)),
 
-  /**
-   * Shallow-merge `partial` into the row's existing `config` JSON. Callers
-   * pass only the fields they want to change.
-   */
   updateConfig: publicProcedure
-    .input(z.object({ id: z.string(), partial: configSchema }))
-    .mutation(({ ctx, input }) => {
-      const existing = ctx.db
-        .select({ config: providers.config })
-        .from(providers)
-        .where(eq(providers.id, input.id))
-        .get();
-      writeConfig(ctx.db, input.id, {
-        ...((existing?.config as Record<string, unknown> | null) ?? {}),
-        ...input.partial,
-      });
-    }),
+    .input(byId.extend({ partial: z.record(z.string(), z.unknown()) }))
+    .mutation(({ ctx, input }) => mergeProviderConfig(ctx.db, input.id, input.partial)),
 
   /** Save an API key in the store requests resolve it from. */
   setCredentials: publicProcedure
-    .input(z.object({ id: z.string(), plaintext: z.string() }))
+    .input(byId.extend({ plaintext: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.credentials.modify(input.id, async () => ({
         type: 'api_key',
@@ -268,47 +116,24 @@ export const providersRouter = router({
    * reveal it. Null when there is none, including when the provider holds an
    * OAuth token instead.
    */
-  getCredentials: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }): Promise<string | null> => {
-      const credential = await ctx.credentials.read(input.id);
-      return credential?.type === 'api_key' ? (credential.key ?? null) : null;
-    }),
+  getCredentials: publicProcedure.input(byId).query(async ({ ctx, input }) => {
+    const credential = await ctx.credentials.read(input.id);
+    return credential?.type === 'api_key' ? (credential.key ?? null) : null;
+  }),
 
-  clearCredentials: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      await ctx.credentials.delete(input.id);
-    }),
+  clearCredentials: publicProcedure.input(byId).mutation(async ({ ctx, input }) => {
+    await ctx.credentials.delete(input.id);
+  }),
 
-  /**
-   * Add or replace a model on a provider the user defined, stored on its config.
-   * `previousId` lets the editor rename one without leaving the old entry behind.
-   */
   upsertCustomModel: publicProcedure
-    .input(
-      z.object({
-        id: z.string(),
-        model: customModelSchema,
-        previousId: z.string().optional(),
-      }),
-    )
-    .mutation(({ ctx, input }) => {
-      const { config, models } = storedCustomModels(ctx.db, input.id);
-      const dropped = new Set([input.model.id, input.previousId].filter(Boolean));
-      const kept = models.filter((m) => !dropped.has(String((m as { id?: unknown }).id)));
-      writeConfig(ctx.db, input.id, { ...config, customModels: [...kept, input.model] });
-      refreshProviders(ctx.db);
-    }),
+    .input(byId.extend({ model: customModelSchema, previousId: z.string().optional() }))
+    .mutation(({ ctx, input }) =>
+      attempt(() => upsertCustomModel(ctx.db, input.id, input.model, input.previousId)),
+    ),
 
   removeCustomModel: publicProcedure
-    .input(z.object({ id: z.string(), modelId: z.string() }))
-    .mutation(({ ctx, input }) => {
-      const { config, models } = storedCustomModels(ctx.db, input.id);
-      writeConfig(ctx.db, input.id, {
-        ...config,
-        customModels: models.filter((m) => String((m as { id?: unknown }).id) !== input.modelId),
-      });
-      refreshProviders(ctx.db);
-    }),
+    .input(byId.extend({ modelId: z.string() }))
+    .mutation(({ ctx, input }) =>
+      attempt(() => removeCustomModel(ctx.db, input.id, input.modelId)),
+    ),
 });
