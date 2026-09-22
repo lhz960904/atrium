@@ -169,40 +169,7 @@ test('bubbles its activity up to the parent, minus the plan tool', async () => {
   expect(step?.tools?.map((t) => t.name)).toEqual(['echo']);
 });
 
-test('records its own usage under the inherited model (kind=subagent)', async () => {
-  let row: Record<string, unknown> | undefined;
-  const captureDb = {
-    insert: () => ({
-      values: (v: Record<string, unknown>) => ({
-        run: () => {
-          row = v;
-        },
-      }),
-    }),
-  } as unknown as Db;
-
-  await runSubagent({
-    // No pinned model on `def`, so the child inherits the parent's identity.
-    parent: parentCtx({ db: captureDb, providerId: 'anthropic', modelId: 'claude-x' }),
-    engine: engineWith(scripted([reply([{ type: 'text', text: 'ANSWER' }], 'stop')])),
-    tools: [],
-    agent: def,
-    prompt: 'do the task',
-    subagentId: 's1',
-  });
-
-  expect(row?.kind).toBe('subagent');
-  expect(row?.providerId).toBe('anthropic');
-  expect(row?.modelId).toBe('claude-x');
-  expect(row?.inputTokens).toBe(1);
-  expect(row?.outputTokens).toBe(1);
-  expect(row?.totalTokens).toBe(2);
-  // The provider's own figure (usage.cost.total = 0.003 USD), stored as micros
-  // rather than recomputed from rates.
-  expect(row?.costUsdMicros).toBe(3000);
-});
-
-test("a subagent's spend reaches the conversation as well as the ledger", async () => {
+test("a subagent's spend is recorded under the model that actually ran it", async () => {
   const spent: SideCall[] = [];
 
   await runSubagent({
@@ -218,8 +185,8 @@ test("a subagent's spend reaches the conversation as well as the ledger", async 
     subagentId: 's1',
   });
 
-  // Two ledgers, one call: the session is the conversation's own account, the
-  // table is what a cross-thread report reads.
+  // A subagent's calls never reach the parent turn's usage, so this record is
+  // the only place they are counted at all.
   expect(spent).toHaveLength(1);
   expect(spent[0]).toMatchObject({
     kind: 'subagent',

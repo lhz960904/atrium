@@ -1,6 +1,5 @@
 import type { AgentMessage as Message, StreamFn } from '@earendil-works/pi-agent-core';
 import type { Api, AssistantMessage, Model, TextContent, Usage } from '@earendil-works/pi-ai';
-import { recordUsage } from '@main/db/usage';
 import { createLogger } from '@main/utils/log';
 import type { ToolName } from '@shared/tools';
 import { contextCompaction } from '../context/compaction';
@@ -163,25 +162,9 @@ export async function runSubagent(opts: RunSubagentOptions): Promise<SubagentRes
     throw err;
   }
 
-  // Subagent calls are separate model calls, invisible to the parent turn's
-  // usage — record them on their own so the ledger isn't an undercount. They
-  // go to both ledgers: the session is the conversation's own account of what
-  // it spent, the table is what survives the conversation being deleted.
+  // A subagent's calls are its own: they never reach the parent turn's usage,
+  // so without this they would appear in no report at all.
   parent.spend?.({ kind: 'subagent', usage, providerId, modelId });
-  if (providerId && modelId) {
-    recordUsage(parent.db, {
-      threadId: parent.threadId,
-      kind: 'subagent',
-      providerId,
-      modelId,
-      inputTokens: usage.input,
-      outputTokens: usage.output,
-      cacheReadTokens: usage.cacheRead,
-      cacheCreationTokens: usage.cacheWrite,
-      totalTokens: usage.totalTokens,
-      costUsd: usage.cost.total,
-    });
-  }
 
   return { text: lastText || '(subagent finished without a text response)', usage };
 }

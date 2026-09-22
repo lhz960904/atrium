@@ -1,5 +1,10 @@
 import { ratesFor } from '@main/agent/providers/models';
-import { USAGE_RANGES, usageDaily, usageDailyByModel, usageSummary } from '@main/db/usage';
+import {
+  USAGE_RANGES,
+  usageDaily,
+  usageDailyByModel,
+  usageSummary,
+} from '@main/conversation/usage';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
 
