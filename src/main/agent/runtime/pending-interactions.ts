@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolCall } from '@earendil-works/pi-ai';
+import { Refusal } from '@main/utils/refusal';
 import type {
   DecideInteraction,
   InteractionDecision,
@@ -10,10 +11,18 @@ import type {
 } from '@shared/interactions';
 
 /** The interaction a decision names is not open: another run, already settled, or never asked. */
-export class InteractionConflict extends Error {}
+export class InteractionConflict extends Refusal {
+  constructor(message: string) {
+    super('collision', message);
+  }
+}
 
 /** The decision does not fit the interaction it names. */
-export class InvalidInteractionDecision extends Error {}
+export class InvalidInteractionDecision extends Refusal {
+  constructor(message: string) {
+    super('unacceptable', message);
+  }
+}
 
 export type OpenInteraction = {
   request: InteractionRequest;

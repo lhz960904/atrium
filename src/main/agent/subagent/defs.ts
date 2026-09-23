@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Db } from '@main/db';
 import { subagents } from '@main/db/schema';
+import { Refusal } from '@main/utils/refusal';
 import { TOOL_NAMES, type ToolName } from '@shared/tools';
 import { eq } from 'drizzle-orm';
 import type { AtriumTool } from '../tools/define';
@@ -165,7 +166,11 @@ export type SubagentInput = {
 };
 
 /** A name a built-in already answers to, or another custom subagent has. */
-export class SubagentNameTaken extends Error {}
+export class SubagentNameTaken extends Refusal {
+  constructor(message: string) {
+    super('collision', message);
+  }
+}
 
 export function listSubagents(db: Db): SubagentView[] {
   const builtins: SubagentView[] = Object.values(BUILTIN_SUBAGENTS).map((agent) => ({

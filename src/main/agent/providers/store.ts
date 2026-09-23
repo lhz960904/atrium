@@ -1,6 +1,7 @@
 import type { CredentialStore } from '@earendil-works/pi-ai';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
+import { Refusal } from '@main/utils/refusal';
 import { type CustomModel, type CustomProvider, customProviderSchema } from '@shared/custom-model';
 import { eq } from 'drizzle-orm';
 import { getProviderManifest, PROVIDER_MANIFEST, type ProviderManifest } from './manifest';
@@ -18,10 +19,18 @@ import { piModels, refreshProviders } from './registry';
  */
 
 /** An id already claimed — by a provider Atrium ships, or by one already added. */
-export class ProviderIdTaken extends Error {}
+export class ProviderIdTaken extends Refusal {
+  constructor(message: string) {
+    super('unacceptable', message);
+  }
+}
 
 /** Asked of a built-in provider something only a user-defined one has. */
-export class NotADefinedProvider extends Error {}
+export class NotADefinedProvider extends Refusal {
+  constructor(message: string) {
+    super('unacceptable', message);
+  }
+}
 
 /** A provider as the settings panel shows it: manifest ⋈ row ⋈ credential. */
 export type ProviderView = ProviderManifest & {

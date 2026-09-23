@@ -10,10 +10,7 @@ import {
   applyServersJson,
   createServer,
   exportServersJson,
-  InvalidMcpConfig,
   listServers,
-  ManagedMcpServer,
-  McpNameTaken,
   previewServersJson,
   removeServer,
   serverCredentials,
@@ -24,7 +21,7 @@ import {
 import { getDb } from '@main/db';
 import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { z } from 'zod';
-import { badRequest, conflict, refusing } from '../errors';
+import { badRequest } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 const fields = z.object({
@@ -41,12 +38,6 @@ const jsonInput = z.object({ json: z.string() });
 
 const byId = z.object({ id: z.string() });
 
-const attempt = refusing(
-  [McpNameTaken, conflict],
-  [InvalidMcpConfig, badRequest],
-  [ManagedMcpServer, badRequest],
-);
-
 export const mcpRouter = router({
   list: publicProcedure.query(() => listServers(getDb())),
 
@@ -59,20 +50,18 @@ export const mcpRouter = router({
 
   create: publicProcedure
     .input(fields)
-    .mutation(({ input }) => attempt(() => ({ id: createServer(getDb(), input) }))),
+    .mutation(({ input }) => ({ id: createServer(getDb(), input) })),
 
   update: publicProcedure.input(fields.extend({ id: z.string() })).mutation(({ input }) => {
     const { id, ...rest } = input;
-    attempt(() => updateServer(getDb(), id, rest));
+    updateServer(getDb(), id, rest);
   }),
 
   setEnabled: publicProcedure
     .input(byId.extend({ enabled: z.boolean() }))
-    .mutation(({ input }) => attempt(() => setServerEnabled(getDb(), input.id, input.enabled))),
+    .mutation(({ input }) => setServerEnabled(getDb(), input.id, input.enabled)),
 
-  delete: publicProcedure
-    .input(byId)
-    .mutation(({ input }) => attempt(() => removeServer(getDb(), input.id))),
+  delete: publicProcedure.input(byId).mutation(({ input }) => removeServer(getDb(), input.id)),
 
   /** Decrypt the secrets so the settings form can prefill them on edit; {} when none. */
   getCredentials: publicProcedure
@@ -129,5 +118,5 @@ export const mcpRouter = router({
 
   applyJson: publicProcedure
     .input(jsonInput)
-    .mutation(({ input }) => attempt(() => applyServersJson(getDb(), input.json))),
+    .mutation(({ input }) => applyServersJson(getDb(), input.json)),
 });

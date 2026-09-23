@@ -3,12 +3,10 @@ import {
   createSubagent,
   listSubagents,
   removeSubagent,
-  SubagentNameTaken,
   updateSubagent,
 } from '@main/agent/subagent/defs';
 import { getDb } from '@main/db';
 import { z } from 'zod';
-import { conflict, refusing } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 const fields = z.object({
@@ -21,8 +19,6 @@ const fields = z.object({
   modelId: z.string().nullable(),
 });
 
-const attempt = refusing([SubagentNameTaken, conflict]);
-
 export const subagentsRouter = router({
   list: publicProcedure.query(() => listSubagents(getDb())),
 
@@ -30,11 +26,11 @@ export const subagentsRouter = router({
 
   create: publicProcedure
     .input(fields)
-    .mutation(({ input }) => attempt(() => ({ id: createSubagent(getDb(), input) }))),
+    .mutation(({ input }) => ({ id: createSubagent(getDb(), input) })),
 
   update: publicProcedure.input(fields.extend({ id: z.string() })).mutation(({ input }) => {
     const { id, ...rest } = input;
-    attempt(() => updateSubagent(getDb(), id, rest));
+    updateSubagent(getDb(), id, rest);
   }),
 
   delete: publicProcedure

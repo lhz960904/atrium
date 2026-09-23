@@ -13,8 +13,6 @@ import {
   ensureProviderRow,
   listProviders,
   mergeProviderConfig,
-  NotADefinedProvider,
-  ProviderIdTaken,
   readApiKey,
   removeCustomModel,
   removeProvider,
@@ -31,35 +29,26 @@ import {
 } from '@shared/custom-model';
 import { shell } from 'electron';
 import { z } from 'zod';
-import { badRequest, refusing } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 const byId = z.object({ id: z.string() });
-
-const attempt = refusing([ProviderIdTaken, badRequest], [NotADefinedProvider, badRequest]);
 
 export const providersRouter = router({
   list: publicProcedure.query(() => listProviders(getDb(), credentialStore())),
 
   available: publicProcedure.query(() => addableProviders(getDb())),
 
-  add: publicProcedure
-    .input(byId)
-    .mutation(({ input }) => attempt(() => addProvider(getDb(), input.id))),
+  add: publicProcedure.input(byId).mutation(({ input }) => addProvider(getDb(), input.id)),
 
   remove: publicProcedure.input(byId).mutation(({ input }) => removeProvider(getDb(), input.id)),
 
   createCustomProvider: publicProcedure
     .input(z.object({ id: customProviderIdSchema, provider: customProviderSchema }))
-    .mutation(({ input }) =>
-      attempt(() => createCustomProvider(getDb(), input.id, input.provider)),
-    ),
+    .mutation(({ input }) => createCustomProvider(getDb(), input.id, input.provider)),
 
   updateCustomProvider: publicProcedure
     .input(byId.extend({ provider: customProviderSchema }))
-    .mutation(({ input }) =>
-      attempt(() => updateCustomProvider(getDb(), input.id, input.provider)),
-    ),
+    .mutation(({ input }) => updateCustomProvider(getDb(), input.id, input.provider)),
 
   /**
    * Subscription login. `start` kicks the flow off and opens the browser; the
@@ -107,11 +96,9 @@ export const providersRouter = router({
 
   upsertCustomModel: publicProcedure
     .input(byId.extend({ model: customModelSchema, previousId: z.string().optional() }))
-    .mutation(({ input }) =>
-      attempt(() => upsertCustomModel(getDb(), input.id, input.model, input.previousId)),
-    ),
+    .mutation(({ input }) => upsertCustomModel(getDb(), input.id, input.model, input.previousId)),
 
   removeCustomModel: publicProcedure
     .input(byId.extend({ modelId: z.string() }))
-    .mutation(({ input }) => attempt(() => removeCustomModel(getDb(), input.id, input.modelId))),
+    .mutation(({ input }) => removeCustomModel(getDb(), input.id, input.modelId)),
 });

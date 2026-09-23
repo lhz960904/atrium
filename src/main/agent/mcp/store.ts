@@ -3,6 +3,7 @@ import type { Db } from '@main/db';
 import { mcpServers } from '@main/db/schema';
 import { decryptJson, encryptJson } from '@main/platform/safe-storage';
 import { createLogger } from '@main/utils/log';
+import { Refusal } from '@main/utils/refusal';
 import { eq } from 'drizzle-orm';
 import {
   type McpSecrets,
@@ -29,13 +30,25 @@ const log = createLogger('mcp');
  */
 
 /** A name the user already gave to another server. */
-export class McpNameTaken extends Error {}
+export class McpNameTaken extends Refusal {
+  constructor(message: string) {
+    super('collision', message);
+  }
+}
 
 /** A config the transport cannot accept. */
-export class InvalidMcpConfig extends Error {}
+export class InvalidMcpConfig extends Refusal {
+  constructor(message: string) {
+    super('unacceptable', message);
+  }
+}
 
 /** A server a feature provisioned; the user may read it but not change it. */
-export class ManagedMcpServer extends Error {}
+export class ManagedMcpServer extends Refusal {
+  constructor(message: string) {
+    super('unacceptable', message);
+  }
+}
 
 /** What the settings list shows — never the encrypted blob, only whether one exists. */
 export type McpServerView = {

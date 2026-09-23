@@ -1,7 +1,3 @@
-import {
-  InteractionConflict,
-  InvalidInteractionDecision,
-} from '@main/agent/runtime/pending-interactions';
 import type { Runner } from '@main/agent/runtime/runner';
 import type { AtriumUIMessage } from '@shared/chat';
 import { decideInteractionSchema } from '@shared/interactions';
@@ -10,7 +6,6 @@ import type { EventEnvelope } from '@shared/protocol';
 import { TRPCError } from '@trpc/server';
 import { observable } from '@trpc/server/observable';
 import { z } from 'zod';
-import { badRequest, conflict, refusing } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 /**
@@ -71,8 +66,6 @@ function attach(runner: Runner, threadId: string, from: number) {
   });
 }
 
-const attempt = refusing([InteractionConflict, conflict], [InvalidInteractionDecision, badRequest]);
-
 export const chatRouter = router({
   /**
    * Start a turn. The log exists by the time this resolves, so the caller can
@@ -114,9 +107,9 @@ export const chatRouter = router({
    */
   decide: publicProcedure
     .input(z.object({ threadId: z.string().min(1), interaction: decideInteractionSchema }))
-    .mutation(({ ctx, input }) =>
-      attempt(() => ({ status: ctx.runner.respond(input.threadId, input.interaction) })),
-    ),
+    .mutation(({ ctx, input }) => ({
+      status: ctx.runner.respond(input.threadId, input.interaction),
+    })),
 
   /**
    * Stop a thread's generation. Aborts the loop in the main process — detaching

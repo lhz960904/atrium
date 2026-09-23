@@ -1,5 +1,6 @@
 import type { Runner } from '@main/agent/runtime/runner';
-import { initTRPC } from '@trpc/server';
+import { Refusal } from '@main/utils/refusal';
+import { initTRPC, TRPCError } from '@trpc/server';
 
 /**
  * tRPC context — a procedure's own dependencies.
@@ -17,5 +18,24 @@ export type Context = { runner: Runner };
 
 const t = initTRPC.context<Context>().create({ isServer: true });
 
+/**
+ * A store's refusal, in the code a client understands.
+ *
+ * Stores throw refusals in their own words and know nothing about status codes;
+ * this is the one place the two vocabularies meet, so no procedure needs a
+ * try/catch to say the same thing again. Anything that is not a refusal is a
+ * fault and travels untouched — a bug must never reach a client dressed as a
+ * polite 400.
+ */
+const refusals = t.middleware(async ({ next }) => {
+  const result = await next();
+  const cause = result.ok ? undefined : result.error.cause;
+  if (!(cause instanceof Refusal)) return result;
+  throw new TRPCError({
+    code: cause.kind === 'collision' ? 'CONFLICT' : 'BAD_REQUEST',
+    message: cause.message,
+  });
+});
+
 export const router = t.router;
-export const publicProcedure = t.procedure;
+export const publicProcedure = t.procedure.use(refusals);
