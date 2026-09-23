@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -302,4 +302,39 @@ test('a title that lands after its run still records, and closes nothing', async
   const kinds = (await conversation.records()).map((r) => r.type);
   expect(kinds).toEqual(['operation_started', 'operation_finished', 'usage']);
   await repository.close();
+});
+
+test('looking a conversation up does not re-read every session in the store', async () => {
+  const { store, addThread, repository } = fixture();
+  addThread('t1');
+  addThread('t2');
+  await (await store.openForThread('t1', '/tmp/work')).appendPrompt('p1', user('one'));
+  await (await store.openForThread('t2', '/tmp/work')).appendPrompt('p2', user('two'));
+
+  const list = spyOn(repository, 'list');
+  for (let i = 0; i < 5; i++) {
+    expect(await store.forThread('t1')).toBeDefined();
+    expect(await store.forThread('t2')).toBeDefined();
+  }
+
+  // The store has no by-id lookup, so `list` decodes every session row. A
+  // session's metadata is fixed for its life, so creating it is the last time
+  // anything has to be read for it.
+  expect(list).not.toHaveBeenCalled();
+  list.mockRestore();
+});
+
+test('a session this process did not create is read once, then remembered', async () => {
+  const { store, addThread, repository, db } = fixture();
+  addThread('t1');
+  const session = await repository.create({ cwd: '/tmp/work' });
+  const { id } = await session.getMetadata();
+  db.update(schema.threads).set({ sessionId: id }).where(eq(schema.threads.id, 't1')).run();
+
+  const list = spyOn(repository, 'list');
+  expect(await store.forThread('t1')).toBeDefined();
+  expect(list).toHaveBeenCalledTimes(1);
+  expect(await store.forThread('t1')).toBeDefined();
+  expect(list).toHaveBeenCalledTimes(1);
+  list.mockRestore();
 });
