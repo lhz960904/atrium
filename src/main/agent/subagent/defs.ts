@@ -165,9 +165,6 @@ export type SubagentInput = {
   modelId: string | null;
 };
 
-/** A name a built-in already answers to, or another custom subagent has. */
-export class SubagentNameTaken extends Refusal {}
-
 export function listSubagents(db: Db): SubagentView[] {
   const builtins: SubagentView[] = Object.values(BUILTIN_SUBAGENTS).map((agent) => ({
     id: agent.name,
@@ -231,7 +228,7 @@ export function removeSubagent(db: Db, id: string): void {
  */
 function assertNameFree(db: Db, name: string, excludeId?: string): void {
   if (BUILTIN_SUBAGENTS[name]) {
-    throw new SubagentNameTaken(`'${name}' is a built-in subagent name.`);
+    throw new Refusal(`'${name}' is a built-in subagent name.`);
   }
   const existing = db
     .select({ id: subagents.id })
@@ -239,6 +236,6 @@ function assertNameFree(db: Db, name: string, excludeId?: string): void {
     .where(eq(subagents.name, name))
     .get();
   if (existing && existing.id !== excludeId) {
-    throw new SubagentNameTaken(`A subagent named '${name}' already exists.`);
+    throw new Refusal(`A subagent named '${name}' already exists.`);
   }
 }

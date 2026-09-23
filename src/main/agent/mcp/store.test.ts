@@ -2,16 +2,14 @@ import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
 import type { Db } from '@main/db';
 import * as schema from '@main/db/schema';
+import { Refusal } from '@main/utils/refusal';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 
 import {
   applyServersJson,
   createServer,
   exportServersJson,
-  InvalidMcpConfig,
   listServers,
-  ManagedMcpServer,
-  McpNameTaken,
   type McpServerInput,
   removeServer,
   setServerEnabled,
@@ -51,18 +49,20 @@ test('a name another server already has is a collision, and the row is not writt
   const { db } = store();
   createServer(db, server({ name: 'files' }));
 
-  expect(() => createServer(db, server({ name: 'files', enabled: false }))).toThrow(McpNameTaken);
+  expect(() => createServer(db, server({ name: 'files', enabled: false }))).toThrow(
+    /already exists/,
+  );
   expect(listServers(db)).toHaveLength(1);
   // Renaming onto another server's name collides; keeping your own does not.
   const second = createServer(db, server({ name: 'other' }));
-  expect(() => updateServer(db, second, server({ name: 'files' }))).toThrow(McpNameTaken);
+  expect(() => updateServer(db, second, server({ name: 'files' }))).toThrow(/already exists/);
   expect(() => updateServer(db, second, server({ name: 'other', enabled: false }))).not.toThrow();
 });
 
 test('a config the transport cannot accept is refused before anything is stored', () => {
   const { db } = store();
   // stdio needs a command; without one there is nothing to launch.
-  expect(() => createServer(db, server({ config: {} }))).toThrow(InvalidMcpConfig);
+  expect(() => createServer(db, server({ config: {} }))).toThrow(/Invalid MCP server config/);
   expect(listServers(db)).toEqual([]);
 });
 
@@ -80,9 +80,9 @@ test('a managed server refuses every edit, and is still listed', () => {
   const id = createServer(db, server({ name: 'browser' }));
   raw.query('UPDATE mcp_servers SET managed = 1 WHERE id = ?').run(id);
 
-  expect(() => updateServer(db, id, server({ name: 'browser' }))).toThrow(ManagedMcpServer);
-  expect(() => setServerEnabled(db, id, false)).toThrow(ManagedMcpServer);
-  expect(() => removeServer(db, id)).toThrow(ManagedMcpServer);
+  expect(() => updateServer(db, id, server({ name: 'browser' }))).toThrow(/managed/);
+  expect(() => setServerEnabled(db, id, false)).toThrow(/managed/);
+  expect(() => removeServer(db, id)).toThrow(/managed/);
   // Read-only, not hidden: the settings list still shows it.
   expect(listServers(db)).toMatchObject([{ id, managed: true }]);
 });
@@ -138,6 +138,6 @@ test('applying JSON neither edits nor deletes a managed server', () => {
 test('JSON that does not parse is refused without touching a row', () => {
   const { db } = store();
   createServer(db, server({ name: 'files' }));
-  expect(() => applyServersJson(db, '{ not json')).toThrow(InvalidMcpConfig);
+  expect(() => applyServersJson(db, '{ not json')).toThrow(Refusal);
   expect(listServers(db)).toHaveLength(1);
 });

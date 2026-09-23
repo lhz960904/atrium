@@ -10,7 +10,12 @@ import type {
   RunStopReason,
 } from '@shared/interactions';
 
-/** The interaction a decision names is not open: another run, already settled, or never asked. */
+/**
+ * The interaction a decision names is not open: another run's, already settled,
+ * or never asked. Named apart from a plain Refusal because the approval path's
+ * tests turn on which of the two it is, and answering the wrong one there is a
+ * real bug rather than a wording change.
+ */
 export class InteractionConflict extends Refusal {}
 
 /** The decision does not fit the interaction it names. */

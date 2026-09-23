@@ -18,12 +18,6 @@ import { piModels, refreshProviders } from './registry';
  * where only a request could reach them.
  */
 
-/** An id already claimed — by a provider Atrium ships, or by one already added. */
-export class ProviderIdTaken extends Refusal {}
-
-/** Asked of a built-in provider something only a user-defined one has. */
-export class NotADefinedProvider extends Refusal {}
-
 /** A provider as the settings panel shows it: manifest ⋈ row ⋈ credential. */
 export type ProviderView = ProviderManifest & {
   enabled: boolean;
@@ -116,7 +110,7 @@ export function addableProviders(
  * forgets to leave.
  */
 export function addProvider(db: Db, id: string): void {
-  if (!getProviderManifest(id)) throw new ProviderIdTaken(`"${id}" is not a known provider.`);
+  if (!getProviderManifest(id)) throw new Refusal(`"${id}" is not a known provider.`);
   enable(db, id, true);
 }
 
@@ -137,10 +131,10 @@ export function setProviderEnabled(db: Db, id: string, enabled: boolean): void {
  */
 export function createCustomProvider(db: Db, id: string, provider: CustomProvider): void {
   if (getProviderManifest(id)) {
-    throw new ProviderIdTaken(`"${id}" is already the id of a built-in provider.`);
+    throw new Refusal(`"${id}" is already the id of a built-in provider.`);
   }
   const taken = db.select({ id: providers.id }).from(providers).where(eq(providers.id, id)).get();
-  if (taken) throw new ProviderIdTaken(`"${id}" is already in use.`);
+  if (taken) throw new Refusal(`"${id}" is already in use.`);
   db.insert(providers)
     .values({ id, enabled: true, config: { customProvider: provider } })
     .run();
@@ -149,7 +143,7 @@ export function createCustomProvider(db: Db, id: string, provider: CustomProvide
 
 export function updateCustomProvider(db: Db, id: string, provider: CustomProvider): void {
   const config = storedConfig(db, id);
-  if (!config.customProvider) throw new NotADefinedProvider('Not a provider you defined.');
+  if (!config.customProvider) throw new Refusal('Not a provider you defined.');
   writeConfig(db, id, { ...config, customProvider: provider });
   refreshProviders(db);
 }
@@ -237,7 +231,7 @@ function writeConfig(db: Db, id: string, config: Record<string, unknown>): void 
 function definedModels(db: Db, id: string): { config: Record<string, unknown>; models: unknown[] } {
   const config = storedConfig(db, id);
   if (!customProviderSchema.safeParse(config.customProvider).success) {
-    throw new NotADefinedProvider('Only a provider you defined has models to change.');
+    throw new Refusal('Only a provider you defined has models to change.');
   }
   return { config, models: Array.isArray(config.customModels) ? config.customModels : [] };
 }

@@ -3,6 +3,7 @@ import { expect, test } from 'bun:test';
 import type { Credential, CredentialStore } from '@earendil-works/pi-ai';
 import type { Db } from '@main/db';
 import * as schema from '@main/db/schema';
+import { Refusal } from '@main/utils/refusal';
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 
@@ -12,8 +13,6 @@ import {
   createCustomProvider,
   listProviders,
   mergeProviderConfig,
-  NotADefinedProvider,
-  ProviderIdTaken,
   readApiKey,
   removeCustomModel,
   saveApiKey,
@@ -78,17 +77,19 @@ test('adding is the whole step: the provider is on, and off the add picker', asy
 
 test('an id Atrium does not ship is not addable', () => {
   const { db } = store();
-  expect(() => addProvider(db, 'not-a-provider')).toThrow(ProviderIdTaken);
+  expect(() => addProvider(db, 'not-a-provider')).toThrow(/not a known provider/);
   expect(db.select().from(schema.providers).all()).toEqual([]);
 });
 
 test('a defined provider cannot claim an id that is already taken', () => {
   const { db } = store();
   // Shadowing a built-in would make two different products answer to one id.
-  expect(() => createCustomProvider(db, 'anthropic', defined)).toThrow(ProviderIdTaken);
+  expect(() => createCustomProvider(db, 'anthropic', defined)).toThrow(
+    /already the id of a built-in/,
+  );
 
   createCustomProvider(db, 'gateway', defined);
-  expect(() => createCustomProvider(db, 'gateway', defined)).toThrow(ProviderIdTaken);
+  expect(() => createCustomProvider(db, 'gateway', defined)).toThrow(/already in use/);
   expect(db.select().from(schema.providers).all()).toHaveLength(1);
 });
 
@@ -110,10 +111,10 @@ test('only a provider you defined can be edited or given models', () => {
   const { db } = store();
   addProvider(db, 'anthropic');
 
-  expect(() => updateCustomProvider(db, 'anthropic', defined)).toThrow(NotADefinedProvider);
+  expect(() => updateCustomProvider(db, 'anthropic', defined)).toThrow(Refusal);
   // A built-in's catalog is the engine's alone.
-  expect(() => upsertCustomModel(db, 'anthropic', model('m1'))).toThrow(NotADefinedProvider);
-  expect(() => removeCustomModel(db, 'anthropic', 'm1')).toThrow(NotADefinedProvider);
+  expect(() => upsertCustomModel(db, 'anthropic', model('m1'))).toThrow(Refusal);
+  expect(() => removeCustomModel(db, 'anthropic', 'm1')).toThrow(Refusal);
 });
 
 test('renaming a model replaces it instead of leaving the old id behind', () => {

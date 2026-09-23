@@ -14,7 +14,6 @@ import {
   resolveSubagentDef,
   SUBAGENT_DENIED_TOOLS,
   type SubagentInput,
-  SubagentNameTaken,
   updateSubagent,
 } from './defs';
 
@@ -150,9 +149,9 @@ test('a custom subagent cannot take a built-in name, or another custom one', () 
   const db = subagentStore();
   const builtin = Object.keys(BUILTIN_SUBAGENTS)[0];
 
-  expect(() => createSubagent(db, definition(builtin))).toThrow(SubagentNameTaken);
+  expect(() => createSubagent(db, definition(builtin))).toThrow(/built-in subagent name/);
   const id = createSubagent(db, definition('reviewer'));
-  expect(() => createSubagent(db, definition('reviewer'))).toThrow(SubagentNameTaken);
+  expect(() => createSubagent(db, definition('reviewer'))).toThrow(/already exists/);
   // Keeping your own name while editing something else is not a collision.
   expect(() =>
     updateSubagent(db, id, { ...definition('reviewer'), description: 'x' }),
