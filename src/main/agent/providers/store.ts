@@ -19,18 +19,10 @@ import { piModels, refreshProviders } from './registry';
  */
 
 /** An id already claimed — by a provider Atrium ships, or by one already added. */
-export class ProviderIdTaken extends Refusal {
-  constructor(message: string) {
-    super('unacceptable', message);
-  }
-}
+export class ProviderIdTaken extends Refusal {}
 
 /** Asked of a built-in provider something only a user-defined one has. */
-export class NotADefinedProvider extends Refusal {
-  constructor(message: string) {
-    super('unacceptable', message);
-  }
-}
+export class NotADefinedProvider extends Refusal {}
 
 /** A provider as the settings panel shows it: manifest ⋈ row ⋈ credential. */
 export type ProviderView = ProviderManifest & {

@@ -11,18 +11,10 @@ import type {
 } from '@shared/interactions';
 
 /** The interaction a decision names is not open: another run, already settled, or never asked. */
-export class InteractionConflict extends Refusal {
-  constructor(message: string) {
-    super('collision', message);
-  }
-}
+export class InteractionConflict extends Refusal {}
 
 /** The decision does not fit the interaction it names. */
-export class InvalidInteractionDecision extends Refusal {
-  constructor(message: string) {
-    super('unacceptable', message);
-  }
-}
+export class InvalidInteractionDecision extends Refusal {}
 
 export type OpenInteraction = {
   request: InteractionRequest;

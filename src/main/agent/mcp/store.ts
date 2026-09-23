@@ -30,25 +30,13 @@ const log = createLogger('mcp');
  */
 
 /** A name the user already gave to another server. */
-export class McpNameTaken extends Refusal {
-  constructor(message: string) {
-    super('collision', message);
-  }
-}
+export class McpNameTaken extends Refusal {}
 
 /** A config the transport cannot accept. */
-export class InvalidMcpConfig extends Refusal {
-  constructor(message: string) {
-    super('unacceptable', message);
-  }
-}
+export class InvalidMcpConfig extends Refusal {}
 
 /** A server a feature provisioned; the user may read it but not change it. */
-export class ManagedMcpServer extends Refusal {
-  constructor(message: string) {
-    super('unacceptable', message);
-  }
-}
+export class ManagedMcpServer extends Refusal {}
 
 /** What the settings list shows — never the encrypted blob, only whether one exists. */
 export type McpServerView = {

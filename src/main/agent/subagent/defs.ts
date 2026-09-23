@@ -166,11 +166,7 @@ export type SubagentInput = {
 };
 
 /** A name a built-in already answers to, or another custom subagent has. */
-export class SubagentNameTaken extends Refusal {
-  constructor(message: string) {
-    super('collision', message);
-  }
-}
+export class SubagentNameTaken extends Refusal {}
 
 export function listSubagents(db: Db): SubagentView[] {
   const builtins: SubagentView[] = Object.values(BUILTIN_SUBAGENTS).map((agent) => ({

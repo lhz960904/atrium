@@ -73,22 +73,31 @@ test('a retried decision reports that it was already accepted', async () => {
   expect(await chat.decide(valid)).toEqual({ status: 'already_accepted' });
 });
 
-test('a decision for an interaction that is no longer open conflicts', async () => {
+test.each([
+  ['no longer open', new InteractionConflict('The interaction is no longer active.')],
+  ['not what it asked for', new InvalidInteractionDecision('A approval cannot be answered.')],
+])('a decision the run refuses because it is %s says so, in its own words', async (_, refusal) => {
   const chat = caller({
     respond: () => {
-      throw new InteractionConflict('The interaction is no longer active.');
+      throw refusal;
     },
   });
-  await expect(chat.decide(valid)).rejects.toMatchObject({ code: 'CONFLICT' });
+  // A refusal is the domain's answer, so it reaches the caller as a bad request
+  // carrying the message the store wrote — not as an internal error.
+  await expect(chat.decide(valid)).rejects.toMatchObject({
+    code: 'BAD_REQUEST',
+    message: refusal.message,
+  });
 });
 
-test('a decision that does not fit its interaction is a bad request', async () => {
+test('a fault is not dressed up as a refusal', async () => {
   const chat = caller({
     respond: () => {
-      throw new InvalidInteractionDecision('A approval cannot be answered.');
+      throw new TypeError('cannot read properties of undefined');
     },
   });
-  await expect(chat.decide(valid)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  // The caller is told something went wrong, not that their input was bad.
+  await expect(chat.decide(valid)).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
 });
 
 test('a send that is not a user message never reaches the runner', async () => {

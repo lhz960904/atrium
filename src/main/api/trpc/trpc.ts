@@ -1,5 +1,6 @@
 import type { Runner } from '@main/agent/runtime/runner';
-import { Refusal } from '@main/utils/refusal';
+import { createLogger } from '@main/utils/log';
+import { messageOf, Refusal } from '@main/utils/refusal';
 import { initTRPC, TRPCError } from '@trpc/server';
 
 /**
@@ -16,26 +17,33 @@ import { initTRPC, TRPCError } from '@trpc/server';
  */
 export type Context = { runner: Runner };
 
+const log = createLogger('api');
+
 const t = initTRPC.context<Context>().create({ isServer: true });
 
 /**
- * A store's refusal, in the code a client understands.
+ * What a failed procedure tells the caller, and what it tells us.
  *
- * Stores throw refusals in their own words and know nothing about status codes;
- * this is the one place the two vocabularies meet, so no procedure needs a
- * try/catch to say the same thing again. Anything that is not a refusal is a
- * fault and travels untouched — a bug must never reach a client dressed as a
- * polite 400.
+ * A refusal is the domain's answer, so it travels as a bad request carrying its
+ * own message — one code, because nothing on the other side does anything
+ * different with a second one.
+ *
+ * Anything else is a fault nobody meant. It keeps the internal error it already
+ * had, and is logged here with the original throw: until this existed, a bug in
+ * a procedure left no trace at all on this side of the boundary.
  */
-const refusals = t.middleware(async ({ next }) => {
+const failures = t.middleware(async ({ next, path }) => {
   const result = await next();
-  const cause = result.ok ? undefined : result.error.cause;
-  if (!(cause instanceof Refusal)) return result;
-  throw new TRPCError({
-    code: cause.kind === 'collision' ? 'CONFLICT' : 'BAD_REQUEST',
-    message: cause.message,
-  });
+  if (result.ok) return result;
+  const cause = result.error.cause;
+  if (cause instanceof Refusal) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: messageOf(cause) });
+  }
+  if (result.error.code === 'INTERNAL_SERVER_ERROR') {
+    log.error(`${path}: ${messageOf(cause ?? result.error)}`, cause ?? result.error);
+  }
+  return result;
 });
 
 export const router = t.router;
-export const publicProcedure = t.procedure.use(refusals);
+export const publicProcedure = t.procedure.use(failures);
