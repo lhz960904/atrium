@@ -1,4 +1,3 @@
-import { app } from 'electron';
 import { browserRouter } from './routers/browser';
 import { chatRouter } from './routers/chat';
 import { computerRouter } from './routers/computer';
@@ -18,23 +17,15 @@ import { systemRouter } from './routers/system';
 import { threadsRouter } from './routers/threads';
 import { updateRouter } from './routers/update';
 import { usageRouter } from './routers/usage';
-import { publicProcedure, router } from './trpc';
+import { router } from './trpc';
 
 /**
- * Root tRPC router.
+ * Root tRPC router: the sub-routers under `./routers/*`, and nothing else.
  *
- * Sub-routers live under `./routers/*` and are spread in here. Keeping
- * the leaf procedures (`ping`) and the assembly in one file is fine while
- * the surface is small; if it grows, split each section into its own file.
+ * Nothing lives here directly. A procedure belongs to the area it is about, and
+ * this file only says which areas there are.
  */
 export const appRouter = router({
-  ping: publicProcedure.query(() => ({
-    pong: true,
-    at: Date.now(),
-    version: app.getVersion(),
-    electron: process.versions.electron,
-    node: process.versions.node,
-  })),
   chat: chatRouter,
   threads: threadsRouter,
   messages: messagesRouter,
