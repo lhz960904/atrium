@@ -6,6 +6,7 @@ import { AddProviderDialog } from './AddProviderDialog';
 import { CustomProviderDialog } from './CustomProviderDialog';
 import { ProviderDetail } from './ProviderDetail';
 import { ProvidersList } from './ProvidersList';
+import { selectedProvider } from './types';
 
 export function ProvidersSection(): React.JSX.Element {
   const { t } = useTranslation();
@@ -22,7 +23,7 @@ export function ProvidersSection(): React.JSX.Element {
     );
   }
 
-  const selected = providers.find((p) => p.id === selectedId) ?? providers[0] ?? null;
+  const selected = selectedProvider(providers, selectedId);
 
   return (
     <div className="grid h-full grid-cols-[260px_1fr] gap-0 overflow-hidden rounded-xl border border-border-default bg-canvas">
@@ -50,7 +51,13 @@ export function ProvidersSection(): React.JSX.Element {
         </button>
       </aside>
       <section className="min-h-0">
-        <ProviderDetail provider={selected} />
+        {selected ? (
+          <ProviderDetail provider={selected} />
+        ) : (
+          <div className="flex h-full items-center justify-center px-8 text-center text-fg-tertiary text-sm">
+            {t('settings.providers.noneAdded')}
+          </div>
+        )}
       </section>
 
       {adding === 'pick' && (
