@@ -184,6 +184,25 @@ export function removeCustomModel(db: Db, id: string, modelId: string): void {
   refreshProviders(db);
 }
 
+/**
+ * The saved API key in plaintext, so a password field's reveal can show it.
+ * Null when there is none — including when the provider holds an OAuth token,
+ * which is not a key and must never be handed out as one.
+ */
+export async function readApiKey(credentials: CredentialStore, id: string): Promise<string | null> {
+  const credential = await credentials.read(id);
+  return credential?.type === 'api_key' ? (credential.key ?? null) : null;
+}
+
+/** Save an API key in the store requests resolve it from. */
+export async function saveApiKey(
+  credentials: CredentialStore,
+  id: string,
+  plaintext: string,
+): Promise<void> {
+  await credentials.modify(id, async () => ({ type: 'api_key', key: plaintext }));
+}
+
 /** Make sure the row exists before a login writes tokens against it. */
 export function ensureProviderRow(db: Db, id: string): void {
   enable(db, id, true);

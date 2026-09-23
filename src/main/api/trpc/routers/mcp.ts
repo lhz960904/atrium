@@ -21,6 +21,7 @@ import {
   setServerEnabled,
   updateServer,
 } from '@main/agent/mcp/store';
+import { getDb } from '@main/db';
 import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { z } from 'zod';
 import { badRequest, conflict } from '../errors';
@@ -58,10 +59,10 @@ function attempt<T>(run: () => T): T {
 }
 
 export const mcpRouter = router({
-  list: publicProcedure.query(({ ctx }) => listServers(ctx.db)),
+  list: publicProcedure.query(() => listServers(getDb())),
 
   /** Enabled servers that need the user's attention — for the startup prompt + badge. */
-  attention: publicProcedure.query(({ ctx }) => serversNeedingAttention(ctx.db)),
+  attention: publicProcedure.query(() => serversNeedingAttention(getDb())),
 
   authenticate: publicProcedure
     .input(byId)
@@ -69,25 +70,25 @@ export const mcpRouter = router({
 
   create: publicProcedure
     .input(fields)
-    .mutation(({ ctx, input }) => attempt(() => ({ id: createServer(ctx.db, input) }))),
+    .mutation(({ input }) => attempt(() => ({ id: createServer(getDb(), input) }))),
 
-  update: publicProcedure.input(fields.extend({ id: z.string() })).mutation(({ ctx, input }) => {
+  update: publicProcedure.input(fields.extend({ id: z.string() })).mutation(({ input }) => {
     const { id, ...rest } = input;
-    attempt(() => updateServer(ctx.db, id, rest));
+    attempt(() => updateServer(getDb(), id, rest));
   }),
 
   setEnabled: publicProcedure
     .input(byId.extend({ enabled: z.boolean() }))
-    .mutation(({ ctx, input }) => attempt(() => setServerEnabled(ctx.db, input.id, input.enabled))),
+    .mutation(({ input }) => attempt(() => setServerEnabled(getDb(), input.id, input.enabled))),
 
   delete: publicProcedure
     .input(byId)
-    .mutation(({ ctx, input }) => attempt(() => removeServer(ctx.db, input.id))),
+    .mutation(({ input }) => attempt(() => removeServer(getDb(), input.id))),
 
   /** Decrypt the secrets so the settings form can prefill them on edit; {} when none. */
   getCredentials: publicProcedure
     .input(byId)
-    .query(({ ctx, input }) => serverCredentials(ctx.db, input.id)),
+    .query(({ input }) => serverCredentials(getDb(), input.id)),
 
   /** Which other AI clients have an importable config on this machine, and how many servers. */
   importSources: publicProcedure.query(() => listImportSources()),
@@ -122,7 +123,7 @@ export const mcpRouter = router({
     }
   }),
 
-  exportJson: publicProcedure.query(({ ctx }) => ({ json: exportServersJson(ctx.db) })),
+  exportJson: publicProcedure.query(() => ({ json: exportServersJson(getDb()) })),
 
   /** Validate edited JSON and surface any fields dropped on parse; no DB access. */
   previewJson: publicProcedure.input(jsonInput).query(({ input }) => {
@@ -139,5 +140,5 @@ export const mcpRouter = router({
 
   applyJson: publicProcedure
     .input(jsonInput)
-    .mutation(({ ctx, input }) => attempt(() => applyServersJson(ctx.db, input.json))),
+    .mutation(({ input }) => attempt(() => applyServersJson(getDb(), input.json))),
 });

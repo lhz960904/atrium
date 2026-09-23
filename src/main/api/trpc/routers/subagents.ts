@@ -6,6 +6,7 @@ import {
   SubagentNameTaken,
   updateSubagent,
 } from '@main/agent/subagent/defs';
+import { getDb } from '@main/db';
 import { z } from 'zod';
 import { conflict } from '../errors';
 import { publicProcedure, router } from '../trpc';
@@ -30,20 +31,20 @@ function attempt<T>(run: () => T): T {
 }
 
 export const subagentsRouter = router({
-  list: publicProcedure.query(({ ctx }) => listSubagents(ctx.db)),
+  list: publicProcedure.query(() => listSubagents(getDb())),
 
   assignableTools: publicProcedure.query(() => assignableTools()),
 
   create: publicProcedure
     .input(fields)
-    .mutation(({ ctx, input }) => attempt(() => ({ id: createSubagent(ctx.db, input) }))),
+    .mutation(({ input }) => attempt(() => ({ id: createSubagent(getDb(), input) }))),
 
-  update: publicProcedure.input(fields.extend({ id: z.string() })).mutation(({ ctx, input }) => {
+  update: publicProcedure.input(fields.extend({ id: z.string() })).mutation(({ input }) => {
     const { id, ...rest } = input;
-    attempt(() => updateSubagent(ctx.db, id, rest));
+    attempt(() => updateSubagent(getDb(), id, rest));
   }),
 
   delete: publicProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) => removeSubagent(ctx.db, input.id)),
+    .mutation(({ input }) => removeSubagent(getDb(), input.id)),
 });

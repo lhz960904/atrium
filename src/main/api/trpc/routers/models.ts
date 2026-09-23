@@ -1,4 +1,5 @@
 import { resolvePiModel } from '@main/agent/providers/models';
+import { getDb } from '@main/db';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
 
@@ -19,11 +20,11 @@ export const modelsRouter = router({
         models: z.array(z.object({ providerId: z.string(), modelId: z.string() })).max(100),
       }),
     )
-    .query(({ ctx, input }) => {
+    .query(({ input }) => {
       const out: Record<string, { maxContextTokens: number }> = {};
       for (const { providerId, modelId } of input.models) {
         try {
-          const model = resolvePiModel(ctx.db, providerId, modelId);
+          const model = resolvePiModel(getDb(), providerId, modelId);
           out[`${providerId}/${modelId}`] = { maxContextTokens: model.contextWindow };
         } catch {
           // An unknown provider or a model that can't be resolved has no window

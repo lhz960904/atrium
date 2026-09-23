@@ -1,10 +1,10 @@
 import { expect, mock, test } from 'bun:test';
+import { openRunner } from '@main/agent/runtime/current-runner';
 import {
   InteractionConflict,
   InvalidInteractionDecision,
 } from '@main/agent/runtime/pending-interactions';
 import type { Runner } from '@main/agent/runtime/runner';
-import type { Context } from '../../trpc';
 import { chatRouter } from '../chat';
 
 /**
@@ -13,15 +13,14 @@ import { chatRouter } from '../chat';
  * and that watching a log is separable from the run writing it.
  */
 
-function caller(runner: Partial<Runner>) {
+function caller(fake: Partial<Runner>) {
   const start = mock(() => {
     throw new Error('a decision never starts a run');
   });
-  return chatRouter.createCaller({
-    runner: { start, ...runner } as unknown as Runner,
-    db: {} as never,
-    credentials: {} as never,
-  } as Context);
+  // The runner is a process singleton now, so a fake is installed rather than
+  // handed in — the same way every other store is given a test double.
+  openRunner({ start, ...fake } as unknown as Runner);
+  return chatRouter.createCaller({});
 }
 
 const valid = {

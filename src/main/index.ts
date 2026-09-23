@@ -12,6 +12,7 @@ import { runDream, startDreamScheduler } from './agent/memory';
 import { createCredentialStore } from './agent/providers/credential-store';
 import { firstEnabledModel, resolvePiModel } from './agent/providers/models';
 import { piStreamFn, refreshProviders, useCredentialStore } from './agent/providers/registry';
+import { closeRunner, openRunner, runner } from './agent/runtime/current-runner';
 import { Runner } from './agent/runtime/runner';
 import { refreshSkills } from './agent/skills/registry';
 import { appRouter } from './api/trpc/router';
@@ -137,8 +138,6 @@ function createWindow(): BrowserWindow {
 }
 
 // Held at module scope so before-quit can dispose it (kill background shells) —
-// assigned once the runner exists inside whenReady.
-let runner: Runner | undefined;
 
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.atrium.app');
@@ -165,8 +164,7 @@ app.whenReady().then(async () => {
 
   // One composition root for every turn — the chat endpoint and the scheduler
   // are both callers of it.
-  const runs = new Runner({ db, defaultProjectRoot });
-  runner = runs;
+  openRunner(new Runner({ db, defaultProjectRoot }));
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window);
@@ -179,7 +177,7 @@ app.whenReady().then(async () => {
   createIPCHandler({
     router: appRouter,
     windows: [win],
-    createContext: async () => ({ db, credentials, runner: runs }),
+    createContext: async () => ({}),
   });
   registerComputerUseDrag();
   registerDragOverlay(() => mainWindow ?? undefined);
@@ -250,7 +248,7 @@ app.whenReady().then(async () => {
     createIPCHandler({
       router: appRouter,
       windows: [next],
-      createContext: async () => ({ db, credentials, runner: runs }),
+      createContext: async () => ({}),
     });
   };
 
@@ -261,8 +259,8 @@ app.whenReady().then(async () => {
   const startScheduler = (): void => {
     startScheduledTasks({
       db,
-      runner: runs,
-      runningThreadIds: runs.runningThreadIds,
+      runner: runner(),
+      runningThreadIds: () => runner().runningThreadIds(),
       defaultModel: () => {
         // The renderer only persists general.defaultModel on an explicit pick, so
         // it can be null even when the user has a working model — fall back to the
@@ -320,7 +318,7 @@ async function shutdown(): Promise<void> {
     }
   };
   await attempt('scheduled', () => scheduledManager.dispose());
-  await attempt('runner', () => drainWithin(runner?.dispose() ?? Promise.resolve(), 3000));
+  await attempt('runner', () => drainWithin(closeRunner(), 3000));
   await attempt('mcp', () => mcpManager.dispose());
   await attempt('updater', () => updaterManager.dispose());
   await attempt('computer-use', () => disposeComputerUseHelper());
@@ -331,7 +329,7 @@ async function shutdown(): Promise<void> {
 /** The old best-effort teardown, for the one path that must not be held up. */
 function disposeImmediately(): void {
   void closeSessionRepository().catch(() => {});
-  void runner?.dispose();
+  void closeRunner();
   scheduledManager.dispose();
   void mcpManager.dispose();
   updaterManager.dispose();

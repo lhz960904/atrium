@@ -55,6 +55,12 @@ export function useCredentialStore(store: CredentialStore): void {
   credentials = store;
 }
 
+/** The store the engine resolves through, for callers that write to it too. */
+export function credentialStore(): CredentialStore {
+  if (!credentials) throw new Error('credential store not initialized');
+  return credentials;
+}
+
 /**
  * pi loads each OAuth flow through a variable specifier so bundlers can't follow
  * it — which is exactly what breaks here: main is bundled to one file, and the

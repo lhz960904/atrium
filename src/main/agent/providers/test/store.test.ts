@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
+import type { Credential, CredentialStore } from '@earendil-works/pi-ai';
 import type { Db } from '@main/db';
 import * as schema from '@main/db/schema';
 import type { CustomModel, CustomProvider } from '@shared/custom-model';
@@ -13,7 +14,9 @@ import {
   mergeProviderConfig,
   NotADefinedProvider,
   ProviderIdTaken,
+  readApiKey,
   removeCustomModel,
+  saveApiKey,
   setProviderEnabled,
   updateCustomProvider,
   upsertCustomModel,
@@ -153,4 +156,55 @@ test('a view says whether a credential exists, never what it is', async () => {
   expect(view).toMatchObject({ id: 'anthropic', enabled: false, hasCredentials: true });
   // The panel is told one bit: that a key is there. Reading it is its own call.
   expect(JSON.stringify(view)).not.toContain('sk-secret-value');
+});
+
+/** A credential store the test writes into, standing in for the engine's. */
+function credentialsWith(saved = new Map<string, Credential>()): CredentialStore {
+  return {
+    list: async () => [...saved.keys()].map((providerId) => ({ providerId })),
+    read: async (id: string) => saved.get(id),
+    modify: async (id: string, next: (current?: Credential) => Promise<Credential>) => {
+      saved.set(id, await next(saved.get(id)));
+    },
+    delete: async (id: string) => {
+      saved.delete(id);
+    },
+  } as unknown as CredentialStore;
+}
+
+test('an api key is saved as a typed credential, revealed, and cleared', async () => {
+  const saved = new Map<string, Credential>();
+  const credentials = credentialsWith(saved);
+
+  await saveApiKey(credentials, 'deepseek', 'sk-test');
+  expect(saved.get('deepseek')).toEqual({ type: 'api_key', key: 'sk-test' });
+  expect(await readApiKey(credentials, 'deepseek')).toBe('sk-test');
+
+  await credentials.delete('deepseek');
+  expect(await readApiKey(credentials, 'deepseek')).toBeNull();
+});
+
+test('an oauth token is never revealed as a key', async () => {
+  const credentials = credentialsWith(
+    new Map<string, Credential>([
+      ['openai-codex', { type: 'oauth', access: 'a', refresh: 'r', expires: 1 }],
+    ]),
+  );
+  // A token is not a key, and the reveal must never hand one out as though it were.
+  expect(await readApiKey(credentials, 'openai-codex')).toBeNull();
+});
+
+test('the list reports credentials the store can read, per provider', async () => {
+  const { db } = store();
+  addProvider(db, 'anthropic');
+  addProvider(db, 'openai');
+  const credentials = credentialsWith(
+    new Map<string, Credential>([['anthropic', { type: 'api_key', key: 'sk-test' }]]),
+  );
+
+  const listed = await listProviders(db, credentials);
+  expect(Object.fromEntries(listed.map((p) => [p.id, p.hasCredentials]))).toMatchObject({
+    anthropic: true,
+    openai: false,
+  });
 });
