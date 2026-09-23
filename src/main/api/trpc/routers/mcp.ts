@@ -21,7 +21,6 @@ import {
 import { getDb } from '@main/db';
 import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { z } from 'zod';
-import { badRequest } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 const fields = z.object({
@@ -74,13 +73,7 @@ export const mcpRouter = router({
   /** Read one client's config, normalized to mcp.json text, to load into the editor. */
   readImport: publicProcedure
     .input(z.object({ source: z.enum(['cursor', 'claude-code', 'claude-desktop', 'codex']) }))
-    .query(({ input }) => {
-      try {
-        return { json: readImportSource(input.source as ImportSourceId) };
-      } catch (err) {
-        throw badRequest(err instanceof Error ? err.message : 'Import failed.');
-      }
-    }),
+    .query(({ input }) => ({ json: readImportSource(input.source as ImportSourceId) })),
 
   /** Native picker for any config file (covers project-level scopes); null if cancelled. */
   importFile: publicProcedure.mutation(async () => {
@@ -94,11 +87,7 @@ export const mcpRouter = router({
     const win = BrowserWindow.getFocusedWindow();
     const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     if (res.canceled || res.filePaths.length === 0) return { json: null };
-    try {
-      return { json: readImportFile(res.filePaths[0]) };
-    } catch (err) {
-      throw badRequest(err instanceof Error ? err.message : 'Could not read that file.');
-    }
+    return { json: readImportFile(res.filePaths[0]) };
   }),
 
   exportJson: publicProcedure.query(() => ({ json: exportServersJson(getDb()) })),
