@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.18.0](https://github.com/lhz960904/atrium/compare/v0.17.1...v0.18.0) (2026-09-23)
+
+
+### Features
+
+* **threads:** delete a thread by marking it, not by dropping it ([#121](https://github.com/lhz960904/atrium/issues/121)) ([6414a04](https://github.com/lhz960904/atrium/commit/6414a049ee81a0db915e2da19203d63a1ce5523b))
+
+
+### Bug Fixes
+
+* **conversation:** repair a run because it left a gap, not because it is open ([#125](https://github.com/lhz960904/atrium/issues/125)) ([96d7033](https://github.com/lhz960904/atrium/commit/96d7033b48f7824b03563d13897cc1de9f5e0b92))
+* **usage:** price calls from the provider and record every one of them ([#119](https://github.com/lhz960904/atrium/issues/119)) ([c3a473e](https://github.com/lhz960904/atrium/commit/c3a473ed3568ab8dd5a0d557a3fa5b7d0708153c))
+
 ## [0.17.1](https://github.com/lhz960904/atrium/compare/v0.17.0...v0.17.1) (2026-09-20)
 
 
