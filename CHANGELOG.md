@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.1](https://github.com/lhz960904/atrium/compare/v0.18.0...v0.18.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* **providers:** do not open the provider pane on a provider that is not there ([#127](https://github.com/lhz960904/atrium/issues/127)) ([13e74e8](https://github.com/lhz960904/atrium/commit/13e74e8a9285f782e6857eab6b18586b96faeede))
+
 ## [0.18.0](https://github.com/lhz960904/atrium/compare/v0.17.1...v0.18.0) (2026-09-23)
 
 
