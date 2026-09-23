@@ -1,18 +1,13 @@
 import { TRPCError } from '@trpc/server';
 
 /**
- * Small constructors for the tRPC error codes routers raise, so call sites read
- * `throw badRequest('…')` instead of repeating the `new TRPCError({ code, message })`
- * shape. Only the codes actually used across routers are exposed; add more as needed.
+ * The one code a router raises by hand, so a call site reads
+ * `throw badRequest('…')` instead of repeating the TRPCError shape.
+ *
+ * There used to be one of these per code. Only this one is left, because a
+ * store's refusal is translated in one middleware now rather than named at
+ * every throw — leaving this for the handful of checks a router does itself,
+ * where the input never reached a store to be refused by it.
  */
 export const badRequest = (message: string): TRPCError =>
   new TRPCError({ code: 'BAD_REQUEST', message });
-
-export const conflict = (message: string): TRPCError =>
-  new TRPCError({ code: 'CONFLICT', message });
-
-export const preconditionFailed = (message: string): TRPCError =>
-  new TRPCError({ code: 'PRECONDITION_FAILED', message });
-
-export const internalError = (message: string): TRPCError =>
-  new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message });

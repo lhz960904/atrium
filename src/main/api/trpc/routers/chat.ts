@@ -6,6 +6,7 @@ import type { EventEnvelope } from '@shared/protocol';
 import { TRPCError } from '@trpc/server';
 import { observable } from '@trpc/server/observable';
 import { z } from 'zod';
+import { badRequest } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 /**
@@ -77,7 +78,7 @@ export const chatRouter = router({
     .mutation(({ ctx, input }) => {
       const { message, ...run } = input;
       if (message?.role !== 'user') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'chat takes a user message' });
+        throw badRequest('chat takes a user message');
       }
       ctx.runner.start({ ...run, userMessage: message });
     }),

@@ -1,7 +1,8 @@
 import type { Runner } from '@main/agent/runtime/runner';
 import { createLogger } from '@main/utils/log';
 import { messageOf, Refusal } from '@main/utils/refusal';
-import { initTRPC, TRPCError } from '@trpc/server';
+import { initTRPC } from '@trpc/server';
+import { badRequest } from './errors';
 
 /**
  * tRPC context — a procedure's own dependencies.
@@ -37,7 +38,7 @@ const failures = t.middleware(async ({ next, path }) => {
   if (result.ok) return result;
   const cause = result.error.cause;
   if (cause instanceof Refusal) {
-    throw new TRPCError({ code: 'BAD_REQUEST', message: messageOf(cause) });
+    throw badRequest(messageOf(cause));
   }
   if (result.error.code === 'INTERNAL_SERVER_ERROR') {
     log.error(`${path}: ${messageOf(cause ?? result.error)}`, cause ?? result.error);
