@@ -20,7 +20,7 @@ import {
   INTERACTION_ENTRY,
   type InteractionEntryData,
 } from '../project';
-import { recoverInterruptedRun } from '../recovery';
+import { repairConversation } from '../recovery';
 import { threadStore } from './threads';
 
 /** A run's stop reason, kept so a later boot can still name it. */
@@ -359,7 +359,9 @@ export class ConversationStore {
    * Repairing when the session is opened rather than when the next run starts
    * is what lets a thread nobody has written to since the crash still read
    * correctly: a call with no result would otherwise sit in the transcript
-   * looking like it were still running.
+   * looking like it were still running. Every run is examined, not only the
+   * ones still open — see repairConversation for the gap that hides in a run
+   * whose bracket closed.
    */
   private async repaired(
     sessionId: string,
@@ -368,11 +370,7 @@ export class ConversationStore {
     const conversation = new Conversation(session);
     let repair = this.repairs.get(sessionId);
     if (!repair) {
-      repair = (async () => {
-        for (const open of await conversation.openRuns()) {
-          await recoverInterruptedRun(conversation, open.id, 'interrupted');
-        }
-      })();
+      repair = repairConversation(conversation);
       this.repairs.set(sessionId, repair);
     }
     await repair;
