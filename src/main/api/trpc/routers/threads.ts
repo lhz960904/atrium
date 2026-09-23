@@ -1,4 +1,3 @@
-import { runner } from '@main/agent/runtime/current-runner';
 import { conversationStore } from '@main/conversation/store/conversation';
 import { threadStore } from '@main/conversation/store/threads';
 import { z } from 'zod';
@@ -15,7 +14,7 @@ export const threadsRouter = router({
 
   /** Thread ids whose agent is currently generating — the source of truth lives
    *  in the main process, so the sidebar spinner stays correct across reloads. */
-  running: publicProcedure.query(() => runner().runningThreadIds()),
+  running: publicProcedure.query(({ ctx }) => ctx.runner.runningThreadIds()),
 
   /** One thread plus its conversation, or null when there is no such thread. */
   get: publicProcedure.input(byId).query(async ({ input }) => {

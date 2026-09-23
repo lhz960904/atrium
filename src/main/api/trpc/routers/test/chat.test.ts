@@ -1,5 +1,4 @@
 import { expect, mock, test } from 'bun:test';
-import { openRunner } from '@main/agent/runtime/current-runner';
 import {
   InteractionConflict,
   InvalidInteractionDecision,
@@ -17,10 +16,7 @@ function caller(fake: Partial<Runner>) {
   const start = mock(() => {
     throw new Error('a decision never starts a run');
   });
-  // The runner is a process singleton now, so a fake is installed rather than
-  // handed in — the same way every other store is given a test double.
-  openRunner({ start, ...fake } as unknown as Runner);
-  return chatRouter.createCaller({});
+  return chatRouter.createCaller({ runner: { start, ...fake } as unknown as Runner });
 }
 
 const valid = {

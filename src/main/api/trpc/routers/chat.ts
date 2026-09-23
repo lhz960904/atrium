@@ -1,4 +1,3 @@
-import { runner } from '@main/agent/runtime/current-runner';
 import {
   InteractionConflict,
   InvalidInteractionDecision,
@@ -79,18 +78,18 @@ export const chatRouter = router({
    */
   send: publicProcedure
     .input(runInput.extend({ message: z.custom<AtriumUIMessage>() }))
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
       const { message, ...run } = input;
       if (message?.role !== 'user') {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'chat takes a user message' });
       }
-      runner().start({ ...run, userMessage: message });
+      ctx.runner.start({ ...run, userMessage: message });
     }),
 
   /** Watch a run from `from`. Completes at once when the thread has no log. */
   events: publicProcedure
     .input(attachInput)
-    .subscription(({ input }) => attach(runner(), input.threadId, input.from)),
+    .subscription(({ ctx, input }) => attach(ctx.runner, input.threadId, input.from)),
 
   /**
    * Rejoin a run already in flight — what opening a thread does. A log whose
@@ -99,9 +98,9 @@ export const chatRouter = router({
    */
   rejoin: publicProcedure
     .input(attachInput)
-    .subscription(({ input }) =>
-      runner().isRunning(input.threadId)
-        ? attach(runner(), input.threadId, input.from)
+    .subscription(({ ctx, input }) =>
+      ctx.runner.isRunning(input.threadId)
+        ? attach(ctx.runner, input.threadId, input.from)
         : observable<EventEnvelope>((emit) => emit.complete()),
     ),
 
@@ -112,9 +111,9 @@ export const chatRouter = router({
    */
   decide: publicProcedure
     .input(z.object({ threadId: z.string().min(1), interaction: decideInteractionSchema }))
-    .mutation(({ input }) => {
+    .mutation(({ ctx, input }) => {
       try {
-        return { status: runner().respond(input.threadId, input.interaction) };
+        return { status: ctx.runner.respond(input.threadId, input.interaction) };
       } catch (error) {
         if (error instanceof InteractionConflict) {
           throw new TRPCError({ code: 'CONFLICT', message: error.message });
@@ -133,10 +132,10 @@ export const chatRouter = router({
    */
   abort: publicProcedure
     .input(z.object({ threadId: z.string().min(1) }))
-    .mutation(({ input }) => ({ aborted: runner().abort(input.threadId) })),
+    .mutation(({ ctx, input }) => ({ aborted: ctx.runner.abort(input.threadId) })),
 
   /** Fold a thread on demand (the user's /compact). Needs a model for the summary. */
   compact: publicProcedure
     .input(runInput.omit({ permissionMode: true }))
-    .mutation(async ({ input }) => ({ compacted: await runner().compact(input) })),
+    .mutation(async ({ ctx, input }) => ({ compacted: await ctx.runner.compact(input) })),
 });
