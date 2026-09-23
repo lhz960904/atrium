@@ -31,8 +31,6 @@ const RECENT_LIMIT = 8;
 const RESULT_LIMIT = 30;
 /** Raw FTS rows to score before aggregating to threads (one thread can own many). */
 const SCAN_LIMIT = 200;
-/** bm25 is lower-is-better; nudge title hits ahead of body hits of the same thread. */
-const TITLE_BOOST = 2;
 
 export type SearchScope = 'active' | 'archived';
 
@@ -186,19 +184,25 @@ export function searchChats(
         LIMIT ${SCAN_LIMIT}`,
   ) as FtsRow[];
 
-  // Collapse to one hit per thread, keeping its best-scoring row.
-  const best = new Map<string, { row: FtsRow; effScore: number }>();
+  // Collapse to one hit per thread, then order the threads. A title match wins
+  // over a body match either way: the title is what the conversation is called,
+  // so matching it says more than matching a line inside it. bm25 only decides
+  // between two matches of the same kind.
+  //
+  // This was a constant subtracted from the score, which read like a weight but
+  // could never behave as one: bm25 here lands around 1e-6, so any offset big
+  // enough to matter made the rule absolute anyway.
+  const best = new Map<string, FtsRow>();
   for (const row of rows) {
-    const effScore = row.score - (row.kind === 'title' ? TITLE_BOOST : 0);
     const current = best.get(row.threadId);
-    if (!current || effScore < current.effScore) best.set(row.threadId, { row, effScore });
+    if (!current || better(row, current)) best.set(row.threadId, row);
   }
 
   const hits = [...best.values()]
-    .sort((a, b) => a.effScore - b.effScore)
+    .sort((a, b) => (better(a, b) ? -1 : better(b, a) ? 1 : 0))
     .slice(0, RESULT_LIMIT)
     .map(
-      ({ row }): SearchHit => ({
+      (row): SearchHit => ({
         threadId: row.threadId,
         title: row.title,
         updatedAt: Number(row.updatedAt),
@@ -210,4 +214,16 @@ export function searchChats(
     );
 
   return { query: q, hits };
+}
+
+/**
+ * Whether `row` is the stronger match: a title beats a body, then lower bm25.
+ *
+ * The query already returns rows best-first, so the score half is what keeps
+ * this rule from depending on that — the kind half is not implied by it, since
+ * a title row can arrive after a body row that scored better.
+ */
+function better(row: FtsRow, than: FtsRow): boolean {
+  if (row.kind !== than.kind) return row.kind === 'title';
+  return row.score < than.score;
 }

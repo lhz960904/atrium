@@ -73,43 +73,55 @@ const settlementOf = (
       data.phase === 'resolved' && data.request.toolCall.id === toolCallId,
   )?.outcome;
 
-/** The entries a run produced: everything between its start and the next run's. */
-async function readRun(conversation: Conversation, runId: string) {
-  const records = await conversation.records();
-  const started = records.find(
-    (record) => record.type === 'operation_started' && record.id === runId,
+/** One run, and the entries inside its bracket. */
+type Run = { id: string; finished: boolean; entries: Entry[] };
+
+/**
+ * Every run in the lane with the entries it produced.
+ *
+ * A run's entries are the ones between its own start and the next run's: the
+ * lane runs one operation at a time, so nothing after that point can be its own.
+ */
+async function readRuns(conversation: Conversation): Promise<Run[]> {
+  const [records, entries] = await Promise.all([conversation.records(), conversation.entries()]);
+  const starts = records.filter((record) => record.type === 'operation_started');
+  const closed = new Set(
+    records.flatMap((record) => (record.type === 'operation_finished' ? [record.runId] : [])),
   );
-  if (!started) return undefined;
-  const finished = records.some(
-    (record) => record.type === 'operation_finished' && record.runId === runId,
-  );
-  const next = records.find(
-    (record) => record.type === 'operation_started' && record.seq > started.seq,
-  );
-  const entries = await conversation.entries();
-  const own = entries.filter(
-    (entry) => entry.seq > started.seq && entry.seq < (next?.seq ?? Number.POSITIVE_INFINITY),
-  );
-  return { finished, entries: own };
+  return starts.map((started, index) => {
+    const until = starts[index + 1]?.seq ?? Number.POSITIVE_INFINITY;
+    return {
+      id: started.id,
+      finished: closed.has(started.id),
+      entries: entries.filter((entry) => entry.seq > started.seq && entry.seq < until),
+    };
+  });
 }
 
-export async function recoverInterruptedRun(
-  conversation: Conversation,
-  runId: string,
-  reason: RunStopReason,
-  /** How the run is closed: a failure keeps saying so, everything else stopped. */
-  outcome: 'aborted' | 'failed' = 'aborted',
-): Promise<void> {
-  const run = await readRun(conversation, runId);
-  if (!run || run.finished) return;
+/** Whether this run left anything half-written for a reader to trip over. */
+function hasGaps(run: Run): boolean {
+  const messages = run.entries.flatMap((entry) =>
+    entry.type === 'message' ? [entry.message as Message] : [],
+  );
+  if (missingResults(messages).length > 0) return true;
+  const interactions = interactionsOf(run.entries);
+  return interactions.some((data) => !settlementOf(interactions, data.request.toolCall.id));
+}
 
+/** Pair what this run left open, and close its bracket if it is still open. */
+async function repair(
+  conversation: Conversation,
+  run: Run,
+  reason: RunStopReason,
+  outcome: 'aborted' | 'failed',
+): Promise<void> {
   const interactions = interactionsOf(run.entries);
   const messages = run.entries.flatMap((entry) =>
     entry.type === 'message' ? [entry.message as Message] : [],
   );
 
   for (const result of missingResults(messages)) {
-    await conversation.appendInterruptedResult(runId, result.toolCallId, result);
+    await conversation.appendInterruptedResult(run.id, result.toolCallId, result);
   }
 
   for (const request of interactions.map((data) => data.request)) {
@@ -117,5 +129,43 @@ export async function recoverInterruptedRun(
     await conversation.settleInteraction(request, { kind: 'interrupted', reason });
   }
 
-  await conversation.finishRun(runId, outcome);
+  // A run whose bracket already closed keeps the outcome it recorded; writing a
+  // second one would claim it ended twice.
+  if (!run.finished) await conversation.finishRun(run.id, outcome);
+}
+
+/** Close off one run the caller knows is open — what frees the lane for the next. */
+export async function recoverInterruptedRun(
+  conversation: Conversation,
+  runId: string,
+  reason: RunStopReason,
+  /** How the run is closed: a failure keeps saying so, everything else stopped. */
+  outcome: 'aborted' | 'failed' = 'aborted',
+): Promise<void> {
+  const run = (await readRuns(conversation)).find((candidate) => candidate.id === runId);
+  if (!run || run.finished) return;
+  await repair(conversation, run, reason, outcome);
+}
+
+/**
+ * Close off everything the last process left half-written, across every run.
+ *
+ * A run is repaired because it left a gap, not because its bracket is open.
+ * Those usually coincide — a lost run leaves both — but they can come apart:
+ * if writing a tool result failed while the run went on to finish, the bracket
+ * closed over a call that never got one. Keying the repair on the bracket left
+ * that card spinning in the transcript with nothing that would ever fix it,
+ * because the run reads as completed.
+ *
+ * Every write here has a derived id, so a second pass over a repaired run adds
+ * nothing.
+ */
+export async function repairConversation(
+  conversation: Conversation,
+  reason: RunStopReason = 'interrupted',
+): Promise<void> {
+  for (const run of await readRuns(conversation)) {
+    if (run.finished && !hasGaps(run)) continue;
+    await repair(conversation, run, reason, 'aborted');
+  }
 }

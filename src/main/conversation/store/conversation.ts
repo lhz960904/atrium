@@ -20,7 +20,7 @@ import {
   INTERACTION_ENTRY,
   type InteractionEntryData,
 } from '../project';
-import { recoverInterruptedRun } from '../recovery';
+import { repairConversation } from '../recovery';
 import { threadStore } from './threads';
 
 /** A run's stop reason, kept so a later boot can still name it. */
@@ -322,6 +322,17 @@ export class ConversationStore {
    */
   private readonly repairs = new Map<string, Promise<void>>();
 
+  /**
+   * Session metadata by id, because the store has no way to ask for one.
+   *
+   * `list()` reads and decodes every session row, so looking one up by id cost
+   * the whole table — once per thread opened, per projection, per turn. A
+   * session's metadata is fixed for its life (the id and the directory it was
+   * created in), so an entry can never go stale; only an id we have not seen
+   * sends us back to the store.
+   */
+  private readonly metadata = new Map<string, SqliteSessionMetadata>();
+
   constructor(private readonly repository: SqliteSessionRepository) {}
 
   /** A thread's conversation, or undefined while it has never run. */
@@ -347,6 +358,7 @@ export class ConversationStore {
     const session = await this.repository.create({ cwd: workspaceRoot });
     const { id } = await session.getMetadata();
     threadStore().bindSession(threadId, id);
+    this.metadata.set(id, await session.getMetadata());
     // A session created here has nothing to repair, and saying so is what keeps
     // a later read from treating the run about to open as something to close.
     this.repairs.set(id, Promise.resolve());
@@ -359,7 +371,9 @@ export class ConversationStore {
    * Repairing when the session is opened rather than when the next run starts
    * is what lets a thread nobody has written to since the crash still read
    * correctly: a call with no result would otherwise sit in the transcript
-   * looking like it were still running.
+   * looking like it were still running. Every run is examined, not only the
+   * ones still open — see repairConversation for the gap that hides in a run
+   * whose bracket closed.
    */
   private async repaired(
     sessionId: string,
@@ -368,11 +382,7 @@ export class ConversationStore {
     const conversation = new Conversation(session);
     let repair = this.repairs.get(sessionId);
     if (!repair) {
-      repair = (async () => {
-        for (const open of await conversation.openRuns()) {
-          await recoverInterruptedRun(conversation, open.id, 'interrupted');
-        }
-      })();
+      repair = repairConversation(conversation);
       this.repairs.set(sessionId, repair);
     }
     await repair;
@@ -398,8 +408,10 @@ export class ConversationStore {
   }
 
   private async metadataOf(sessionId: string): Promise<SqliteSessionMetadata | undefined> {
-    const sessions = await this.repository.list();
-    return sessions.find((session) => session.id === sessionId);
+    const known = this.metadata.get(sessionId);
+    if (known) return known;
+    for (const session of await this.repository.list()) this.metadata.set(session.id, session);
+    return this.metadata.get(sessionId);
   }
 }
 

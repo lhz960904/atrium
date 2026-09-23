@@ -8,7 +8,7 @@ import { NodeExecutionEnv } from '@earendil-works/pi-agent-core/node';
 import { SqliteSessionRepository } from '@earendil-works/pi-session-backend-sqlite-node';
 import type { InteractionRequest } from '@shared/interactions';
 import { INTERACTION_ENTRY } from '../project';
-import { recoverInterruptedRun } from '../recovery';
+import { recoverInterruptedRun, repairConversation } from '../recovery';
 import { Conversation } from '../store/conversation';
 import { sessionSqlite } from '../store/sqlite-driver';
 
@@ -242,5 +242,93 @@ test('a run that already ended is left alone', async () => {
   const after = await read(s);
   expect(after.entries).toHaveLength(before.entries.length);
   expect(after.records.filter((record) => record.type === 'operation_finished')).toHaveLength(1);
+  await repo.close();
+});
+
+test('a run that finished over a call with no result is still repaired', async () => {
+  const { repo, session: s } = await session();
+  await lostRun(s, async (s) => {
+    await s.appendMessage(calling('c1', 'c2'));
+    await s.appendMessage(result('c1', 'the real output'));
+  });
+  // The run went on to finish: writing c2's result is what failed, not the run.
+  await s.appendRecord({
+    id: 'r1-end',
+    lane: 'main',
+    type: 'operation_finished',
+    runId: 'r1',
+    outcome: 'completed',
+  });
+
+  await repairConversation(new Conversation(s));
+
+  const { entries, records } = await read(s);
+  // Keying the repair on the bracket left this card spinning with nothing that
+  // would ever fix it, because the run reads as completed.
+  expect(resultsFor(entries, 'c2')).toHaveLength(1);
+  expect(detailsOf(resultsFor(entries, 'c1')[0])).toBe('the real output');
+  // The outcome it recorded stands; it did not end twice.
+  const finished = records.filter((record) => record.type === 'operation_finished');
+  expect(finished).toHaveLength(1);
+  expect(finished[0]).toMatchObject({ outcome: 'completed' });
+  await repo.close();
+});
+
+test('a run that finished cleanly is left exactly as it was', async () => {
+  const { repo, session: s } = await session();
+  await lostRun(s, async (s) => {
+    await s.appendMessage(calling('c1'));
+    await s.appendMessage(result('c1', 'done'));
+  });
+  await s.appendRecord({
+    id: 'r1-end',
+    lane: 'main',
+    type: 'operation_finished',
+    runId: 'r1',
+    outcome: 'completed',
+  });
+  const before = await read(s);
+
+  await repairConversation(new Conversation(s));
+
+  const after = await read(s);
+  expect(after.entries).toHaveLength(before.entries.length);
+  expect(after.records).toHaveLength(before.records.length);
+  await repo.close();
+});
+
+test('repairing a whole conversation reaches every run, and twice changes nothing', async () => {
+  const { repo, session: s } = await session();
+  // Two runs, the first closed over a gap and the second never closed at all.
+  await lostRun(s, async (s) => {
+    await s.appendMessage(calling('c1'));
+  });
+  await s.appendRecord({
+    id: 'r1-end',
+    lane: 'main',
+    type: 'operation_finished',
+    runId: 'r1',
+    outcome: 'completed',
+  });
+  await s.appendRecord({
+    id: 'r2',
+    lane: 'main',
+    type: 'operation_started',
+    sourceLeafId: await s.getLeafId(),
+    intent: { kind: 'run', originalPrompt: [], initialMessages: [] },
+  });
+  await s.appendMessage(calling('c2'));
+
+  await repairConversation(new Conversation(s));
+  const first = await read(s);
+  await repairConversation(new Conversation(s));
+  const second = await read(s);
+
+  expect(resultsFor(first.entries, 'c1')).toHaveLength(1);
+  expect(resultsFor(first.entries, 'c2')).toHaveLength(1);
+  expect(await s.findOpenOperations('main')).toEqual([]);
+  // Every write has a derived id, so a second pass adds nothing.
+  expect(second.entries).toHaveLength(first.entries.length);
+  expect(second.records).toHaveLength(first.records.length);
   await repo.close();
 });
