@@ -31,22 +31,12 @@ import {
 } from '@shared/custom-model';
 import { shell } from 'electron';
 import { z } from 'zod';
-import { badRequest } from '../errors';
+import { badRequest, refusing } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 const byId = z.object({ id: z.string() });
 
-/** The store's refusals, in the code a client understands. */
-function attempt<T>(run: () => T): T {
-  try {
-    return run();
-  } catch (error) {
-    if (error instanceof ProviderIdTaken || error instanceof NotADefinedProvider) {
-      throw badRequest(error.message);
-    }
-    throw error;
-  }
-}
+const attempt = refusing([ProviderIdTaken, badRequest], [NotADefinedProvider, badRequest]);
 
 export const providersRouter = router({
   list: publicProcedure.query(() => listProviders(getDb(), credentialStore())),

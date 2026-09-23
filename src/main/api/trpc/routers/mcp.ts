@@ -24,7 +24,7 @@ import {
 import { getDb } from '@main/db';
 import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { z } from 'zod';
-import { badRequest, conflict } from '../errors';
+import { badRequest, conflict, refusing } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 const fields = z.object({
@@ -41,22 +41,11 @@ const jsonInput = z.object({ json: z.string() });
 
 const byId = z.object({ id: z.string() });
 
-/** The store's refusals, in the codes a client understands. */
-function translate(error: unknown): never {
-  if (error instanceof McpNameTaken) throw conflict(error.message);
-  if (error instanceof InvalidMcpConfig || error instanceof ManagedMcpServer) {
-    throw badRequest(error.message);
-  }
-  throw error;
-}
-
-function attempt<T>(run: () => T): T {
-  try {
-    return run();
-  } catch (error) {
-    return translate(error);
-  }
-}
+const attempt = refusing(
+  [McpNameTaken, conflict],
+  [InvalidMcpConfig, badRequest],
+  [ManagedMcpServer, badRequest],
+);
 
 export const mcpRouter = router({
   list: publicProcedure.query(() => listServers(getDb())),

@@ -8,7 +8,7 @@ import {
 } from '@main/agent/subagent/defs';
 import { getDb } from '@main/db';
 import { z } from 'zod';
-import { conflict } from '../errors';
+import { conflict, refusing } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 const fields = z.object({
@@ -21,14 +21,7 @@ const fields = z.object({
   modelId: z.string().nullable(),
 });
 
-function attempt<T>(run: () => T): T {
-  try {
-    return run();
-  } catch (error) {
-    if (error instanceof SubagentNameTaken) throw conflict(error.message);
-    throw error;
-  }
-}
+const attempt = refusing([SubagentNameTaken, conflict]);
 
 export const subagentsRouter = router({
   list: publicProcedure.query(() => listSubagents(getDb())),

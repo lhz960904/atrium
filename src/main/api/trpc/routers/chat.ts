@@ -10,6 +10,7 @@ import type { EventEnvelope } from '@shared/protocol';
 import { TRPCError } from '@trpc/server';
 import { observable } from '@trpc/server/observable';
 import { z } from 'zod';
+import { badRequest, conflict, refusing } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 /**
@@ -70,6 +71,8 @@ function attach(runner: Runner, threadId: string, from: number) {
   });
 }
 
+const attempt = refusing([InteractionConflict, conflict], [InvalidInteractionDecision, badRequest]);
+
 export const chatRouter = router({
   /**
    * Start a turn. The log exists by the time this resolves, so the caller can
@@ -111,19 +114,9 @@ export const chatRouter = router({
    */
   decide: publicProcedure
     .input(z.object({ threadId: z.string().min(1), interaction: decideInteractionSchema }))
-    .mutation(({ ctx, input }) => {
-      try {
-        return { status: ctx.runner.respond(input.threadId, input.interaction) };
-      } catch (error) {
-        if (error instanceof InteractionConflict) {
-          throw new TRPCError({ code: 'CONFLICT', message: error.message });
-        }
-        if (error instanceof InvalidInteractionDecision) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: error.message });
-        }
-        throw error;
-      }
-    }),
+    .mutation(({ ctx, input }) =>
+      attempt(() => ({ status: ctx.runner.respond(input.threadId, input.interaction) })),
+    ),
 
   /**
    * Stop a thread's generation. Aborts the loop in the main process — detaching
