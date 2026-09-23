@@ -88,7 +88,8 @@ test('a two-character Chinese word matches, and the hit carries its message and 
 test('a thread matched in both title and body comes back once, as a title hit', () => {
   const f = fixture();
   // A long title and a one-word message, so bm25 on its own prefers the
-  // message — the title only wins here because of the boost.
+  // message: the title wins because a title match outranks a body match, not
+  // because of anything the scores say.
   f.thread('t1', {
     title: 'a long chat title that goes on about the search index and other things',
   });
@@ -97,9 +98,32 @@ test('a thread matched in both title and body comes back once, as a title hit', 
   const { hits } = searchChats(f.db, 'index');
 
   expect(hits).toHaveLength(1);
-  // A title hit is nudged ahead of the same thread's body hits, so the row the
-  // user sees names the thread rather than a line buried inside it.
+  // The row the user sees names the thread rather than a line buried inside it.
   expect(hits[0]).toMatchObject({ matchedIn: 'title', messageId: null });
+});
+
+test('a thread matched by title outranks one matched only in its body', () => {
+  const f = fixture();
+  // The body match is the better one by bm25 — a single word, nothing else —
+  // and still sorts second.
+  f.thread('titled', { title: 'a long chat title that mentions the index among other things' });
+  f.thread('bodied');
+  f.message('bodied', 'm1', 'index');
+
+  const { hits } = searchChats(f.db, 'index');
+
+  expect(hits.map((hit) => hit.threadId)).toEqual(['titled', 'bodied']);
+  expect(hits.map((hit) => hit.matchedIn)).toEqual(['title', 'message']);
+});
+
+test('two body matches are ordered by bm25, the shorter message first', () => {
+  const f = fixture();
+  f.thread('short');
+  f.message('short', 'm1', 'index');
+  f.thread('long');
+  f.message('long', 'm2', 'the index is one word among a great many other words in this message');
+
+  expect(searchChats(f.db, 'index').hits.map((hit) => hit.threadId)).toEqual(['short', 'long']);
 });
 
 test('every token has to match, so an unrelated second word finds nothing', () => {
