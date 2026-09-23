@@ -223,7 +223,8 @@ describe('sending', () => {
     t.push(
       ...open('a1'),
       { type: 'notice', name: 'title', payload: { data: { title: '新标题' } } },
-      ...close([]),
+      ...text('回答'),
+      ...close([{ type: 'text', text: '回答' }]),
     );
     t.end();
     await untilIdle(chat);
@@ -453,7 +454,7 @@ describe('lifecycle', () => {
     const { chat, t } = makeChat();
     t.fail.abort = new Error('abort failed');
     await sending(chat, t);
-    t.push(...open('a1'));
+    t.push(...open('a1'), ...text('写到一半'));
     await until(() => chat.getSnapshot().messages.length === 2);
 
     await expect(chat.stop()).rejects.toThrow('abort failed');
@@ -480,7 +481,7 @@ describe('lifecycle', () => {
   test('a broken stream is a failure, and detaches', async () => {
     const { chat, t } = makeChat();
     await sending(chat, t);
-    t.push(...open('a1'));
+    t.push(...open('a1'), ...text('写到一半'));
     await until(() => chat.getSnapshot().messages.length === 2);
 
     t.breaks(new Error('ipc closed'));
@@ -505,6 +506,25 @@ describe('lifecycle', () => {
     // Detaching is how a watch ends; stopping a turn is only ever `stop`.
     expect(t.detaches).toBeGreaterThan(detachedOnce);
     expect(t.aborted).toEqual([]);
+  });
+
+  test('a run that fails before saying anything leaves no message behind', async () => {
+    const { chat, t } = makeChat();
+    await sending(chat, t);
+    // The turn opened and then the provider refused it: a step marker, nothing
+    // else. An empty assistant row still takes space and reports "0 tokens",
+    // so the error stands on its own instead.
+    t.push(...open('a1'), {
+      type: 'run_finished',
+      status: 'failed',
+      error: 'Provider is not configured: deepseek',
+    } as AgentSessionEvent);
+    t.end();
+    await untilIdle(chat);
+
+    const snap = chat.getSnapshot();
+    expect(snap.messages.map((message) => message.role)).toEqual(['user']);
+    expect(snap.error?.message).toContain('not configured');
   });
 
   test('setMessages materializes and replaces the list', async () => {

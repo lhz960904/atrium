@@ -348,12 +348,13 @@ describe('run envelope', () => {
 
   test('usage is summed from the turns, not sent alongside them', () => {
     const turn = (input: number, output: number, cacheRead: number, total: number) => ({
-      ...assistant([]),
+      ...assistant([{ type: 'text', text: 'ok' }]),
       usage: { ...usage(), input, output, cacheRead, totalTokens: total },
     });
     const assembler = new RunAssembler();
     for (const event of [
       ...open(),
+      ...text(0, 'one'),
       { type: 'message_end', message: turn(10, 2, 1, 13) },
       { type: 'message_start', message: assistant([]) },
       { type: 'message_end', message: turn(20, 3, 4, 27) },
@@ -375,7 +376,7 @@ describe('run envelope', () => {
 
   test('cost is summed from what each turn reported, split the way the readout shows it', () => {
     const turn = (input: number, cacheRead: number, cacheWrite: number, output: number) => ({
-      ...assistant([]),
+      ...assistant([{ type: 'text', text: 'ok' }]),
       usage: {
         ...usage(),
         totalTokens: 1,
@@ -391,6 +392,7 @@ describe('run envelope', () => {
     const assembler = new RunAssembler();
     for (const event of [
       ...open(),
+      ...text(0, 'one'),
       { type: 'message_end', message: turn(0.01, 0.002, 0.003, 0.1) },
       { type: 'message_start', message: assistant([]) },
       { type: 'message_end', message: turn(0.02, 0.004, 0.001, 0.2) },

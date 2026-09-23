@@ -40,7 +40,6 @@ export class RunAssembler {
   private parts: Part[] = [];
   private id = '';
   private metadata: Record<string, unknown> = {};
-  private started = false;
   private ended = false;
   private failure: string | undefined;
   /** Current turn's contentIndex → parts index; reset every message_start. */
@@ -63,7 +62,6 @@ export class RunAssembler {
       case 'message_start': {
         // Mirror the old per-step markers (every step opened with one).
         this.parts.push({ type: 'step-start' });
-        this.started = true;
         this.turnParts = new Map();
         break;
       }
@@ -129,8 +127,13 @@ export class RunAssembler {
   }
 
   snapshot(): RunSnapshot {
+    // A step marker is not content. A turn that opened and then failed — an
+    // unconfigured provider, a dropped connection before the first token —
+    // has nothing to show, and a message with nothing in it still takes a
+    // row and a token count. The error is reported on its own.
+    const hasContent = this.parts.some((part) => part.type !== 'step-start');
     return {
-      message: this.started
+      message: hasContent
         ? {
             id: this.id,
             role: 'assistant',
