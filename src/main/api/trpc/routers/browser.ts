@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { syncBrowserProvisioning } from '@main/agent/mcp/browser-provisioner';
+import { getDb } from '@main/db';
 import { isChromeInstalled, isPlaywrightExtensionInstalled } from '@main/platform/browser';
 import { getSettings } from '@main/settings/conf';
 import { clipboard } from 'electron';
@@ -59,7 +60,7 @@ export const browserRouter = router({
    *  Only the exact token format is accepted, so unrelated content is ignored. */
   importToken: publicProcedure
     .input(z.object({ token: z.string().optional() }).optional())
-    .mutation(({ ctx, input }) => {
+    .mutation(({ input }) => {
       const token = input?.token ?? clipboardTokenValue();
       if (!token || !/^[A-Za-z0-9_-]+$/.test(token)) return { imported: false as const };
       getSettings().set('browser', {
@@ -67,26 +68,26 @@ export const browserRouter = router({
         extensionToken: token,
         connected: true,
       });
-      void syncBrowserProvisioning(ctx.db);
+      void syncBrowserProvisioning(getDb());
       return { imported: true as const };
     }),
 
   /** Connect the signed-in browser without a token: the extension prompts for
    *  approval ("Allow & select") on first use. */
-  connect: publicProcedure.mutation(({ ctx }) => {
+  connect: publicProcedure.mutation(() => {
     getSettings().set('browser', { ...getSettings('browser'), connected: true });
-    void syncBrowserProvisioning(ctx.db);
+    void syncBrowserProvisioning(getDb());
   }),
 
   /** Disconnect the signed-in browser: tear its --extension server down and clear
    *  the stored token, so it fully resets (a stale/invalid token can't linger and
    *  keep the extension rejecting the connection). Reconnecting re-imports it. */
-  disconnect: publicProcedure.mutation(({ ctx }) => {
+  disconnect: publicProcedure.mutation(() => {
     getSettings().set('browser', {
       ...getSettings('browser'),
       connected: false,
       extensionToken: '',
     });
-    void syncBrowserProvisioning(ctx.db);
+    void syncBrowserProvisioning(getDb());
   }),
 });

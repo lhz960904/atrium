@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
+import { messageOf, Refusal } from '@main/utils/refusal';
 import { parse as parseToml } from 'smol-toml';
 import { parseMcpJson } from './json-config';
 
@@ -134,13 +135,22 @@ export function listImportSources(): ImportSource[] {
 /** Read one client's config, normalized to `mcpServers` JSON text for the editor. */
 export function readImportSource(id: ImportSourceId): string {
   const def = SOURCES.find((d) => d.id === id);
-  if (!def) throw new Error(`Unknown import source: ${id}`);
+  if (!def) throw new Refusal(`Unknown import source: ${id}`);
   const raw = readIfPresent(def);
-  if (raw == null) throw new Error(`No ${def.label} config found.`);
+  if (raw == null) throw new Refusal(`No ${def.label} config found.`);
   return normalizeConfigText(raw, def.file);
 }
 
-/** Read and normalize an arbitrary config file the user picked (any scope, any client). */
+/**
+ * Read and normalize a config file the user picked, from any scope and any
+ * client. Whatever goes wrong — gone since the picker closed, unreadable, not a
+ * config at all — the user picked it and can pick another, so it is a refusal
+ * and says which file it was.
+ */
 export function readImportFile(path: string): string {
-  return normalizeConfigText(readFileSync(path, 'utf8'), path);
+  try {
+    return normalizeConfigText(readFileSync(path, 'utf8'), path);
+  } catch (err) {
+    throw new Refusal(`Could not read ${basename(path)}: ${messageOf(err)}`);
+  }
 }

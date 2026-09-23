@@ -1,7 +1,3 @@
-import {
-  InteractionConflict,
-  InvalidInteractionDecision,
-} from '@main/agent/runtime/pending-interactions';
 import type { Runner } from '@main/agent/runtime/runner';
 import type { AtriumUIMessage } from '@shared/chat';
 import { decideInteractionSchema } from '@shared/interactions';
@@ -10,6 +6,7 @@ import type { EventEnvelope } from '@shared/protocol';
 import { TRPCError } from '@trpc/server';
 import { observable } from '@trpc/server/observable';
 import { z } from 'zod';
+import { badRequest } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 /**
@@ -81,7 +78,7 @@ export const chatRouter = router({
     .mutation(({ ctx, input }) => {
       const { message, ...run } = input;
       if (message?.role !== 'user') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'chat takes a user message' });
+        throw badRequest('chat takes a user message');
       }
       ctx.runner.start({ ...run, userMessage: message });
     }),
@@ -111,19 +108,9 @@ export const chatRouter = router({
    */
   decide: publicProcedure
     .input(z.object({ threadId: z.string().min(1), interaction: decideInteractionSchema }))
-    .mutation(({ ctx, input }) => {
-      try {
-        return { status: ctx.runner.respond(input.threadId, input.interaction) };
-      } catch (error) {
-        if (error instanceof InteractionConflict) {
-          throw new TRPCError({ code: 'CONFLICT', message: error.message });
-        }
-        if (error instanceof InvalidInteractionDecision) {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: error.message });
-        }
-        throw error;
-      }
-    }),
+    .mutation(({ ctx, input }) => ({
+      status: ctx.runner.respond(input.threadId, input.interaction),
+    })),
 
   /**
    * Stop a thread's generation. Aborts the loop in the main process — detaching

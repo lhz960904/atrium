@@ -1,8 +1,11 @@
 import { expect, test } from 'bun:test';
+import { Refusal } from '@main/utils/refusal';
 import {
   claudeCodeToMcpServers,
   codexTomlToMcpServers,
   normalizeConfigText,
+  readImportFile,
+  readImportSource,
 } from './client-imports';
 import { parseMcpJson } from './json-config';
 
@@ -110,4 +113,32 @@ test('normalizeConfigText routes a picked file by extension and content', () => 
 test('normalizeConfigText falls back to TOML when content is not JSON', () => {
   const { servers } = parseMcpJson(normalizeConfigText('[mcp_servers.b]\ncommand = "z"\n', ''));
   expect(servers.map((s) => s.name)).toEqual(['b']);
+});
+
+test('a file the user picked that cannot be read is refused, naming the file', () => {
+  // The picker closed a moment ago, so whatever went wrong the user can pick
+  // again — which makes this their answer, not a fault to be logged.
+  expect(() => readImportFile('/nowhere/atrium-does-not-exist.json')).toThrow(Refusal);
+  expect(() => readImportFile('/nowhere/atrium-does-not-exist.json')).toThrow(
+    /atrium-does-not-exist\.json/,
+  );
+});
+
+test('a client with no config on this machine is refused by name', () => {
+  // `cursor` is a real source; its config is what is missing.
+  const read = () => readImportSource('cursor');
+  try {
+    read();
+  } catch (error) {
+    expect(error).toBeInstanceOf(Refusal);
+    expect((error as Error).message).toMatch(/Cursor/);
+    return;
+  }
+  // A machine that really does have Cursor configured reads it instead, which is
+  // the other correct outcome; the point is that it never throws a bare Error.
+  expect(typeof read()).toBe('string');
+});
+
+test('an import source that does not exist is refused', () => {
+  expect(() => readImportSource('nope' as never)).toThrow(Refusal);
 });

@@ -1,6 +1,7 @@
 import type { CredentialStore } from '@earendil-works/pi-ai';
 import type { Db } from '@main/db';
 import { providers } from '@main/db/schema';
+import { Refusal } from '@main/utils/refusal';
 import { type CustomModel, type CustomProvider, customProviderSchema } from '@shared/custom-model';
 import { eq } from 'drizzle-orm';
 import { getProviderManifest, PROVIDER_MANIFEST, type ProviderManifest } from './manifest';
@@ -16,12 +17,6 @@ import { piModels, refreshProviders } from './registry';
  * model list of their own at all. Those rules used to live in a tRPC router,
  * where only a request could reach them.
  */
-
-/** An id already claimed — by a provider Atrium ships, or by one already added. */
-export class ProviderIdTaken extends Error {}
-
-/** Asked of a built-in provider something only a user-defined one has. */
-export class NotADefinedProvider extends Error {}
 
 /** A provider as the settings panel shows it: manifest ⋈ row ⋈ credential. */
 export type ProviderView = ProviderManifest & {
@@ -115,7 +110,7 @@ export function addableProviders(
  * forgets to leave.
  */
 export function addProvider(db: Db, id: string): void {
-  if (!getProviderManifest(id)) throw new ProviderIdTaken(`"${id}" is not a known provider.`);
+  if (!getProviderManifest(id)) throw new Refusal(`"${id}" is not a known provider.`);
   enable(db, id, true);
 }
 
@@ -136,10 +131,10 @@ export function setProviderEnabled(db: Db, id: string, enabled: boolean): void {
  */
 export function createCustomProvider(db: Db, id: string, provider: CustomProvider): void {
   if (getProviderManifest(id)) {
-    throw new ProviderIdTaken(`"${id}" is already the id of a built-in provider.`);
+    throw new Refusal(`"${id}" is already the id of a built-in provider.`);
   }
   const taken = db.select({ id: providers.id }).from(providers).where(eq(providers.id, id)).get();
-  if (taken) throw new ProviderIdTaken(`"${id}" is already in use.`);
+  if (taken) throw new Refusal(`"${id}" is already in use.`);
   db.insert(providers)
     .values({ id, enabled: true, config: { customProvider: provider } })
     .run();
@@ -148,7 +143,7 @@ export function createCustomProvider(db: Db, id: string, provider: CustomProvide
 
 export function updateCustomProvider(db: Db, id: string, provider: CustomProvider): void {
   const config = storedConfig(db, id);
-  if (!config.customProvider) throw new NotADefinedProvider('Not a provider you defined.');
+  if (!config.customProvider) throw new Refusal('Not a provider you defined.');
   writeConfig(db, id, { ...config, customProvider: provider });
   refreshProviders(db);
 }
@@ -184,6 +179,25 @@ export function removeCustomModel(db: Db, id: string, modelId: string): void {
   refreshProviders(db);
 }
 
+/**
+ * The saved API key in plaintext, so a password field's reveal can show it.
+ * Null when there is none — including when the provider holds an OAuth token,
+ * which is not a key and must never be handed out as one.
+ */
+export async function readApiKey(credentials: CredentialStore, id: string): Promise<string | null> {
+  const credential = await credentials.read(id);
+  return credential?.type === 'api_key' ? (credential.key ?? null) : null;
+}
+
+/** Save an API key in the store requests resolve it from. */
+export async function saveApiKey(
+  credentials: CredentialStore,
+  id: string,
+  plaintext: string,
+): Promise<void> {
+  await credentials.modify(id, async () => ({ type: 'api_key', key: plaintext }));
+}
+
 /** Make sure the row exists before a login writes tokens against it. */
 export function ensureProviderRow(db: Db, id: string): void {
   enable(db, id, true);
@@ -217,7 +231,7 @@ function writeConfig(db: Db, id: string, config: Record<string, unknown>): void 
 function definedModels(db: Db, id: string): { config: Record<string, unknown>; models: unknown[] } {
   const config = storedConfig(db, id);
   if (!customProviderSchema.safeParse(config.customProvider).success) {
-    throw new NotADefinedProvider('Only a provider you defined has models to change.');
+    throw new Refusal('Only a provider you defined has models to change.');
   }
   return { config, models: Array.isArray(config.customModels) ? config.customModels : [] };
 }

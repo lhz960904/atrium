@@ -4,12 +4,13 @@ import type { Db } from '@main/db';
 import type { ScheduledTask, ScheduledTaskRun } from '@main/db/schema';
 import { scheduledTaskRuns, scheduledTasks } from '@main/db/schema';
 import { createLogger } from '@main/utils/log';
+import { Refusal } from '@main/utils/refusal';
 import type { PermissionMode } from '@shared/permissions';
 import type { SelectedModel } from '@shared/settings';
 import { Cron } from 'croner';
 import { desc, eq, sql } from 'drizzle-orm';
 import type { Runner } from '../runtime/runner';
-import { computeNextRun } from './cron';
+import { computeNextRun, isRecurringCron } from './cron';
 import { runScheduledTask, type ScheduledRunResult } from './run';
 
 const log = createLogger('scheduled');
@@ -49,6 +50,9 @@ export type CreateScheduledTaskInput = {
 };
 
 export type UpdateScheduledTaskInput = Partial<CreateScheduledTaskInput>;
+
+/** Cap on simultaneously-enabled tasks — a runaway-automation backstop. */
+const MAX_ACTIVE_TASKS = 20;
 
 /**
  * A task definition plus its derived run state — the shape the tRPC router and
@@ -121,6 +125,9 @@ export class ScheduledTaskManager {
   // ── writes (DB + croner in lockstep) ────────────────────────────────────
 
   create(input: CreateScheduledTaskInput): ScheduledTaskView {
+    const schedule = this.checkedSchedule(input.kind, input);
+    if (input.enabled !== false) this.assertUnderCap();
+    input = { ...input, ...schedule };
     const id = randomUUID();
     const now = new Date(this.nowMs());
     // The bound thread is created lazily on the first fire (see ensureThread), so
@@ -153,6 +160,9 @@ export class ScheduledTaskManager {
   }
 
   update(id: string, patch: UpdateScheduledTaskInput): ScheduledTaskView {
+    if (patch.cronExpr != null) patch = { ...patch, cronExpr: checkedCron(patch.cronExpr) };
+    if (patch.runAt != null) patch = { ...patch, runAt: checkedFuture(patch.runAt, this.nowMs()) };
+    if (patch.enabled === true) this.assertUnderCap(id);
     const set: Record<string, unknown> = { updatedAt: new Date(this.nowMs()) };
     for (const [key, value] of Object.entries(patch)) {
       if (value !== undefined) set[key] = value;
@@ -186,12 +196,46 @@ export class ScheduledTaskManager {
     return this.fire(id, { manual: true });
   }
 
+  /**
+   * What "Run now" asks for: fire unless this task is already running.
+   *
+   * The run itself is not awaited — it drives a full agent turn, minutes long —
+   * so the answer is only whether one was started. The bound thread and the
+   * completion notification are how it is followed.
+   */
+  requestRun(id: string): { started: boolean } {
+    if (!this.get(id)) throw new Refusal(`No scheduled task ${id}.`);
+    if (this.isRunning(id)) return { started: false };
+    void this.runNow(id);
+    return { started: true };
+  }
+
   /** Whether a run is in flight for this task (or its bound thread is streaming). */
   isRunning(id: string): boolean {
     if (this.firing.has(id)) return true;
     const threadId = this.get(id)?.threadId;
     if (!threadId) return false;
     return this.deps.runningThreadIds?.().includes(threadId) ?? false;
+  }
+
+  /** The schedule a task of this kind must have: one field, and only that one. */
+  private checkedSchedule(
+    kind: 'recurring' | 'once',
+    input: { cronExpr?: string | null; runAt?: Date | null },
+  ): { cronExpr: string | null; runAt: Date | null } {
+    return kind === 'once'
+      ? { cronExpr: null, runAt: checkedFuture(input.runAt, this.nowMs()) }
+      : { cronExpr: checkedCron(input.cronExpr), runAt: null };
+  }
+
+  /** Refuse enabling one past the cap (`excludeId` is the task being updated). */
+  private assertUnderCap(excludeId?: string): void {
+    const active = this.listViews().filter((task) => task.enabled && task.id !== excludeId).length;
+    if (active >= MAX_ACTIVE_TASKS) {
+      throw new Refusal(
+        `Too many active scheduled tasks (max ${MAX_ACTIVE_TASKS}). Disable one first.`,
+      );
+    }
   }
 
   // ── lifecycle ───────────────────────────────────────────────────────────
@@ -428,3 +472,23 @@ export class ScheduledTaskManager {
 
 /** App-wide singleton; `init()` + `start()` at boot (see agent/automation/index.ts). */
 export const scheduledManager = new ScheduledTaskManager();
+
+/**
+ * A recurring task needs a valid 5-field cron. Requiring exactly 5 fields caps
+ * granularity at one minute, which is the effective minimum interval.
+ */
+function checkedCron(cron: string | null | undefined): string {
+  const expression = cron?.trim();
+  if (!expression) throw new Refusal('A recurring task needs a cron expression.');
+  if (!isRecurringCron(expression)) {
+    throw new Refusal(`Use a valid 5-field cron expression: ${expression}`);
+  }
+  return expression;
+}
+
+/** A one-time task fires once, so a time already past would never come. */
+function checkedFuture(runAt: Date | null | undefined, nowMs: number): Date {
+  if (runAt == null) throw new Refusal('A one-time task needs a run time.');
+  if (runAt.getTime() <= nowMs) throw new Refusal('The run time must be in the future.');
+  return runAt;
+}

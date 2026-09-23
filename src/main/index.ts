@@ -137,7 +137,8 @@ function createWindow(): BrowserWindow {
 }
 
 // Held at module scope so before-quit can dispose it (kill background shells) —
-// assigned once the runner exists inside whenReady.
+
+// Assigned once the runner exists inside whenReady; the quit path needs it.
 let runner: Runner | undefined;
 
 app.whenReady().then(async () => {
@@ -179,7 +180,7 @@ app.whenReady().then(async () => {
   createIPCHandler({
     router: appRouter,
     windows: [win],
-    createContext: async () => ({ db, credentials, runner: runs }),
+    createContext: async () => ({ runner: runs }),
   });
   registerComputerUseDrag();
   registerDragOverlay(() => mainWindow ?? undefined);
@@ -250,7 +251,7 @@ app.whenReady().then(async () => {
     createIPCHandler({
       router: appRouter,
       windows: [next],
-      createContext: async () => ({ db, credentials, runner: runs }),
+      createContext: async () => ({ runner: runs }),
     });
   };
 

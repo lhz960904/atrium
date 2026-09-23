@@ -339,3 +339,76 @@ test('disabling a task hides its next run; re-enabling surfaces it again', () =>
   expect(on.enabled).toBe(true);
   expect(on.nextRunAt).toBeInstanceOf(Date);
 });
+
+/**
+ * The rules a task has to satisfy, which used to live in the tRPC router — so
+ * the only way to reach them was to send a request, and none had a test.
+ */
+
+test('a recurring task needs a cron, and one that means something', () => {
+  const { mgr } = setup();
+  expect(() => mgr.create({ ...RECURRING, cronExpr: null })).toThrow(/needs a cron expression/);
+  expect(() => mgr.create({ ...RECURRING, cronExpr: '   ' })).toThrow(/needs a cron expression/);
+  // Six fields would schedule by the second, which nothing here can honour.
+  expect(() => mgr.create({ ...RECURRING, cronExpr: '*/5 * * * * *' })).toThrow(/5-field/);
+  expect(mgr.listViews()).toEqual([]);
+});
+
+test('a one-time task needs a time, and one that is still coming', () => {
+  const { mgr } = setup();
+  const once = { title: 'Once', prompt: 'do it', kind: 'once', timezone: 'UTC' } as const;
+
+  expect(() => mgr.create({ ...once })).toThrow(/needs a run time/);
+  expect(() => mgr.create({ ...once, runAt: new Date(START - 1) })).toThrow(
+    /must be in the future/,
+  );
+  // It fires once, so a time already past would never come.
+  const task = mgr.create({ ...once, runAt: new Date(START + 60_000) });
+  expect(task.cronExpr).toBeNull();
+  expect(task.runAt).toBeInstanceOf(Date);
+});
+
+test('a kind decides which schedule field survives, not the caller', () => {
+  const { mgr } = setup();
+  // Both given: the kind says which one the task actually has.
+  const task = mgr.create({ ...RECURRING, runAt: new Date(START + 60_000) });
+  expect(task.cronExpr).toBe('0 9 * * *');
+  expect(task.runAt).toBeNull();
+});
+
+test('editing a task cannot give it a cron that means nothing', () => {
+  const { mgr } = setup();
+  const task = mgr.create({ ...RECURRING });
+  expect(() => mgr.update(task.id, { cronExpr: 'nonsense' })).toThrow(/5-field/);
+  expect(() => mgr.update(task.id, { runAt: new Date(START - 1) })).toThrow(/in the future/);
+  // The task is untouched by a refused edit.
+  expect(view(mgr, task.id).cronExpr).toBe('0 9 * * *');
+});
+
+test('the active-task cap refuses the one that would cross it, not the ones already there', () => {
+  const { mgr } = setup();
+  for (let i = 0; i < 20; i++) mgr.create({ ...RECURRING, title: `t${i}` });
+
+  expect(() => mgr.create({ ...RECURRING, title: 'one too many' })).toThrow(/Too many active/);
+  // Disabled ones do not count, so one can always be parked.
+  const parked = mgr.create({ ...RECURRING, title: 'parked', enabled: false });
+  expect(() => mgr.setEnabled(parked.id, true)).toThrow(/Too many active/);
+  // And re-enabling a task that is already on is not it crossing the cap again.
+  const [first] = mgr.listViews();
+  expect(() => mgr.setEnabled(first.id, true)).not.toThrow();
+});
+
+test('run now refuses a task that is not there, and never stacks a second run', async () => {
+  const gate = Promise.withResolvers<void>();
+  const { mgr } = setup(async () => {
+    await gate.promise;
+    return { status: 'ok', messageId: 'a1' };
+  });
+  const task = mgr.create({ ...RECURRING });
+
+  expect(() => mgr.requestRun('nope')).toThrow(/No scheduled task/);
+  expect(mgr.requestRun(task.id)).toEqual({ started: true });
+  // The first is still in flight, so asking again is answered rather than obeyed.
+  expect(mgr.requestRun(task.id)).toEqual({ started: false });
+  gate.resolve();
+});

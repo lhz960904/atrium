@@ -3,6 +3,7 @@ import type { Db } from '@main/db';
 import { mcpServers } from '@main/db/schema';
 import { decryptJson, encryptJson } from '@main/platform/safe-storage';
 import { createLogger } from '@main/utils/log';
+import { messageOf, Refusal } from '@main/utils/refusal';
 import { eq } from 'drizzle-orm';
 import {
   type McpSecrets,
@@ -27,15 +28,6 @@ const log = createLogger('mcp');
  * tRPC router, where the only way to reach them was to send a request — and
  * where a second caller would have had to restate them.
  */
-
-/** A name the user already gave to another server. */
-export class McpNameTaken extends Error {}
-
-/** A config the transport cannot accept. */
-export class InvalidMcpConfig extends Error {}
-
-/** A server a feature provisioned; the user may read it but not change it. */
-export class ManagedMcpServer extends Error {}
 
 /** What the settings list shows — never the encrypted blob, only whether one exists. */
 export type McpServerView = {
@@ -316,7 +308,7 @@ function parseJson(json: string): ReturnType<typeof parseMcpJson> {
   try {
     return parseMcpJson(json);
   } catch (err) {
-    throw new InvalidMcpConfig(err instanceof Error ? err.message : 'Invalid JSON');
+    throw new Refusal(messageOf(err));
   }
 }
 
@@ -324,7 +316,7 @@ function validateConfig(transport: McpTransport, config: unknown) {
   try {
     return parseConfig(transport, config);
   } catch (err) {
-    throw new InvalidMcpConfig(err instanceof Error ? err.message : 'Invalid MCP server config.');
+    throw new Refusal(`Invalid MCP server config: ${messageOf(err)}`);
   }
 }
 
@@ -348,7 +340,7 @@ function assertNotManaged(db: Db, id: string): void {
     .where(eq(mcpServers.id, id))
     .get();
   if (row?.managed) {
-    throw new ManagedMcpServer('This server is managed and cannot be changed here.');
+    throw new Refusal('This server is managed and cannot be changed here.');
   }
 }
 
@@ -359,6 +351,6 @@ function assertNameFree(db: Db, name: string, excludeId?: string): void {
     .where(eq(mcpServers.name, name))
     .get();
   if (existing && existing.id !== excludeId) {
-    throw new McpNameTaken(`An MCP server named '${name}' already exists.`);
+    throw new Refusal(`An MCP server named '${name}' already exists.`);
   }
 }

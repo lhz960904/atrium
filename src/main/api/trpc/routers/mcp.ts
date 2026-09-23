@@ -10,10 +10,7 @@ import {
   applyServersJson,
   createServer,
   exportServersJson,
-  InvalidMcpConfig,
   listServers,
-  ManagedMcpServer,
-  McpNameTaken,
   previewServersJson,
   removeServer,
   serverCredentials,
@@ -21,9 +18,9 @@ import {
   setServerEnabled,
   updateServer,
 } from '@main/agent/mcp/store';
+import { getDb } from '@main/db';
 import { BrowserWindow, dialog, type OpenDialogOptions } from 'electron';
 import { z } from 'zod';
-import { badRequest, conflict } from '../errors';
 import { publicProcedure, router } from '../trpc';
 
 const fields = z.object({
@@ -40,28 +37,11 @@ const jsonInput = z.object({ json: z.string() });
 
 const byId = z.object({ id: z.string() });
 
-/** The store's refusals, in the codes a client understands. */
-function translate(error: unknown): never {
-  if (error instanceof McpNameTaken) throw conflict(error.message);
-  if (error instanceof InvalidMcpConfig || error instanceof ManagedMcpServer) {
-    throw badRequest(error.message);
-  }
-  throw error;
-}
-
-function attempt<T>(run: () => T): T {
-  try {
-    return run();
-  } catch (error) {
-    return translate(error);
-  }
-}
-
 export const mcpRouter = router({
-  list: publicProcedure.query(({ ctx }) => listServers(ctx.db)),
+  list: publicProcedure.query(() => listServers(getDb())),
 
   /** Enabled servers that need the user's attention — for the startup prompt + badge. */
-  attention: publicProcedure.query(({ ctx }) => serversNeedingAttention(ctx.db)),
+  attention: publicProcedure.query(() => serversNeedingAttention(getDb())),
 
   authenticate: publicProcedure
     .input(byId)
@@ -69,25 +49,23 @@ export const mcpRouter = router({
 
   create: publicProcedure
     .input(fields)
-    .mutation(({ ctx, input }) => attempt(() => ({ id: createServer(ctx.db, input) }))),
+    .mutation(({ input }) => ({ id: createServer(getDb(), input) })),
 
-  update: publicProcedure.input(fields.extend({ id: z.string() })).mutation(({ ctx, input }) => {
+  update: publicProcedure.input(fields.extend({ id: z.string() })).mutation(({ input }) => {
     const { id, ...rest } = input;
-    attempt(() => updateServer(ctx.db, id, rest));
+    updateServer(getDb(), id, rest);
   }),
 
   setEnabled: publicProcedure
     .input(byId.extend({ enabled: z.boolean() }))
-    .mutation(({ ctx, input }) => attempt(() => setServerEnabled(ctx.db, input.id, input.enabled))),
+    .mutation(({ input }) => setServerEnabled(getDb(), input.id, input.enabled)),
 
-  delete: publicProcedure
-    .input(byId)
-    .mutation(({ ctx, input }) => attempt(() => removeServer(ctx.db, input.id))),
+  delete: publicProcedure.input(byId).mutation(({ input }) => removeServer(getDb(), input.id)),
 
   /** Decrypt the secrets so the settings form can prefill them on edit; {} when none. */
   getCredentials: publicProcedure
     .input(byId)
-    .query(({ ctx, input }) => serverCredentials(ctx.db, input.id)),
+    .query(({ input }) => serverCredentials(getDb(), input.id)),
 
   /** Which other AI clients have an importable config on this machine, and how many servers. */
   importSources: publicProcedure.query(() => listImportSources()),
@@ -95,13 +73,7 @@ export const mcpRouter = router({
   /** Read one client's config, normalized to mcp.json text, to load into the editor. */
   readImport: publicProcedure
     .input(z.object({ source: z.enum(['cursor', 'claude-code', 'claude-desktop', 'codex']) }))
-    .query(({ input }) => {
-      try {
-        return { json: readImportSource(input.source as ImportSourceId) };
-      } catch (err) {
-        throw badRequest(err instanceof Error ? err.message : 'Import failed.');
-      }
-    }),
+    .query(({ input }) => ({ json: readImportSource(input.source as ImportSourceId) })),
 
   /** Native picker for any config file (covers project-level scopes); null if cancelled. */
   importFile: publicProcedure.mutation(async () => {
@@ -115,14 +87,10 @@ export const mcpRouter = router({
     const win = BrowserWindow.getFocusedWindow();
     const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     if (res.canceled || res.filePaths.length === 0) return { json: null };
-    try {
-      return { json: readImportFile(res.filePaths[0]) };
-    } catch (err) {
-      throw badRequest(err instanceof Error ? err.message : 'Could not read that file.');
-    }
+    return { json: readImportFile(res.filePaths[0]) };
   }),
 
-  exportJson: publicProcedure.query(({ ctx }) => ({ json: exportServersJson(ctx.db) })),
+  exportJson: publicProcedure.query(() => ({ json: exportServersJson(getDb()) })),
 
   /** Validate edited JSON and surface any fields dropped on parse; no DB access. */
   previewJson: publicProcedure.input(jsonInput).query(({ input }) => {
@@ -139,5 +107,5 @@ export const mcpRouter = router({
 
   applyJson: publicProcedure
     .input(jsonInput)
-    .mutation(({ ctx, input }) => attempt(() => applyServersJson(ctx.db, input.json))),
+    .mutation(({ input }) => applyServersJson(getDb(), input.json)),
 });
