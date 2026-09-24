@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process';
-import { stripVTControlCharacters } from 'node:util';
+import { randomUUID } from 'node:crypto';
+import type { Readable } from 'node:stream';
 import { createLogger } from '@main/utils/log';
 
 const log = createLogger('shell-env');
-const DELIM = '__ATRIUM_ENV__';
 
 /**
  * A login shell can take several seconds to start behind a heavy rc (compinit
@@ -16,12 +16,18 @@ const DELIM = '__ATRIUM_ENV__';
 const RESOLVE_TIMEOUT_MS = 10_000;
 
 /**
- * Given to the shell we spawn, never to the app. A plugin that updates itself or
- * starts a multiplexer while the rc loads turns resolution into an unbounded
- * wait. These keys are dropped on the way back so our own values cannot leak
- * into the app environment, and from there into every subprocess it spawns.
+ * Given to the shell we spawn, never to the app. The first two turn our own
+ * binary into a plain node interpreter, so it can print the environment the
+ * shell built; the rest stop the rc plugins that update themselves or start a
+ * multiplexer on load, either of which makes resolution an unbounded wait.
+ *
+ * Every key here is dropped out of the result. Letting ELECTRON_RUN_AS_NODE
+ * through would be the worst of them: it would land in our own environment and
+ * bring every Electron process we later spawn up as node instead.
  */
-const QUIET_ENV: Record<string, string> = {
+const INJECTED_ENV: Record<string, string> = {
+  ELECTRON_RUN_AS_NODE: '1',
+  ELECTRON_NO_ATTACH_CONSOLE: '1',
   DISABLE_AUTO_UPDATE: 'true',
   ZSH_TMUX_AUTOSTART: 'false',
   ZSH_TMUX_AUTOSTARTED: 'true',
@@ -29,6 +35,13 @@ const QUIET_ENV: Record<string, string> = {
 
 /** Tried in order when the user's own shell cannot dump a POSIX environment. */
 const FALLBACK_SHELLS = ['/bin/zsh', '/bin/bash'];
+
+/**
+ * The payload goes to a descriptor of its own with stdout and stderr discarded,
+ * so neither a banner the rc prints nor a job it backgrounds — which keeps
+ * writing while the dump runs — can reach what we parse.
+ */
+const PAYLOAD_FD = 3;
 
 let pending: Promise<void> | null = null;
 
@@ -54,24 +67,22 @@ export function loadShellEnv(): Promise<void> {
 }
 
 /**
- * The user's shell first, then POSIX fallbacks: a shell that does not speak
- * `-ilc` fails immediately, and dropping to one that does is better than
- * running with the GUI environment. All attempts share one deadline.
+ * The user's shell first, then POSIX fallbacks: a shell that speaks neither the
+ * login flags nor the descriptor redirect fails immediately, and dropping to one
+ * that does beats running with the GUI environment. All attempts share one
+ * deadline.
  */
 async function resolveShellEnv(): Promise<void> {
   if (process.platform === 'win32') return;
   const deadline = Date.now() + RESOLVE_TIMEOUT_MS;
-  const seen = new Set<string>();
+  const tried = new Set<string>();
   for (const shell of [process.env.SHELL, ...FALLBACK_SHELLS]) {
-    if (!shell || seen.has(shell)) continue;
-    seen.add(shell);
+    if (!shell || tried.has(shell)) continue;
+    tried.add(shell);
     const budget = deadline - Date.now();
     if (budget <= 0) break;
     try {
-      const dump = stripVTControlCharacters(await runEnvDump(shell, budget));
-      const body = dump.split(DELIM)[1];
-      if (!body) continue;
-      mergeEnv(body);
+      mergeEnv(await runEnvDump(shell, budget));
       return;
     } catch (err) {
       log.warn(`could not read the environment from ${shell}`, err);
@@ -81,47 +92,78 @@ async function resolveShellEnv(): Promise<void> {
 }
 
 /**
- * Run the login + interactive shell and capture `env`. `command` bypasses an
- * alias or function of that name, stdin is /dev/null so an interactive shell can
- * never block reading input, and the delimiters fence the env output off from
- * any banner/MOTD the rc prints. Rejects on spawn failure (e.g. the shell binary
- * is missing) or when the shell outruns its budget.
+ * Run the login + interactive shell and have it print its environment as JSON.
+ * JSON rather than `env` output because a variable whose value spans lines
+ * cannot be told apart from the next variable, which both truncates the value
+ * and invents a name from the remainder.
+ *
+ * Settles on `exit`, never on `close`: a process the rc backgrounds inherits the
+ * descriptor and holds it open for as long as it lives, so `close` can be hours
+ * away — or never — with the whole payload already in hand. The marker itself
+ * usually settles this first, as soon as the closing one arrives.
  */
-function runEnvDump(shell: string, timeoutMs: number): Promise<string> {
+function runEnvDump(shell: string, timeoutMs: number): Promise<Record<string, string>> {
+  // A marker fresh per run: a fixed one could occur in a variable's value or in
+  // what an rc prints, and would then cut the payload in the wrong place.
+  const mark = randomUUID().replaceAll('-', '').slice(0, 12);
+  const payload = new RegExp(`${mark}(\\{.*\\})${mark}`);
+  const print = `"${mark}" + JSON.stringify(process.env) + "${mark}"`;
+  const command = `'${process.execPath}' -p '${print}' >&${PAYLOAD_FD}`;
+
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      shell,
-      ['-ilc', `echo -n "${DELIM}"; command env; echo -n "${DELIM}"; exit`],
-      { stdio: ['ignore', 'pipe', 'ignore'], env: { ...process.env, ...QUIET_ENV } },
-    );
+    const child = spawn(shell, ['-i', '-l', '-c', command], {
+      // Its own process group, so killing the shell never reaches a daemon the
+      // rc legitimately started.
+      detached: true,
+      stdio: ['ignore', 'ignore', 'ignore', 'pipe'],
+      env: { ...process.env, ...INJECTED_ENV },
+    });
+    const pipe = child.stdio[PAYLOAD_FD] as Readable | undefined;
     let out = '';
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      reject(new Error(`login-shell env resolution timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-    child.stdout?.setEncoding('utf8');
-    child.stdout?.on('data', (chunk: string) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const done = (result: Record<string, string> | Error): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      pipe?.destroy();
+      child.kill();
+      child.unref();
+      if (result instanceof Error) reject(result);
+      else resolve(result);
+    };
+
+    /** Null until both markers have arrived and what they bracket parses. */
+    const captured = (): Record<string, string> | null => {
+      const match = payload.exec(out);
+      if (!match) return null;
+      try {
+        return JSON.parse(match[1]) as Record<string, string>;
+      } catch {
+        return null;
+      }
+    };
+
+    timer = setTimeout(
+      () => done(new Error(`login-shell env resolution timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+    pipe?.setEncoding('utf8');
+    pipe?.on('data', (chunk: string) => {
       out += chunk;
+      const env = captured();
+      if (env) done(env);
     });
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.on('close', () => {
-      clearTimeout(timer);
-      resolve(out);
-    });
+    child.on('error', (err) => done(err));
+    child.on('exit', () => done(captured() ?? new Error(`${shell} printed no environment`)));
   });
 }
 
 /** Fold the shell's view of the environment into ours, without overwriting it. */
-function mergeEnv(body: string): void {
-  for (const line of body.split('\n')) {
-    const eq = line.indexOf('=');
-    if (eq <= 0) continue;
-    const key = line.slice(0, eq);
-    if (key in QUIET_ENV) continue;
-    const value = line.slice(eq + 1);
+function mergeEnv(shellEnv: Record<string, string>): void {
+  for (const [key, value] of Object.entries(shellEnv)) {
+    if (key in INJECTED_ENV) continue;
     if (key === 'PATH') {
       process.env.PATH = mergePath(value, process.env.PATH);
     } else if (!(key in process.env)) {
