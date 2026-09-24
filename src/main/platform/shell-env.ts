@@ -18,12 +18,10 @@ const RESOLVE_TIMEOUT_MS = 10_000;
 /**
  * Given to the shell we spawn, never to the app. A plugin that updates itself or
  * starts a multiplexer while the rc loads turns resolution into an unbounded
- * wait, and the first flag lets a user's own rc skip its slow work the same way.
- * These keys are dropped on the way back so our own values cannot leak into the
- * app environment, and from there into every subprocess it spawns.
+ * wait. These keys are dropped on the way back so our own values cannot leak
+ * into the app environment, and from there into every subprocess it spawns.
  */
 const QUIET_ENV: Record<string, string> = {
-  ATRIUM_RESOLVING_ENVIRONMENT: '1',
   DISABLE_AUTO_UPDATE: 'true',
   ZSH_TMUX_AUTOSTART: 'false',
   ZSH_TMUX_AUTOSTARTED: 'true',
