@@ -3,8 +3,9 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createLogger } from '@main/utils/log';
+import { BLANK_OPAQUE_FRACTION, opaqueFraction } from '@shared/favicon';
 import decodeIco from 'decode-ico';
-import { app, nativeImage, protocol } from 'electron';
+import { app, nativeImage, protocol, type Session, session } from 'electron';
 import { parseHTML } from 'linkedom';
 
 const log = createLogger('favicons');
@@ -13,17 +14,16 @@ const log = createLogger('favicons');
  * Site favicons for the chat's inline link chips.
  *
  * The renderer's CSP forbids remote images and remote fetch, so it can't pull a
- * favicon itself. The main process fetches one per host (straight from the cited
- * site — no third-party favicon service, so nothing about which links appear in
- * a chat leaks anywhere), caches it on disk, and serves it back over a private
- * `atrium-favicon://<host>` scheme that `<img>` tags can point at.
+ * favicon itself. The main process fetches one per host, caches it on disk, and
+ * serves it back over a private `atrium-favicon://<host>` scheme that `<img>`
+ * tags can point at.
+ *
+ * The cited site is asked first, so the common case tells nobody else which
+ * links a chat contains. A host that refuses — which the large sites gating on
+ * a browser TLS client do — falls through to DuckDuckGo's icon service, and
+ * that host does reach a third party. See `fromService`.
  */
 const SCHEME = 'atrium-favicon';
-
-// Present as a real browser — many servers gate their HTML (and so their
-// <link rel=icon>) behind a browser UA, matching how web-fetch already fetches.
-const USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 const FETCH_TIMEOUT_MS = 6000;
 const MAX_HTML_BYTES = 1_000_000;
@@ -52,12 +52,35 @@ const misses = new Map<string, number>();
 // Coalesce concurrent requests for the same host onto a single fetch.
 const inflight = new Map<string, Promise<Favicon | null>>();
 
+/** Loopback, link-local, private and carrier-grade-NAT IPv4. */
+const PRIVATE_IPV4 =
+  /^(0\.|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/;
+
+/**
+ * Chat citations are public sites, so a link must never become a probe of what
+ * the user's own network is running. Requiring a dot is what turns away the
+ * addresses no dotted rule would catch — an IPv6 literal, or the integer form
+ * of an address — so relaxing it re-opens far more than it looks like.
+ */
 function isFetchableHost(host: string): boolean {
   if (!host.includes('.')) return false;
   if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.localhost')) return false;
-  // Loopback / private IPv4 — chat citations are public sites; don't let a link
-  // probe services on the user's own network.
-  return !/^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
+  return !PRIVATE_IPV4.test(host);
+}
+
+/**
+ * The same judgement on a whole URL, for the addresses we did not choose: an
+ * href a page declares, and every hop a redirect takes. Anything but https is
+ * refused outright — Chromium's stack will happily read a `file:` URL, which
+ * the Node fetch this replaced could not.
+ */
+function isFetchableUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && isFetchableHost(u.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 function sniff(bytes: Uint8Array): string | null {
@@ -76,36 +99,99 @@ function sniff(bytes: Uint8Array): string | null {
   return null;
 }
 
+let fetchSession: Session | null = null;
+
+/**
+ * Favicon lookups run on Chromium's network stack rather than Node's, which is
+ * what gets the system proxy, its authentication schemes and the certificate
+ * handling the rest of the app uses — and presents the TLS client the sites
+ * that gate on one are looking for.
+ *
+ * It is its own partition, unnamed so nothing is written to disk, so these
+ * requests carry none of the app's cookies. The request filter is the only
+ * place a redirect can be judged: the fetch that follows one reports neither
+ * the hops it took nor the URL it ended on, so every hop is vetted here as
+ * Chromium is about to make it.
+ */
+function fetcher(): Session {
+  if (fetchSession) return fetchSession;
+  const ses = session.fromPartition('atrium-favicons');
+  // Only the app's own name and Electron's are dropped; the Chrome version has
+  // to stay the real one. Chromium sends client hints naming the build it
+  // actually is, and a user agent claiming a different one is the disagreement
+  // the bot filters in front of these sites look for — a hand-written browser
+  // string is what gets them to refuse, not what gets them to answer.
+  ses.setUserAgent(
+    ses
+      .getUserAgent()
+      .replace(/\s[^\s/]+\/[\d.]+\sChrome\//, ' Chrome/')
+      .replace(/\sElectron\/[\d.]+/, ''),
+  );
+  ses.webRequest.onBeforeRequest((details, callback) => {
+    callback({ cancel: !isFetchableUrl(details.url) });
+  });
+  fetchSession = ses;
+  return ses;
+}
+
+/**
+ * Read at most `maxBytes`, dropping the response the moment it goes over rather
+ * than buffering whatever a server decides to send: content-length is a claim,
+ * and a server free to omit it is free to be wrong about it.
+ */
+async function readCapped(body: ReadableStream<Uint8Array>, maxBytes: number) {
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return bytes;
+}
+
 async function get(
   url: string,
   maxBytes: number,
 ): Promise<{ bytes: Uint8Array<ArrayBuffer>; type: string | null } | null> {
+  if (!isFetchableUrl(url)) return null;
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetcher().fetch(url, {
       redirect: 'follow',
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: { 'User-Agent': USER_AGENT, Accept: '*/*' },
+      headers: { Accept: '*/*' },
     });
   } catch (err) {
     log.debug('fetch failed', url, String(err));
     return null;
   }
-  if (!res.ok) return null;
-  const declared = Number(res.headers.get('content-length') ?? 0);
-  if (declared > maxBytes) return null;
-  let buf: ArrayBuffer;
+  if (!res.ok || !res.body) return null;
+  if (Number(res.headers.get('content-length') ?? 0) > maxBytes) {
+    await res.body.cancel();
+    return null;
+  }
+  let bytes: Uint8Array<ArrayBuffer> | null;
   try {
-    buf = await res.arrayBuffer();
+    bytes = await readCapped(res.body, maxBytes);
   } catch {
     return null;
   }
-  if (buf.byteLength > maxBytes) return null;
+  if (!bytes) return null;
   const type = res.headers.get('content-type');
-  return {
-    bytes: new Uint8Array(buf),
-    type: type ? (type.split(';')[0]?.trim().toLowerCase() ?? null) : null,
-  };
+  return { bytes, type: type ? (type.split(';')[0]?.trim().toLowerCase() ?? null) : null };
 }
 
 /**
@@ -131,16 +217,6 @@ function asImage(res: { bytes: Uint8Array<ArrayBuffer>; type: string | null }): 
   if (isCorruptIco(res.bytes)) return null;
   const ct = res.type?.startsWith('image/') ? res.type : sniff(res.bytes);
   return ct ? { bytes: res.bytes, contentType: ct } : null;
-}
-
-// Share the renderer's "almost nothing opaque" threshold so both layers agree.
-const BLANK_OPAQUE_FRACTION = 0.02;
-function opaqueFraction(rgba: Uint8Array | Uint8ClampedArray): number {
-  const pixels = rgba.length / 4;
-  if (!pixels) return 1;
-  let opaque = 0;
-  for (let i = 3; i < rgba.length; i += 4) if (rgba[i] >= 16) opaque++;
-  return opaque / pixels;
 }
 
 /**
@@ -230,10 +306,10 @@ async function fromSite(host: string): Promise<Favicon | null> {
   return declared && !isBlank(declared.bytes) ? declared : null;
 }
 
-// DuckDuckGo's icon service — the privacy-respecting fallback for the many large
-// sites (openai.com, chatgpt.com, …) that 403 a non-browser TLS client and so
-// can't be fetched directly. DDG 404s on unindexed subdomains, so a subdomain
-// that misses retries its parent (help.anthropic.com → anthropic.com).
+// DuckDuckGo's icon service — the fallback for the sites whose bot filters
+// refuse us outright, which no request we can make will get past. It is the one
+// path that tells a third party which host a chat cited, so it stays a fallback.
+// DDG 404s on unindexed subdomains, so a subdomain that misses retries its parent.
 async function fromService(host: string): Promise<Favicon | null> {
   const one = async (h: string): Promise<Favicon | null> => {
     const r = await get(`https://icons.duckduckgo.com/ip3/${h}.ico`, MAX_ICON_BYTES);
