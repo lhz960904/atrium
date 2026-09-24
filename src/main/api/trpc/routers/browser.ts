@@ -1,13 +1,17 @@
 import { spawn } from 'node:child_process';
 import { syncBrowserProvisioning } from '@main/agent/mcp/browser-provisioner';
 import { getDb } from '@main/db';
-import { isChromeInstalled, isPlaywrightExtensionInstalled } from '@main/platform/browser';
+import {
+  isChromeInstalled,
+  isPlaywrightExtensionInstalled,
+  PLAYWRIGHT_EXTENSION_ID,
+} from '@main/platform/browser';
+import { loadShellEnv } from '@main/platform/shell-env';
 import { getSettings } from '@main/settings/conf';
 import { clipboard } from 'electron';
 import { z } from 'zod';
 import { publicProcedure, router } from '../trpc';
 
-const EXTENSION_ID = 'mmlmfjhmonkocbjadbfplnigmagldckm';
 // The extension's copy button puts exactly `PLAYWRIGHT_MCP_EXTENSION_TOKEN=<token>`
 // on the clipboard; matching that format means we only ever pick up the token and
 // never mistake unrelated clipboard content for it.
@@ -31,7 +35,11 @@ function openInChrome(url: string): void {
 export const browserRouter = router({
   /** State for the Browser settings section. Polled by the UI, so installing
    *  Chrome/the extension or connecting shows up live without a manual refresh. */
-  environment: publicProcedure.query(() => {
+  environment: publicProcedure.query(async () => {
+    // Chrome is found on PATH where it is not an app bundle, so the probe has to
+    // wait out the login-shell resolution or it reports a Chrome that is there
+    // as missing. Memoized and started at boot, so this normally costs nothing.
+    await loadShellEnv();
     const s = getSettings('browser');
     return {
       chromeInstalled: isChromeInstalled(),
@@ -52,7 +60,7 @@ export const browserRouter = router({
 
   /** Open the extension's status page, where the token + a copy button live. */
   openTokenPage: publicProcedure.mutation(() => {
-    openInChrome(`chrome-extension://${EXTENSION_ID}/status.html`);
+    openInChrome(`chrome-extension://${PLAYWRIGHT_EXTENSION_ID}/status.html`);
   }),
 
   /** Store the extension token (passed in, or read off the clipboard) and mark

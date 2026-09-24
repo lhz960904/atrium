@@ -1,10 +1,30 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { accessSync, constants, existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 
 /** The official "Playwright Extension" Chrome Web Store id. */
-const PLAYWRIGHT_EXTENSION_ID = 'mmlmfjhmonkocbjadbfplnigmagldckm';
+export const PLAYWRIGHT_EXTENSION_ID = 'mmlmfjhmonkocbjadbfplnigmagldckm';
+
+const CHROME_BINARIES = ['google-chrome', 'google-chrome-stable', 'chrome'];
+
+/**
+ * Whether PATH holds an executable of this name — the lookup `which` performs,
+ * done in-process. Shelling out cost a fork per candidate name on a probe the
+ * settings UI polls, and left us reporting "not installed" on the systems that
+ * ship no `which` at all.
+ */
+function onPath(name: string): boolean {
+  for (const dir of (process.env.PATH ?? '').split(delimiter)) {
+    if (!dir) continue;
+    try {
+      accessSync(join(dir, name), constants.X_OK);
+      return true;
+    } catch {
+      // not this directory — try the next
+    }
+  }
+  return false;
+}
 
 /**
  * Whether Google Chrome is installed. The browser feature drives Chrome
@@ -31,15 +51,7 @@ export function isChromeInstalled(): boolean {
     );
   }
   // Linux and the rest: look for a Chrome binary on PATH.
-  for (const bin of ['google-chrome', 'google-chrome-stable', 'chrome']) {
-    try {
-      execFileSync('which', [bin], { stdio: 'ignore' });
-      return true;
-    } catch {
-      // not this name — try the next
-    }
-  }
-  return false;
+  return CHROME_BINARIES.some(onPath);
 }
 
 /** Chrome's user-data root (where per-profile dirs live), by platform. */

@@ -1,24 +1,11 @@
 import type { ScheduledTaskRun } from '@main/db/schema';
-import { getSettings } from '@main/settings/conf';
-import { app, Notification } from 'electron';
+import { Notification } from 'electron';
+import { uiLang } from './locale';
 
-// Main-process UI strings have no i18n framework (the renderer owns react-i18next),
-// so a scheduled-run notification carries its own tiny bilingual map — matched to
-// the app's language setting, or the OS locale when that's set to "system".
 const STRINGS = {
   en: { done: 'Scheduled task completed', failed: 'Scheduled task failed' },
   zh: { done: '定时任务已完成', failed: '定时任务运行失败' },
 } as const;
-
-function uiLang(): 'en' | 'zh' {
-  try {
-    const pref = getSettings('general.language');
-    if (pref === 'en' || pref === 'zh') return pref;
-  } catch {
-    // settings not open yet — fall through to the OS locale
-  }
-  return app.getLocale().toLowerCase().startsWith('zh') ? 'zh' : 'en';
-}
 
 /**
  * Surface a finished scheduled run as a desktop notification. The title is the
