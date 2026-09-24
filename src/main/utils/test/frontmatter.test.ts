@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { parseFrontmatter, renderFrontmatter, stripFrontmatter } from './frontmatter';
+import { parseFrontmatter, renderFrontmatter, stripFrontmatter } from '../frontmatter';
 
 test('parseFrontmatter returns the YAML object, or null', () => {
   expect(parseFrontmatter('---\nname: x\ndescription: hi\n---\nbody')).toEqual({

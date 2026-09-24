@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { drainWithin } from './drain';
+import { drainWithin } from '../drain';
 
 test('work that finishes in time drains', async () => {
   expect(await drainWithin(Promise.resolve(), 50)).toBe('drained');
