@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.2](https://github.com/lhz960904/atrium/compare/v0.18.1...v0.18.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* **chat:** a turn that said nothing leaves no row ([#129](https://github.com/lhz960904/atrium/issues/129)) ([c69de35](https://github.com/lhz960904/atrium/commit/c69de3599f6ad8076eac86be85a4b0930db3ab6f))
+
 ## [0.18.1](https://github.com/lhz960904/atrium/compare/v0.18.0...v0.18.1) (2026-09-23)
 
 
