@@ -1,8 +1,16 @@
 import { getSettings } from '@main/settings/conf';
 import { app, Menu, type NativeImage, nativeImage, Tray } from 'electron';
 import menubarTemplate from '../../../resources/menubarTemplate.png?asset';
+import { uiLang } from './locale';
 
 let tray: Tray | null = null;
+/** The language the current menu was built in, so a switch rebuilds it. */
+let trayLang: 'en' | 'zh' | null = null;
+
+const STRINGS = {
+  en: { newChat: 'New Chat', open: 'Open Atrium', quit: 'Quit Atrium' },
+  zh: { newChat: '新对话', open: '打开 Atrium', quit: '退出 Atrium' },
+} as const;
 
 type MenuBarDeps = {
   /** Show (recreating if needed) and focus the main window. */
@@ -20,33 +28,39 @@ function trayIcon(): NativeImage {
   return img;
 }
 
-function buildTray(deps: MenuBarDeps): Tray {
-  const t = new Tray(trayIcon());
-  t.setToolTip('Atrium');
-  t.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: 'New Chat', click: deps.newChat },
-      { label: 'Open Atrium', click: deps.showWindow },
-      { type: 'separator' },
-      // app.quit() trips before-quit, which sets isQuitting so the window's
-      // hide-on-close interception steps aside and the app really exits.
-      { label: 'Quit Atrium', click: () => app.quit() },
-    ]),
-  );
-  return t;
+function buildMenu(lang: 'en' | 'zh', deps: MenuBarDeps): Menu {
+  const strings = STRINGS[lang];
+  return Menu.buildFromTemplate([
+    { label: strings.newChat, click: deps.newChat },
+    { label: strings.open, click: deps.showWindow },
+    { type: 'separator' },
+    // app.quit() trips before-quit, which sets isQuitting so the window's
+    // hide-on-close interception steps aside and the app really exits.
+    { label: strings.quit, click: () => app.quit() },
+  ]);
 }
 
 function apply(enabled: boolean, deps: MenuBarDeps): void {
-  if (enabled && !tray) {
-    tray = buildTray(deps);
-  } else if (!enabled && tray) {
-    tray.destroy();
+  if (!enabled) {
+    tray?.destroy();
     tray = null;
+    trayLang = null;
+    return;
   }
+  const lang = uiLang();
+  if (!tray) {
+    tray = new Tray(trayIcon());
+    tray.setToolTip('Atrium');
+  } else if (lang === trayLang) {
+    return;
+  }
+  tray.setContextMenu(buildMenu(lang, deps));
+  trayLang = lang;
 }
 
-/** Mirror the menu-bar tray to the persisted setting — now, and on every toggle
- *  (electron-conf fires onDidChange when the renderer patches the scope). */
+/** Mirror the menu-bar tray to the persisted setting — now, and on every change
+ *  to the scope (electron-conf fires onDidChange when the renderer patches it).
+ *  The language lives in that same scope, so a switch rebuilds the menu. */
 export function setupMenuBar(deps: MenuBarDeps): void {
   apply(getSettings('general.showInMenuBar'), deps);
   getSettings().onDidChange('general', (next) => {
