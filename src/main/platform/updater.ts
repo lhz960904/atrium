@@ -36,6 +36,7 @@ class UpdaterManager {
   private getWindow: () => BrowserWindow | null = () => null;
   private onBeforeInstall: () => void = () => {};
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private startupTimer: ReturnType<typeof setTimeout> | null = null;
   private wired = false;
 
   init(opts: {
@@ -81,6 +82,11 @@ class UpdaterManager {
     autoUpdater.on('update-downloaded', (info) =>
       this.set({ stage: 'downloaded', info: toInfo(info), progress: null }),
     );
+    // A cancelled download leaves the update found but not fetched; without this
+    // the state would sit at 'downloading' until a later poll moved it.
+    autoUpdater.on('update-cancelled', (info) =>
+      this.set({ stage: 'available', info: toInfo(info), progress: null }),
+    );
     autoUpdater.on('error', (err) =>
       this.set({ stage: 'error', error: err?.message ?? String(err) }),
     );
@@ -88,11 +94,17 @@ class UpdaterManager {
 
   /** Check shortly after launch, then poll on a fixed interval. */
   startAutoCheck(): void {
-    setTimeout(() => void this.check(), STARTUP_CHECK_DELAY);
+    this.startupTimer ??= setTimeout(() => void this.check(), STARTUP_CHECK_DELAY);
     this.pollTimer ??= setInterval(() => void this.check(), POLL_INTERVAL);
   }
 
+  /** Both timers, or a quit inside the startup delay still fires a check into a
+   *  window that is already gone. */
   dispose(): void {
+    if (this.startupTimer) {
+      clearTimeout(this.startupTimer);
+      this.startupTimer = null;
+    }
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
@@ -112,7 +124,9 @@ class UpdaterManager {
   }
 
   async download(): Promise<void> {
-    if (this.state.stage === 'downloading') return;
+    // Already staged counts as done: asking again fetches the whole package a
+    // second time, since electron-updater only coalesces a download in flight.
+    if (this.state.stage === 'downloading' || this.state.stage === 'downloaded') return;
     try {
       this.set({ stage: 'downloading', progress: null, error: null });
       await autoUpdater.downloadUpdate();
@@ -149,9 +163,16 @@ class UpdaterManager {
     return false;
   }
 
+  /**
+   * Sending to a window that has been destroyed throws, and the state has to be
+   * kept regardless — a window opened later re-seeds from getState(). Quitting
+   * is where the two meet: the window goes first and teardown runs on, so a
+   * transition can still arrive with nothing left to deliver it to.
+   */
   private set(patch: Partial<UpdaterState>): void {
     this.state = { ...this.state, ...patch };
-    this.getWindow()?.webContents.send(UPDATE_STATE_CHANNEL, this.state);
+    const win = this.getWindow();
+    if (win && !win.isDestroyed()) win.webContents.send(UPDATE_STATE_CHANNEL, this.state);
   }
 }
 
