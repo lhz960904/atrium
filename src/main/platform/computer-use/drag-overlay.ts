@@ -18,8 +18,10 @@ const POLL_MS = 250;
 // Failed Settings lookups tolerated (~2s) before anchored placement is deemed
 // unavailable and the bar shows at a fixed spot instead.
 const FALLBACK_MISSES = 8;
-// System Settings' sidebar is a fixed width; the overlay aligns to the content
-// column on its right, not the whole window, so it never spans the menu.
+// The overlay aligns to System Settings' content column, not the whole window,
+// so it never spans the sidebar. The width is that other app's layout, not a
+// value it publishes, so a redesign there moves the bar sideways — it stays put
+// and readable, which is why a guess is worth more here than no alignment.
 const SIDEBAR_WIDTH = 220;
 const MIN_WIDTH = 320;
 const SETTINGS_BUNDLE_ID = 'com.apple.systempreferences';
@@ -57,10 +59,11 @@ export interface OverlayTexts {
   closeLabel: string;
 }
 
+/** Covers both quote characters, so an attribute added later cannot be escaped out of. */
 function escapeHtml(s: string): string {
   return s.replace(
-    /[&<>"]/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c,
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c,
   );
 }
 
@@ -216,14 +219,25 @@ async function syncOverlay(win: BrowserWindow, immediate = false): Promise<void>
   reveal();
 }
 
+/**
+ * Each tick asks the helper where Settings is, and the helper answers one
+ * request at a time. A tick that is still waiting therefore has to swallow the
+ * next one: queueing them would leave a slow helper with a backlog it can only
+ * work through, and every entry in that backlog is already out of date.
+ */
 function startFollow(win: BrowserWindow): void {
   stopFollow();
+  let syncing = false;
   followTimer = setInterval(() => {
     if (win.isDestroyed()) {
       stopFollow();
       return;
     }
-    void syncOverlay(win);
+    if (syncing) return;
+    syncing = true;
+    void syncOverlay(win).finally(() => {
+      syncing = false;
+    });
   }, POLL_MS);
 }
 
@@ -238,13 +252,20 @@ function stopFollow(): void {
 // isn't covered by the (often maximized) Atrium window. While hidden, disable
 // background throttling so the renderer keeps polling permissions and can
 // auto-restart the moment the grant lands, instead of stalling behind Chromium's
-// hidden-window timer throttle.
+// hidden-window timer throttle. Restoring means putting back what was there:
+// a window the user had already hidden should not reappear because the grant
+// flow ended.
+let wasMainWindowVisible = false;
 function parkMainWindow(hidden: boolean): void {
   const mw = resolveMainWindow?.();
   if (!mw) return;
   mw.webContents.setBackgroundThrottling(!hidden);
-  if (hidden) mw.hide();
-  else mw.show();
+  if (hidden) {
+    wasMainWindowVisible = mw.isVisible();
+    mw.hide();
+  } else if (wasMainWindowVisible) {
+    mw.show();
+  }
 }
 
 function ensureOverlay(): BrowserWindow {
