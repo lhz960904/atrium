@@ -1,3 +1,4 @@
+import { BLANK_OPAQUE_FRACTION, OPAQUE_ALPHA } from '@shared/favicon';
 import { Globe } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 
@@ -45,11 +46,11 @@ function inspect(img: HTMLImageElement): Verdict {
   let opaque = 0;
   let luma = 0;
   for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] < 16) continue;
+    if (data[i + 3] < OPAQUE_ALPHA) continue;
     opaque++;
     luma += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
   }
-  if (opaque < size * size * 0.02) return 'blank';
+  if (opaque < size * size * BLANK_OPAQUE_FRACTION) return 'blank';
   return luma / opaque < 60 ? 'dark' : 'ok';
 }
 
