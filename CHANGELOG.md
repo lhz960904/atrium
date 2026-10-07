@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.18.2](https://github.com/lhz960904/atrium/compare/v0.18.1...v0.18.2) (2026-10-07)
+
+
+### Bug Fixes
+
+* **chat:** a turn that said nothing leaves no row ([#129](https://github.com/lhz960904/atrium/issues/129)) ([c69de35](https://github.com/lhz960904/atrium/commit/c69de3599f6ad8076eac86be85a4b0930db3ab6f))
+* **computer-use:** stop a replaced helper from taking the live one with it ([#134](https://github.com/lhz960904/atrium/issues/134)) ([a32d1be](https://github.com/lhz960904/atrium/commit/a32d1be))
+* **favicons:** fetch on Chromium's network stack and vet every hop ([#132](https://github.com/lhz960904/atrium/issues/132)) ([23c009a](https://github.com/lhz960904/atrium/commit/23c009af9d3301d9ce5bc4087774bdbe94d01d0b))
+* **platform:** resolve the login-shell environment reliably ([#131](https://github.com/lhz960904/atrium/issues/131)) ([3f72b3d](https://github.com/lhz960904/atrium/commit/3f72b3d3f27b9c7268129c7d1ab735fd09d09c57))
+* **updater:** survive a check that lands after the window is gone ([#133](https://github.com/lhz960904/atrium/issues/133)) ([fdd74ff](https://github.com/lhz960904/atrium/commit/fdd74ff))
+
 ## [0.18.1](https://github.com/lhz960904/atrium/compare/v0.18.0...v0.18.1) (2026-09-23)
 
 
