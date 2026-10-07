@@ -6,11 +6,11 @@ import { app, ipcMain, type NativeImage, nativeImage } from 'electron';
 const log = createLogger('computer-use-drag');
 
 /**
- * The .app bundle to drag into a privacy list. Under plan B the helper borrows
- * Atrium's own TCC grant, so the grant target — and thus the drag payload — is
- * Atrium itself, not the helper. The exe lives at
- * `<Bundle>.app/Contents/MacOS/<exe>`, so two levels up from its directory is the
- * bundle: Electron.app in dev, Atrium.app when packaged.
+ * The .app bundle to drag into a privacy list. The helper borrows Atrium's own
+ * TCC grant, so the grant target — and thus the drag payload — is Atrium itself,
+ * not the helper. The exe lives at `<Bundle>.app/Contents/MacOS/<exe>`, so two
+ * levels up from its directory is the bundle: Electron.app in dev, Atrium.app
+ * when packaged.
  */
 export function resolveSelfBundlePath(): string {
   return resolve(dirname(app.getPath('exe')), '..', '..');

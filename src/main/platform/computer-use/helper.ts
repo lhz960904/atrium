@@ -35,11 +35,11 @@ const DEFAULT_CALL_TIMEOUT_MS = 30_000;
  * per line on stdin (`{id, method, params}`), one response per line on stdout
  * (`{id, ok, result}`), matched by id.
  *
- * Plan B: the helper is spawned directly, so macOS attributes its TCC
- * responsibility to Atrium (the parent) — the helper borrows Atrium's
- * Accessibility / Screen Recording grant rather than holding its own. The
- * binary is still a separately-signed bundle; only the launch skips the
- * disclaim step that would give it an independent identity.
+ * The helper is spawned directly, so macOS attributes its TCC responsibility to
+ * Atrium (the parent) — the helper borrows Atrium's Accessibility / Screen
+ * Recording grant rather than holding its own. The binary is still a
+ * separately-signed bundle; only the launch skips the disclaim step that would
+ * give it an independent identity.
  */
 export class ComputerUseHelper {
   private child: ChildProcessWithoutNullStreams | null = null;

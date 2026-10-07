@@ -8,8 +8,8 @@ export interface ComputerPermissions {
 }
 
 /**
- * TCC status for Computer Use. Under plan B the helper borrows Atrium's own
- * grant, so the app's status is the source of truth. `isTrustedAccessibilityClient(false)`
+ * TCC status for Computer Use. The helper borrows Atrium's own grant, so the
+ * app's status is the source of truth. `isTrustedAccessibilityClient(false)`
  * reads state without prompting; screen capture is granted-or-not.
  */
 export function computerPermissions(): ComputerPermissions {
