@@ -12,6 +12,8 @@ export interface HelperResponse {
 }
 
 interface Pending {
+  /** Which child the request went to, so a replaced one only fails its own. */
+  child: ChildProcessWithoutNullStreams;
   resolve: (response: HelperResponse) => void;
   reject: (error: Error) => void;
 }
@@ -33,11 +35,11 @@ const DEFAULT_CALL_TIMEOUT_MS = 30_000;
  * per line on stdin (`{id, method, params}`), one response per line on stdout
  * (`{id, ok, result}`), matched by id.
  *
- * Plan B: the helper is spawned directly, so macOS attributes its TCC
- * responsibility to Atrium (the parent) — the helper borrows Atrium's
- * Accessibility / Screen Recording grant rather than holding its own. The
- * binary is still a separately-signed bundle; only the launch skips the
- * disclaim step that would give it an independent identity.
+ * The helper is spawned directly, so macOS attributes its TCC responsibility to
+ * Atrium (the parent) — the helper borrows Atrium's Accessibility / Screen
+ * Recording grant rather than holding its own. The binary is still a
+ * separately-signed bundle; only the launch skips the disclaim step that would
+ * give it an independent identity.
  */
 export class ComputerUseHelper {
   private child: ChildProcessWithoutNullStreams | null = null;
@@ -72,12 +74,16 @@ export class ComputerUseHelper {
         // blocks the single-threaded helper's next request too, so kill the
         // child — ensureChild respawns it on the following call. SIGKILL, not
         // SIGTERM: a process wedged in a Mach call can defer SIGTERM and live
-        // on (cursor overlay included) after `child` is nulled here.
-        this.child?.kill('SIGKILL');
-        this.child = null;
+        // on (cursor overlay included) after `child` is nulled here. The one
+        // this request went to is named outright: by now it may no longer be
+        // the current one, and the wrong process left alive is the one still
+        // drawing on screen.
+        child.kill('SIGKILL');
+        if (this.child === child) this.child = null;
         reject(new Error(`Computer use action timed out after ${timeoutMs}ms.`));
       }, timeoutMs);
       this.pending.set(id, {
+        child,
         resolve: (response) => {
           cleanup();
           resolve(response);
@@ -139,17 +145,21 @@ export class ComputerUseHelper {
       }
     });
 
+    // A timed-out request kills its child and the next call spawns another
+    // before the dead one's exit is delivered, so neither handler may assume it
+    // is still the current child: clearing the field or failing the queue
+    // wholesale would drop a live helper and fail requests it is working on.
     child.on('exit', (code) => {
-      this.child = null;
+      if (this.child === child) this.child = null;
       if (code) {
         log.warn(`helper exited (code ${code})`);
       }
-      this.rejectAll(new Error(`Computer Use helper exited (code ${code ?? 'unknown'}).`));
+      this.rejectAll(new Error(`Computer Use helper exited (code ${code ?? 'unknown'}).`), child);
     });
     child.on('error', (error) => {
-      this.child = null;
+      if (this.child === child) this.child = null;
       log.error('helper failed to spawn', error);
-      this.rejectAll(error instanceof Error ? error : new Error(String(error)));
+      this.rejectAll(error instanceof Error ? error : new Error(String(error)), child);
     });
 
     this.child = child;
@@ -178,10 +188,12 @@ export class ComputerUseHelper {
     pending.resolve(response);
   }
 
-  private rejectAll(error: Error): void {
-    for (const pending of this.pending.values()) {
+  /** Fail every waiting request, or only the ones a given child owns. */
+  private rejectAll(error: Error, child: ChildProcessWithoutNullStreams | null = null): void {
+    for (const [id, pending] of [...this.pending]) {
+      if (child && pending.child !== child) continue;
+      this.pending.delete(id);
       pending.reject(error);
     }
-    this.pending.clear();
   }
 }

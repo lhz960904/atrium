@@ -37,6 +37,14 @@ import { createLogger, initLogging } from './utils/log';
 const log = createLogger('app');
 
 let mainWindow: BrowserWindow | null = null;
+/**
+ * The window only while it is still usable. `mainWindow` outlives its window —
+ * nothing nulls it — and every send, hide or throttle call on a destroyed one
+ * throws, which quitting reaches routinely: the window goes first and the rest
+ * of teardown, timers included, runs on afterwards.
+ */
+const liveWindow = (): BrowserWindow | null =>
+  mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
 let isQuitting = false;
 let installingUpdate = false;
 let quitReady = false;
@@ -183,8 +191,8 @@ app.whenReady().then(async () => {
     createContext: async () => ({ runner: runs }),
   });
   registerComputerUseDrag();
-  registerDragOverlay(() => mainWindow ?? undefined);
-  registerPermissionBridge(() => mainWindow?.webContents);
+  registerDragOverlay(() => liveWindow() ?? undefined);
+  registerPermissionBridge(() => liveWindow()?.webContents);
 
   // Broadcast updater state into whichever main window is live (it survives
   // hide/close, and getWindow() re-resolves after a rebuild). onBeforeInstall
@@ -192,7 +200,7 @@ app.whenReady().then(async () => {
   // the update relaunch instead of hiding it. Then start the post-launch check +
   // periodic poll off the critical path.
   updaterManager.init({
-    getWindow: () => mainWindow,
+    getWindow: liveWindow,
     onBeforeInstall: () => {
       isQuitting = true;
       installingUpdate = true;
@@ -242,9 +250,10 @@ app.whenReady().then(async () => {
   // Show (or, after a full quit cycle / non-macOS, rebuild) the main window.
   // Hide-on-close keeps it alive, so the common path just re-shows it.
   const showWindow = (): void => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-      mainWindow.focus();
+    const live = liveWindow();
+    if (live) {
+      live.show();
+      live.focus();
       return;
     }
     const next = createWindow();
@@ -281,7 +290,7 @@ app.whenReady().then(async () => {
           status: run.status,
           onOpen: (threadId) => {
             showWindow();
-            mainWindow?.webContents.send('scheduled:open-thread', threadId);
+            liveWindow()?.webContents.send('scheduled:open-thread', threadId);
           },
         });
       },
@@ -293,7 +302,7 @@ app.whenReady().then(async () => {
     showWindow,
     newChat: () => {
       showWindow();
-      mainWindow?.webContents.send('menu:new-chat');
+      liveWindow()?.webContents.send('menu:new-chat');
     },
   });
 
