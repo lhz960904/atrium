@@ -55,7 +55,6 @@ export async function runScheduledTask(
   // A Codex-style key:value preamble frames the turn as an automation run. The
   // Instruction line is our own: each fire appends to the bound thread, so the
   // model sees prior runs and would otherwise reply "already done" and skip.
-  // (Automation memory — a per-task memory file — is deferred to V2.)
   const lastRun = lastCompletedRunAt(deps.db, task.id);
   const header = [
     `Automation: ${task.title}`,
