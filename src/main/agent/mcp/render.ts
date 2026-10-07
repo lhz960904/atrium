@@ -2,8 +2,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { ImageToolOutput, ToolResultImage } from '@shared/chat-types';
 import { headTruncate } from '../tools/output';
 
-// Caps the inline result like the file tools do; spilling oversized output to
-// disk (with a read_file pointer) is a later milestone.
+// Caps the inline result like the file tools do.
 const MCP_OUTPUT_MAX = 50_000;
 
 /**
